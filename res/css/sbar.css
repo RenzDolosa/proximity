@@ -1,0 +1,91 @@
+/* sidebar */
+
+.side-bar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  text-align: center;
+  width: 45vmin;
+  padding: 1.3vmin;
+  z-index: 1000;
+  cursor: default;
+  background-color: #f0f0f0;
+  transform: translateX(97%);
+  transition: transform 0.3s ease-in-out;
+}
+
+.side-bar:hover {
+  transform: translateX(0);
+}
+
+.side-btn {
+  margin-left: 0.5vmin;
+  margin-bottom: 0.3vmin;
+  border-bottom: 0.3vmin solid #e9ecef;
+  cursor: pointer;
+}
+
+.s-header {
+  background: linear-gradient(135deg, #2c3e50, #3498db);
+  color: white;
+  width: 42vmin;
+  height: 6vmin;
+  padding: 0.5vmin;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.s-header::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: repeating-conic-gradient(
+    from 0deg at 50% 50%,
+    transparent 0deg,
+    rgba(255, 255, 255, 0.1) 90deg,
+    transparent 180deg
+  );
+  animation: rotate 20s linear infinite;
+}
+
+@keyframes rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.s-header h1 {
+  position: relative;
+  z-index: 2;
+  font-size: 4vmin;
+  text-shadow: 1vmin 1vmin 2vmin rgba(0, 0, 0, 0.3);
+}
+
+.s-search-section {
+  display: grid;
+  grid-template-columns: 4vmin 1fr;
+  font-size: 2vmin;
+  padding: 1vmin 2vmin;
+  gap: 1vmin;
+  background: #f8f9fa;
+}
+
+.s-search-section img {
+  width: 5vmin;
+  height: 5vmin;
+  vertical-align: middle;
+}
+
+.s-search-section p{
+  font-size: 1.5vmin;
+  color: #666;
+}

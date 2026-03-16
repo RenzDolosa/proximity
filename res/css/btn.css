@@ -1,0 +1,95 @@
+/* button */
+
+.btn {
+  height: 44px;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+}
+
+.btn-success {
+  background: linear-gradient(135deg, #6ce29d 0%, #2c9c60 100%);
+  color: white;
+}
+
+.btn-success:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(56, 161, 105, 0.3);
+}
+
+.btn-import {
+  background: linear-gradient(135deg, #667eea 0%, #3123e9 100%);
+  color: white;
+}
+
+.btn-import:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(12, 122, 224, 0.3);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #f6a253 0%, #ef3838 100%);
+  color: white;
+}
+
+.btn-danger:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(200, 35, 51, 0.3);
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, #898f94 0%, #41454b 100%);
+  color: white;
+}
+
+.btn-secondary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(34, 36, 39, 0.3);
+}
+
+.btn-sm {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  flex: 1;
+}
+
+.btn-sm2 {
+  height: 20px;
+  min-width: 100px;
+  padding: 0rem 0.8rem;
+  font-size: 0.8rem;
+}
+
+.close {
+  color: #aaa;
+  float: right;
+  font-size: 28px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.close:hover {
+  color: #000;
+}
+/*<--*/
+
+@media (max-width: 768px) {
+  .btn {
+    width: 100%;
+    margin-bottom: 0.5rem;
+  }
+}
