@@ -1,17 +1,16 @@
-<?php
-// index.php - Simple router
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simple Router</title>
+</head>
+<body>
+  <h1>Welcome</h1>
+  <p>Select a page:</p>
 
-$request = trim($_SERVER['REQUEST_URI'], '/');
-$request = strtok($request, '?'); // Remove query parameters
-
-switch ($request) {
-    case 'database':
-        require_once 'portal.php';
-        break;
-    
-    default:
-        http_response_code(404);
-        echo "Page not found";
-        break;
-}
-?>
+  <ul>
+    <li><a href="portal.html">Go to Database Page</a></li>
+  </ul>
+</body>
+</html>
