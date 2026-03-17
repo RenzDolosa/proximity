@@ -109,7 +109,7 @@ async function parseExcelFile(file) {
 function displayPreview(data) {
   let previewHTML = '<table class="preview-table"><thead><tr>';
   previewHTML +=
-    "<th>Full Name</th><th>Position</th><th>Brand</th><th>Status</th><th>Shift</th><th>Violation</th><th>QR Code</th>";
+    "<th>Full Name</th><th>Position</th><th>Brand</th><th>Status</th><th>Shift</th><th>Violation</th><th>Proximity Code</th>";
   previewHTML += "</tr></thead><tbody>";
 
   data.forEach((row) => {
@@ -117,7 +117,7 @@ function displayPreview(data) {
     for (let i = 0; i < 6; i++) {
       previewHTML += `<td>${row[i] || ""}</td>`;
     }
-    // Show QR code column with indication if it will be auto-generated
+    // Show Proximity Code column with indication if it will be auto-generated
     const qrValue = row[6] || "";
     const qrDisplay = qrValue
       ? qrValue
