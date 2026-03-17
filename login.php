@@ -130,7 +130,7 @@ if (!isset($_SESSION['csrf_token'])) {
   <title>Login</title>
   <link rel="icon" href="res/icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="res/css/r-l.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
   <!-- Security Headers -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; script-src 'self';">

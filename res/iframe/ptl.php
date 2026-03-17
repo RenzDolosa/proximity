@@ -17,7 +17,7 @@ require_once '../cnfg/db.php';
   <link rel="stylesheet" href="../css/ptl.css">
   <link rel="stylesheet" href="../css/btn.css">
   <link rel="stylesheet" href="../css/loading.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 
 <body>

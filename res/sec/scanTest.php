@@ -17,7 +17,7 @@ require_once '../cnfg/manpower_backend.php';
   <link rel="icon" href="../icon/scanTest.png" type="image/png">
   <link rel="stylesheet" href="../css/qp.css">
   <link rel="stylesheet" href="../css/loading.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 
 <body>
