@@ -18,7 +18,7 @@ require_once 'res/cnfg/req.php';
   <link rel="stylesheet" href="res/css/ptl.css">
   <link rel="stylesheet" href="res/css/sbar.css">
   <link rel="stylesheet" href="res/css/btn.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
     /* Add a subtle indicator that portal is secured */
     .security-badge {

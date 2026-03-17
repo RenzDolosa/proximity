@@ -70,7 +70,7 @@ if ($databaseConnected) {
   <link rel="stylesheet" href="../css/opt-btn.css">
   <link rel="stylesheet" href="../css/pg.css">
   <link rel="stylesheet" href="../css/loading.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
 <body>
@@ -82,7 +82,7 @@ if ($databaseConnected) {
       <div class="loading-subtext">Please wait while we prepare your content</div>
     </div>
   </div>
-
+  
   <div onclick="window.location.href='../iframe/ptl.php';" style="position: fixed;
       top: 0;
       right: 1vmin;
@@ -134,8 +134,8 @@ if ($databaseConnected) {
             <input type="text" id="search_date" name="created_at" placeholder="Search by date...">
           </div>
           <div class="form-group">
-            <label for="search_qr">Proximity Code</label>
-            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Search by proximity code...">
+            <label for="search_qr">QR Code</label>
+            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Search by QR code...">
           </div>
         </div>
       </form>
@@ -212,7 +212,7 @@ if ($databaseConnected) {
             <th>Shift</th>
             <th class="Col7">Violation</th>
             <th class="Col8">Image</th>
-            <th class="Col9">Proximity Code</th>
+            <th class="Col9">QR Code</th>
             <th>Register</th>
             <th>Update</th>
             <th>Actions</th>
@@ -317,22 +317,15 @@ if ($databaseConnected) {
           <li><strong>brand</strong> - Brand/Department</li>
           <li><strong>status</strong> - Active or Inactive (default: Active)</li>
           <li><strong>shift</strong> - Day Shift, Night Shift, or Graveyard Shift (required)</li>
-          <li><strong>violation</strong> - Any violations (include if any)</li>
-          <li><strong>proximity code</strong> - If have Proximity Code</li>
+          <li><strong>violation</strong> - Any violations (optional)</li>
+          <li><strong>qrcode</strong> - If have QR Code (optional)</li>
         </ul>
-        <p><em>Note: If blank Proximity codes will be automatically generated for each employee.</em></p>
+        <p><em>Note: If blank QR codes will be automatically generated for each employee.</em></p>
       </div>
 
       <form id="importForm" enctype="multipart/form-data">
         <div class="form-group">
-          <label for="dataFile"><div class="download-label">Select File
-            <p style="margin-bottom: 1rem;">
-              <a href="#" onclick="templateExcel()" class="template-download-link">
-                <i class="fas fa-download"></i> Download Excel Template
-              </a>
-            </p>
-            </div>
-          </label>
+          <label for="dataFile">Select File</label>
           <div class="file-upload">
             <input type="file" id="dataFile" name="dataFile" accept=".csv,.xlsx,.xls" required>
             <label for="dataFile" class="file-upload-label">
@@ -367,13 +360,6 @@ if ($databaseConnected) {
         <div id="importStatus"></div>
       </div>
     </div>
-    <style>
-      .download-label {
-        display: inline-flex;
-        flex-direction: row;
-        gap: 200px;
-      }
-    </style>
   </div>
 
   <audio id="successSound" src="../sounds/success.mp3" preload="auto"></audio>

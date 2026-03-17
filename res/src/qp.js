@@ -12,18 +12,13 @@ let currentFilter = "all";
 let currentAudio = null;
 
 new QRCode(document.getElementById("message"), {
-  text: "",
+  text: "QR PASS",
   width: Math.min(window.innerWidth, window.innerHeight) - 50,
   height: Math.min(window.innerWidth, window.innerHeight) - 50,
   colorDark: "#000000",
   colorLight: "transparent",
   correctLevel: QRCode.CorrectLevel.H,
 });
-
-document.getElementById("message").style.backgroundImage = "url('https://media.istockphoto.com/id/1124772201/vector/hand-with-nfc-payment-credit-card-icon-vector.jpg?s=612x612&w=0&k=20&c=6zVHT8uztPMbQMcn3QfuXjR_ejDn6cRccZnaMEJrkvU=')";
-document.getElementById("message").style.backgroundSize = "contain";
-document.getElementById("message").style.backgroundRepeat = "no-repeat";
-document.getElementById("message").style.backgroundPosition = "center";
 
 // Setup event listeners
 function setupEventListeners() {
@@ -95,7 +90,7 @@ function setupEventListeners() {
 
 function background() {
   new QRCode(document.getElementById("message"), {
-    text: "",
+    text: "QR PASS",
     width: Math.min(window.innerWidth, window.innerHeight) - 50,
     height: Math.min(window.innerWidth, window.innerHeight) - 50,
     colorDark: "#000000",
@@ -178,7 +173,7 @@ function blockSearchInput() {
       body.style.backgroundColor = originalBgColor;
       body.style.borderColor = originalBorderColor;
     }, 300);
-  }, 1000); // 1 second block
+  }, 1000); // 3 second block
 }
 
 // Search employees function with QR code priority

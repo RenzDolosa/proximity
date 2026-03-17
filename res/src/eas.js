@@ -122,7 +122,7 @@ function exportEmployeeData(employees, type = "Data") {
       "Status",
       "Shift",
       "Violation",
-      "Proximity Code",
+      "QR Code",
       "Register Date",
       "Last Update"
     ];
@@ -158,7 +158,7 @@ function exportEmployeeData(employees, type = "Data") {
       { wch: 12 }, // Status
       { wch: 15 }, // Shift
       { wch: 20 }, // Violation
-      { wch: 15 }, // Proximity Code
+      { wch: 15 }, // QR Code
       { wch: 18 }, // Register Date
       { wch: 18 }  // Last Update
     ];
@@ -282,7 +282,7 @@ function exportToExcel(type = "Filtered") {
       "Status",
       "Shift",
       "Violation",
-      "Proximity Code", // Image column is skipped
+      "QR Code", // Image column is skipped
       "Register",
       "Update",
     ];
@@ -302,9 +302,9 @@ function exportToExcel(type = "Filtered") {
             cells[4]?.textContent?.trim() || "", // Status
             cells[5]?.textContent?.trim() || "", // Shift
             cells[6]?.textContent?.trim() || "", // Violation
-            cells[8]?.textContent?.trim() || "", // Proximity Code (skip Image column)
-            cells[9]?.textContent?.trim() || "", // Register Date
-            cells[10]?.textContent?.trim() || "", // Last Update
+            cells[8]?.textContent?.trim() || "", // QR Code (skip Image column)
+            cells[9]?.textContent?.trim() || "",
+            cells[10]?.textContent?.trim() || "",
           ];
           data.push(rowData);
         }
@@ -329,7 +329,7 @@ function exportToExcel(type = "Filtered") {
       { wch: 12 }, // Status
       { wch: 15 }, // Shift
       { wch: 20 }, // Violation
-      { wch: 15 }, // Proximity Code
+      { wch: 15 }, // QR Code
       { wch: 18 }, // Register Date
       { wch: 18 }  // Last Update
     ];
@@ -469,108 +469,6 @@ function exportWithImages() {
   setTimeout(() => {
     showAlert("Data with images exported successfully!", "success");
   }, 2000);
-}
-
-function templateExcel(type = "Template") {
-  showAlert("Exporting Excel Template...", "info");
-  // Your export logic here
-  try {
-    // Prepare data array
-    const data = [];
-
-    // Add headers
-    const headers = [
-      "Full Name",
-      "Position",
-      "Brand",
-      "Status",
-      "Shift",
-      "Violation",
-      "Proximity Code" // Image column is skipped
-    ];
-    data.push(headers);
-
-    // Create workbook and worksheet
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(data);
-
-    // Set column widths
-    const colWidths = [
-      { wch: 25 }, // Full Name
-      { wch: 20 }, // Position
-      { wch: 15 }, // Brand
-      { wch: 12 }, // Status
-      { wch: 15 }, // Shift
-      { wch: 20 }, // Violation
-      { wch: 15 } // Proximity Code
-    ];
-    ws["!cols"] = colWidths;
-
-    // Style the header row
-    const headerRange = XLSX.utils.decode_range(ws["!ref"]);
-    for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
-      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
-      if (!ws[cellAddress]) continue;
-
-      ws[cellAddress].s = {
-        font: { bold: true, color: { rgb: "FFFFFF" } },
-        fill: { fgColor: { rgb: "4472C4" } },
-        alignment: { horizontal: "center", vertical: "center" },
-        border: {
-          top: { style: "thin", color: { rgb: "000000" } },
-          bottom: { style: "thin", color: { rgb: "000000" } },
-          left: { style: "thin", color: { rgb: "000000" } },
-          right: { style: "thin", color: { rgb: "000000" } },
-        },
-      };
-    }
-
-    // Add borders to all cells
-    for (let row = 1; row <= headerRange.e.r; row++) {
-      for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
-        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
-        if (!ws[cellAddress]) continue;
-
-        if (!ws[cellAddress].s) ws[cellAddress].s = {};
-        ws[cellAddress].s.border = {
-          top: { style: "thin", color: { rgb: "000000" } },
-          bottom: { style: "thin", color: { rgb: "000000" } },
-          left: { style: "thin", color: { rgb: "000000" } },
-          right: { style: "thin", color: { rgb: "000000" } },
-        };
-
-        if (col === 6) {
-          ws[cellAddress].s.textContent = /^[a-zA-Z\s\-]+$/; // Allow only letters, spaces, and hyphens
-        }
-        
-        if (col === 0) {
-          ws[cellAddress].s.alignment = {
-            horizontal: "center",
-            vertical: "center",
-          };
-        }
-      }
-    }
-
-    // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(wb, ws, "Employee Data");
-
-    const filename = `Excel_${type}.xlsx`;
-
-    // Save file
-    XLSX.writeFile(wb, filename);
-
-  } catch (error) {
-    console.error("Download error:", error);
-    showAlert("Error Excel Template: " + error.message, "error");
-  } finally {
-  }
-
-  console.log("Exporting Excel Template");
-
-  setTimeout(() => {
-    showAlert("Excel Template download successfully!", "success");
-  }, 1000);
 }
 
 // Keyboard navigation

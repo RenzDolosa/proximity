@@ -197,7 +197,7 @@ $username = $username ?? 'Unknown User';
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../css/system.css">
   <link rel="stylesheet" href="../css/ptl.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
     .auto-update-controls {
       display: flex;

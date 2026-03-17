@@ -138,7 +138,7 @@ function exportEmployeeData(employees, type = "Data") {
       "Status",
       "Shift",
       "Violation",
-      "Proximity Code",
+      "QR Code",
       "Timestamp",
       "Check Status",
     ];
@@ -174,7 +174,7 @@ function exportEmployeeData(employees, type = "Data") {
       { wch: 10 }, // Status
       { wch: 15 }, // Shift
       { wch: 15 }, // Violation
-      { wch: 15 }, // Proximity Code
+      { wch: 15 }, // QR Code
       { wch: 20 }, // Timestamp
       { wch: 5 }, // Check Status
     ];
@@ -308,7 +308,7 @@ function exportToExcelDTL(type = "Filtered") {
       "Status",
       "Shift",
       "Violation",
-      "Proximity Code", // Image column is skipped
+      "QR Code", // Image column is skipped
       "Timestamp",
       "Check Status",
     ];
@@ -328,7 +328,7 @@ function exportToExcelDTL(type = "Filtered") {
             cells[4]?.textContent?.trim() || "", // Status
             cells[5]?.textContent?.trim() || "", // Shift
             cells[6]?.textContent?.trim() || "", // Violation
-            cells[8]?.textContent?.trim() || "", // Proximity Code (skip Image column)
+            cells[8]?.textContent?.trim() || "", // QR Code (skip Image column)
             cells[9]?.textContent?.trim() || "", // Timestamp
             cells[10]?.textContent?.trim() || "", // Check Status
           ];
@@ -355,7 +355,7 @@ function exportToExcelDTL(type = "Filtered") {
       { wch: 10 }, // Status
       { wch: 15 }, // Shift
       { wch: 15 }, // Violation
-      { wch: 15 }, // Proximity Code
+      { wch: 15 }, // QR Code
       { wch: 20 }, // Timestamp
       { wch: 5 }, // Check Status
     ];

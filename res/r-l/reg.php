@@ -137,7 +137,7 @@ function handleRegistrationError($error, $context = [])
   <title>Register</title>
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../css/r-l.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
 <body>

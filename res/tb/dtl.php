@@ -84,7 +84,7 @@ if ($databaseConnected) {
   <link rel="stylesheet" href="../css/opt-btn.css">
   <link rel="stylesheet" href="../css/pg.css">
   <link rel="stylesheet" href="../css/loading.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
 <body>
@@ -148,8 +148,8 @@ if ($databaseConnected) {
             <input type="text" id="search_date" name="access_timestamp" placeholder="Search by date...">
           </div>
           <div class="form-group">
-            <label for="search_qr">Proximity Code</label>
-            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Search by proximity code...">
+            <label for="search_qr">QR Code</label>
+            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Search by QR code...">
           </div>
         </div>
       </form>
@@ -245,7 +245,7 @@ if ($databaseConnected) {
             <th>Shift</th>
             <th class="Col7">Violation</th>
             <th class="Col8">Image</th>
-            <th class="Col9">Proximity Code</th>
+            <th class="Col9">QR Code</th>
             <th>Timestamp</th>
             <th>Check Status</th>
           </tr>
