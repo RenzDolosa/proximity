@@ -534,10 +534,10 @@ try {
           'fullname' => sanitizeInput($_POST['fullname'] ?? $current_employee['fullname']),
           'position' => sanitizeInput($_POST['position'] ?? $current_employee['position']),
           'brand' => sanitizeInput($_POST['brand'] ?? $current_employee['brand']),
-          'status' => $_POST['status'] ?? $current_employee['status'],
+          'status' => sanitizeInput($_POST['status'] ?? $current_employee['status']),
           'shift' => sanitizeInput($_POST['shift'] ?? $current_employee['shift']),
           'violation' => sanitizeInput($_POST['violation'] ?? $current_employee['violation']),
-          'image' => $image_filename,
+          'image' => sanitizeInput($image_filename),
           'qr_code' => sanitizeInput($_POST['qr_code'] ?? $current_employee['qr_code']),
         ];
 
@@ -640,10 +640,10 @@ try {
                 'position' => sanitizeInput(trim($employee_data['position'])),
                 'brand' => sanitizeInput(trim($employee_data['brand'] ?? '')),
                 'status' => in_array($employee_data['status'], ['Active', 'Inactive']) ? $employee_data['status'] : 'Active',
-                'shift' => sanitizeInput(trim($employee_data['shift'])),
+                'shift' => in_array($employee_data['shift'], ['Day Shift', 'Night Shift']) ? $employee_data['shift'] : 'Day Shift',
                 'violation' => sanitizeInput(trim($employee_data['violation'] ?? '')),
                 'image' => null,
-                'qr_code' => sanitizeInput(trim($employee_data['violation'] ?? $qr_code))
+                'qr_code' => sanitizeInput(trim($employee_data['qr_code'] ?? $qr_code))
               ];
 
               // Validate required fields
@@ -783,7 +783,7 @@ try {
         $qr_code = $_POST['qr_code'] ?? '';
 
         if (empty($qr_code)) {
-          $response['message'] = 'QR code is required';
+          $response['message'] = 'Proximity code is required';
           break;
         }
 
@@ -796,12 +796,12 @@ try {
             $response['message'] = 'Employee found';
 
             // Log QR scan
-            logSystemAction($database->getCurrentUserId(), 'QR_SCAN', "QR scan for employee: " . $employee['fullname']);
+            logSystemAction($database->getCurrentUserId(), 'PROXIMITY_SCAN', "Proximity scan for employee: " . $employee['fullname']);
           } else {
-            $response['message'] = 'No employee found with this QR code';
+            $response['message'] = 'No employee found with this proximity code';
           }
         } catch (Exception $e) {
-          $response['message'] = 'QR search error: ' . $e->getMessage();
+          $response['message'] = 'Proximity code search error: ' . $e->getMessage();
         }
         break;
 
@@ -869,7 +869,7 @@ try {
               unset($employee_data['created_at']);
               unset($employee_data['updated_at']);
 
-              // Generate new QR code if needed
+              // Generate new Proximity code if needed
               if (empty($employee_data['qr_code'])) {
                 $employee_data['qr_code'] = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
               }
@@ -986,13 +986,13 @@ try {
             } else {
               $response['success'] = true;
               $response['exists'] = false;
-              $response['message'] = 'QR code available';
+              $response['message'] = 'Proximity code available';
             }
           } catch (Exception $e) {
-            $response['message'] = 'Error checking QR code: ' . $e->getMessage();
+            $response['message'] = 'Error checking proximity code: ' . $e->getMessage();
           }
         } else {
-          $response['message'] = 'QR code parameter is required';
+          $response['message'] = 'Proximity code parameter is required';
         }
         break;
 
@@ -1128,14 +1128,14 @@ function getAPIInfo()
         'import' => 'Import employees from JSON',
         'export' => 'Export employees to CSV/Excel',
         'bulk_status_update' => 'Update status for multiple employees',
-        'search_qr' => 'Search employee by QR code',
+        'search_qr' => 'Search employee by Proximity code',
         'backup_data' => 'Create data backup',
         'restore_data' => 'Restore from backup'
       ],
       'GET' => [
         'get/list' => 'Get employees with optional filters',
         'get_single' => 'Get single employee by ID',
-        'check_qr' => 'Check if QR code exists',
+        'check_qr' => 'Check if Proximity code exists',
         'stats' => 'Get employee statistics',
         'user_info' => 'Get current user information'
       ]

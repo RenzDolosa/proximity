@@ -109,16 +109,34 @@ async function parseExcelFile(file) {
 function displayPreview(data) {
   let previewHTML = '<table class="preview-table"><thead><tr>';
   previewHTML +=
-    "<th>Full Name</th><th>Position</th><th>Brand</th><th>Status</th><th>Shift</th><th>Violation</th><th>QR Code</th>";
+    "<th>Full Name</th><th>Position</th><th>Brand</th><th>Status</th><th>Shift</th><th>Violation</th><th>Proximity Code</th>";
   previewHTML += "</tr></thead><tbody>";
 
-  data.forEach((row) => {
+  data.forEach((col) => {
     previewHTML += "<tr>";
     for (let i = 0; i < 6; i++) {
-      previewHTML += `<td>${row[i] || ""}</td>`;
+      previewHTML += `<td>${col[i] || ""}</td>`;
     }
+    const statusValue = col[3] || "";
+    const statusDisplay = statusValue
+      ? statusValue
+      : '<em style="color: #6c757d;">Default (Active)</em>';
+    previewHTML = previewHTML.replace(`<td>${statusValue}</td>`, `<td>${statusDisplay}</td>`);
+
+    const shiftValue = col[4] || "";
+    const shiftDisplay = shiftValue
+      ? shiftValue
+      : '<em style="color: #6c757d;">Default (Day Shift)</em>';
+    previewHTML = previewHTML.replace(`<td>${shiftValue}</td>`, `<td>${shiftDisplay}</td>`);
+
+    const violationValue = col[5] || "";
+    const violationDisplay = violationValue
+      ? violationValue
+      : '<em style="color: #6c757d;">None</em>';
+    previewHTML = previewHTML.replace(`<td>${violationValue}</td>`, `<td>${violationDisplay}</td>`);
+
     // Show QR code column with indication if it will be auto-generated
-    const qrValue = row[6] || "";
+    const qrValue = col[6] || "";
     const qrDisplay = qrValue
       ? qrValue
       : '<em style="color: #6c757d;">Auto-generate</em>';
