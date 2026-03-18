@@ -524,7 +524,6 @@ async function handleFormSubmit(e) {
     const position = document.getElementById("position").value.trim();
     const brand = document.getElementById("brand").value.trim();
     const shift = document.getElementById("shift").value;
-    const qrcode = document.getElementById("qr_code").value.trim();
     const employeeId = document.getElementById("employee_id").value;
 
     if (!fullname) {
@@ -544,11 +543,6 @@ async function handleFormSubmit(e) {
 
     if (!shift) {
       showAlert("Shift is required", "error");
-      return;
-    }
-
-    if (!qrcode) {
-      showAlert("Proximity Code is required", "error");
       return;
     }
 

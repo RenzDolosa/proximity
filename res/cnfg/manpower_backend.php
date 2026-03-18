@@ -481,7 +481,7 @@ try {
           'shift' => sanitizeInput($_POST['shift'] ?? ''),
           'violation' => sanitizeInput($_POST['violation'] ?? ''),
           'image' => $image_filename,
-          'qr_code' => sanitizeInput($_POST['qr_code'] ?? $qr_code)
+          'qr_code' => sanitizeInput(!empty($_POST['qr_code']) ? $_POST['qr_code'] : $qr_code)
         ];
 
         // Validate required fields
@@ -530,6 +530,9 @@ try {
           }
         }
 
+        // Generate QR code with user context
+        $qr_code = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
+
         $employee_data = [
           'fullname' => sanitizeInput($_POST['fullname'] ?? $current_employee['fullname']),
           'position' => sanitizeInput($_POST['position'] ?? $current_employee['position']),
@@ -538,7 +541,7 @@ try {
           'shift' => sanitizeInput($_POST['shift'] ?? $current_employee['shift']),
           'violation' => sanitizeInput($_POST['violation'] ?? $current_employee['violation']),
           'image' => sanitizeInput($image_filename),
-          'qr_code' => sanitizeInput($_POST['qr_code'] ?? $current_employee['qr_code']),
+          'qr_code' => sanitizeInput(!empty($_POST['qr_code']) ? $_POST['qr_code'] : $qr_code ?? $current_employee['qr_code']),
         ];
 
         if ($employeeManager->updateEmployee($employee_id, $employee_data)) {

@@ -93,11 +93,11 @@ try {
       <form class="search-form" id="searchForm">
         <div class="form-group">
           <label for="fullname">Fullname</label>
-          <input type="text" id="fullname" name="fullname" placeholder="Search by Fullname...">
+          <input type="text" id="fullname" name="fullname" placeholder="Search by fullname...">
         </div>
         <div class="form-group">
-          <label for="qrCode">QR Code</label>
-          <input type="text" id="qrCode" name="qr_code" placeholder="Search by QR code...">
+          <label for="qr_code">Proximity Code</label>
+          <input type="text" id="qr_code" name="qr_code" placeholder="Search by proximity code...">
         </div>
       </form>
     </div>
@@ -112,7 +112,7 @@ try {
         <div class="no-results" id="defaultState">
           <div class="no-results-icon">🔍</div>
           <h3>Search for Employees</h3>
-          <p>Enter a name or QR code to find employees</p>
+          <p>Enter a name or proximity code to find employees</p>
         </div>
       </div>
     </div>
@@ -285,7 +285,7 @@ try {
       <div class="no-results" id="defaultState">
         <div class="no-results-icon">🔍</div>
         <h3>Search for Employees</h3>
-        <p>Enter a name or QR code to find employees</p>
+        <p>Enter a name or proximity code to find employees</p>
       </div>
     `;
         count.textContent = 'Enter search criteria to find employees';

@@ -137,7 +137,7 @@ if (typeof originalSearchEmployees === 'function') {
 // Add loading to form submissions
 document.addEventListener('DOMContentLoaded', function() {
   const employeeForm = document.getElementById('employeeForm');
-  const importForm = document.getElementById('importForm');
+  // const importForm = document.getElementById('importForm');
   
   if (employeeForm) {
     employeeForm.addEventListener('submit', function(e) {
@@ -150,16 +150,16 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   
-  if (importForm) {
-    importForm.addEventListener('submit', function(e) {
-      showLoadingForImport();
+  // if (importForm) {
+  //   importForm.addEventListener('submit', function(e) {
+  //     showLoadingForImport();
       
-      // Let the form submit naturally
-      setTimeout(() => {
-        hideLoadingForOperation();
-      }, 3000);
-    });
-  }
+  //     // Let the form submit naturally
+  //     setTimeout(() => {
+  //       hideLoadingForOperation();
+  //     }, 3000);
+  //   });
+  // }
 
   // Add loading to export buttons
   const clearButtons = document.querySelectorAll('[onclick*="clear"]');
