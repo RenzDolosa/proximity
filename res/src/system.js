@@ -334,7 +334,7 @@ function copyQRCode(qrCode) {
     document.execCommand('copy');
     
     // Show success message (optional)
-    showAlert('QR code copied to clipboard!');
+    showAlert('Proximity code copied to clipboard!');
     
     // Alternative: Use a more subtle notification
     // console.log('QR code copied:', qrCode);
@@ -343,12 +343,12 @@ function copyQRCode(qrCode) {
     // Fallback for modern browsers using the Clipboard API
     if (navigator.clipboard) {
       navigator.clipboard.writeText(qrCode).then(() => {
-        showAlert('QR code copied to clipboard!');
+        showAlert('Proximity code copied to clipboard!');
       }).catch(() => {
-        showAlert('Failed to copy QR code');
+        showAlert('Failed to copy Proximity code');
       });
     } else {
-      showAlert('Failed to copy QR code');
+      showAlert('Failed to copy Proximity code');
     }
   }
   

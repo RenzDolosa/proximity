@@ -12,13 +12,15 @@ let currentFilter = "all";
 let currentAudio = null;
 
 new QRCode(document.getElementById("message"), {
-  text: "QR Code Test",
+  text: "",
   width: Math.min(window.innerWidth, window.innerHeight) - 50,
   height: Math.min(window.innerWidth, window.innerHeight) - 50,
   colorDark: "#000000",
   colorLight: "transparent",
   correctLevel: QRCode.CorrectLevel.H,
 });
+
+document.getElementById("message").innerHTML = '<img src="https://uxwing.com/wp-content/themes/uxwing/download/internet-network-technology/nfc-wireless-icon.png" alt="Proximity Code" style="width: 100%; height: 90vh;">';
 
 // Setup event listeners
 function setupEventListeners() {
@@ -90,13 +92,15 @@ function setupEventListeners() {
 
 function background() {
   new QRCode(document.getElementById("message"), {
-    text: "QR PASS",
+    text: "",
     width: Math.min(window.innerWidth, window.innerHeight) - 50,
     height: Math.min(window.innerWidth, window.innerHeight) - 50,
     colorDark: "#000000",
     colorLight: "transparent",
     correctLevel: QRCode.CorrectLevel.H,
   });
+
+  document.getElementById("message").innerHTML = '<img src="https://uxwing.com/wp-content/themes/uxwing/download/internet-network-technology/nfc-wireless-icon.png" alt="Proximity Code" style="width: 100%; height: 90vh;">';
 }
 
 // Function to stop any currently playing audio

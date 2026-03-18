@@ -72,6 +72,7 @@ $email = $_SESSION['email'] ?? '';
       <div class="result" id="resultsBody"></div>
     </div>
     <div id="message"></div>
+    <div id="message-object"></div>
   </div>
 
   <audio id="successSound" src="../sounds/success.mp3" preload="auto"></audio>

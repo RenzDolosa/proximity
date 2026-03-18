@@ -287,6 +287,7 @@ input[type="text"] {
   text-shadow: none;
   opacity: 0;
   animation: fadeOut 3s ease-out, gradientShift 4s ease-in-out infinite;
+  z-index: 1000;
 }
 
 @keyframes fadeOut {

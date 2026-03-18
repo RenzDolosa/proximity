@@ -34,7 +34,7 @@ require_once '../cnfg/manpower_backend.php';
   </div>
 
   <div class="container">
-    <h2>Test QR Code Live Search</h2>
+    <h2>Test Proximity Code Live Search</h2>
 
     <div class="search-container">
       <input type="text" id="searchInput" autofocus>
