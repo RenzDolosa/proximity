@@ -82,7 +82,7 @@ if ($databaseConnected) {
       <div class="loading-subtext">Please wait while we prepare your content</div>
     </div>
   </div>
-  
+
   <div onclick="window.location.href='../iframe/ptl.php';" style="position: fixed;
       top: 0;
       right: 1vmin;
@@ -134,8 +134,8 @@ if ($databaseConnected) {
             <input type="text" id="search_date" name="created_at" placeholder="Search by date...">
           </div>
           <div class="form-group">
-            <label for="search_qr">QR Code</label>
-            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Search by QR code...">
+            <label for="search_qr">Proximity Code</label>
+            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Search by proximity code...">
           </div>
         </div>
       </form>
@@ -212,7 +212,7 @@ if ($databaseConnected) {
             <th>Shift</th>
             <th class="Col7">Violation</th>
             <th class="Col8">Image</th>
-            <th class="Col9">QR Code</th>
+            <th class="Col9">Proximity Code</th>
             <th>Register</th>
             <th>Update</th>
             <th>Actions</th>
@@ -280,7 +280,11 @@ if ($databaseConnected) {
         </div>
         <div class="form-group">
           <label for="violation">Violation</label>
-          <textarea id="violation" name="violation" rows="3" placeholder="Enter any violations..."></textarea>
+          <textarea id="violation" name="violation" rows="3" placeholder="Kindly specify any violations, if applicable."></textarea>
+        </div>
+        <div class="form-group">
+          <label for="qr_code">Proximity Code</label>
+          <input type="text" id="qr_code" name="qr_code" placeholder="Enter proximity code or leave blank to auto-generate">
         </div>
         <div class="form-group">
           <label for="image">Employee Image</label>
@@ -318,14 +322,20 @@ if ($databaseConnected) {
           <li><strong>status</strong> - Active or Inactive (default: Active)</li>
           <li><strong>shift</strong> - Day Shift, Night Shift, or Graveyard Shift (required)</li>
           <li><strong>violation</strong> - Any violations (optional)</li>
-          <li><strong>qrcode</strong> - If have QR Code (optional)</li>
+          <li><strong>proximity code</strong> - If have Proximity Code (optional)</li>
         </ul>
-        <p><em>Note: If blank QR codes will be automatically generated for each employee.</em></p>
+        <p><em>Note: If blank Proximity Codes will be automatically generated for each employee.</em></p>
       </div>
 
       <form id="importForm" enctype="multipart/form-data">
         <div class="form-group">
-          <label for="dataFile">Select File</label>
+          <label for="dataFile">
+            <div class="download-label">Select File
+              <a href="#" onclick="excelTemplate()" class="template-download-link">
+                <i class="fas fa-download"></i> Download Excel Template
+              </a>
+            </div>
+          </label>
           <div class="file-upload">
             <input type="file" id="dataFile" name="dataFile" accept=".csv,.xlsx,.xls" required>
             <label for="dataFile" class="file-upload-label">

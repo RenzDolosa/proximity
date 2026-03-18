@@ -115,6 +115,7 @@ async function loadEmployeeData(employeeId) {
       document.getElementById("status").value = employee.status || "Active";
       document.getElementById("shift").value = employee.shift || "";
       document.getElementById("violation").value = employee.violation || "";
+      document.getElementById("qr_code").value = employee.qr_code || "";
 
       const fileLabel = document.querySelector(".file-upload-label");
       if (employee.image) {
@@ -269,7 +270,7 @@ async function renderEmployeeTable() {
                 : `<div class="ph-cont"><div class="employee-ph">${fullnameInitials}</div></div>`
             }
             </td>
-            <td class="Col9" onclick="copyQRCode('${employee.qr_code}')" title="Copy QR code"><i class='fas fa-qrcode'></i></td>
+            <td class="Col9" onclick="copyQRCode('${employee.qr_code}')" title="Copy Proximity code"><i class='fas fa-qrcode'></i></td>
             <td><small>${employee.created_at}</small></td>
             <td><small>${employee.updated_at}</small></td>
             <td>
@@ -523,6 +524,7 @@ async function handleFormSubmit(e) {
     const position = document.getElementById("position").value.trim();
     const brand = document.getElementById("brand").value.trim();
     const shift = document.getElementById("shift").value;
+    const qrcode = document.getElementById("qr_code").value.trim();
     const employeeId = document.getElementById("employee_id").value;
 
     if (!fullname) {
@@ -542,6 +544,11 @@ async function handleFormSubmit(e) {
 
     if (!shift) {
       showAlert("Shift is required", "error");
+      return;
+    }
+
+    if (!qrcode) {
+      showAlert("Proximity Code is required", "error");
       return;
     }
 

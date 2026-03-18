@@ -472,7 +472,7 @@ async function renderEmployeeTable() {
                   : `<div class="ph-cont"><div class="employee-ph">${fullnameInitials}</div></div>`
               }
               </td>
-              <td class="Col9" onclick="copyQRCode('${employee.qr_code || ''}')" title="Copy QR code"><i class='fas fa-qrcode'></i></td>
+              <td class="Col9" onclick="copyQRCode('${employee.qr_code || ''}')" title="Copy Proximity code"><i class='fas fa-qrcode'></i></td>
               <td class="employee-timestamp"><small>${employee.access_timestamp || 'N/A'}</small></td>
               <td><div class="check-status-${(employee.check_status || '').toLowerCase()}"><div class="employee-ph">${
         employee.check_status || 'N/A'

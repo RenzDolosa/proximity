@@ -41,6 +41,13 @@
   cursor: default;
 }
 
+.download-label {
+  display: flex;
+  align-items: center;
+  gap: 15rem;
+  font-weight: 600;
+}
+
 /* Preview table styling */
 .preview-table {
   max-height: 350px;

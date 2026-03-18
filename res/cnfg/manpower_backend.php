@@ -481,7 +481,7 @@ try {
           'shift' => sanitizeInput($_POST['shift'] ?? ''),
           'violation' => sanitizeInput($_POST['violation'] ?? ''),
           'image' => $image_filename,
-          'qr_code' => $qr_code
+          'qr_code' => sanitizeInput($_POST['qr_code'] ?? $qr_code)
         ];
 
         // Validate required fields
@@ -538,7 +538,7 @@ try {
           'shift' => sanitizeInput($_POST['shift'] ?? $current_employee['shift']),
           'violation' => sanitizeInput($_POST['violation'] ?? $current_employee['violation']),
           'image' => $image_filename,
-          'qr_code' => $current_employee['qr_code']
+          'qr_code' => sanitizeInput($_POST['qr_code'] ?? $current_employee['qr_code']),
         ];
 
         if ($employeeManager->updateEmployee($employee_id, $employee_data)) {
@@ -643,7 +643,7 @@ try {
                 'shift' => sanitizeInput(trim($employee_data['shift'])),
                 'violation' => sanitizeInput(trim($employee_data['violation'] ?? '')),
                 'image' => null,
-                'qr_code' => $qr_code
+                'qr_code' => sanitizeInput(trim($employee_data['violation'] ?? $qr_code))
               ];
 
               // Validate required fields
