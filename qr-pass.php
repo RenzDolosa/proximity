@@ -14,7 +14,7 @@ require_once 'res/cnfg/db.php';
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - QR Pass</title>
-  <link rel="icon" href="res/icon/scan-icon.png" type="image/png">
+  <link rel="icon" href="res/logo/nfc-logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="res/css/qp.css">
   <link rel="stylesheet" href="res/css/ptl.css">
   <link rel="stylesheet" href="res/css/sbar.css">

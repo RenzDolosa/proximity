@@ -3,7 +3,16 @@
 
 require_once '../cnfg/config.php';
 require_once '../cnfg/manpower_backend.php';
+if (!isset($_SESSION['user_id'])) {
+  header('Location: ../../login.php');
+  exit();
+}
 
+$myDatabase = $_SESSION['my_database'] ?? 'My Database';
+$userId = $_SESSION['user_id'];
+$userDbName = USER_DB_PREFIX . $userId;
+$username = $_SESSION['username'] ?? 'User';
+$email = $_SESSION['email'] ?? '';
 ?>
 
 <!DOCTYPE html>

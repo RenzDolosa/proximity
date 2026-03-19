@@ -91,14 +91,6 @@ function setupEventListeners() {
 }
 
 function background() {
-  new QRCode(document.getElementById("message"), {
-  text: "",
-  width: Math.min(window.innerWidth, window.innerHeight) - 50,
-  height: Math.min(window.innerWidth, window.innerHeight) - 50,
-  colorDark: "#000000",
-  colorLight: "transparent",
-  correctLevel: QRCode.CorrectLevel.H,
-});
   document.getElementById("message").innerHTML = '<img src="https://uxwing.com/wp-content/themes/uxwing/download/internet-network-technology/nfc-wireless-icon.png" alt="Proximity Code" style="width: 100%; height: 90vh;">';
 }
 

@@ -147,9 +147,9 @@ if ($databaseConnected) {
             <label for="search_date">Date</label>
             <input type="text" id="search_date" name="access_timestamp" placeholder="Search by date...">
           </div>
-          <div class="form-group">
+          <div class="form-group" style="position: absolute; right: 1%; bottom: 10%; opacity: 0;">
             <label for="search_qr">Proximity Code</label>
-            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Search by proximity code...">
+            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Search by proximity code..." style="cursor: default;" autocomplete="off">
           </div>
         </div>
       </form>

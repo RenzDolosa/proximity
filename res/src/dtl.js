@@ -28,11 +28,39 @@ function setupEventListeners() {
 
   // Search form inputs
   const searchInputs = document.querySelectorAll(
-    "#searchForm input, #searchForm select"
+    "#searchForm input, #searchForm select",
   );
+
   searchInputs.forEach((input) => {
     input.addEventListener("input", debounce(searchEmployees, 300));
   });
+
+  // 🔥 AUTO-FOCUS LOGIC
+  const proximityInput = document.getElementById("search_qr");
+
+  function autoFocusProximity() {
+    const active = document.activeElement;
+
+    // Check if active element is NOT an input, select, or textarea
+    const isTyping =
+      active &&
+      (active.tagName === "INPUT" ||
+        active.tagName === "SELECT" ||
+        active.tagName === "TEXTAREA");
+
+    if (!isTyping && proximityInput) {
+      proximityInput.focus();
+    }
+  }
+
+  // Run on page load
+  autoFocusProximity();
+
+  // Re-check when user clicks anywhere
+  document.addEventListener("click", autoFocusProximity);
+
+  // Re-check when focus changes (keyboard navigation, tabbing, etc.)
+  document.addEventListener("focusin", autoFocusProximity);
 
   // Auto-update toggle
   const autoUpdateToggle = document.getElementById("autoUpdateToggle");
@@ -52,7 +80,7 @@ function initializeAutoUpdate() {
   // Check if auto-update elements exist before initializing
   const toggle = document.getElementById("autoUpdateToggle");
   const intervalSelector = document.getElementById("updateInterval");
-  
+
   if (!toggle || !intervalSelector) {
     console.warn("Auto-update elements not found, skipping initialization");
     return;
@@ -61,11 +89,11 @@ function initializeAutoUpdate() {
   // Start with auto-update enabled and default interval
   autoUpdateEnabled = toggle.checked || false;
   const defaultInterval = parseInt(intervalSelector.value) || 30000; // Default to 30 seconds
-  
+
   if (autoUpdateEnabled) {
     startAutoUpdate(defaultInterval);
   }
-  
+
   updateAutoUpdateUI();
   setupUserActivityTracking();
 }
@@ -74,11 +102,11 @@ function initializeAutoUpdate() {
 function setupUserActivityTracking() {
   const activityEvents = [
     "mousedown",
-    "keydown", 
+    "keydown",
     "scroll",
     "click",
     "mousemove",
-    "touchstart"
+    "touchstart",
   ];
 
   activityEvents.forEach((event) => {
@@ -108,7 +136,10 @@ function updateAutoUpdateInterval() {
   if (autoUpdateEnabled) {
     const interval = getSelectedInterval();
     startAutoUpdate(interval);
-    showAlert(`Auto-update interval changed to ${formatInterval(interval)}`, "info");
+    showAlert(
+      `Auto-update interval changed to ${formatInterval(interval)}`,
+      "info",
+    );
   }
 }
 
@@ -142,7 +173,9 @@ function startAutoUpdate(intervalMs) {
     }
   }, intervalMs);
 
-  console.log(`Auto-update started with ${formatInterval(intervalMs)} interval`);
+  console.log(
+    `Auto-update started with ${formatInterval(intervalMs)} interval`,
+  );
 }
 
 // Stop auto-update
@@ -162,7 +195,7 @@ function checkForChanges(newData) {
 
   // Create a map for faster lookup and comparison
   const oldEmployeeMap = new Map(
-    employees.map((emp) => [emp.id, JSON.stringify(emp)])
+    employees.map((emp) => [emp.id, JSON.stringify(emp)]),
   );
 
   // Compare each employee record
@@ -273,14 +306,17 @@ async function loadEmployeesAuto(filters = {}) {
       ...filters,
     });
 
-    const response = await fetch(`../cnfg/datalog_backend.php?${params.toString()}`, {
-      method: "GET",
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-        "Cache-Control": "no-cache"
+    const response = await fetch(
+      `../cnfg/datalog_backend.php?${params.toString()}`,
+      {
+        method: "GET",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "Cache-Control": "no-cache",
+        },
+        signal: AbortSignal.timeout(10000), // 10 second timeout
       },
-      signal: AbortSignal.timeout(10000) // 10 second timeout
-    });
+    );
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -295,7 +331,9 @@ async function loadEmployeesAuto(filters = {}) {
         employees = data.data;
         await renderEmployeeTable();
         showAutoUpdateNotification();
-        console.log(`Auto-update: Employee data refreshed - ${employees.length} employees loaded`);
+        console.log(
+          `Auto-update: Employee data refreshed - ${employees.length} employees loaded`,
+        );
       } else {
         console.log("Auto-update: No changes detected");
       }
@@ -303,19 +341,25 @@ async function loadEmployeesAuto(filters = {}) {
       lastUpdateTimestamp = Date.now();
       updateAutoUpdateUI();
     } else {
-      console.warn("Auto-update failed:", data.message || "Invalid data format");
+      console.warn(
+        "Auto-update failed:",
+        data.message || "Invalid data format",
+      );
     }
   } catch (error) {
     console.error("Auto-update error:", error);
 
     // Handle different types of errors
-    if (error.name === 'TimeoutError') {
+    if (error.name === "TimeoutError") {
       console.warn("Auto-update timeout - server may be slow");
-    } else if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
+    } else if (
+      error.message.includes("Failed to fetch") ||
+      error.message.includes("NetworkError")
+    ) {
       console.warn("Auto-update: Network connection issue");
       // Optionally disable auto-update on repeated network failures
       handleNetworkError();
-    } else if (error.name === 'AbortError') {
+    } else if (error.name === "AbortError") {
       console.warn("Auto-update request was aborted");
     }
   }
@@ -325,13 +369,16 @@ async function loadEmployeesAuto(filters = {}) {
 let networkErrorCount = 0;
 function handleNetworkError() {
   networkErrorCount++;
-  
+
   // Disable auto-update after 3 consecutive network errors
   if (networkErrorCount >= 3) {
     stopAutoUpdate();
     autoUpdateEnabled = false;
     updateAutoUpdateUI();
-    showAlert("Auto-update disabled due to repeated connection issues", "warning");
+    showAlert(
+      "Auto-update disabled due to repeated connection issues",
+      "warning",
+    );
     networkErrorCount = 0; // Reset counter
   }
 }
@@ -366,7 +413,7 @@ async function loadEmployeeData(employeeId) {
         headers: {
           "X-Requested-With": "XMLHttpRequest",
         },
-      }
+      },
     );
 
     const data = await response.json();
@@ -376,15 +423,15 @@ async function loadEmployeeData(employeeId) {
 
       // Populate form fields
       const fields = {
-        "employee_id": employee.id,
-        "fullname": employee.fullname || "",
-        "position": employee.position || "",
-        "brand": employee.brand || "",
-        "status": employee.status || "Active",
-        "shift": employee.shift || "",
-        "violation": employee.violation || "",
-        "check_status": employee.check_status || "",
-        "access_timestamp": employee.access_timestamp || ""
+        employee_id: employee.id,
+        fullname: employee.fullname || "",
+        position: employee.position || "",
+        brand: employee.brand || "",
+        status: employee.status || "Active",
+        shift: employee.shift || "",
+        violation: employee.violation || "",
+        check_status: employee.check_status || "",
+        access_timestamp: employee.access_timestamp || "",
       };
 
       Object.entries(fields).forEach(([fieldId, value]) => {
@@ -455,13 +502,13 @@ async function renderEmployeeTable() {
       return `
           <tr>
               <td>${startIndex + index + 1}</td>
-              <td><strong>${employee.fullname || 'N/A'}</strong></td>
-              <td>${employee.position || 'N/A'}</td>
-              <td>${employee.brand || 'N/A'}</td>
-              <td><span class="status-${(employee.status || '').toLowerCase()}">${
-        employee.status || 'N/A'
-      }</span></td>
-              <td>${employee.shift || 'N/A'}</td>
+              <td><strong>${employee.fullname || "N/A"}</strong></td>
+              <td>${employee.position || "N/A"}</td>
+              <td>${employee.brand || "N/A"}</td>
+              <td><span class="status-${(employee.status || "").toLowerCase()}">${
+                employee.status || "N/A"
+              }</span></td>
+              <td>${employee.shift || "N/A"}</td>
               <td class="Col7"><div style="height: 50px; overflow-y: auto; scrollbar-width: thin; align-content: center;">
                 <small>${employee.violation || "None"}</small></div></td>
               <td class="Col8">${
@@ -472,11 +519,12 @@ async function renderEmployeeTable() {
                   : `<div class="ph-cont"><div class="employee-ph">${fullnameInitials}</div></div>`
               }
               </td>
-              <td class="Col9" onclick="copyQRCode('${employee.qr_code || ''}')" title="Copy Proximity code"><i class='fas fa-qrcode'></i></td>
-              <td class="employee-timestamp"><small>${employee.access_timestamp || 'N/A'}</small></td>
-              <td><div class="check-status-${(employee.check_status || '').toLowerCase()}"><div class="employee-ph">${
-        employee.check_status || 'N/A'
-      }</div></div></td>
+              <td class="Col9" onclick="copyQRCode('${employee.qr_code || ""}')" title="Copy Proximity code">
+              <img src="../icon/nfc-icon.png" alt="Copy Proximity code" style="width: 20px; height: 20px;"></td>
+              <td class="employee-timestamp"><small>${employee.access_timestamp || "N/A"}</small></td>
+              <td><div class="check-status-${(employee.check_status || "").toLowerCase()}"><div class="employee-ph">${
+                employee.check_status || "N/A"
+              }</div></div></td>
           </tr>
       `;
     })
@@ -509,44 +557,43 @@ async function getCurrentUserId() {
 }
 
 // Copy QR code to clipboard
-function copyQRCode(qrCode) {
-  if (!qrCode) {
-    showAlert('No QR code available', 'warning');
-    return;
-  }
+function copyQRCode(code) {
+  // Create a temporary textarea element to hold the text
+  const tempTextArea = document.createElement("textarea");
+  tempTextArea.value = code;
+  document.body.appendChild(tempTextArea);
 
-  // Modern clipboard API
-  if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(qrCode).then(() => {
-      showAlert('QR code copied to clipboard!', 'success');
-    }).catch(() => {
-      fallbackCopyTextToClipboard(qrCode);
-    });
-  } else {
-    // Fallback for older browsers
-    fallbackCopyTextToClipboard(qrCode);
-  }
-}
+  // Select and copy the text
+  tempTextArea.select();
+  tempTextArea.setSelectionRange(0, 99999); // For mobile devices
 
-// Fallback copy method
-function fallbackCopyTextToClipboard(text) {
-  const textArea = document.createElement('textarea');
-  textArea.value = text;
-  textArea.style.position = 'fixed';
-  textArea.style.left = '-999999px';
-  textArea.style.top = '-999999px';
-  document.body.appendChild(textArea);
-  textArea.focus();
-  textArea.select();
-  
   try {
-    document.execCommand('copy');
-    showAlert('QR code copied to clipboard!', 'success');
+    // Copy the text to clipboard
+    document.execCommand("copy");
+
+    // Show success message (optional)
+    showAlert("Proximity code copied to clipboard!");
+
+    // Alternative: Use a more subtle notification
+    // console.log('QR code copied:', code);
   } catch (err) {
-    showAlert('Failed to copy QR code', 'error');
+    // Fallback for modern browsers using the Clipboard API
+    if (navigator.clipboard) {
+      navigator.clipboard
+        .writeText(code)
+        .then(() => {
+          showAlert("Proximity code copied to clipboard!");
+        })
+        .catch(() => {
+          showAlert("Failed to copy Proximity code");
+        });
+    } else {
+      showAlert("Failed to copy Proximity code");
+    }
   }
-  
-  document.body.removeChild(textArea);
+
+  // Remove the temporary textarea
+  document.body.removeChild(tempTextArea);
 }
 
 // Pagination functions
@@ -566,13 +613,11 @@ function updatePaginationControls() {
   paginationDiv.style.display = "flex";
 
   // Update page info
-  if (pageInfo) {
-    pageInfo.textContent = `Page ${currentPage} of ${totalPages} (${employees.length} total employees)`;
-  }
+  pageInfo.textContent = `Page ${currentPage} of ${totalPages} (${employees.length} total employees)`;
 
   // Update button states
-  if (prevBtn) prevBtn.disabled = currentPage <= 1;
-  if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
+  prevBtn.disabled = currentPage <= 1;
+  nextBtn.disabled = currentPage >= totalPages;
 }
 
 function previousPage() {
@@ -599,6 +644,8 @@ function goToPage(page) {
 // Search employees
 function searchEmployees() {
   const searchForm = document.getElementById("searchForm");
+  const searchQuery = document.getElementById("search_qr").value.trim();
+  
   if (!searchForm) return;
 
   const formData = new FormData(searchForm);
@@ -611,6 +658,11 @@ function searchEmployees() {
   }
 
   loadEmployees(filters);
+
+  // ✅ AUTO-CLEAR AFTER SUCCESSFUL SEARCH
+  if (searchQuery) {
+    document.getElementById("search_qr").value = "";
+  }
 }
 
 // Clear search
@@ -646,7 +698,7 @@ function forceRefresh() {
     });
 }
 
-// Modal functions
+// Open modal
 async function openModal(action, employeeId = null) {
   currentAction = action;
   const modal = document.getElementById("employeeModal");
@@ -660,24 +712,16 @@ async function openModal(action, employeeId = null) {
 
   // Reset form
   form.reset();
-  const employeeIdField = document.getElementById("employee_id");
-  if (employeeIdField) {
-    employeeIdField.value = "";
-  }
+  document.getElementById("employee_id").value = ""; // Fixed ID reference
 
   // Reset file upload label
   const fileLabel = document.querySelector(".file-upload-label");
-  if (fileLabel) {
-    fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
-  }
+  fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
 
   if (action === "add") {
     modalTitle.textContent = "Add Employee";
     // Set default values for new employee
-    const statusField = document.getElementById("status");
-    if (statusField) {
-      statusField.value = "Active";
-    }
+    document.getElementById("status").value = "Active";
   } else if (action === "edit" && employeeId) {
     modalTitle.textContent = "Edit Employee";
     await loadEmployeeData(employeeId);
@@ -687,20 +731,23 @@ async function openModal(action, employeeId = null) {
 }
 
 // Load employees with improved error handling
-async function loadEmployees(filters = {}) {
+async function loadEmployees(filters = {}, preservePage = false) {
   try {
     showLoading(true);
 
     const params = new URLSearchParams({
-      action: "get",
+      action: "get", // or 'list' - both work according to your backend
       ...filters,
     });
 
-    const response = await fetch(`../cnfg/datalog_backend.php?${params.toString()}`, {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
+    const response = await fetch(
+      `../cnfg/datalog_backend.php?${params.toString()}`,
+      {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+        },
       },
-    });
+    );
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -710,7 +757,12 @@ async function loadEmployees(filters = {}) {
 
     if (data.success && Array.isArray(data.data)) {
       employees = data.data;
-      currentPage = 1;
+
+      // Only reset to page 1 if not preserving page and not filtering
+      if (!preservePage && Object.keys(filters).length === 0) {
+        currentPage = 1;
+      }
+
       await renderEmployeeTable();
       lastUpdateTimestamp = Date.now();
       updateAutoUpdateUI();
@@ -724,7 +776,7 @@ async function loadEmployees(filters = {}) {
     console.error("Error loading employees:", error);
     showAlert(
       "Failed to load employees. Please check your connection.",
-      "error"
+      "error",
     );
   } finally {
     showLoading(false);
@@ -796,7 +848,7 @@ async function handleFormSubmit(e) {
       // Check file type
       const allowedTypes = [
         "image/jpeg",
-        "image/jpg", 
+        "image/jpg",
         "image/png",
         "image/gif",
       ];
@@ -831,7 +883,7 @@ async function handleFormSubmit(e) {
           (currentAction === "add"
             ? "Employee added successfully!"
             : "Employee updated successfully!"),
-        "success"
+        "success",
       );
       closeModal();
       loadEmployees(); // Reload the employee list
@@ -842,7 +894,7 @@ async function handleFormSubmit(e) {
     console.error("Error:", error);
     showAlert(
       "Failed to save employee. Please check your connection.",
-      "error"
+      "error",
     );
   } finally {
     showLoading(false);
@@ -873,7 +925,7 @@ function setupFileUploadHandler() {
       const allowedTypes = [
         "image/jpeg",
         "image/jpg",
-        "image/png", 
+        "image/png",
         "image/gif",
       ];
       if (!allowedTypes.includes(file.type)) {
@@ -931,7 +983,7 @@ async function deleteEmployee(employeeId) {
 async function deleteAllEmployees() {
   if (
     !confirm(
-      "⚠️ WARNING: This will permanently delete ALL employee data!\n\nThis action cannot be undone. Are you absolutely sure?"
+      "⚠️ WARNING: This will permanently delete ALL employee data!\n\nThis action cannot be undone. Are you absolutely sure?",
     )
   ) {
     return;
@@ -940,7 +992,7 @@ async function deleteAllEmployees() {
   // Double confirmation
   if (
     !confirm(
-      '🚨 FINAL WARNING: You are about to delete ALL employees and their data.\n\nType "DELETE ALL" in the next dialog to confirm.'
+      '🚨 FINAL WARNING: You are about to delete ALL employees and their data.\n\nType "DELETE ALL" in the next dialog to confirm.',
     )
   ) {
     return;
@@ -959,7 +1011,7 @@ async function deleteAllEmployees() {
     formData.append("action", "delete_all");
 
     const response = await fetch("../cnfg/datalog_backend.php", {
-      method: "POST", 
+      method: "POST",
       body: formData,
       headers: {
         "X-Requested-With": "XMLHttpRequest",
@@ -988,7 +1040,7 @@ async function deleteAllEmployees() {
 function showAlert(message, type = "info") {
   // Remove any existing alerts
   const existingAlerts = document.querySelectorAll(".alert");
-  existingAlerts.forEach(alert => alert.remove());
+  existingAlerts.forEach((alert) => alert.remove());
 
   // Create alert element
   const alert = document.createElement("div");

@@ -588,6 +588,93 @@ function excelTemplate(type = "Template") {
   }, 1000);
 }
 
+function excelProxCodeTemplate(proxcode= "Proximity Code",type = "Template") {
+  showAlert(`Exporting Excel ${proxcode} ${type}...`, "info");
+  // Your export logic here
+  try {
+    // Prepare data array
+    const data = [];
+
+    // Add headers
+    const headers = [
+      proxcode // Image column is skipped
+    ];
+    data.push(headers);
+
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    // Set column widths
+    const colWidths = [
+      { wch: 15 } // Proximity Code
+    ];
+    ws["!cols"] = colWidths;
+
+    // Style the header row
+    const headerRange = XLSX.utils.decode_range(ws["!ref"]);
+    for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+      if (!ws[cellAddress]) continue;
+
+      ws[cellAddress].s = {
+        font: { bold: true, color: { rgb: "FFFFFF" } },
+        fill: { fgColor: { rgb: "4472C4" } },
+        alignment: { horizontal: "center", vertical: "center" },
+        border: {
+          top: { style: "thin", color: { rgb: "000000" } },
+          bottom: { style: "thin", color: { rgb: "000000" } },
+          left: { style: "thin", color: { rgb: "000000" } },
+          right: { style: "thin", color: { rgb: "000000" } },
+        },
+      };
+    }
+
+    // Add borders to all cells
+    for (let row = 1; row <= headerRange.e.r; row++) {
+      for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+        if (!ws[cellAddress]) continue;
+
+        if (!ws[cellAddress].s) ws[cellAddress].s = {};
+        ws[cellAddress].s.border = {
+          top: { style: "thin", color: { rgb: "000000" } },
+          bottom: { style: "thin", color: { rgb: "000000" } },
+          left: { style: "thin", color: { rgb: "000000" } },
+          right: { style: "thin", color: { rgb: "000000" } },
+        };
+
+        // Center align SN column
+        if (col === 0) {
+          ws[cellAddress].s.alignment = {
+            horizontal: "center",
+            vertical: "center",
+          };
+        }
+      }
+    }
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, "Employee Data");
+
+    const filename = `Excel_${proxcode}_${type}.xlsx`;
+
+    // Save file
+    XLSX.writeFile(wb, filename);
+
+  } catch (error) {
+    console.error("Export error:", error);
+    showAlert(`Error downloading ${toLowerCase(type)}: ` + error.message, "error");
+  } finally {
+  }
+
+  console.log(`Exporting Excel ${type}`);
+
+  setTimeout(() => {
+    showAlert(`Excel ${type} download successfully!`, "success");
+  }, 1000);
+}
+
 // Keyboard navigation
 document.addEventListener("keydown", function (e) {
   if (e.key === "Escape" && typeof isDropdownOpen !== 'undefined' && isDropdownOpen) {

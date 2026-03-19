@@ -23,7 +23,7 @@ $email = $_SESSION['email'] ?? '';
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - QR Pass</title>
-  <link rel="icon" href="../icon/scan-icon.png" type="image/png">
+  <link rel="icon" href="../logo/nfc-logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../css/qp.css">
   <link rel="stylesheet" href="../css/sbar.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -37,7 +37,7 @@ $email = $_SESSION['email'] ?? '';
         <h1>QR Pass</h1>
       </div>
       <div class="s-search-section">
-        <img src="../icon/scan-icon.png" alt="QR Pass Icon">
+        <img src="../icon/nfc-icon.png" alt="QR Pass Icon">
         <div>
           <h3>Live Search</h3>
           <p>Web pass verifier application</p>
@@ -65,14 +65,13 @@ $email = $_SESSION['email'] ?? '';
     <h2>Live Search</h2>
 
     <div class="search-container">
-      <input type="text" id="searchInput" autofocus>
+      <input type="text" id="searchInput" autocomplete="off" autofocus >
     </div>
 
     <div id="resultsTable" style="display: none;">
       <div class="result" id="resultsBody"></div>
     </div>
     <div id="message"></div>
-    <div id="message-object"></div>
   </div>
 
   <audio id="successSound" src="../sounds/success.mp3" preload="auto"></audio>

@@ -31,7 +31,7 @@ try {
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($myDatabase); ?> - Manual Search</title>
-  <link rel="icon" href="../icon/scan-icon.png" type="image/png">
+  <link rel="icon" href="../logo/nfc-logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../css/m-i.css">
   <link rel="stylesheet" href="../css/btn.css">
   <link rel="stylesheet" href="../css/sbar.css">
@@ -46,7 +46,7 @@ try {
         <h1>QR Pass</h1>
       </div>
       <div class="s-search-section">
-        <img src="../icon/scan-icon.png" alt="QR Pass Icon">
+        <img src="../icon/nfc-icon.png" alt="QR Pass Icon">
         <div>
           <h3>Live Search</h3>
           <p>Web pass verifier application</p>

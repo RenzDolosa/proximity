@@ -572,7 +572,7 @@ try {
       case 'delete_all':
         try {
           // Get all employees first to delete their images
-          $all_employees = $employeeManager->getEmployees();
+          $all_employees = $employeeManager->getEmployees($employee_id);
 
           // Start transaction
           $db = $database->getUserConnection();

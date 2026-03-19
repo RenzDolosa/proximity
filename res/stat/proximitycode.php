@@ -17,25 +17,15 @@ $settings = [];
 if ($databaseConnected) {
   try {
     // Get total employees
-    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employees");
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM code");
     $stmt->execute();
     $stats['total_employees'] = $stmt->fetchColumn();
 
-    // Get active employees (note: status values are 'Active', not 'active')
-    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employees WHERE status = 'Active'");
-    $stmt->execute();
-    $stats['active_employees'] = $stmt->fetchColumn();
-
-    // Get inactive count
-    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employees WHERE status = 'Inactive'");
-    $stmt->execute();
-    $stats['inactive_employees'] = $stmt->fetchColumn();
-
-    // Get recent employee logs (fixed column references)
+    // Get recent proximity code logs (fixed column references)
     $stmt = $userDb->prepare("
-            SELECT el.*, e.fullname 
+            SELECT el.*, e.qr_code
             FROM employee_logs el
-            JOIN employees e ON el.employee_id = e.id
+            JOIN code e ON el.employee_id = e.id
             ORDER BY el.timestamp DESC 
             LIMIT 10
         ");
@@ -62,7 +52,7 @@ if ($databaseConnected) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Manage</title>
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
-  <link rel="stylesheet" href="../css/system.css">
+  <link rel="stylesheet" href="../css/proxcode.css">
   <link rel="stylesheet" href="../css/ptl.css">
   <link rel="stylesheet" href="../css/modal.css">
   <link rel="stylesheet" href="../css/btn.css">
@@ -101,35 +91,6 @@ if ($databaseConnected) {
       <form id="searchForm">
         <div class="form-row">
           <div class="form-group">
-            <label for="search_fullname">Full Name</label>
-            <input type="text" id="search_fullname" name="fullname" placeholder="Search by name...">
-          </div>
-          <div class="form-group">
-            <label for="search_position">Position</label>
-            <input type="text" id="search_position" name="position" placeholder="Search by position...">
-          </div>
-          <div class="form-group">
-            <label for="search_brand">Brand</label>
-            <input type="text" id="search_brand" name="brand" placeholder="Search by brand...">
-          </div>
-          <div class="form-group">
-            <label for="search_status">Status</label>
-            <select id="search_status" name="status">
-              <option value="">All Status</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="search_shift">Shift</label>
-            <select id="search_shift" name="shift">
-              <option value="">All Shifts</option>
-              <option value="Day Shift">Day Shift</option>
-              <option value="Night Shift">Night Shift</option>
-              <option value="Graveyard Shift">Graveyard Shift</option>
-            </select>
-          </div>
-          <div class="form-group">
             <label for="search_date">Date</label>
             <input type="text" id="search_date" name="created_at" placeholder="Search by date...">
           </div>
@@ -148,12 +109,12 @@ if ($databaseConnected) {
         </div>
         <div class="dropdown">
           <button class="btn add-dropdown" id="addTrigger" onclick="toggleAddOptions();">
-            <i class="fas fa-ellipsis-v"></i> Add Employee
+            <i class="fas fa-ellipsis-v"></i> Add Proximity
             <span class="add-arrow">▼</span>
           </button>
           <div class="add-options-menu" id="addOptionsMenu">
-            <button onclick="openModal('add'); hideAddOptions();"><i class="fas fa-plus"></i> Add Employee</button>
-            <button onclick="openImportModal(); hideAddOptions();"><i class="fas fa-upload"></i> Import Employee</button>
+            <button onclick="openModal('add'); hideAddOptions();"><i class="fas fa-plus"></i> Add Proximity Code</button>
+            <button onclick="openImportModal(); hideAddOptions();"><i class="fas fa-upload"></i> Import Proximity Code</button>
             <button onclick="hideAddOptions();"><i class="fas fa-times"></i> Cancel</button>
           </div>
         </div>
@@ -179,25 +140,15 @@ if ($databaseConnected) {
     <!-- Alert Messages -->
     <div class="alert-container" id="alertContainer"></div>
 
-    <!-- Employee Data Table -->
+    <!-- Proximity Code Table -->
     <div class="data-table">
       <div class="table-header">
-        <h3>Employee Records</h3>
+        <h3>Proximity Records</h3>
         <div class="emp-status">
           <div style="display: flex; gap: 10px;">
             <div class="total-emp"><i class="fas fa-users"></i></div>
-            <p>Total Employees</p>
+            <p>Total Proximity Codes</p>
             <h3 id="total_employees"><?php echo $stats['total_employees']; ?></h3>
-          </div>
-          <div style="display: flex; gap: 10px;">
-            <div class="active-emp"><i class="fas fa-user-check"></i></div>
-            <p>Active Employees</p>
-            <h3 id="active_employees"><?php echo $stats['active_employees']; ?></h3>
-          </div>
-          <div style="display: flex; gap: 10px;">
-            <div class="inactive-emp"><i class="fas fa-user-times"></i></div>
-            <p>Inactive Employees</p>
-            <h3 id="inactive_employees"><?php echo $stats['inactive_employees']; ?></h3>
           </div>
         </div>
       </div>
@@ -205,12 +156,6 @@ if ($databaseConnected) {
         <thead>
           <tr>
             <th>SN</th>
-            <th>Full Name</th>
-            <th>Position</th>
-            <th>Brand</th>
-            <th>Status</th>
-            <th>Shift</th>
-            <th class="Col7">Violation</th>
             <th class="Col8">Image</th>
             <th class="Col9">Proximity Code</th>
             <th>Register</th>
@@ -225,8 +170,8 @@ if ($databaseConnected) {
 
       <div id="no-data" class="no-data" style="display: none;">
         <div class="no-data-icon">📋</div>
-        <h3>No Employee Data Found</h3>
-        <p>Try adjusting your search criteria or load all employees to get started.</p>
+        <h3>No Proximity Code Found</h3>
+        <p>Try adjusting your search criteria or load all proximity codes to get started.</p>
       </div>
     </div>
   </div>
@@ -237,66 +182,19 @@ if ($databaseConnected) {
     <button onclick="nextPage()" id="next-btn">Next <i class="fas fa-arrow-right"></i></button>
   </div>
 
-  <!-- Employee Modal -->
+  <!-- Proximity Code Modal -->
   <div id="employeeModal" class="modal">
     <div class="modal-content">
       <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
-      <h2 id="modalTitle">Add Employee</h2>
+      <h2 id="modalTitle">Add Proximity Code</h2>
       <form id="employeeForm" enctype="multipart/form-data">
         <input type="hidden" id="employee_id" name="id">
-        <div class="form-row">
-          <div class="form-group">
-            <label for="fullname">Full Name *</label>
-            <input type="text" id="fullname" name="fullname" required>
-          </div>
-          <div class="form-group">
-            <label for="position">Position *</label>
-            <input type="text" id="position" name="position" required>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="brand">Brand *</label>
-            <input type="text" id="brand" name="brand" required>
-          </div>
-          <div class="form-group">
-            <label for="status">Status</label>
-            <select id="status" name="status">
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="shift">Shift *</label>
-            <select id="shift" name="shift" required>
-              <option value="">Select Shift</option>
-              <option value="Day Shift">Day Shift</option>
-              <option value="Night Shift">Night Shift</option>
-              <option value="Graveyard Shift">Graveyard Shift</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-group">
-          <label for="violation">Violation</label>
-          <textarea id="violation" name="violation" rows="3" placeholder="Kindly specify any violations, if applicable."></textarea>
-        </div>
         <div class="form-group">
           <label for="qr_code">Proximity Code</label>
-          <input type="text" id="qr_code" name="qr_code" placeholder="Enter proximity code or leave blank to auto-generate">
-        </div>
-        <div class="form-group">
-          <label for="image">Employee Image</label>
-          <div class="file-upload">
-            <input type="file" id="image" name="image" accept="image/*">
-            <label for="image" class="file-upload-label">
-              <i class="fas fa-file-image"></i> Click to select image (Max 1MB)
-            </label>
-          </div>
+          <input type="text" id="qr_code" name="qr_code" placeholder="Enter proximity code or leave blank to auto-generate" autocomplete="off" autofocus>
         </div>
         <div class="form-row" style="margin-top: 2rem;">
-          <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> Save Employee</button>
+          <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> Save Proximity Code</button>
           <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
         </div>
       </form>
@@ -307,7 +205,7 @@ if ($databaseConnected) {
   <div id="importModal" class="modal">
     <div class="modal-content">
       <span class="close" onclick="closeImportModal()"><i class="fas fa-times"></i></span>
-      <h2>Import Employees from File</h2>
+      <h2>Import Proximity Codes from File</h2>
 
       <div class="import-instructions">
         <h4>Supported File Formats:</h4>
@@ -316,22 +214,16 @@ if ($databaseConnected) {
         <h4>File Format Requirements:</h4>
         <p>Your file should have the following columns in this order:</p>
         <ul>
-          <li><strong>fullname</strong> - Employee's full name (required)</li>
-          <li><strong>position</strong> - Job position</li>
-          <li><strong>brand</strong> - Brand/Department</li>
-          <li><strong>status</strong> - Active or Inactive (default: Active)</li>
-          <li><strong>shift</strong> - Day Shift, Night Shift, or Graveyard Shift (required)</li>
-          <li><strong>violation</strong> - Any violations (optional)</li>
-          <li><strong>proximity code</strong> - If have Proximity Code (optional)</li>
+          <li><strong>proximity code</strong> - If have Proximity Code (required)</li>
         </ul>
-        <p><em>Note: If blank Proximity Codes will be automatically generated for each employee.</em></p>
+        <!-- <p><em>Note: If blank Proximity Codes will be automatically generated for each employee.</em></p> -->
       </div>
 
       <form id="importForm" enctype="multipart/form-data">
         <div class="form-group">
           <label for="dataFile">
             <div class="download-label">Select File
-              <a href="#" onclick="excelTemplate()" class="template-download-link">
+              <a href="#" onclick="excelProxCodeTemplate()" class="template-download-link">
                 <i class="fas fa-download"></i> Download Excel Template
               </a>
             </div>
@@ -378,8 +270,8 @@ if ($databaseConnected) {
   <audio id="inactiveSound" src="../sounds/inactive.mp3" preload="auto"></audio>
   <!-- Add XLSX library for Excel file support -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="../src/system.js"></script>
-  <script src="../src/is.js"></script>
+  <script src="../src/proxcode.js"></script>
+  <script src="../src/ipc.js"></script>
   <script src="../src/eas.js"></script>
   <script src="../src/opt-btn.js"></script>
   <script src="../src/loading.js"></script>
