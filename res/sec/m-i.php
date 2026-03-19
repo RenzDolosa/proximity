@@ -46,7 +46,7 @@ try {
         <h1>QR Pass</h1>
       </div>
       <div class="s-search-section">
-        <img src="../logo/nfc-logo.svg" alt="QR Pass Icon">
+        <img src="../icon/nfc-icon.png" alt="QR Pass Icon">
         <div>
           <h3>Live Search</h3>
           <p>Web pass verifier application</p>
@@ -110,7 +110,7 @@ try {
       <div class="employee-grid" id="resultsTable">
         <!-- Default blank state -->
         <div class="no-results" id="defaultState">
-          <div class="no-results-icon">🔍</div>
+          <div class="no-results-icon"><img src="../icon/nfc-icon.png" alt="Proximity Code" style="width: 10%; height: 10%;"></div>
           <h3>Search for Employees</h3>
           <p>Enter a name or proximity code to find employees</p>
         </div>
@@ -283,7 +283,7 @@ try {
       if (!hasSearched) {
         resultsTable.innerHTML = `
       <div class="no-results" id="defaultState">
-        <div class="no-results-icon">🔍</div>
+        <div class="no-results-icon"><img src="../icon/nfc-icon.png" alt="Proximity Code" style="width: 10%; height: 10%;"></div>
         <h3>Search for Employees</h3>
         <p>Enter a name or proximity code to find employees</p>
       </div>

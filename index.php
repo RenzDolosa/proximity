@@ -1,5 +1,5 @@
 <?php
-// login.php
+// index.php
 
 // Start session with secure settings
 if (session_status() === PHP_SESSION_NONE) {

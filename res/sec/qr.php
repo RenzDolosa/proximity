@@ -4,7 +4,7 @@
 require_once '../cnfg/config.php';
 
 if (!isset($_SESSION['user_id'])) {
-  header('Location: ../../login.php');
+  header('Location: ../../index.php');
   exit();
 }
 
@@ -37,7 +37,7 @@ $email = $_SESSION['email'] ?? '';
         <h1>QR Pass</h1>
       </div>
       <div class="s-search-section">
-        <img src="../logo/nfc-logo.svg" alt="QR Pass Icon">
+        <img src="../icon/nfc-icon.png" alt="QR Pass Icon">
         <div>
           <h3>Live Search</h3>
           <p>Web pass verifier application</p>

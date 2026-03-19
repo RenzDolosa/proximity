@@ -94,6 +94,9 @@ if ($databaseConnected) {
             <label for="search_date">Date</label>
             <input type="text" id="search_date" name="created_at" placeholder="Search by date...">
           </div>
+          <div class="form-group" style="position: absolute; right: -100px; bottom: 10%; opacity: 1;">
+            <img src="../icon/nfc-icon.png" alt="Proximity" style="width: 50px; height: 50px;">
+          </div>
           <div class="form-group" style="position: absolute; right: 1%; bottom: 10%; opacity: 0;">
             <label for="search_qr">Proximity Code</label>
             <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Search by proximity code..." style="cursor: default;" autocomplete="off">

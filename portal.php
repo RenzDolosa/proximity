@@ -54,7 +54,7 @@ require_once 'res/cnfg/req.php';
         <h1>QR Pass</h1>
       </div>
       <div class="s-search-section">
-        <img src="res/logo/nfc-logo.svg" alt="QR Pass Icon">
+        <img src="res/icon/nfc-icon.png" alt="QR Pass Icon">
         <div>
           <h3>Live Search</h3>
           <p>Web pass verifier application</p>

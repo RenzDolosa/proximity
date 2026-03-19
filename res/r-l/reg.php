@@ -237,7 +237,7 @@ function handleRegistrationError($error, $context = [])
     </form>
 
     <div class="login-link">
-      Already have an account? <a href="../../login.php">Sign in here</a>
+      Already have an account? <a href="../../index.php">Sign in here</a>
     </div>
   </div>
 

@@ -5,7 +5,7 @@ require_once 'config.php';
 
 // Redirect to login if not authenticated
 if (!isset($_SESSION['user_id'])) {
-  header('Location: ../../login.php');
+  header('Location: ../../index.php');
   exit();
 }
 
@@ -20,7 +20,7 @@ $phoneNum = $_SESSION['phone'] ?? '';
 if (isset($_GET['logout'])) {
   logSystemAction($userId, 'USER_LOGOUT', 'User logged out');
   session_destroy();
-  header('Location: ../../login.php');
+  header('Location: ../../index.php');
   exit;
 }
 

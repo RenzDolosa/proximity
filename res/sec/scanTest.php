@@ -4,7 +4,7 @@
 require_once '../cnfg/config.php';
 require_once '../cnfg/manpower_backend.php';
 if (!isset($_SESSION['user_id'])) {
-  header('Location: ../../login.php');
+  header('Location: ../../index.php');
   exit();
 }
 
@@ -46,7 +46,7 @@ $email = $_SESSION['email'] ?? '';
     <h2>Test Proximity Code Live Search</h2>
 
     <div class="search-container">
-      <input type="text" id="searchInput" autofocus>
+      <input type="text" id="searchInput" autocomplete="off" autofocus>
     </div>
 
     <div id="resultsTable" style="display: none;">
