@@ -110,7 +110,7 @@ if (!$portalAccessGranted) {
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Portal Access Required</title>
+    <title>Portal Access</title>
     <link rel="icon" href="res/icon/database-icon.png" type="image/png">
     <link rel="stylesheet" href="res/css/req.css">
     <link rel="stylesheet" href="res/css/loading.css">

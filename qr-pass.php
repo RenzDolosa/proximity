@@ -13,7 +13,7 @@ require_once 'res/cnfg/db.php';
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?php echo htmlspecialchars($myDatabase); ?> - QR Pass</title>
+  <title><?php echo htmlspecialchars($myDatabase); ?> - Proximity Pass</title>
   <link rel="icon" href="res/logo/nfc-logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="res/css/qp.css">
   <link rel="stylesheet" href="res/css/ptl.css">

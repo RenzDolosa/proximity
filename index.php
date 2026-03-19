@@ -149,8 +149,8 @@ if (!isset($_SESSION['csrf_token'])) {
   <div class="container">
     <div class="header">
       <div><img src="res/logo/database.png" alt="My Database Logo" class="logo"></div>
-      <h2>Welcome Back</h2>
-      <p class="subtitle">Sign in to your Employee Database</p>
+      <h2>Proximity Data</h2>
+      <p class="subtitle">Sign in to your Proximity Database</p>
     </div>
 
     <div class="database-status">

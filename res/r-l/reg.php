@@ -150,7 +150,7 @@ function handleRegistrationError($error, $context = [])
     <div class="header">
       <div><img src="../logo/database.png" alt="My Database Logo" class="logo"></div>
       <h2>Create Your Account</h2>
-      <p class="subtitle">Sign up to Employee Database</p>
+      <p class="subtitle">Sign up to Proximity Database</p>
     </div>
 
     <div class="database-info">
