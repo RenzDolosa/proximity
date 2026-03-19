@@ -46,7 +46,7 @@ try {
         <h1>QR Pass</h1>
       </div>
       <div class="s-search-section">
-        <img src="../icon/nfc-icon.png" alt="QR Pass Icon">
+        <img src="../logo/nfc-logo.svg" alt="QR Pass Icon">
         <div>
           <h3>Live Search</h3>
           <p>Web pass verifier application</p>
@@ -95,9 +95,9 @@ try {
           <label for="fullname">Fullname</label>
           <input type="text" id="fullname" name="fullname" placeholder="Search by fullname...">
         </div>
-        <div class="form-group">
-          <label for="qr_code">Proximity Code</label>
-          <input type="text" id="qr_code" name="qr_code" placeholder="Search by proximity code...">
+        <div class="form-group" style="position: absolute; right: 1%; top: 10%; opacity: 0;">
+          <label for="search_qr">Proximity Code</label>
+          <input type="text" id="search_qr" name="qr_code" placeholder="Search by proximity code..." style="cursor: default;" autocomplete="off">
         </div>
       </form>
     </div>
@@ -394,6 +394,11 @@ try {
       });
 
       renderEmployees(filteredEmployees);
+
+      // ✅ AUTO-CLEAR AFTER SUCCESSFUL SEARCH
+      if (hasSearchCriteria) {
+        document.getElementById("search_qr").value = "";
+      }
     }
 
     function clearSearch() {
@@ -463,11 +468,50 @@ try {
 
       // Add real-time search
       const searchInputs = document.querySelectorAll('#searchForm input, #searchForm select');
-      searchInputs.forEach(input => {
-        input.addEventListener('input', searchEmployees);
-        input.addEventListener('change', searchEmployees);
+      searchInputs.forEach((input) => {
+        input.addEventListener("input", debounce(searchEmployees, 300));
       });
+
+      // 🔥 AUTO-FOCUS LOGIC
+      const codeInput = document.getElementById("search_qr");
+
+      function autoFocus() {
+        const active = document.activeElement;
+
+        // Check if active element is NOT an input, select, or textarea
+        const isTyping =
+          active &&
+          (active.tagName === "INPUT" ||
+            active.tagName === "SELECT" ||
+            active.tagName === "TEXTAREA");
+
+        if (!isTyping && codeInput) {
+          codeInput.focus();
+        }
+      }
+
+      // Run on page load
+      autoFocus();
+
+      // Re-check when user clicks anywhere
+      document.addEventListener("click", autoFocus);
+
+      // Re-check when focus changes (keyboard navigation, tabbing, etc.)
+      document.addEventListener("focusin", autoFocus);
     });
+
+    // Debounce function
+    function debounce(func, wait) {
+      let timeout;
+      return function executedFunction(...args) {
+        const later = () => {
+          clearTimeout(timeout);
+          func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+      };
+    }
   </script>
 </body>
 

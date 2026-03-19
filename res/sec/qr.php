@@ -37,7 +37,7 @@ $email = $_SESSION['email'] ?? '';
         <h1>QR Pass</h1>
       </div>
       <div class="s-search-section">
-        <img src="../icon/nfc-icon.png" alt="QR Pass Icon">
+        <img src="../logo/nfc-logo.svg" alt="QR Pass Icon">
         <div>
           <h3>Live Search</h3>
           <p>Web pass verifier application</p>
