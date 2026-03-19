@@ -595,7 +595,6 @@ try {
             $db->rollBack();
             $response['message'] = 'Failed to delete employee data';
           }
-
         } catch (Exception $e) {
           if (isset($db)) {
             $db->rollBack();
@@ -644,7 +643,7 @@ try {
                 'brand' => sanitizeInput(trim($employee_data['brand'] ?? '')),
                 'status' => in_array($employee_data['status'], ['Active', 'Inactive']) ? $employee_data['status'] : 'Active',
                 'shift' => in_array($employee_data['shift'], ['Day Shift', 'Night Shift']) ? $employee_data['shift'] : 'Day Shift',
-                'violation' => sanitizeInput(trim($employee_data['violation'] ?? '')),
+                'violation' => (($employee_violation = sanitizeInput(trim($employee_data['violation'] ?? ''))) === '' || $employee_violation === 'None') ? '' : $employee_violation,
                 'image' => null,
                 'qr_code' => sanitizeInput(trim($employee_data['qr_code'] ?? $qr_code))
               ];
@@ -662,7 +661,6 @@ try {
               } else {
                 $errors[] = "Row " . ($index + 1) . ": Failed to create employee record";
               }
-
             } catch (Exception $e) {
               $errors[] = "Row " . ($index + 1) . ": " . $e->getMessage();
             }
@@ -685,7 +683,6 @@ try {
             $response['message'] = 'Import failed. No valid employee records were processed.';
             $response['errors'] = $errors;
           }
-
         } catch (Exception $e) {
           if (isset($db)) {
             $db->rollBack();
@@ -773,7 +770,6 @@ try {
           }
 
           logSystemAction($database->getCurrentUserId(), 'BULK_STATUS_UPDATE', "Updated $updated_count employees to status: $new_status");
-
         } catch (Exception $e) {
           if (isset($db)) {
             $db->rollBack();
@@ -831,7 +827,6 @@ try {
 
           logSystemAction($database->getCurrentUserId(), 'DATA_BACKUP', 'Created backup with ' . count($employees) . ' employees');
           exit;
-
         } catch (Exception $e) {
           $response['message'] = 'Backup error: ' . $e->getMessage();
         }
@@ -884,7 +879,6 @@ try {
               } else {
                 $errors[] = "Failed to restore employee: " . ($employee_data['fullname'] ?? 'Unknown');
               }
-
             } catch (Exception $e) {
               $errors[] = "Error restoring " . ($employee_data['fullname'] ?? 'Unknown') . ": " . $e->getMessage();
             }
@@ -902,7 +896,6 @@ try {
           }
 
           logSystemAction($database->getCurrentUserId(), 'DATA_RESTORED', "Restored $restored_count employees from backup");
-
         } catch (Exception $e) {
           if (isset($db)) {
             $db->rollBack();
@@ -912,10 +905,9 @@ try {
         break;
 
       default:
-        $response['message'] = 'Invalid action specified ' .$action;
+        $response['message'] = 'Invalid action specified ' . $action;
         break;
     }
-
   } elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $action = $_GET['action'] ?? '';
 
@@ -1039,7 +1031,6 @@ try {
   } else {
     $_SESSION['error_message'] = $response['message'];
   }
-
 } catch (Exception $e) {
   $error_response = [
     'success' => false,
@@ -1179,5 +1170,3 @@ if (isset($_GET['health_check'])) {
   echo json_encode($health, JSON_PRETTY_PRINT);
   exit;
 }
-
-?>

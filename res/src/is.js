@@ -23,7 +23,10 @@ document.addEventListener("DOMContentLoaded", function () {
     if (e.target.files.length > 0) {
       const fileName = e.target.files[0].name;
       const fileExtension = fileName.split(".").pop().toLowerCase();
-      const fileIcon = fileExtension === "csv" ? `<i class="fas fa-file-alt"></i>` : `<i class="fas fa-file-excel"></i>`;
+      const fileIcon =
+        fileExtension === "csv"
+          ? `<i class="fas fa-file-alt"></i>`
+          : `<i class="fas fa-file-excel"></i>`;
       label.innerHTML = `${fileIcon} ${fileName}`;
     } else {
       label.innerHTML = `<i class="fas fa-file-alt"></i> Click to select file (.csv, .xlsx, .xls)`;
@@ -109,11 +112,12 @@ async function parseExcelFile(file) {
 function displayPreview(data) {
   let previewHTML = '<table class="preview-table"><thead><tr>';
   previewHTML +=
-    "<th>Full Name</th><th>Position</th><th>Brand</th><th>Status</th><th>Shift</th><th>Violation</th><th>Proximity Code</th>";
+    "<th>SN</th><th>Full Name</th><th>Position</th><th>Brand</th><th>Status</th><th>Shift</th><th>Violation</th><th>Proximity Code</th>";
   previewHTML += "</tr></thead><tbody>";
 
-  data.forEach((col) => {
+  data.forEach((col, index) => {
     previewHTML += "<tr>";
+    previewHTML += `<td>${index + 1}</td>`;
     for (let i = 0; i < 6; i++) {
       previewHTML += `<td>${col[i] || ""}</td>`;
     }
@@ -121,19 +125,28 @@ function displayPreview(data) {
     const statusDisplay = statusValue
       ? statusValue
       : '<em style="color: #6c757d;">Default (Active)</em>';
-    previewHTML = previewHTML.replace(`<td>${statusValue}</td>`, `<td>${statusDisplay}</td>`);
+    previewHTML = previewHTML.replace(
+      `<td>${statusValue}</td>`,
+      `<td>${statusDisplay}</td>`,
+    );
 
     const shiftValue = col[4] || "";
     const shiftDisplay = shiftValue
       ? shiftValue
       : '<em style="color: #6c757d;">Default (Day Shift)</em>';
-    previewHTML = previewHTML.replace(`<td>${shiftValue}</td>`, `<td>${shiftDisplay}</td>`);
+    previewHTML = previewHTML.replace(
+      `<td>${shiftValue}</td>`,
+      `<td>${shiftDisplay}</td>`,
+    );
 
     const violationValue = col[5] || "";
-    const violationDisplay = violationValue
+    const violationDisplay = violationValue !== "" && violationValue !== "None"
       ? violationValue
       : '<em style="color: #6c757d;">None</em>';
-    previewHTML = previewHTML.replace(`<td>${violationValue}</td>`, `<td>${violationDisplay}</td>`);
+    previewHTML = previewHTML.replace(
+      `<td>${violationValue}</td>`,
+      `<td>${violationDisplay}</td>`,
+    );
 
     // Show QR code column with indication if it will be auto-generated
     const qrValue = col[6] || "";
@@ -249,7 +262,7 @@ async function handleImportSubmit(e) {
         `Found ${errors.length} errors:\n${errors.slice(0, 5).join("\n")}${
           errors.length > 5 ? "\n... and more" : ""
         }`,
-        "error"
+        "error",
       );
       showImportProgress(false);
       return;
@@ -339,8 +352,8 @@ async function processExcelFile(file) {
           (row) =>
             row &&
             row.some(
-              (cell) => cell !== null && cell !== undefined && cell !== ""
-            )
+              (cell) => cell !== null && cell !== undefined && cell !== "",
+            ),
         );
 
         resolve(filteredRows);

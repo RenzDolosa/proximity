@@ -364,7 +364,7 @@ function displayPreview(data) {
   }
 
   let previewHTML = '<table class="preview-table"><thead><tr>';
-  previewHTML += '<th>Status</th>';
+  previewHTML += '<th>SN</th>';
   previewHTML += '<th>Proximity Code</th>';
   previewHTML += '</tr></thead><tbody>';
 
@@ -381,7 +381,7 @@ function displayPreview(data) {
 
     const qrDisplay = qrValue 
       ? escapeHtml(qrValue)
-      : '<em style="color: #6c757d;">Auto-generate</em>';
+      : '<em style="color: #6c757d;">Skipped Row</em>';
     previewHTML += `<td><span class="badge badge-info">${index + 1}</span></td>`;
     previewHTML += `<td>${qrDisplay}</td>`;
     previewHTML += "</tr>";

@@ -539,8 +539,14 @@ try {
 
               // Prepare proximity code with sanitization
               $employee_record = [
-                'qr_code' => sanitizeInput($qr_code)
+                'qr_code' => sanitizeInput(trim($employee_data['qr_code'] ?? $qr_code))
               ];
+
+              // Validate required fields
+              if (empty($employee_record['qr_code'])) {
+                $errors[] = "Row " . ($index + 1) . ": Missing required fields";
+                continue;
+              }
 
               $employee_id = $employeeManager->createEmployee($employee_record);
 
