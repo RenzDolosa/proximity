@@ -330,13 +330,14 @@ if ($databaseConnected) {
 
       <form id="importForm" enctype="multipart/form-data">
         <div class="form-group">
-          <label for="dataFile">
-            <div class="download-label">Select File
-              <a href="#" onclick="excelTemplate()" class="template-download-link">
-                <i class="fas fa-download"></i> Download Excel Template
-              </a>
-            </div>
-          </label>
+          <div class="form-row">
+            <label for="dataFile">
+              <div class="download-label">Select File</div>
+            </label>
+            <a href="#" onclick="excelTemplate()" style="display: flex; align-items: center; gap: 5px; margin-left: auto; text-decoration: none; color: #007bff;">
+              <i class="fas fa-download"></i> Download Excel Template
+            </a>
+          </div>
           <div class="file-upload">
             <input type="file" id="dataFile" name="dataFile" accept=".csv,.xlsx,.xls" required>
             <label for="dataFile" class="file-upload-label">

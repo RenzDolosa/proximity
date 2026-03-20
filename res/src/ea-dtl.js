@@ -28,10 +28,8 @@ async function fetchAllEmployeesForExport() {
 // Function to apply current search filters to employee data
 function applyCurrentFilters(employees) {
   const filters = {
-    fullname:
-      document.getElementById("search_fullname")?.value?.toLowerCase() || "",
-    position:
-      document.getElementById("search_position")?.value?.toLowerCase() || "",
+    fullname: document.getElementById("search_fullname")?.value?.toLowerCase() || "",
+    position: document.getElementById("search_position")?.value?.toLowerCase() || "",
     brand: document.getElementById("search_brand")?.value?.toLowerCase() || "",
     status: document.getElementById("search_status")?.value || "",
     shift: document.getElementById("search_shift")?.value || "",
@@ -250,7 +248,7 @@ function exportEmployeeData(employees, type = "Data") {
     // Show success message
     showAlert(
       `Successfully exported ${employees.length} employee records to ${filename}`,
-      "success"
+      "success",
     );
   } catch (error) {
     console.error("Export employee data error:", error);
@@ -429,7 +427,7 @@ function exportToExcelDTL(type = "Filtered") {
       `Successfully exported ${
         data.length - 1
       } employee records to ${filename}`,
-      "success"
+      "success",
     );
   } catch (error) {
     console.error("Export error:", error);
@@ -460,12 +458,12 @@ function exportFilteredData() {
 
     // Check if any filters are active
     const hasActiveFilters = Object.values(filters).some(
-      (filter) => filter !== ""
+      (filter) => filter !== "",
     );
 
     if (hasActiveFilters) {
       const result = confirm(
-        "Export filtered data only or export all data?\n\nClick OK to export filtered data\nClick Cancel to export all data"
+        "Export filtered data only or export all data?\n\nClick OK to export filtered data\nClick Cancel to export all data",
       );
       if (result) {
         exportToExcelDTL(); // Export only visible/filtered data

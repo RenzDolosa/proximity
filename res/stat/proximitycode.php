@@ -125,8 +125,8 @@ if ($databaseConnected) {
             <span class="add-arrow">▼</span>
           </button>
           <div class="add-options-menu" id="exportOptionsMenu">
-            <button onclick="exportAllData(); hideExportOptions();"><i class="fas fa-download"></i> Export All Data</button>
-            <button onclick="exportFilteredData(); hideExportOptions();"><i class="fas fa-download"></i> Export Filtered Data</button>
+            <button onclick="exportAllCodes(); hideExportOptions();"><i class="fas fa-download"></i> Export All Data</button>
+            <button onclick="exportFilteredCodes(); hideExportOptions();"><i class="fas fa-download"></i> Export Filtered Data</button>
             <button onclick="exportWithImages(); hideExportOptions();"><i class="fas fa-download"></i> Export with Images</button>
             <button onclick="hideExportOptions();"><i class="fas fa-times"></i> Cancel</button>
           </div>
@@ -222,13 +222,14 @@ if ($databaseConnected) {
 
       <form id="importForm" enctype="multipart/form-data">
         <div class="form-group">
-          <label for="dataFile">
-            <div class="download-label">Select File
-              <a href="#" onclick="excelProxCodeTemplate()" class="template-download-link">
-                <i class="fas fa-download"></i> Download Excel Template
-              </a>
-            </div>
-          </label>
+          <div class="form-row">
+            <label for="dataFile">
+              <div class="download-label">Select File</div>
+            </label>
+            <a href="#" onclick="excelProxCodeTemplate()" style="display: flex; align-items: center; gap: 5px; margin-left: auto; text-decoration: none; color: #007bff;">
+              <i class="fas fa-download"></i> Download Excel Template
+            </a>
+          </div>
           <div class="file-upload">
             <input type="file" id="dataFile" name="dataFile" accept=".csv,.xlsx,.xls" required>
             <label for="dataFile" class="file-upload-label">

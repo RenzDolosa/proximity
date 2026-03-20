@@ -1,5 +1,5 @@
 <?php
-// load_employees.php - Updated to support export functionality
+// export_proxcode.php - Updated to support export functionality
 
 require_once 'config.php';
 require_once 'db.php';
@@ -27,10 +27,9 @@ try {
 
   if ($isExportRequest) {
     // For export, get all employees without pagination
-    $sql = "SELECT id, fullname, position, brand, status, shift, violation, qr_code, 
-                       image, access_timestamp, check_status
-                FROM employee_access_log
-                ORDER BY access_timestamp DESC";
+    $sql = "SELECT id, qr_code, created_at, updated_at 
+                FROM code
+                ORDER BY id DESC";
 
     $stmt = $userDb->prepare($sql);
     $stmt->execute();
@@ -53,31 +52,6 @@ try {
   $searchConditions = [];
   $searchParams = [];
 
-  if (!empty($_GET['fullname'])) {
-    $searchConditions[] = "fullname LIKE :fullname";
-    $searchParams[':fullname'] = '%' . $_GET['fullname'] . '%';
-  }
-
-  if (!empty($_GET['position'])) {
-    $searchConditions[] = "position LIKE :position";
-    $searchParams[':position'] = '%' . $_GET['position'] . '%';
-  }
-
-  if (!empty($_GET['brand'])) {
-    $searchConditions[] = "brand LIKE :brand";
-    $searchParams[':brand'] = '%' . $_GET['brand'] . '%';
-  }
-
-  if (!empty($_GET['status'])) {
-    $searchConditions[] = "status = :status";
-    $searchParams[':status'] = $_GET['status'];
-  }
-
-  if (!empty($_GET['shift'])) {
-    $searchConditions[] = "shift = :shift";
-    $searchParams[':shift'] = $_GET['shift'];
-  }
-
   if (!empty($_GET['created_at'])) {
     $searchConditions[] = "DATE(created_at) = :created_at";
     $searchParams[':created_at'] = $_GET['created_at'];
@@ -95,7 +69,7 @@ try {
   }
 
   // Get total count for pagination
-  $countSql = "SELECT COUNT(*) FROM employees $whereClause";
+  $countSql = "SELECT COUNT(*) FROM code $whereClause";
   $countStmt = $userDb->prepare($countSql);
   foreach ($searchParams as $key => $value) {
     $countStmt->bindValue($key, $value);
@@ -104,11 +78,10 @@ try {
   $totalRecords = $countStmt->fetchColumn();
 
   // Get paginated results
-  $sql = "SELECT id, fullname, position, brand, status, shift, violation, qr_code, 
-                   image, access_timestamp, check_status
-            FROM employee_access_log
+  $sql = "SELECT id, qr_code, created_at, updated_at 
+            FROM code 
             $whereClause 
-            ORDER BY access_timestamp DESC 
+            ORDER BY id DESC 
             LIMIT :limit OFFSET :offset";
 
   $stmt = $userDb->prepare($sql);
@@ -128,15 +101,11 @@ try {
   // Format dates and handle images
   foreach ($employees as &$employee) {
     // Format dates
-    if ($employee['access_timestamp']) {
-      $employee['formatted_access_timestamp'] = date('Y-m-d H:i:s', strtotime($employee['access_timestamp']));
+    if ($employee['created_at']) {
+      $employee['formatted_created_at'] = date('Y-m-d H:i:s', strtotime($employee['created_at']));
     }
-
-    // Handle image path
-    if ($employee['image'] && file_exists('../uploads/' . $employee['image'])) {
-      $employee['image_url'] = '../uploads/' . $employee['image'];
-    } else {
-      $employee['image_url'] = null;
+    if ($employee['updated_at']) {
+      $employee['formatted_updated_at'] = date('Y-m-d H:i:s', strtotime($employee['updated_at']));
     }
   }
 
