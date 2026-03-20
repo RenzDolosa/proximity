@@ -285,7 +285,7 @@ if ($databaseConnected) {
         </div>
         <div class="form-group">
           <label for="qr_code">Proximity Code</label>
-          <input type="text" id="qr_code" name="qr_code" placeholder="Enter proximity code or leave blank to auto-generate">
+          <input type="text" id="qr_code" name="qr_code" placeholder="Enter proximity code or leave blank to auto-generate" autocomplete="off" autofocus>
         </div>
         <div class="form-group">
           <label for="image">Employee Image</label>

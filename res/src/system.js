@@ -29,7 +29,7 @@ function setupEventListeners() {
 
   // Search form inputs
   const searchInputs = document.querySelectorAll(
-    "#searchForm input, #searchForm select"
+    "#searchForm input, #searchForm select",
   );
 
   searchInputs.forEach((input) => {
@@ -434,7 +434,7 @@ function goToPage(page) {
 function searchEmployees() {
   const searchForm = document.getElementById("searchForm");
   const searchQuery = document.getElementById("search_qr").value.trim();
-  
+
   if (!searchForm) return;
 
   const formData = new FormData(searchForm);
@@ -469,6 +469,7 @@ async function openModal(action, employeeId = null) {
   const modal = document.getElementById("employeeModal");
   const modalTitle = document.getElementById("modalTitle");
   const form = document.getElementById("employeeForm");
+  const qrCodeInput = document.getElementById("qr_code");
 
   if (!modal || !modalTitle || !form) {
     console.error("Modal elements not found");
@@ -484,7 +485,9 @@ async function openModal(action, employeeId = null) {
   fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
 
   if (action === "add") {
+    
     modalTitle.textContent = "Add Employee";
+    
     // Set default values for new employee
     document.getElementById("status").value = "Active";
   } else if (action === "edit" && employeeId) {
@@ -493,6 +496,11 @@ async function openModal(action, employeeId = null) {
   }
 
   modal.style.display = "block";
+
+  if (action === "add") {
+    // Autofocus on qr_code input after modal is displayed
+    qrCodeInput.focus();
+  }
 }
 
 // Load employee data - Modified to preserve pagination
