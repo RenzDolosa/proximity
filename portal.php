@@ -51,10 +51,10 @@ require_once 'res/cnfg/req.php';
   <div class="side-bar" style="top: 64px;">
     <div onclick="window.location.href='qr-pass.php';" class="side-btn">
       <div class="s-header">
-        <h1>QR Pass</h1>
+        <h1>Proximity</h1>
       </div>
       <div class="s-search-section">
-        <img src="res/icon/nfc-icon.png" alt="QR Pass Icon">
+        <img src="res/icon/nfc-icon.png" alt="NFC Icon">
         <div>
           <h3>Live Search</h3>
           <p>Web pass verifier application</p>

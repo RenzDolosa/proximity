@@ -89,10 +89,10 @@ require_once '../cnfg/db.php';
       <div class="menu-card" onclick="navigateWithLoading('../sec/scanTest.php');">
         <a href="../sec/scanTest.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../sec/scanTest.php');">Test QR Code</a>
         <div class="favi">
-          <img src="../icon/scan-icon.png" alt="QR Pass Icon" style="width: 100px; height: 100px;">
+          <img src="../icon/nfc-icon.png" alt="NFC Icon" style="width: 100px; height: 100px;">
           <div>
-            <h3>Test QR Code Live Search</h3>
-            <p>Web QR Pass verifier application</p>
+            <h3>Test Live Search</h3>
+            <p>Web Proximity verifier application</p>
           </div>
         </div>
       </div>
