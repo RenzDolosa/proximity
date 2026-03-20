@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", function () {
   loadCurrentUserId(); // Load and cache user ID first
   loadEmployees();
   setupEventListeners();
+  updateTotalAvailable(); // 🆕 Update count on page load
 });
 
 // Load and cache current user ID
@@ -64,6 +65,38 @@ async function getSystemEmployeeQRCodes() {
   }
 
   return []; // Return empty array on error
+}
+
+// 🆕 Count and display available QR codes
+async function updateTotalAvailable() {
+  try {
+    // Fetch system.js employee QR codes
+    const systemQRCodes = await getSystemEmployeeQRCodes();
+    
+    // Normalize system QR codes for comparison
+    const normalizedSystemQRCodes = systemQRCodes.map(code => 
+      String(code).trim().toLowerCase()
+    );
+
+    // Count QR codes that ARE in system.js (occupied)
+    const occupiedCount = employees.filter(emp => 
+      emp.qr_code && normalizedSystemQRCodes.includes(String(emp.qr_code).trim().toLowerCase())
+    ).length;
+    
+    // Available = total employees - occupied
+    const availableCount = employees.length - occupiedCount;
+    
+    // Update the DOM elements
+    const totalAvailableElement = document.getElementById("total_available");
+    const totalOccupiedElement = document.getElementById("total_occupied");
+    
+    if (totalAvailableElement && totalOccupiedElement) {
+      totalAvailableElement.textContent = availableCount;
+      totalOccupiedElement.textContent = occupiedCount;
+    }
+  } catch (error) {
+    console.error("Error updating total available:", error);
+  }
 }
 
 // Setup event listeners
@@ -310,6 +343,9 @@ async function renderEmployeeTable() {
 
   // Update pagination controls
   updatePaginationControls();
+  
+  // 🆕 Update total available count
+  await updateTotalAvailable();
 }
 
 // Escape HTML to prevent XSS
@@ -526,6 +562,7 @@ async function loadEmployees(filters = {}, preservePage = false) {
       }
 
       await renderEmployeeTable();
+      await updateTotalAvailable(); // 🆕 Update count after loading
 
       console.log(`Loaded ${data.total || employees.length} employees`);
     } else {

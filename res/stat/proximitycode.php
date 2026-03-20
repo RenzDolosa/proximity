@@ -147,9 +147,23 @@ if ($databaseConnected) {
         <h3>Proximity Records</h3>
         <div class="emp-status">
           <div style="display: flex; gap: 10px;">
-            <div class="total-emp"><i class="fas fa-users"></i></div>
+            <div class="total-emp"><i class="fas fa-id-card"></i></div>
             <p>Total Proximity Codes</p>
             <h3 id="total_employees"><?php echo $stats['total_employees']; ?></h3>
+          </div>
+        </div>
+        <div class="emp-status">
+          <div style="display: flex; gap: 10px;">
+            <div class="total-emp"><i class="fas fa-address-card"></i></div>
+            <p>Total Available</p>
+            <h3 id="total_available">0</h3>
+          </div>
+        </div>
+        <div class="emp-status">
+          <div style="display: flex; gap: 10px;">
+            <div class="total-emp"><i class="fas fa-credit-card"></i></div>
+            <p>Total Occupied</p>
+            <h3 id="total_occupied">0</h3>
           </div>
         </div>
       </div>
