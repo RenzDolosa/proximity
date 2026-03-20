@@ -2,11 +2,11 @@
 //settings.php
 
 require_once '../cnfg/config.php';
+require_once '../cnfg/db.php';
 
 $user = getCurrentUser();
 $message = '';
 $messageType = '';
-$myDatabase = $user['my_database'] ?? 'My Database';
 
 // Refresh user data from database to ensure we have the latest information
 try {

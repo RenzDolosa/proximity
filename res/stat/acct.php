@@ -2,6 +2,7 @@
 //acct.php
 
 require_once '../cnfg/config.php';
+require_once '../cnfg/db.php';
 
 $user = getCurrentUser();
 $message = '';
