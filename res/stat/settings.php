@@ -6,6 +6,7 @@ require_once '../cnfg/config.php';
 $user = getCurrentUser();
 $message = '';
 $messageType = '';
+$myDatabase = $user['my_database'] ?? 'My Database';
 
 // Refresh user data from database to ensure we have the latest information
 try {
@@ -34,7 +35,7 @@ try {
   $userStats['active_employees'] = $stmt->fetchColumn();
 
   // Get total violations
-  $stmt = $userPdo->query("SELECT COUNT(*) as total_violations FROM violations");
+  $stmt = $userPdo->query("SELECT COUNT(*) as total_violations FROM employees WHERE violation <> ''");
   $userStats['total_violations'] = $stmt->fetchColumn();
 
   // Get recent activity count (last 30 days)
