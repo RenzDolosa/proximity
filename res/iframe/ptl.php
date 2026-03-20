@@ -50,10 +50,10 @@ require_once '../cnfg/db.php';
         <p>View your activity statistics and insights</p>
       </div>
 
-      <div class="stat-card">
-        <div class="icon">💬</div>
-        <h3>Support Center</h3>
-        <p>Check your latest messages and notifications</p>
+      <div class="stat-card" onclick="navigateWithLoading('../stat/proximitycode.php');">
+        <div class="icon"><img src="../logo/nfc-logo.svg" alt="NFC Icon" style="width: 36px; height: 36px; margin: 8px 0 -12px 0;"></div>
+        <h3>Proximity Center</h3>
+        <p>Check your proximity code status</p>
       </div>
 
       <div class="stat-card" onclick="navigateWithLoading('../stat/settings.php');">
@@ -97,8 +97,8 @@ require_once '../cnfg/db.php';
         </div>
       </div>
 
-      <div class="menu-card" onclick="navigateWithLoading('../stat/proximitycode.php');" style="background: linear-gradient(to right, rgb(183, 183, 183), rgb(147, 147, 147)); transform: scale(1);">
-        <a href="../stat/proximitycode.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../stat/proximitycode.php');">Coming Soon</a>
+      <div class="menu-card" onclick="navigateWithLoading('../udev/m-i v2.php');" style="background: linear-gradient(to right, rgb(183, 183, 183), rgb(147, 147, 147)); transform: scale(1);">
+        <a href="../udev/m-i v2.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../udev/m-i v2.php');">Coming Soon</a>
         <div class="favi">
           <img src="../logo/coming-soon.png" alt="Coming Soon" style="width: 125px; height: 100px;">
           <div>

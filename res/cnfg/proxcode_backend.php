@@ -231,7 +231,7 @@ class EmployeeManager
   }
 
   // Get proximity code statistics
-  public function getEmployeeStats()
+  public function getProxcodeStats()
   {
     $stats = [];
 
@@ -700,7 +700,7 @@ try {
 
       case 'stats':
         try {
-          $stats = $employeeManager->getEmployeeStats();
+          $stats = $employeeManager->getProxcodeStats();
           $response['success'] = true;
           $response['data'] = $stats;
         } catch (Exception $e) {

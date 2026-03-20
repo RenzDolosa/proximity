@@ -10,15 +10,13 @@ $stats = [
   'total_employees' => 0,
   'active_employees' => 0,
   'inactive_employees' => 0,
-];
-
-$stats1 = [
   'total_scanned' => 0,
   'active_scan' => 0,
   'inactive_scan' => 0,
   'today_attendance' => 0,
   'today_in' => 0,
   'today_out' => 0,
+  'total_proxcode' => 0,
 ];
 
 $recentLogs = [];
@@ -48,35 +46,49 @@ if ($databaseConnected && $employeeManager) {
     // Get access log statistics
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log");
     $stmt->execute();
-    $stats1['total_scanned'] = $stmt->fetchColumn();
+    $stats['total_scanned'] = $stmt->fetchColumn();
 
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE status = 'Active'");
     $stmt->execute();
-    $stats1['active_scan'] = $stmt->fetchColumn();
+    $stats['active_scan'] = $stmt->fetchColumn();
 
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE status = 'Inactive'");
     $stmt->execute();
-    $stats1['inactive_scan'] = $stmt->fetchColumn();
+    $stats['inactive_scan'] = $stmt->fetchColumn();
 
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE DATE(access_timestamp) = CURDATE()");
     $stmt->execute();
-    $stats1['today_attendance'] = $stmt->fetchColumn();
+    $stats['today_attendance'] = $stmt->fetchColumn();
 
     // Get today's check-ins
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'IN' AND DATE(access_timestamp) = CURDATE()");
     $stmt->execute();
-    $stats1['today_in'] = (int)$stmt->fetchColumn();
+    $stats['today_in'] = (int)$stmt->fetchColumn();
 
     // Get today's check-outs
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'OUT' AND DATE(access_timestamp) = CURDATE()");
     $stmt->execute();
-    $stats1['today_out'] = (int)$stmt->fetchColumn();
+    $stats['today_out'] = (int)$stmt->fetchColumn();
 
     // Get recent employee logs
     $stmt = $userDb->prepare("
             SELECT el.*, e.fullname 
             FROM employee_access_log el
             LEFT JOIN employees e ON el.employee_id = e.id
+            ORDER BY el.access_timestamp DESC 
+            LIMIT 6
+        ");
+    $stmt->execute();
+    $recentLogs = $stmt->fetchAll();
+
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM code");
+    $stmt->execute();
+    $stats['total_proxcode'] = $stmt->fetchColumn();
+
+    // Get recent employee logs
+    $stmt = $userDb->prepare("
+            SELECT el.*, e.qr_code
+            FROM code el
             ORDER BY el.access_timestamp DESC 
             LIMIT 6
         ");
@@ -163,10 +175,10 @@ if ($databaseConnected && $employeeManager) {
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #17a2b8, #6f42c1);">
-          <i class="fas fa-calendar-day" style="z-index: 1000;"></i>
+          <i class="fas fa-id-card" style="z-index: 1000;"></i>
         </div>
-        <div class="stat-number">0</div>
-        <div class="stat-label">Search Results</div>
+        <div class="stat-number"><?php echo number_format($stats['total_proxcode']); ?></div>
+        <div class="stat-label">Proximity Codes</div>
         <img src="../logo/mysql-logo.png" style="top: 10%; right: 2%; height: 40px; position:absolute;">
       </div>
     </section>
@@ -177,7 +189,7 @@ if ($databaseConnected && $employeeManager) {
         <div class="stat-icon" style="background: linear-gradient(135deg, #667eea, #764ba2);">
           <i class="fas fa-users" style="z-index: 1000;"></i>
         </div>
-        <div class="stat-number"><?php echo number_format($stats1['total_scanned']); ?></div>
+        <div class="stat-number"><?php echo number_format($stats['total_scanned']); ?></div>
         <div class="stat-label">Total Scanned</div>
         <img src="../logo/database.png" style="top: 10%; right: 5%; height: 40px; position:absolute;">
       </div>
@@ -185,7 +197,7 @@ if ($databaseConnected && $employeeManager) {
         <div class="stat-icon" style="background: linear-gradient(135deg, #28a745, #20c997);">
           <i class="fas fa-user-check" style="z-index: 1000;"></i>
         </div>
-        <div class="stat-number"><?php echo number_format($stats1['active_scan']); ?></div>
+        <div class="stat-number"><?php echo number_format($stats['active_scan']); ?></div>
         <div class="stat-label">Active Scanned</div>
         <img src="../logo/database.png" style="top: 10%; right: 5%; height: 40px; position:absolute;">
       </div>
@@ -193,19 +205,19 @@ if ($databaseConnected && $employeeManager) {
         <div class="stat-icon" style="background: linear-gradient(135deg, #dc3545, #fd7e14);">
           <i class="fas fa-user-times" style="z-index: 1000;"></i>
         </div>
-        <div class="stat-number"><?php echo number_format($stats1['inactive_scan']); ?></div>
+        <div class="stat-number"><?php echo number_format($stats['inactive_scan']); ?></div>
         <div class="stat-label">Inactive Scanned</div>
         <img src="../logo/database.png" style="top: 10%; right: 5%; height: 40px; position:absolute;">
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #17a2b8, #6f42c1);">
-          <i class="fas fa-calendar-day" style="z-index: 1000;"></i>
+          <img src="../icon/nfc-icon.png" style="width: 32px; height: 32px; z-index: 1000; filter: invert(1);" >
         </div>
-        <div class="stat-number"><?php echo number_format($stats1['today_attendance']); ?></div>
+        <div class="stat-number"><?php echo number_format($stats['today_attendance']); ?></div>
         <div class="stat-label">Scanned Today</div>
         <small style="color: #666; position: absolute; bottom: 10px; left: 40%;">
-          In: <span id="todayIn"><?php echo $stats1['today_in']; ?></span> |
-          Out: <span id="todayOut"><?php echo $stats1['today_out']; ?></span>
+          In: <span id="todayIn"><?php echo $stats['today_in']; ?></span> |
+          Out: <span id="todayOut"><?php echo $stats['today_out']; ?></span>
         </small>
         <img src="../logo/database.png" style="top: 10%; right: 5%; height: 40px; position:absolute;">
       </div>
