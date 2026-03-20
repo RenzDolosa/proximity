@@ -131,7 +131,7 @@ try {
   $userStats['active_employees'] = $stmt->fetchColumn();
 
   // Get total violations
-  $stmt = $userPdo->query("SELECT COUNT(*) as total_violations FROM violations");
+  $stmt = $userPdo->query("SELECT COUNT(*) as total_violations FROM employees WHERE violation <> ''");
   $userStats['total_violations'] = $stmt->fetchColumn();
 
   // Get recent activity count (last 30 days)
