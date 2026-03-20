@@ -1,4 +1,4 @@
-//proxcode.js - Proximity Management System (FIXED)
+//proxcode.js - Proximity Management System (FIXED WITH QR CODE MATCHING)
 
 // Global variables
 let currentAction = "add";
@@ -38,6 +38,32 @@ async function loadCurrentUserId() {
     console.error("Error loading user ID:", error);
     currentUserId = "default";
   }
+}
+
+// 🆕 Fetch QR codes from system.js employee data
+async function getSystemEmployeeQRCodes() {
+  try {
+    const response = await fetch("../cnfg/manpower_backend.php?action=get", {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && Array.isArray(data.data)) {
+        // Extract QR codes from system.js employees and normalize (trim + lowercase)
+        return data.data
+          .map((emp) => emp.qr_code)
+          .filter((qr) => qr) // Remove empty QR codes
+          .map((qr) => qr.trim().toLowerCase()); // Normalize for comparison
+      }
+    }
+  } catch (error) {
+    console.error("Error fetching system QR codes:", error);
+  }
+
+  return []; // Return empty array on error
 }
 
 // Setup event listeners
@@ -192,7 +218,7 @@ async function loadEmployeeData(employeeId) {
   }
 }
 
-// Render proximity code table
+// 🆕 Render proximity code table with QR matching logic
 async function renderEmployeeTable() {
   const tbody = document.getElementById("employeeTableBody");
   const paginationDiv = document.getElementById("pagination");
@@ -230,9 +256,18 @@ async function renderEmployeeTable() {
   // Use cached user ID
   const userId = currentUserId || "default";
 
+  // 🆕 Fetch system.js employee QR codes to match against
+  const systemQRCodes = await getSystemEmployeeQRCodes();
+
   // Render table rows
   tbody.innerHTML = currentEmployees
     .map((employee, index) => {
+      // 🆕 Check if this proxcode's QR matches any system.js employee QR code
+      const isOccupied = systemQRCodes.includes(employee.qr_code.trim().toLowerCase());
+      
+      // 🆕 Update employee status dynamically (without backend change)
+      const displayStatus = isOccupied ? "Occupied" : "Available";
+
       // Generate initials for placeholder
       const fullnameInitials = (employee.qr_code || "UN")
         .split(" ")
@@ -259,6 +294,7 @@ async function renderEmployeeTable() {
             <td class="Col9" onclick="copyQRCode('${escapeHtml(employee.qr_code)}')" title="Copy Proximity code" style="cursor: pointer;">
               <img src="../icon/nfc-icon.png" alt="Copy Proximity code" style="width: 20px; height: 20px;">
             </td>
+            <td><span class="status-${displayStatus.toLowerCase()}">${displayStatus}</span></td>
             <td><small>${employee.created_at || ''}</small></td>
             <td><small>${employee.updated_at || ''}</small></td>
             <td>

@@ -95,10 +95,11 @@ try {
           <label for="fullname">Fullname</label>
           <input type="text" id="fullname" name="fullname" placeholder="Search by fullname...">
         </div>
-        <div class="form-group" style="position: absolute; right: 1%; top: 10%; opacity: 0;">
+        <div class="form-group" style="position: fixed; left: 1%; top: 1%; opacity: 0;">
           <label for="search_qr">Proximity Code</label>
           <input type="text" id="search_qr" name="qr_code" placeholder="Search by proximity code..." style="cursor: default;" autocomplete="off">
         </div>
+        <img src="../icon/nfc-icon.png" alt="Proximity" style="position: absolute; left: 24px; top: 10%; width: 100px; height: 100px; filter: invert(1);">
       </form>
     </div>
 

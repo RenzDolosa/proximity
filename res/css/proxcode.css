@@ -213,7 +213,7 @@ tr:hover {
   cursor: pointer;
 }
 
-.status-active {
+.status-available {
   background: linear-gradient(135deg, #d4edda 0%, #8deda3 100%);
   color: #155724;
   padding: 0.25rem 0.5rem;
@@ -222,51 +222,13 @@ tr:hover {
   font-weight: 500;
 }
 
-.status-inactive {
+.status-occupied {
   background: linear-gradient(135deg, #f8d7da 0%, #ff9ca4 100%);
   color: #721c24;
   padding: 0.25rem 0.5rem;
   border-radius: 15px;
   font-size: 0.8rem;
   font-weight: 500;
-}
-
-.check-status-in {
-  width: 60px;
-  height: 40px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border-radius: 45%;
-  background: linear-gradient(135deg, #6ce29d 0%, #2c9c60 100%);
-}
-
-.check-status-out {
-  width: 60px;
-  height: 40px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border-radius: 45%;
-  background: linear-gradient(135deg, #f6a253 0%, #ef3838 100%);
-}
-
-.check-in {
-  padding: 1px 10px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #6ce29d 0%, #2c9c60 100%);
-}
-
-.check-out {
-  padding: 1px 10px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #f6a253 0%, #ef3838 100%);
 }
 
 .ph-cont {

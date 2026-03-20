@@ -94,7 +94,7 @@ if ($databaseConnected) {
             <label for="search_date">Date</label>
             <input type="text" id="search_date" name="created_at" placeholder="Search by date...">
           </div>
-          <div class="form-group" style="position: absolute; right: 1%; bottom: 10%; opacity: 0;">
+          <div class="form-group" style="position: fixed; left: 1%; top: 1%; opacity: 0;">
             <label for="search_qr">Proximity Code</label>
             <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Search by proximity code..." style="cursor: default;" autocomplete="off">
           </div>
@@ -159,6 +159,7 @@ if ($databaseConnected) {
             <th>SN</th>
             <th class="Col8">Image</th>
             <th class="Col9">Proximity Code</th>
+            <th>Status</th>
             <th>Register</th>
             <th>Update</th>
             <th>Actions</th>
