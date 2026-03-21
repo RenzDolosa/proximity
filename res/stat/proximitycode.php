@@ -130,7 +130,7 @@ if ($databaseConnected) {
           </div>
         </div>
         <div class="delete-all-btn">
-          <button type="button" class="btn btn-danger" onclick="deleteAllEmployees()"><i class="fas fa-trash-alt"></i> Delete All
+          <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All
             Data</button>
         </div>
       </div>
@@ -152,14 +152,14 @@ if ($databaseConnected) {
         </div>
         <div class="emp-status">
           <div style="display: flex; gap: 10px;">
-            <div class="total-emp"><i class="fas fa-rectangle-list"></i></div>
+            <div class="active-emp"><i class="fas fa-rectangle-list"></i></div>
             <p>Total Available</p>
             <h3 id="total_available">0</h3>
           </div>
         </div>
         <div class="emp-status">
           <div style="display: flex; gap: 10px;">
-            <div class="total-emp"><i class="fas fa-credit-card"></i></div>
+            <div class="inactive-emp"><i class="fas fa-credit-card"></i></div>
             <p>Total Occupied</p>
             <h3 id="total_occupied">0</h3>
           </div>
@@ -205,7 +205,7 @@ if ($databaseConnected) {
         <input type="hidden" id="employee_id" name="id">
         <div class="form-group">
           <label for="qr_code">Proximity Code</label>
-          <input type="text" id="qr_code" name="qr_code" placeholder="Enter proximity code or leave blank to auto-generate" autocomplete="off" autofocus>
+          <input type="text" id="qr_code" name="qr_code" placeholder="Enter proximity code or leave blank to auto-generate" autocomplete="off">
         </div>
         <div class="form-row" style="margin-top: 2rem;">
           <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> Save Proximity Code</button>
@@ -215,10 +215,33 @@ if ($databaseConnected) {
     </div>
   </div>
 
+  <!-- Delete Modal -->
+  <div id="deleteModal" class="modal-overlay" style="display: none;">
+    <div class="modal-delete-content">
+      <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
+      <div class="modal-header">
+        <h2 id="deleteModalTitle">Delete Employee</h2>
+      </div>
+
+      <div class="modal-body">
+        <p id="deleteModalMessage">Are you sure you want to delete this employee?</p>
+
+        <!-- Confirmation input for delete all -->
+        <div id="confirmationContainer" style="display: none; margin-top: 20px;">
+          <label for="confirmationInput" style="display: block; margin-bottom: 10px; font-weight: bold;">Type "DELETE ALL" to confirm:</label>
+          <input type="text" id="confirmationInput" placeholder="Type DELETE ALL" style="margin-bottom: 10px;" />
+        </div>
+      </div>
+
+      <button id="confirmDeleteBtn" class="btn btn-danger">Delete</button>
+      <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
+    </div>
+  </div>
+
   <!-- CSV / Excel Import Modal -->
   <div id="importModal" class="modal">
     <div class="modal-content">
-      <span class="close" onclick="closeImportModal()"><i class="fas fa-times"></i></span>
+      <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
       <h2>Import Proximity Codes from File</h2>
 
       <div class="import-instructions">
@@ -265,7 +288,7 @@ if ($databaseConnected) {
         <div class="form-row" style="margin-top: 2rem;">
           <button type="button" class="btn btn-primary" onclick="previewFile()"><i class="fas fa-list-ul"></i> Preview</button>
           <button type="submit" class="btn btn-import"><i class="fas fa-upload"></i> Import</button>
-          <button type="button" class="btn btn-secondary" onclick="closeImportModal()"><i class="fas fa-times"></i> Cancel</button>
+          <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
         </div>
       </form>
 

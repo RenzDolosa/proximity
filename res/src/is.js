@@ -10,11 +10,6 @@ function openImportModal() {
     `<i class="fas fa-file"></i> Click to select file (.csv, .xlsx, .xls)`;
 }
 
-// Close import modal
-function closeImportModal() {
-  document.getElementById("importModal").style.display = "none";
-}
-
 // Update file label when file is selected
 document.addEventListener("DOMContentLoaded", function () {
   // Add this to your existing setupEventListeners function
@@ -140,9 +135,10 @@ function displayPreview(data) {
     );
 
     const violationValue = col[5] || "";
-    const violationDisplay = violationValue !== "" && violationValue !== "None"
-      ? violationValue
-      : '<em style="color: #6c757d;">None</em>';
+    const violationDisplay =
+      violationValue !== "" && violationValue !== "None"
+        ? violationValue
+        : '<em style="color: #6c757d;">None</em>';
     previewHTML = previewHTML.replace(
       `<td>${violationValue}</td>`,
       `<td>${violationDisplay}</td>`,

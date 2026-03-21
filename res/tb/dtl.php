@@ -174,7 +174,7 @@ if ($databaseConnected) {
           </div>
         </div>
         <div class="delete-all-btn">
-          <button type="button" class="btn btn-danger" onclick="deleteAllEmployees()"><i class="fas fa-trash-alt"></i> Delete All
+          <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All
             Data
           </button>
         </div>
@@ -268,6 +268,29 @@ if ($databaseConnected) {
     <button onclick="previousPage()" id="prev-btn"><i class="fas fa-arrow-left"></i> Previous</button>
     <span id="page-info">Page 1 of 1</span>
     <button onclick="nextPage()" id="next-btn">Next <i class="fas fa-arrow-right"></i></button>
+  </div>
+
+  <!-- Delete Modal -->
+  <div id="deleteModal" class="modal-overlay" style="display: none;">
+    <div class="modal-delete-content">
+      <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
+      <div class="modal-header">
+        <h2 id="deleteModalTitle">Delete Employee</h2>
+      </div>
+
+      <div class="modal-body">
+        <p id="deleteModalMessage">Are you sure you want to delete this employee?</p>
+
+        <!-- Confirmation input for delete all -->
+        <div id="confirmationContainer" style="display: none; margin-top: 20px;">
+          <label for="confirmationInput" style="display: block; margin-bottom: 10px; font-weight: bold;">Type "DELETE ALL" to confirm:</label>
+          <input type="text" id="confirmationInput" placeholder="Type DELETE ALL" style="margin-bottom: 10px;" />
+        </div>
+      </div>
+
+      <button id="confirmDeleteBtn" class="btn btn-danger">Delete</button>
+      <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
+    </div>
   </div>
 
   <!-- Add XLSX library for Excel file support -->

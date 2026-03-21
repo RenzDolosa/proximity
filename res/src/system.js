@@ -179,8 +179,9 @@ async function updateTotalEmployees() {
 async function updateActiveEmployees() {
   try {
     const activeEmployeesElement = document.getElementById("active_employees");
+    const inactiveEmployeesElement = document.getElementById("inactive_employees");
  
-    if (!activeEmployeesElement) {
+    if (!activeEmployeesElement || !inactiveEmployeesElement) {
       console.warn("Active employees element not found");
       return 0;
     }
@@ -191,47 +192,20 @@ async function updateActiveEmployees() {
     }
  
     // Filter employees with "Active" status (case-insensitive)
-    const count = employees.filter(
+    const activeCount = employees.filter(
       (emp) => emp.status && emp.status.toLowerCase() === "active"
     ).length;
+
+    const inactiveCount = employees.length - activeCount;
  
-    activeEmployeesElement.textContent = count;
-    console.log("✓ Active employees updated:", count);
+    activeEmployeesElement.textContent = activeCount;
+    inactiveEmployeesElement.textContent = inactiveCount;
+    console.log("✓ Active employees updated:", activeCount);
+    console.log("✓ Inactive employees updated:", inactiveCount);
  
     return count;
   } catch (error) {
     console.error("Error updating active employees:", error);
-    return 0;
-  }
-}
-
-// 🆕 Update active employees count
-async function updateInactiveEmployees() {
-  try {
-    const inactiveEmployeesElement =
-      document.getElementById("inactive_employees");
- 
-    if (!inactiveEmployeesElement) {
-      console.warn("Inactive employees element not found");
-      return 0;
-    }
- 
-    if (!Array.isArray(employees)) {
-      console.error("Employees array not initialized");
-      return 0;
-    }
- 
-    // Filter employees with "Inactive" status (case-insensitive)
-    const count = employees.filter(
-      (emp) => emp.status && emp.status.toLowerCase() === "inactive"
-    ).length;
- 
-    inactiveEmployeesElement.textContent = count;
-    console.log("✓ Inactive employees updated:", count);
- 
-    return count;
-  } catch (error) {
-    console.error("Error updating inactive employees:", error);
     return 0;
   }
 }
@@ -383,17 +357,13 @@ async function renderEmployeeTable() {
                 <div style="display: grid; grid-template-row: 20px; gap: 0.2rem; flex: 0.5;">
                   <button class="btn btn-success btn-sm2" onclick="addToLog(${
                     employee.id
-                  }, 'IN')" title="Check: IN">🟢 IN</button>
+                  }, 'IN')" title="Check: IN">🟢\nIN</button>
                   <button class="btn btn-danger btn-sm2" onclick="addToLog(${
                     employee.id
-                  }, 'OUT')" title="Check: OUT">🔴 OUT</button>
+                  }, 'OUT')" title="Check: OUT">🔴\nOUT</button>
                 </div>
-                <button class="btn btn-primary btn-sm" onclick="openModal('edit', ${
-                  employee.id
-                })" title="EDIT"><i class="fas fa-edit"></i> Edit</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteEmployee(${
-                  employee.id
-                })" title="DELETE"><i class="fas fa-trash-alt"></i> Delete</button>
+                <button class="btn btn-primary btn-sm" onclick="openModal('edit', ${employee.id})" title="EDIT"><i class="fas fa-edit"></i>\nEdit</button>
+                <button class="btn btn-danger btn-sm" onclick="openDeleteModal('${employee.id}', false)" title="DELETE"><i class="fas fa-trash-alt"></i>\nDelete</button>
               </div>
             </td>
         </tr>
@@ -578,6 +548,85 @@ async function openModal(action, employeeId = null) {
   }
 }
 
+function openDeleteModal(employeeId = null, requireConfirmation = false) {
+  const modal = document.getElementById("deleteModal");
+  const confirmBtn = document.getElementById("confirmDeleteBtn");
+  const confirmationInput = document.getElementById("confirmationInput");
+  const confirmationContainer = document.getElementById("confirmationContainer");
+  const modalTitle = document.getElementById("deleteModalTitle");
+  const modalMessage = document.getElementById("deleteModalMessage");
+ 
+  // Store the employeeId for use in confirm handler
+  confirmBtn.dataset.employeeId = employeeId;
+  confirmBtn.dataset.requireConfirmation = requireConfirmation;
+ 
+  // Update modal content based on delete type
+  if (requireConfirmation) {
+    // Delete all employees
+    modalTitle.textContent = "⚠️ Delete All Employees";
+    modalMessage.textContent =
+      "This will permanently delete ALL employee data. This action cannot be undone.";
+    confirmationContainer.style.display = "block";
+    confirmBtn.disabled = true;
+    confirmBtn.style.opacity = "0.5";
+    confirmBtn.style.cursor = "not-allowed";
+  } else {
+    // Single employee delete
+    modalTitle.textContent = "Delete Employee";
+    modalMessage.textContent = "Are you sure you want to delete this employee?";
+    confirmationContainer.style.display = "none";
+    confirmBtn.disabled = false;
+    confirmBtn.style.opacity = "1";
+    confirmBtn.style.cursor = "pointer";
+  }
+ 
+  // Clear input field
+  if (confirmationInput) {
+    confirmationInput.value = "";
+  }
+ 
+  // Show modal
+  modal.style.display = "flex";
+ 
+  // Remove previous listeners to avoid duplicates
+  const newConfirmBtn = confirmBtn.cloneNode(true);
+  confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+ 
+  // Handle confirmation input (if delete all)
+  if (requireConfirmation && confirmationInput) {
+    const newConfirmationInput = confirmationInput.cloneNode(true);
+    confirmationInput.parentNode.replaceChild(newConfirmationInput, confirmationInput);
+
+    newConfirmationInput.focus();
+ 
+    newConfirmationInput.addEventListener("input", () => {
+      newConfirmBtn.disabled = newConfirmationInput.value !== "DELETE ALL";
+      newConfirmBtn.style.opacity = newConfirmBtn.disabled ? "0.5" : "1";
+      newConfirmBtn.style.cursor = newConfirmBtn.disabled ? "not-allowed" : "pointer";
+    });
+  }
+ 
+  // Handle confirm click
+  newConfirmBtn.addEventListener("click", () => {
+    const id = newConfirmBtn.dataset.employeeId;
+    const requiresConfirm = newConfirmBtn.dataset.requireConfirmation === "true";
+ 
+    if (requiresConfirm) {
+      deleteAllEmployees();
+    } else {
+      deleteEmployee(id);
+    }
+    modal.style.display = "none";
+  });
+ 
+  // Handle clicking outside modal
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) {
+      modal.style.display = "none";
+    }
+  });
+}
+
 // Load employee data - Modified to preserve pagination
 async function loadEmployees(filters = {}, preservePage = false) {
   try {
@@ -614,8 +663,6 @@ async function loadEmployees(filters = {}, preservePage = false) {
       await renderEmployeeTable();
       await updateTotalEmployees(); // 🆕 Update total employees count
       await updateActiveEmployees(); // 🆕 Update active count after loading
-      await updateInactiveEmployees(); // 🆕 Update inactive count after loading
-
       console.log(`Loaded ${data.total || employees.length} employees`);
     } else {
       showAlert(data.message || "Error loading employees", "error");
@@ -633,10 +680,14 @@ async function loadEmployees(filters = {}, preservePage = false) {
 
 // Close modal
 function closeModal() {
-  const modal = document.getElementById("employeeModal");
-  if (!modal) return;
+  const employeeModal = document.getElementById("employeeModal");
+  const deleteModal = document.getElementById("deleteModal");
+  const importModal = document.getElementById("importModal");
+  if (!employeeModal || !deleteModal || !importModal) return;
 
-  modal.style.display = "none";
+  employeeModal.style.display = "none";
+  deleteModal.style.display = "none";
+  importModal.style.display = "none";
 
   // Reset form
   const form = document.getElementById("employeeForm");
@@ -755,11 +806,9 @@ async function handleFormSubmit(e) {
 
       // Preserve current page when updating, reset to page 1 when adding
       const preservePage = currentAction === "edit";
-      loadEmployees({}, preservePage);
-
+      await loadEmployees({}, preservePage);
       await updateTotalEmployees(); // 🆕 Update total employees count
       await updateActiveEmployees(); // 🆕 Update active count after loading
-      await updateInactiveEmployees(); // 🆕 Update inactive count after loading
     } else {
       showAlert(data.message || "Failed to save employee", "error");
     }
@@ -811,10 +860,6 @@ function setupFileUploadHandler() {
 
 // Delete employee - Modified to preserve current page
 async function deleteEmployee(employeeId) {
-  if (!confirm("Are you sure you want to delete this employee?")) {
-    return;
-  }
-
   try {
     showLoading(true);
 
@@ -834,12 +879,9 @@ async function deleteEmployee(employeeId) {
 
     if (data.success) {
       showAlert(data.message, "success");
-      // Preserve current page after deletion
-      loadEmployees({}, true);
-
+      await loadEmployees({}, true);
       await updateTotalEmployees(); // 🆕 Update total employees count
       await updateActiveEmployees(); // 🆕 Update active count after loading
-      await updateInactiveEmployees(); // 🆕 Update inactive count after loading
     } else {
       showAlert(data.message, "error");
     }
@@ -853,29 +895,6 @@ async function deleteEmployee(employeeId) {
 
 // Delete all employees
 async function deleteAllEmployees() {
-  if (
-    !confirm(
-      "⚠️ WARNING: This will permanently delete ALL employee data!\n\nThis action cannot be undone. Are you absolutely sure?",
-    )
-  ) {
-    return;
-  }
-
-  // Double confirmation
-  if (
-    !confirm(
-      '🚨 FINAL WARNING: You are about to delete ALL employees and their data.\n\nType "DELETE ALL" in the next dialog to confirm.',
-    )
-  ) {
-    return;
-  }
-
-  const userInput = prompt('Please type "DELETE ALL" to confirm this action:');
-  if (userInput !== "DELETE ALL") {
-    showAlert("Action cancelled - confirmation text did not match", "error");
-    return;
-  }
-
   try {
     showLoading(true);
 
@@ -896,11 +915,9 @@ async function deleteAllEmployees() {
       showAlert(data.message, "success");
       // Reset to page 1 after deleting all
       currentPage = 1;
-      loadEmployees(); // Reload the table (will show empty)
-
+      await loadEmployees(); // Reload the table (will show empty)
       await updateTotalEmployees(); // 🆕 Update total employees count
       await updateActiveEmployees(); // 🆕 Update active count after loading
-      await updateInactiveEmployees(); // 🆕 Update inactive count after loading
     } else {
       showAlert(data.message, "error");
     }
@@ -909,11 +926,9 @@ async function deleteAllEmployees() {
     showAlert("Delete all employee data", "success");
     // Reset to page 1 after error
     currentPage = 1;
-    loadEmployees(); // Reload the table (will show empty)
-
+    await loadEmployees(); // Reload the table (will show empty)
     await updateTotalEmployees(); // 🆕 Update total employees count
     await updateActiveEmployees(); // 🆕 Update active count after loading
-    await updateInactiveEmployees(); // 🆕 Update inactive count after loading
   } finally {
     showLoading(false);
   }

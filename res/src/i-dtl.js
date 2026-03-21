@@ -6,13 +6,8 @@ function openImportModal() {
   document.getElementById("importForm").reset();
   document.getElementById("importPreview").style.display = "none";
   document.getElementById("importProgress").style.display = "none";
-  document.querySelector("#dataFile + .file-upload-label").textContent =
-    "📄 Click to select file (.csv, .xlsx, .xls)";
-}
-
-// Close import modal
-function closeImportModal() {
-  document.getElementById("importModal").style.display = "none";
+  document.querySelector("#dataFile + .file-upload-label").innerHTML =
+    `<i class="fas fa-file"></i> Click to select file (.csv, .xlsx, .xls)`;
 }
 
 // Update file label when file is selected
@@ -23,10 +18,13 @@ document.addEventListener("DOMContentLoaded", function () {
     if (e.target.files.length > 0) {
       const fileName = e.target.files[0].name;
       const fileExtension = fileName.split(".").pop().toLowerCase();
-      const fileIcon = fileExtension === "csv" ? "📄" : "📊";
-      label.textContent = `${fileIcon} ${fileName}`;
+      const fileIcon =
+        fileExtension === "csv"
+          ? `<i class="fas fa-file-alt"></i>`
+          : `<i class="fas fa-file-excel"></i>`;
+      label.innerHTML = `${fileIcon} ${fileName}`;
     } else {
-      label.textContent = "📄 Click to select file (.csv, .xlsx, .xls)";
+      label.innerHTML = `<i class="fas fa-file-alt"></i> Click to select file (.csv, .xlsx, .xls)`;
     }
   });
 

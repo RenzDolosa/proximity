@@ -24,11 +24,14 @@ document.addEventListener("DOMContentLoaded", function () {
 // Load and cache current user ID
 async function loadCurrentUserId() {
   try {
-    const response = await fetch("../cnfg/proxcode_backend.php?action=user_info", {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
+    const response = await fetch(
+      "../cnfg/proxcode_backend.php?action=user_info",
+      {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+        },
       },
-    });
+    );
 
     if (response.ok) {
       const data = await response.json();
@@ -72,25 +75,29 @@ async function getSystemEmployeeQRCodes() {
 async function updateTotalAvailable() {
   try {
     // Fetch system.js employee QR codes
-    const systemQRCodes = await getSystemEmployeeQRCodes()
-    
+    const systemQRCodes = await getSystemEmployeeQRCodes();
+
     // Normalize system QR codes for comparison
-    const normalizedSystemQRCodes = systemQRCodes.map(code => 
-      String(code).trim().toLowerCase()
+    const normalizedSystemQRCodes = systemQRCodes.map((code) =>
+      String(code).trim().toLowerCase(),
     );
 
     // Count QR codes that ARE in system.js (occupied)
-    const occupiedCount = employees.filter(emp => 
-      emp.qr_code && normalizedSystemQRCodes.includes(String(emp.qr_code).trim().toLowerCase())
+    const occupiedCount = employees.filter(
+      (emp) =>
+        emp.qr_code &&
+        normalizedSystemQRCodes.includes(
+          String(emp.qr_code).trim().toLowerCase(),
+        ),
     ).length;
-    
+
     // Available = total employees - occupied
     const availableCount = employees.length - occupiedCount;
-    
+
     // Update the DOM elements
     const totalAvailableElement = document.getElementById("total_available");
     const totalOccupiedElement = document.getElementById("total_occupied");
-    
+
     if (totalAvailableElement && totalOccupiedElement) {
       totalAvailableElement.textContent = availableCount;
       totalOccupiedElement.textContent = occupiedCount;
@@ -104,11 +111,11 @@ async function updateTotalAvailable() {
 async function updateTotalEmployees() {
   try {
     const totalEmployeesElement = document.getElementById("total_employees");
-    
+
     if (totalEmployeesElement) {
       // Update with current employees array length
       totalEmployeesElement.textContent = employees.length;
-      console.log('Total employees updated:', employees.length);
+      console.log("Total employees updated:", employees.length);
     }
   } catch (error) {
     console.error("Error updating total employees:", error);
@@ -128,7 +135,7 @@ function setupEventListeners() {
 
   // Search form inputs
   const searchInputs = document.querySelectorAll(
-    "#searchForm input, #searchForm select"
+    "#searchForm input, #searchForm select",
   );
 
   searchInputs.forEach((input) => {
@@ -235,7 +242,7 @@ async function loadEmployeeData(employeeId) {
         headers: {
           "X-Requested-With": "XMLHttpRequest",
         },
-      }
+      },
     );
 
     if (!response.ok) {
@@ -312,8 +319,10 @@ async function renderEmployeeTable() {
   tbody.innerHTML = currentEmployees
     .map((employee, index) => {
       // 🆕 Check if this proxcode's QR matches any system.js employee QR code
-      const isOccupied = systemQRCodes.includes(employee.qr_code.trim().toLowerCase());
-      
+      const isOccupied = systemQRCodes.includes(
+        employee.qr_code.trim().toLowerCase(),
+      );
+
       // 🆕 Update proximity remarks dynamically (without backend change)
       const displayRemarks = isOccupied ? "Occupied" : "Available";
 
@@ -325,8 +334,8 @@ async function renderEmployeeTable() {
         .substring(0, 2)
         .toUpperCase();
 
-      const imageUrl = employee.image 
-        ? `../../uploads/user_${userId}/${employee.image}` 
+      const imageUrl = employee.image
+        ? `../../uploads/user_${userId}/${employee.image}`
         : null;
 
       return `
@@ -344,12 +353,12 @@ async function renderEmployeeTable() {
               <img src="../icon/nfc-icon.png" alt="Copy Proximity code" style="width: 20px; height: 20px;">
             </td>
             <td><span class="remarks-${displayRemarks.toLowerCase()}">${displayRemarks}</span></td>
-            <td><small>${employee.created_at || ''}</small></td>
-            <td><small>${employee.updated_at || ''}</small></td>
+            <td><small>${employee.created_at || ""}</small></td>
+            <td><small>${employee.updated_at || ""}</small></td>
             <td>
               <div style="display: flex; gap: 0.5rem;">
-                <button class="btn btn-primary btn-sm" onclick="openModal('edit', ${employee.id})" title="EDIT"><i class="fas fa-edit"></i> Edit</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteEmployee(${employee.id})" title="DELETE"><i class="fas fa-trash-alt"></i> Delete</button>
+                <button class="btn btn-primary btn-sm" onclick="openModal('edit', ${employee.id})" title="EDIT"><i class="fas fa-edit"></i>\nEdit</button>
+                <button class="btn btn-danger btn-sm" onclick="openDeleteModal('${employee.id}', false)" title="DELETE"><i class="fas fa-trash-alt"></i>\nDelete</button>
               </div>
             </td>
         </tr>
@@ -359,7 +368,7 @@ async function renderEmployeeTable() {
 
   // Update pagination controls
   updatePaginationControls();
-  
+
   // 🆕 Update total available count
   await updateTotalAvailable();
 }
@@ -478,7 +487,7 @@ function goToPage(page) {
 async function searchEmployees() {
   const searchForm = document.getElementById("searchForm");
   const searchInput = document.getElementById("search_qr");
-  
+
   if (!searchForm || !searchInput) return;
 
   const searchQuery = searchInput.value.trim();
@@ -524,7 +533,7 @@ async function openModal(action, employeeId = null) {
 
   // Reset form
   form.reset();
-  
+
   const employeeIdInput = document.getElementById("employee_id");
   if (employeeIdInput) {
     employeeIdInput.value = "";
@@ -550,6 +559,85 @@ async function openModal(action, employeeId = null) {
   }
 }
 
+function openDeleteModal(employeeId = null, requireConfirmation = false) {
+  const modal = document.getElementById("deleteModal");
+  const confirmBtn = document.getElementById("confirmDeleteBtn");
+  const confirmationInput = document.getElementById("confirmationInput");
+  const confirmationContainer = document.getElementById("confirmationContainer");
+  const modalTitle = document.getElementById("deleteModalTitle");
+  const modalMessage = document.getElementById("deleteModalMessage");
+ 
+  // Store the employeeId for use in confirm handler
+  confirmBtn.dataset.employeeId = employeeId;
+  confirmBtn.dataset.requireConfirmation = requireConfirmation;
+ 
+  // Update modal content based on delete type
+  if (requireConfirmation) {
+    // Delete all employees
+    modalTitle.textContent = "⚠️ Delete All Employees";
+    modalMessage.textContent =
+      "This will permanently delete ALL employee data. This action cannot be undone.";
+    confirmationContainer.style.display = "block";
+    confirmBtn.disabled = true;
+    confirmBtn.style.opacity = "0.5";
+    confirmBtn.style.cursor = "not-allowed";
+  } else {
+    // Single employee delete
+    modalTitle.textContent = "Delete Employee";
+    modalMessage.textContent = "Are you sure you want to delete this employee?";
+    confirmationContainer.style.display = "none";
+    confirmBtn.disabled = false;
+    confirmBtn.style.opacity = "1";
+    confirmBtn.style.cursor = "pointer";
+  }
+ 
+  // Clear input field
+  if (confirmationInput) {
+    confirmationInput.value = "";
+  }
+ 
+  // Show modal
+  modal.style.display = "flex";
+ 
+  // Remove previous listeners to avoid duplicates
+  const newConfirmBtn = confirmBtn.cloneNode(true);
+  confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+ 
+  // Handle confirmation input (if delete all)
+  if (requireConfirmation && confirmationInput) {
+    const newConfirmationInput = confirmationInput.cloneNode(true);
+    confirmationInput.parentNode.replaceChild(newConfirmationInput, confirmationInput);
+
+    newConfirmationInput.focus();
+ 
+    newConfirmationInput.addEventListener("input", () => {
+      newConfirmBtn.disabled = newConfirmationInput.value !== "DELETE ALL";
+      newConfirmBtn.style.opacity = newConfirmBtn.disabled ? "0.5" : "1";
+      newConfirmBtn.style.cursor = newConfirmBtn.disabled ? "not-allowed" : "pointer";
+    });
+  }
+ 
+  // Handle confirm click
+  newConfirmBtn.addEventListener("click", () => {
+    const id = newConfirmBtn.dataset.employeeId;
+    const requiresConfirm = newConfirmBtn.dataset.requireConfirmation === "true";
+ 
+    if (requiresConfirm) {
+      deleteAllEmployees();
+    } else {
+      deleteEmployee(id);
+    }
+    modal.style.display = "none";
+  });
+ 
+  // Handle clicking outside modal
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) {
+      modal.style.display = "none";
+    }
+  });
+}
+
 // Load proximity code - Modified to preserve pagination
 async function loadEmployees(filters = {}, preservePage = false) {
   try {
@@ -566,7 +654,7 @@ async function loadEmployees(filters = {}, preservePage = false) {
         headers: {
           "X-Requested-With": "XMLHttpRequest",
         },
-      }
+      },
     );
 
     if (!response.ok) {
@@ -595,7 +683,7 @@ async function loadEmployees(filters = {}, preservePage = false) {
     console.error("Error loading employees:", error);
     showAlert(
       "Failed to load employees. Please check your connection.",
-      "error"
+      "error",
     );
   } finally {
     showLoading(false);
@@ -604,15 +692,25 @@ async function loadEmployees(filters = {}, preservePage = false) {
 
 // Close modal
 function closeModal() {
-  const modal = document.getElementById("employeeModal");
-  if (!modal) return;
+  const employeeModal = document.getElementById("employeeModal");
+  const deleteModal = document.getElementById("deleteModal");
+  const importModal = document.getElementById("importModal");
+  if (!employeeModal || !deleteModal || !importModal) return;
 
-  modal.style.display = "none";
+  employeeModal.style.display = "none";
+  deleteModal.style.display = "none";
+  importModal.style.display = "none";
 
   // Reset form
   const form = document.getElementById("employeeForm");
   if (form) {
     form.reset();
+  }
+
+  // Reset file upload label
+  const fileLabel = document.querySelector(".file-upload-label");
+  if (fileLabel) {
+    fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
   }
 }
 
@@ -624,7 +722,7 @@ async function handleFormSubmit(e) {
     // Get form values properly
     const employeeIdField = document.getElementById("employee_id");
     const qrCodeField = document.getElementById("qr_code");
-    
+
     if (!qrCodeField) {
       showAlert("Form field 'qr_code' not found", "error");
       return;
@@ -650,10 +748,7 @@ async function handleFormSubmit(e) {
     });
 
     if (isDuplicate) {
-      showAlert(
-        `Proximity code "${qrCode}" already exists!`,
-        "error"
-      );
+      showAlert(`Proximity code "${qrCode}" already exists!`, "error");
       return;
     }
 
@@ -682,19 +777,15 @@ async function handleFormSubmit(e) {
           (currentAction === "add"
             ? "Proximity code added successfully!"
             : "Proximity code updated successfully!"),
-        "success"
+        "success",
       );
       closeModal();
 
       // Preserve current page when updating, reset to page 1 when adding
       const preservePage = currentAction === "edit";
       await loadEmployees({}, preservePage);
-      
-      // 🆕 Update total employees count after form submission
-      await updateTotalEmployees();
-      
-      // 🆕 Update available/occupied counts
-      await updateTotalAvailable();
+      await updateTotalEmployees(); // 🆕 Update total employees count
+      await updateTotalAvailable(); // 🆕 Update count after loading
     } else {
       showAlert(data.message || "Failed to save proximity code", "error");
     }
@@ -702,7 +793,7 @@ async function handleFormSubmit(e) {
     console.error("Error:", error);
     showAlert(
       "Failed to save proximity code. Please check your connection.",
-      "error"
+      "error",
     );
   } finally {
     showLoading(false);
@@ -751,10 +842,6 @@ function setupFileUploadHandler() {
 
 // Delete proximity code - Modified to preserve current page
 async function deleteEmployee(employeeId) {
-  if (!confirm("Are you sure you want to delete this proximity code?")) {
-    return;
-  }
-
   try {
     showLoading(true);
 
@@ -777,15 +864,14 @@ async function deleteEmployee(employeeId) {
     const data = await response.json();
 
     if (data.success) {
-      showAlert(data.message || "Proximity code deleted successfully", "success");
+      showAlert(
+        data.message || "Proximity code deleted successfully",
+        "success",
+      );
       // Preserve current page after deletion
       await loadEmployees({}, true);
-      
-      // 🆕 Update total employees count after deletion
-      await updateTotalEmployees();
-      
-      // 🆕 Update available/occupied counts
-      await updateTotalAvailable();
+      await updateTotalEmployees(); // 🆕 Update total employees count
+      await updateTotalAvailable(); // 🆕 Update count after loading
     } else {
       showAlert(data.message || "Failed to delete proximity code", "error");
     }
@@ -799,29 +885,6 @@ async function deleteEmployee(employeeId) {
 
 // Delete all employees with better confirmation
 async function deleteAllEmployees(employeeId) {
-  if (
-    !confirm(
-      "⚠️ WARNING: This will permanently delete ALL employee data!\n\nThis action cannot be undone. Are you absolutely sure?",
-    )
-  ) {
-    return;
-  }
-
-  // Double confirmation
-  if (
-    !confirm(
-      '🚨 FINAL WARNING: You are about to delete ALL employees and their data.\n\nType "DELETE ALL" in the next dialog to confirm.',
-    )
-  ) {
-    return;
-  }
-
-  const userInput = prompt('Please type "DELETE ALL" to confirm this action:');
-  if (userInput !== "DELETE ALL") {
-    showAlert("Action cancelled - confirmation text did not match", "error");
-    return;
-  }
-
   try {
     showLoading(true);
 
@@ -842,26 +905,17 @@ async function deleteAllEmployees(employeeId) {
     if (data.success) {
       showAlert(data.message, "success");
       await loadEmployees(); // Reload the table (will show empty)
-      
-      // 🆕 Update total employees count after deleting all
-      await updateTotalEmployees();
-      
-      // 🆕 Update available/occupied counts
-      await updateTotalAvailable();
+      await updateTotalEmployees(); // 🆕 Update total employees count
+      await updateActiveEmployees(); // 🆕 Update active count after loading
     } else {
       showAlert(data.message, "error");
     }
   } catch (error) {
     console.error("Error:", error);
     showAlert("Delete all proximity codes", "success");
-    // Force reload anyway to refresh the display
-    await loadEmployees();
-    
-    // 🆕 Update total employees count
-    await updateTotalEmployees();
-    
-    // 🆕 Update available/occupied counts
-    await updateTotalAvailable();
+    await loadEmployees(); // Reload the table (will show empty)
+    await updateTotalEmployees(); // 🆕 Update total employees count
+    await updateActiveEmployees(); // 🆕 Update active count after loading
   } finally {
     showLoading(false);
   }

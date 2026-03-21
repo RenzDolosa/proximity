@@ -192,12 +192,6 @@ function openImportModal() {
   }
 }
 
-// Close import modal
-function closeImportModal() {
-  const modal = safeGetElement("importModal");
-  if (modal) modal.style.display = "none";
-}
-
 // ===== FILE HANDLING =====
 
 // Update file label when file is selected

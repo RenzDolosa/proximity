@@ -730,6 +730,93 @@ async function openModal(action, employeeId = null) {
   modal.style.display = "block";
 }
 
+function openDeleteModal(employeeId = null, requireConfirmation = false) {
+  const modal = document.getElementById("deleteModal");
+  const confirmBtn = document.getElementById("confirmDeleteBtn");
+  const cancelBtn = document.getElementById("cancelDeleteBtn");
+  const confirmationInput = document.getElementById("confirmationInput");
+  const confirmationContainer = document.getElementById("confirmationContainer");
+  const modalTitle = document.getElementById("deleteModalTitle");
+  const modalMessage = document.getElementById("deleteModalMessage");
+ 
+  // Store the employeeId for use in confirm handler
+  confirmBtn.dataset.employeeId = employeeId;
+  confirmBtn.dataset.requireConfirmation = requireConfirmation;
+ 
+  // Update modal content based on delete type
+  if (requireConfirmation) {
+    // Delete all employees
+    modalTitle.textContent = "⚠️ Delete All Employees";
+    modalMessage.textContent =
+      "This will permanently delete ALL employee data. This action cannot be undone.";
+    confirmationContainer.style.display = "block";
+    confirmBtn.disabled = true;
+    confirmBtn.style.opacity = "0.5";
+    confirmBtn.style.cursor = "not-allowed";
+  } else {
+    // Single employee delete
+    modalTitle.textContent = "Delete Employee";
+    modalMessage.textContent = "Are you sure you want to delete this employee?";
+    confirmationContainer.style.display = "none";
+    confirmBtn.disabled = false;
+    confirmBtn.style.opacity = "1";
+    confirmBtn.style.cursor = "pointer";
+  }
+ 
+  // Clear input field
+  if (confirmationInput) {
+    confirmationInput.value = "";
+  }
+ 
+  // Show modal
+  modal.style.display = "flex";
+ 
+  // Remove previous listeners to avoid duplicates
+  const newConfirmBtn = confirmBtn.cloneNode(true);
+  const newCancelBtn = cancelBtn.cloneNode(true);
+  confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+  cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+ 
+  // Handle confirmation input (if delete all)
+  if (requireConfirmation && confirmationInput) {
+    const newConfirmationInput = confirmationInput.cloneNode(true);
+    confirmationInput.parentNode.replaceChild(newConfirmationInput, confirmationInput);
+
+    newConfirmationInput.focus();
+ 
+    newConfirmationInput.addEventListener("input", () => {
+      newConfirmBtn.disabled = newConfirmationInput.value !== "DELETE ALL";
+      newConfirmBtn.style.opacity = newConfirmBtn.disabled ? "0.5" : "1";
+      newConfirmBtn.style.cursor = newConfirmBtn.disabled ? "not-allowed" : "pointer";
+    });
+  }
+ 
+  // Handle confirm click
+  newConfirmBtn.addEventListener("click", () => {
+    const id = newConfirmBtn.dataset.employeeId;
+    const requiresConfirm = newConfirmBtn.dataset.requireConfirmation === "true";
+ 
+    if (requiresConfirm) {
+      deleteAllEmployees();
+    } else {
+      deleteEmployee(id);
+    }
+    modal.style.display = "none";
+  });
+ 
+  // Handle cancel click
+  newCancelBtn.addEventListener("click", () => {
+    modal.style.display = "none";
+  });
+ 
+  // Handle clicking outside modal
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) {
+      modal.style.display = "none";
+    }
+  });
+}
+
 // Load employees with improved error handling
 async function loadEmployees(filters = {}, preservePage = false) {
   try {
@@ -785,22 +872,10 @@ async function loadEmployees(filters = {}, preservePage = false) {
 
 // Close modal
 function closeModal() {
-  const modal = document.getElementById("employeeModal");
-  if (!modal) return;
+  const deleteModal = document.getElementById("deleteModal");
+  if (!deleteModal) return;
 
-  modal.style.display = "none";
-
-  // Reset form
-  const form = document.getElementById("employeeForm");
-  if (form) {
-    form.reset();
-  }
-
-  // Reset file upload label
-  const fileLabel = document.querySelector(".file-upload-label");
-  if (fileLabel) {
-    fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
-  }
+  deleteModal.style.display = "none";
 }
 
 // Handle form submission with better validation
@@ -886,7 +961,7 @@ async function handleFormSubmit(e) {
         "success",
       );
       closeModal();
-      loadEmployees(); // Reload the employee list
+      await loadEmployees(); // Reload the employee list
     } else {
       showAlert(data.message || "Failed to save employee", "error");
     }
@@ -944,10 +1019,6 @@ function setupFileUploadHandler() {
 
 // Delete employee
 async function deleteEmployee(employeeId) {
-  if (!confirm("Are you sure you want to delete this employee?")) {
-    return;
-  }
-
   try {
     showLoading(true);
 
@@ -967,7 +1038,7 @@ async function deleteEmployee(employeeId) {
 
     if (data.success) {
       showAlert(data.message, "success");
-      loadEmployees();
+      await loadEmployees();
     } else {
       showAlert(data.message, "error");
     }
@@ -981,29 +1052,6 @@ async function deleteEmployee(employeeId) {
 
 // Delete all employees with better confirmation
 async function deleteAllEmployees() {
-  if (
-    !confirm(
-      "⚠️ WARNING: This will permanently delete ALL employee data!\n\nThis action cannot be undone. Are you absolutely sure?",
-    )
-  ) {
-    return;
-  }
-
-  // Double confirmation
-  if (
-    !confirm(
-      '🚨 FINAL WARNING: You are about to delete ALL employees and their data.\n\nType "DELETE ALL" in the next dialog to confirm.',
-    )
-  ) {
-    return;
-  }
-
-  const userInput = prompt('Please type "DELETE ALL" to confirm this action:');
-  if (userInput !== "DELETE ALL") {
-    showAlert("Action cancelled - confirmation text did not match", "error");
-    return;
-  }
-
   try {
     showLoading(true);
 
@@ -1022,7 +1070,7 @@ async function deleteAllEmployees() {
 
     if (data.success) {
       showAlert(data.message, "success");
-      loadEmployees(); // Reload the table (will show empty)
+      await loadEmployees(); // Reload the table (will show empty)
     } else {
       showAlert(data.message, "error");
     }
@@ -1030,7 +1078,7 @@ async function deleteAllEmployees() {
     console.error("Error:", error);
     showAlert("Delete all employees", "success");
     // Force reload anyway to refresh the display
-    loadEmployees();
+    await loadEmployees();
   } finally {
     showLoading(false);
   }
