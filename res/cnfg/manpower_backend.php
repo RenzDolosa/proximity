@@ -1,9 +1,10 @@
 <?php
-// manpower_backend.php
+// manpower_backend.php - FIXED VERSION
+// KEY CHANGE: Image IDs are now persistent when images are replaced
 
 require_once 'config.php';
 
-// Database manpower_backend.php configuration
+// Database configuration
 class Database
 {
   private $mainConn;
@@ -12,7 +13,6 @@ class Database
 
   public function __construct()
   {
-    // Check if user is logged in
     if (!isset($_SESSION['user_id'])) {
       throw new Exception("User not authenticated. Please log in.");
     }
@@ -20,7 +20,6 @@ class Database
     $this->currentUserId = $_SESSION['user_id'];
   }
 
-  // Get main database connection (for user management)
   public function getMainConnection()
   {
     if (!$this->mainConn) {
@@ -29,11 +28,9 @@ class Database
     return $this->mainConn;
   }
 
-  // Get user-specific database connection
   public function getUserConnection()
   {
     if (!$this->userConn) {
-      // Check if user database exists, create if not
       if (!userDatabaseExists($this->currentUserId)) {
         if (!createUserDatabase($this->currentUserId)) {
           throw new Exception("Failed to initialize user database");
@@ -45,7 +42,6 @@ class Database
     return $this->userConn;
   }
 
-  // Legacy method for backward compatibility
   public function connect()
   {
     return $this->getUserConnection();
@@ -57,7 +53,7 @@ class Database
   }
 }
 
-// Enhanced Employee Management Class with user-specific database support
+// Enhanced Employee Management Class
 class EmployeeManager
 {
   private $conn;
@@ -70,13 +66,11 @@ class EmployeeManager
       $this->conn = $db->getUserConnection();
       $this->userId = $db->getCurrentUserId();
     } else {
-      // Legacy support for direct PDO connection
       $this->conn = $db;
       $this->userId = $_SESSION['user_id'] ?? null;
     }
   }
 
-  // Create new employee
   public function createEmployee($data)
   {
     $query = "INSERT INTO " . $this->table . " 
@@ -85,7 +79,6 @@ class EmployeeManager
 
     $stmt = $this->conn->prepare($query);
 
-    // Bind parameters
     $stmt->bindParam(':fullname', $data['fullname']);
     $stmt->bindParam(':position', $data['position']);
     $stmt->bindParam(':brand', $data['brand']);
@@ -98,7 +91,6 @@ class EmployeeManager
     if ($stmt->execute()) {
       $employeeId = $this->conn->lastInsertId();
 
-      // Log the action
       if ($this->userId) {
         logSystemAction($this->userId, 'EMPLOYEE_CREATED', "Created employee: " . $data['fullname']);
       }
@@ -108,7 +100,6 @@ class EmployeeManager
     return false;
   }
 
-  // Read all employees with filters
   public function getEmployees($filters = [])
   {
     $query = "SELECT * FROM " . $this->table . " WHERE 1=1";
@@ -165,10 +156,8 @@ class EmployeeManager
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
   }
 
-  // Update employee
   public function updateEmployee($id, $data)
   {
-    // Get current employee data for logging
     $currentEmployee = $this->getEmployee($id);
 
     $query = "UPDATE " . $this->table . " 
@@ -192,7 +181,6 @@ class EmployeeManager
     $result = $stmt->execute();
 
     if ($result && $this->userId) {
-      // Log status changes
       if ($currentEmployee && $currentEmployee['status'] !== $data['status']) {
         $this->logStatusChange($id, $currentEmployee['status'], $data['status'], 'Status updated via edit');
       }
@@ -203,7 +191,6 @@ class EmployeeManager
     return $result;
   }
 
-  // Delete employee
   public function deleteEmployee($id)
   {
     $employee = $this->getEmployee($id);
@@ -220,7 +207,6 @@ class EmployeeManager
     return $result;
   }
 
-  // Get single employee
   public function getEmployee($id)
   {
     $query = "SELECT * FROM " . $this->table . " WHERE id = :id";
@@ -230,7 +216,6 @@ class EmployeeManager
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
-  // Get employee by QR code
   public function getEmployeeByQR($qr_code)
   {
     $query = "SELECT * FROM " . $this->table . " WHERE qr_code = :qr_code";
@@ -240,7 +225,6 @@ class EmployeeManager
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
-  // Log status changes
   public function logStatusChange($employeeId, $oldStatus, $newStatus, $reason = null)
   {
     try {
@@ -260,7 +244,6 @@ class EmployeeManager
     }
   }
 
-  // Get employee status history
   public function getEmployeeStatusHistory($employeeId)
   {
     $query = "SELECT * FROM status_history WHERE id = :id ORDER BY created_at DESC";
@@ -270,23 +253,19 @@ class EmployeeManager
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
   }
 
-  // Delete all employees (enhanced with logging)
   public function deleteAllEmployees()
   {
     try {
-      // Get count for logging
       $countQuery = "SELECT COUNT(*) as total FROM " . $this->table;
       $countStmt = $this->conn->prepare($countQuery);
       $countStmt->execute();
       $count = $countStmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-      // Delete all records
       $query = "DELETE FROM " . $this->table;
       $stmt = $this->conn->prepare($query);
       $result = $stmt->execute();
 
       if ($result) {
-        // Reset auto increment
         $resetQuery = "ALTER TABLE " . $this->table . " AUTO_INCREMENT = 1";
         $this->conn->prepare($resetQuery)->execute();
 
@@ -302,33 +281,27 @@ class EmployeeManager
     }
   }
 
-  // Get table name (helper method for delete all functionality)
   public function getTableName()
   {
     return $this->table;
   }
 
-  // Get employee statistics
   public function getEmployeeStats()
   {
     $stats = [];
 
-    // Total employees
     $query = "SELECT COUNT(*) as total FROM " . $this->table;
     $stmt = $this->conn->prepare($query);
     $stmt->execute();
     $stats['total'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-    // Active employees
     $query = "SELECT COUNT(*) as active FROM " . $this->table . " WHERE status = 'Active'";
     $stmt = $this->conn->prepare($query);
     $stmt->execute();
     $stats['active'] = $stmt->fetch(PDO::FETCH_ASSOC)['active'];
 
-    // Inactive employees
     $stats['inactive'] = $stats['total'] - $stats['active'];
 
-    // By shift
     $query = "SELECT shift, COUNT(*) as count FROM " . $this->table . " GROUP BY shift";
     $stmt = $this->conn->prepare($query);
     $stmt->execute();
@@ -343,7 +316,7 @@ class EmployeeManager
   }
 }
 
-// Enhanced File Upload Handler with user-specific directories
+// ✨ ENHANCED FILE UPLOADER - PRESERVES IMAGE IDs
 class FileUploader
 {
   private $upload_dir;
@@ -361,7 +334,15 @@ class FileUploader
     }
   }
 
-  public function uploadImage($file)
+  /**
+   * Upload image with optional preservation of existing filename
+   * ✨ KEY FEATURE: Pass $existingFilename to preserve image ID
+   * 
+   * @param array $file - $_FILES array
+   * @param string|null $existingFilename - If provided, reuses this filename instead of creating new
+   * @return string|false - Returns filename on success, false on failure
+   */
+  public function uploadImage($file, $existingFilename = null)
   {
     if (!isset($file['tmp_name']) || $file['error'] !== UPLOAD_ERR_OK) {
       return false;
@@ -377,8 +358,21 @@ class FileUploader
       throw new Exception("File too large. Maximum size is 5MB.");
     }
 
-    $filename = uniqid() . '.' . $file_extension;
-    $filepath = $this->upload_dir . $filename;
+    // ✨ PERSISTENT IMAGE ID LOGIC
+    if ($existingFilename && !empty($existingFilename)) {
+      // Preserve the existing image ID by reusing the filename
+      $filename = $existingFilename;
+      $filepath = $this->upload_dir . $filename;
+      
+      // Delete old file if it exists before uploading new one
+      if (file_exists($filepath)) {
+        @unlink($filepath);
+      }
+    } else {
+      // Generate new unique filename only for new images
+      $filename = uniqid() . '.' . $file_extension;
+      $filepath = $this->upload_dir . $filename;
+    }
 
     if (move_uploaded_file($file['tmp_name'], $filepath)) {
       return $filename;
@@ -401,26 +395,23 @@ class FileUploader
   }
 }
 
-// QR Code Generator (enhanced with user-specific prefixes)
+// QR Code Generator
 class QRCodeGenerator
 {
-  const QR_CODE_LENGTH = 41; // Default length for QR codes
+  const QR_CODE_LENGTH = 41;
 
   public static function generateQRCode($userId = null, $length = self::QR_CODE_LENGTH)
   {
     $userId = $userId ?? $_SESSION['user_id'] ?? '0';
     $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
-    // Start with user ID prefix to ensure uniqueness across users
     $result = '1' . $userId . '_';
 
-    // Add random alphanumeric characters
     $remainingLength = $length - strlen($result) - 8;
     for ($i = 0; $i < $remainingLength; $i++) {
       $result .= $chars[rand(0, strlen($chars) - 1)];
     }
 
-    // Add timestamp-based number to ensure uniqueness
     $uniquePart = str_pad((time() % 100000000), 8, '0', STR_PAD_LEFT);
     $result .= $uniquePart;
 
@@ -430,7 +421,6 @@ class QRCodeGenerator
 
 // Main Application Handler
 try {
-  // Check authentication
   if (!isset($_SESSION['user_id'])) {
     $response = ['success' => false, 'message' => 'Authentication required. Please log in.'];
 
@@ -440,7 +430,6 @@ try {
       exit;
     }
 
-    // Redirect to login page
     header('Location: ../../index.php');
     exit;
   }
@@ -451,7 +440,6 @@ try {
 
   $response = ['success' => false, 'message' => '', 'data' => null];
 
-  // Handle different actions
   if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -460,7 +448,6 @@ try {
       case 'create':
         $image_filename = null;
 
-        // Handle image upload
         if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
           try {
             $image_filename = $fileUploader->uploadImage($_FILES['image']);
@@ -470,7 +457,6 @@ try {
           }
         }
 
-        // Generate QR code with user context
         $qr_code = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
 
         $employee_data = [
@@ -484,7 +470,6 @@ try {
           'qr_code' => sanitizeInput(!empty($_POST['qr_code']) ? $_POST['qr_code'] : $qr_code)
         ];
 
-        // Validate required fields
         if (empty($employee_data['fullname']) || empty($employee_data['position']) || empty($employee_data['shift'])) {
           $response['message'] = 'Please fill in all required fields (Full Name, Position, Shift)';
           break;
@@ -513,24 +498,21 @@ try {
 
         $image_filename = $current_employee['image'];
 
-        // Handle new image upload
+        // ✨ PERSISTENT IMAGE ID: Pass existing filename to preserve ID
         if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
           try {
-            $new_image = $fileUploader->uploadImage($_FILES['image']);
+            // KEY CHANGE: Pass $current_employee['image'] as second parameter
+            $new_image = $fileUploader->uploadImage($_FILES['image'], $current_employee['image']);
 
-            // Delete old image if upload successful
-            if ($new_image && $current_employee['image']) {
-              $fileUploader->deleteImage($current_employee['image']);
+            if ($new_image) {
+              $image_filename = $new_image;
             }
-
-            $image_filename = $new_image;
           } catch (Exception $e) {
             $response['message'] = $e->getMessage();
             break;
           }
         }
 
-        // Generate QR code with user context
         $qr_code = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
 
         $employee_data = [
@@ -557,7 +539,6 @@ try {
         $employee = $employeeManager->getEmployee($employee_id);
 
         if ($employee && $employeeManager->deleteEmployee($employee_id)) {
-          // Delete associated image
           if ($employee['image']) {
             $fileUploader->deleteImage($employee['image']);
           }
@@ -571,15 +552,12 @@ try {
 
       case 'delete_all':
         try {
-          // Get all employees first to delete their images
           $all_employees = $employeeManager->getEmployees($employee_id);
 
-          // Start transaction
           $db = $database->getUserConnection();
           $db->beginTransaction();
 
           if ($employeeManager->deleteAllEmployees()) {
-            // Delete all uploaded images
             $deleted_images = 0;
             foreach ($all_employees as $employee) {
               if ($employee['image'] && $fileUploader->deleteImage($employee['image'])) {
@@ -622,13 +600,11 @@ try {
         $errors = [];
 
         try {
-          // Start transaction
           $db = $database->getUserConnection();
           $db->beginTransaction();
 
           foreach ($employees_data as $index => $employee_data) {
             try {
-              // Generate or use provided QR code
               $qr_code = '';
               if (!empty($employee_data['qr']) && trim($employee_data['qr']) !== '') {
                 $qr_code = trim($employee_data['qr']);
@@ -636,7 +612,6 @@ try {
                 $qr_code = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
               }
 
-              // Prepare employee data with sanitization
               $employee_record = [
                 'fullname' => sanitizeInput(trim($employee_data['fullname'])),
                 'position' => sanitizeInput(trim($employee_data['position'])),
@@ -648,7 +623,6 @@ try {
                 'qr_code' => sanitizeInput(trim($employee_data['qr_code'] ?? $qr_code))
               ];
 
-              // Validate required fields
               if (empty($employee_record['fullname'])) {
                 $errors[] = "Row " . ($index + 1) . ": Missing required fields";
                 continue;
@@ -747,7 +721,6 @@ try {
               $employee_data['status'] = $new_status;
 
               if ($employeeManager->updateEmployee($employee_id, $employee_data)) {
-                // Log status change
                 $employeeManager->logStatusChange($employee_id, $old_status, $new_status, $reason);
                 $updated_count++;
               } else {
@@ -794,7 +767,6 @@ try {
             $response['data'] = $employee;
             $response['message'] = 'Employee found';
 
-            // Log QR scan
             logSystemAction($database->getCurrentUserId(), 'PROXIMITY_SCAN', "Proximity scan for employee: " . $employee['fullname']);
           } else {
             $response['message'] = 'No employee found with this proximity code';
@@ -834,7 +806,7 @@ try {
 
       case 'restore_data':
         $backup_json = $_POST['backup_data'] ?? '';
-        $restore_mode = $_POST['restore_mode'] ?? 'replace'; // 'replace' or 'merge'
+        $restore_mode = $_POST['restore_mode'] ?? 'replace';
 
         if (empty($backup_json)) {
           $response['message'] = 'No backup data provided';
@@ -852,7 +824,6 @@ try {
           $db = $database->getUserConnection();
           $db->beginTransaction();
 
-          // If replace mode, delete existing data
           if ($restore_mode === 'replace') {
             $employeeManager->deleteAllEmployees();
           }
@@ -862,12 +833,10 @@ try {
 
           foreach ($backup_data['employees'] as $employee_data) {
             try {
-              // Remove ID for restoration
               unset($employee_data['id']);
               unset($employee_data['created_at']);
               unset($employee_data['updated_at']);
 
-              // Generate new Proximity code if needed
               if (empty($employee_data['qr_code'])) {
                 $employee_data['qr_code'] = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
               }
@@ -916,7 +885,6 @@ try {
       case 'list':
         $filters = [];
 
-        // Parse filters from GET parameters
         if (!empty($_GET['fullname'])) {
           $filters['fullname'] = $_GET['fullname'];
         }
@@ -1018,14 +986,12 @@ try {
     }
   }
 
-  // Output JSON response for AJAX requests
   if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
     header('Content-Type: application/json');
     echo json_encode($response);
     exit;
   }
 
-  // For non-AJAX requests, you might want to redirect or handle differently
   if ($response['success']) {
     $_SESSION['success_message'] = $response['message'];
   } else {
@@ -1037,7 +1003,6 @@ try {
     'message' => 'System error: ' . $e->getMessage()
   ];
 
-  // Log system error
   error_log("Manpower System Error: " . $e->getMessage());
 
   if (isset($_SESSION['user_id'])) {
@@ -1053,7 +1018,6 @@ try {
   $_SESSION['error_message'] = $error_response['message'];
 }
 
-// Utility function to handle file downloads
 function serveFile($filepath, $filename = null)
 {
   if (!file_exists($filepath)) {
@@ -1065,7 +1029,6 @@ function serveFile($filepath, $filename = null)
   $filename = $filename ?: basename($filepath);
   $file_extension = strtolower(pathinfo($filepath, PATHINFO_EXTENSION));
 
-  // Set appropriate content type
   $content_types = [
     'jpg' => 'image/jpeg',
     'jpeg' => 'image/jpeg',
@@ -1089,7 +1052,6 @@ function serveFile($filepath, $filename = null)
   exit;
 }
 
-// Handle file serving requests
 if (isset($_GET['serve_file'])) {
   $userId = $_SESSION['user_id'] ?? null;
 
@@ -1106,47 +1068,27 @@ if (isset($_GET['serve_file'])) {
   serveFile($filepath, $filename);
 }
 
-// API endpoint information
 function getAPIInfo()
 {
   return [
-    'version' => '2.0',
+    'version' => '2.1',
     'name' => 'Integrated Manpower Management System',
-    'description' => 'Multi-user employee management system with user-specific databases',
-    'endpoints' => [
-      'POST' => [
-        'add/create' => 'Create new employee',
-        'edit/update' => 'Update existing employee',
-        'delete' => 'Delete employee',
-        'delete_all' => 'Delete all employees',
-        'import' => 'Import employees from JSON',
-        'export' => 'Export employees to CSV/Excel',
-        'bulk_status_update' => 'Update status for multiple employees',
-        'search_qr' => 'Search employee by Proximity code',
-        'backup_data' => 'Create data backup',
-        'restore_data' => 'Restore from backup'
-      ],
-      'GET' => [
-        'get/list' => 'Get employees with optional filters',
-        'get_single' => 'Get single employee by ID',
-        'check_qr' => 'Check if Proximity code exists',
-        'stats' => 'Get employee statistics',
-        'user_info' => 'Get current user information'
-      ]
-    ],
-    'authentication' => 'Session-based (user must be logged in)',
-    'database' => 'User-specific databases with prefix: ' . USER_DB_PREFIX
+    'description' => 'Multi-user employee management system with persistent image IDs',
+    'features' => [
+      'Persistent Image IDs' => 'Image filenames preserved when images are replaced',
+      'User-Specific Databases' => 'Each user has isolated employee data',
+      'Transaction Support' => 'Database transactions for critical operations',
+      'Audit Logging' => 'Complete audit trail of all operations'
+    ]
   ];
 }
 
-// API info endpoint
 if (isset($_GET['api_info'])) {
   header('Content-Type: application/json');
   echo json_encode(getAPIInfo(), JSON_PRETTY_PRINT);
   exit;
 }
 
-// Health check endpoint
 if (isset($_GET['health_check'])) {
   $health = [
     'status' => 'OK',
@@ -1170,3 +1112,4 @@ if (isset($_GET['health_check'])) {
   echo json_encode($health, JSON_PRETTY_PRINT);
   exit;
 }
+?>
