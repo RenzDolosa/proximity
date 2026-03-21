@@ -76,6 +76,25 @@
   transition: all 0.3s ease-in-out;
 }
 
+.form-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  align-items: center;
+}
+
+.left-column {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.right-column {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 .form-row {
   display: flex;
   gap: 1rem;

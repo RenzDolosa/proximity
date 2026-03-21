@@ -147,7 +147,16 @@ async function loadEmployeeData(employeeId) {
 
       const fileLabel = document.querySelector(".file-upload-label");
       if (employee.image) {
-        fileLabel.innerHTML = `<i class="fas fa-image"></i> Current: ${employee.image}`;
+        // Get current user ID to construct proper image path
+        const currentUserId = await getCurrentUserId();
+        const imagePath = `../../uploads/user_${currentUserId}/${employee.image}`;
+        
+        // Display image preview with styling
+        fileLabel.innerHTML = `
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+            <img src="${imagePath}" alt="Current employee image" style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+          </div>
+        `;
       } else {
         fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
       }
@@ -851,7 +860,18 @@ function setupFileUploadHandler() {
         return;
       }
 
-      label.innerHTML = `<i class="fas fa-image"></i> ${file.name}`;
+      // Create image preview using FileReader
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        // Show new image preview with indication it's a new selection
+        label.innerHTML = `
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+            <img src="${event.target.result}" alt="New image preview" style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.15), 0 0 0 2px #4CAF50;">
+            <small style="color: #4CAF50; font-size: 12px; font-weight: 500;">✓ New image selected</small>
+          </div>
+        `;
+      };
+      reader.readAsDataURL(file);
     } else {
       label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
     }

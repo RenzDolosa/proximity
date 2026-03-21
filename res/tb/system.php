@@ -279,21 +279,27 @@ if ($databaseConnected) {
             </select>
           </div>
         </div>
-        <div class="form-group">
-          <label for="violation">Violation</label>
-          <textarea id="violation" name="violation" rows="3" placeholder="Kindly specify any violations, if applicable."></textarea>
-        </div>
-        <div class="form-group">
-          <label for="qr_code">Proximity Code</label>
-          <input type="text" id="qr_code" name="qr_code" placeholder="Enter proximity code or leave blank to auto-generate" autocomplete="off">
-        </div>
-        <div class="form-group">
-          <label for="image">Employee Image</label>
-          <div class="file-upload">
-            <input type="file" id="image" name="image" accept="image/*">
-            <label for="image" class="file-upload-label">
-              <i class="fas fa-file-image"></i> Click to select image (Max 1MB)
-            </label>
+        <div class="form-layout">
+          <div class="left-column">
+            <div class="form-group">
+              <label for="qr_code">Proximity Code</label>
+              <input type="text" id="qr_code" name="qr_code" placeholder="Enter proximity code or leave blank to auto-generate" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="violation">Violation</label>
+              <textarea id="violation" name="violation" rows="3" placeholder="Kindly specify any violations, if applicable."></textarea>
+            </div>
+          </div>
+          <div class="right-column">
+            <div class="form-group">
+              <label for="image">Employee Image</label>
+              <div class="file-upload">
+                <input type="file" id="image" name="image" accept="image/*">
+                <label for="image" class="file-upload-label">
+                  <i class="fas fa-file-image"></i> Click to select image (Max 1MB)
+                </label>
+              </div>
+            </div>
           </div>
         </div>
         <div class="form-row" style="margin-top: 2rem;">
