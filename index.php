@@ -183,8 +183,7 @@ if (!isset($_SESSION['csrf_token'])) {
           value="<?php echo htmlspecialchars($username ?? '', ENT_QUOTES, 'UTF-8'); ?>"
           placeholder="Enter your username or email"
           maxlength="255"
-          autocomplete="username"
-          required>
+          autocomplete="username">
       </div>
 
       <div class="form-group">
@@ -196,8 +195,7 @@ if (!isset($_SESSION['csrf_token'])) {
             class="password-field"
             placeholder="Enter your password"
             maxlength="255"
-            autocomplete="current-password"
-            required>
+            autocomplete="current-password">
           <button type="button"
             class="password-toggle-btn"
             id="togglePassword"

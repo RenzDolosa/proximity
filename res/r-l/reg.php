@@ -174,32 +174,31 @@ function handleRegistrationError($error, $context = [])
       <div class="form-group">
         <label for="my_database">Create Database Name<span style="color: #ff6b6b;">*</span></label>
         <input type="text" id="my_database" name="my_database" value="<?php echo htmlspecialchars($myDatabase ?? ''); ?>"
-          placeholder="Choose a unique Database Name" required>
+          placeholder="Choose a unique Database Name">
       </div>
       <div class="form-row">
         <div class="form-group">
           <label for="first_name">First Name <span style="color: #ff6b6b;">*</span></label>
           <input type="text" id="first_name" name="first_name"
-            value="<?php echo htmlspecialchars($first_name ?? ''); ?>" required>
+            value="<?php echo htmlspecialchars($first_name ?? ''); ?>">
         </div>
 
         <div class="form-group">
           <label for="last_name">Last Name <span style="color: #ff6b6b;">*</span></label>
-          <input type="text" id="last_name" name="last_name" value="<?php echo htmlspecialchars($last_name ?? ''); ?>"
-            required>
+          <input type="text" id="last_name" name="last_name" value="<?php echo htmlspecialchars($last_name ?? ''); ?>">
         </div>
       </div>
 
       <div class="form-group">
         <label for="username">Username <span style="color: #ff6b6b;">*</span></label>
         <input type="text" id="username" name="username" value="<?php echo htmlspecialchars($username ?? ''); ?>"
-          placeholder="Choose a unique username" required>
+          placeholder="Choose a unique username">
       </div>
 
       <div class="form-group">
         <label for="email">Email Address <span style="color: #ff6b6b;">*</span></label>
         <input type="email" id="email" name="email" value="<?php echo htmlspecialchars($email ?? ''); ?>"
-          placeholder="your.email@example.com" required>
+          placeholder="your.email@example.com">
       </div>
 
       <div class="form-group">
@@ -212,7 +211,7 @@ function handleRegistrationError($error, $context = [])
         <div class="form-group">
           <label for="password">Password <span style="color: #ff6b6b;">*</span></label>
           <div class="password-input-wrapper">
-            <input type="password" id="password" name="password" placeholder="Minimum 8 characters" required>
+            <input type="password" id="password" name="password" placeholder="Minimum 8 characters">
             <button type="button" class="password-toggle-btn" aria-label="Toggle password visibility">
               <i class="fas fa-eye"></i>
             </button>
@@ -222,7 +221,7 @@ function handleRegistrationError($error, $context = [])
         <div class="form-group">
           <label for="confirm_password">Confirm Password <span style="color: #ff6b6b;">*</span></label>
           <div class="password-input-wrapper">
-            <input type="password" id="confirm_password" name="confirm_password" placeholder="Re-enter your password" required>
+            <input type="password" id="confirm_password" name="confirm_password" placeholder="Re-enter your password">
             <button type="button" class="password-toggle-btn" aria-label="Toggle password visibility">
               <i class="fas fa-eye"></i>
             </button>

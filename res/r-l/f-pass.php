@@ -128,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <form method="POST" action="">
       <div class="form-group">
         <label for="email">Email Address:</label>
-        <input type="email" id="email" name="email" value="<?php echo htmlspecialchars($email); ?>" required>
+        <input type="email" id="email" name="email" value="<?php echo htmlspecialchars($email); ?>">
       </div>
 
       <button type="submit" class="btn">Send Reset Instructions</button>
