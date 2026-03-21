@@ -160,6 +160,82 @@ async function loadEmployeeData(employeeId) {
   }
 }
 
+// 🆕 Update total employees count
+async function updateTotalEmployees() {
+  try {
+    const totalEmployeesElement = document.getElementById("total_employees");
+ 
+    if (totalEmployeesElement) {
+      // Update with current employees array length
+      totalEmployeesElement.textContent = employees.length;
+      console.log("✓ Total employees updated:", employees.length);
+    }
+  } catch (error) {
+    console.error("Error updating total employees:", error);
+  }
+}
+
+// 🆕 Update active employees count - FIXED VERSION
+async function updateActiveEmployees() {
+  try {
+    const activeEmployeesElement = document.getElementById("active_employees");
+ 
+    if (!activeEmployeesElement) {
+      console.warn("Active employees element not found");
+      return 0;
+    }
+ 
+    if (!Array.isArray(employees)) {
+      console.error("Employees array not initialized");
+      return 0;
+    }
+ 
+    // Filter employees with "Active" status (case-insensitive)
+    const count = employees.filter(
+      (emp) => emp.status && emp.status.toLowerCase() === "active"
+    ).length;
+ 
+    activeEmployeesElement.textContent = count;
+    console.log("✓ Active employees updated:", count);
+ 
+    return count;
+  } catch (error) {
+    console.error("Error updating active employees:", error);
+    return 0;
+  }
+}
+
+// 🆕 Update active employees count
+async function updateInactiveEmployees() {
+  try {
+    const inactiveEmployeesElement =
+      document.getElementById("inactive_employees");
+ 
+    if (!inactiveEmployeesElement) {
+      console.warn("Inactive employees element not found");
+      return 0;
+    }
+ 
+    if (!Array.isArray(employees)) {
+      console.error("Employees array not initialized");
+      return 0;
+    }
+ 
+    // Filter employees with "Inactive" status (case-insensitive)
+    const count = employees.filter(
+      (emp) => emp.status && emp.status.toLowerCase() === "inactive"
+    ).length;
+ 
+    inactiveEmployeesElement.textContent = count;
+    console.log("✓ Inactive employees updated:", count);
+ 
+    return count;
+  } catch (error) {
+    console.error("Error updating inactive employees:", error);
+    return 0;
+  }
+}
+
 // Add employee to access log
 async function addToLog(employeeId, checkStatus = "IN") {
   // Stop any currently playing audio when rendering new results
@@ -485,9 +561,8 @@ async function openModal(action, employeeId = null) {
   fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
 
   if (action === "add") {
-    
     modalTitle.textContent = "Add Employee";
-    
+
     // Set default values for new employee
     document.getElementById("status").value = "Active";
   } else if (action === "edit" && employeeId) {
@@ -537,6 +612,9 @@ async function loadEmployees(filters = {}, preservePage = false) {
       }
 
       await renderEmployeeTable();
+      await updateTotalEmployees(); // 🆕 Update total employees count
+      await updateActiveEmployees(); // 🆕 Update active count after loading
+      await updateInactiveEmployees(); // 🆕 Update inactive count after loading
 
       console.log(`Loaded ${data.total || employees.length} employees`);
     } else {
@@ -678,6 +756,10 @@ async function handleFormSubmit(e) {
       // Preserve current page when updating, reset to page 1 when adding
       const preservePage = currentAction === "edit";
       loadEmployees({}, preservePage);
+
+      await updateTotalEmployees(); // 🆕 Update total employees count
+      await updateActiveEmployees(); // 🆕 Update active count after loading
+      await updateInactiveEmployees(); // 🆕 Update inactive count after loading
     } else {
       showAlert(data.message || "Failed to save employee", "error");
     }
@@ -754,6 +836,10 @@ async function deleteEmployee(employeeId) {
       showAlert(data.message, "success");
       // Preserve current page after deletion
       loadEmployees({}, true);
+
+      await updateTotalEmployees(); // 🆕 Update total employees count
+      await updateActiveEmployees(); // 🆕 Update active count after loading
+      await updateInactiveEmployees(); // 🆕 Update inactive count after loading
     } else {
       showAlert(data.message, "error");
     }
@@ -811,6 +897,10 @@ async function deleteAllEmployees() {
       // Reset to page 1 after deleting all
       currentPage = 1;
       loadEmployees(); // Reload the table (will show empty)
+
+      await updateTotalEmployees(); // 🆕 Update total employees count
+      await updateActiveEmployees(); // 🆕 Update active count after loading
+      await updateInactiveEmployees(); // 🆕 Update inactive count after loading
     } else {
       showAlert(data.message, "error");
     }
@@ -820,6 +910,10 @@ async function deleteAllEmployees() {
     // Reset to page 1 after error
     currentPage = 1;
     loadEmployees(); // Reload the table (will show empty)
+
+    await updateTotalEmployees(); // 🆕 Update total employees count
+    await updateActiveEmployees(); // 🆕 Update active count after loading
+    await updateInactiveEmployees(); // 🆕 Update inactive count after loading
   } finally {
     showLoading(false);
   }

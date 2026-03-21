@@ -1,23 +1,23 @@
 // Function to fetch all employees data bypassing pagination
 async function fetchAllEmployeesForExport() {
   try {
-    const response = await fetch('../cnfg/eas.php?export=all', {
-      method: 'GET',
+    const response = await fetch("../cnfg/eas.php?export=all", {
+      method: "GET",
       headers: {
-        'Content-Type': 'application/json',
-      }
+        "Content-Type": "application/json",
+      },
     });
-    
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
+
     const data = await response.json();
-    
+
     if (data.success) {
       return data.employees || [];
     } else {
-      throw new Error(data.message || 'Failed to fetch employee data');
+      throw new Error(data.message || "Failed to fetch employee data");
     }
   } catch (error) {
     console.error("Fetch employees error:", error);
@@ -28,51 +28,68 @@ async function fetchAllEmployeesForExport() {
 // Function to apply current search filters to employee data
 function applyCurrentFilters(employees) {
   const filters = {
-    fullname: document.getElementById("search_fullname")?.value?.toLowerCase() || '',
-    position: document.getElementById("search_position")?.value?.toLowerCase() || '',
-    brand: document.getElementById("search_brand")?.value?.toLowerCase() || '',
-    status: document.getElementById("search_status")?.value || '',
-    shift: document.getElementById("search_shift")?.value || '',
-    date: document.getElementById("search_date")?.value?.toLowerCase() || '',
-    qr_code: document.getElementById("search_qr")?.value?.toLowerCase() || ''
+    fullname:
+      document.getElementById("search_fullname")?.value?.toLowerCase() || "",
+    position:
+      document.getElementById("search_position")?.value?.toLowerCase() || "",
+    brand: document.getElementById("search_brand")?.value?.toLowerCase() || "",
+    status: document.getElementById("search_status")?.value || "",
+    shift: document.getElementById("search_shift")?.value || "",
+    date: document.getElementById("search_date")?.value?.toLowerCase() || "",
+    qr_code: document.getElementById("search_qr")?.value?.toLowerCase() || "",
   };
 
-  return employees.filter(employee => {
+  return employees.filter((employee) => {
     // Apply fullname filter
-    if (filters.fullname && !employee.fullname?.toLowerCase().includes(filters.fullname)) {
+    if (
+      filters.fullname &&
+      !employee.fullname?.toLowerCase().includes(filters.fullname)
+    ) {
       return false;
     }
-    
+
     // Apply position filter
-    if (filters.position && !employee.position?.toLowerCase().includes(filters.position)) {
+    if (
+      filters.position &&
+      !employee.position?.toLowerCase().includes(filters.position)
+    ) {
       return false;
     }
-    
+
     // Apply brand filter
-    if (filters.brand && !employee.brand?.toLowerCase().includes(filters.brand)) {
+    if (
+      filters.brand &&
+      !employee.brand?.toLowerCase().includes(filters.brand)
+    ) {
       return false;
     }
-    
+
     // Apply status filter (exact match)
     if (filters.status && employee.status !== filters.status) {
       return false;
     }
-    
+
     // Apply shift filter (exact match)
     if (filters.shift && employee.shift !== filters.shift) {
       return false;
     }
-    
+
     // Apply date filter
-    if (filters.date && !employee.created_at?.toLowerCase().includes(filters.date)) {
+    if (
+      filters.date &&
+      !employee.created_at?.toLowerCase().includes(filters.date)
+    ) {
       return false;
     }
-    
+
     // Apply QR code filter
-    if (filters.qr_code && !employee.qr_code?.toLowerCase().includes(filters.qr_code)) {
+    if (
+      filters.qr_code &&
+      !employee.qr_code?.toLowerCase().includes(filters.qr_code)
+    ) {
       return false;
     }
-    
+
     return true;
   });
 }
@@ -80,22 +97,21 @@ function applyCurrentFilters(employees) {
 // Function to export all data without filters
 function exportAllData() {
   showAlert("Exporting all data...", "info");
-  
+
   try {
     fetchAllEmployeesForExport()
-      .then(employees => {
+      .then((employees) => {
         if (!employees || employees.length === 0) {
           showAlert("No employee data found!", "warning");
           return;
         }
-        
+
         exportEmployeeData(employees, "All");
       })
-      .catch(error => {
+      .catch((error) => {
         console.error("Export all data error:", error);
         showAlert("Error fetching all data: " + error.message, "error");
       });
-      
   } catch (error) {
     console.error("Export all data error:", error);
     showAlert("Error exporting all data: " + error.message, "error");
@@ -117,14 +133,14 @@ function exportEmployeeData(employees, type = "Data") {
     const headers = [
       "SN",
       "Full Name",
-      "Position", 
+      "Position",
       "Brand",
       "Status",
       "Shift",
       "Violation",
       "Proximity Code",
       "Register Date",
-      "Last Update"
+      "Last Update",
     ];
     data.push(headers);
 
@@ -140,7 +156,7 @@ function exportEmployeeData(employees, type = "Data") {
         employee.violation || "None",
         employee.qr_code || "",
         formatDate(employee.created_at) || "",
-        formatDate(employee.updated_at) || ""
+        formatDate(employee.updated_at) || "",
       ];
       data.push(rowData);
     });
@@ -151,7 +167,7 @@ function exportEmployeeData(employees, type = "Data") {
 
     // Set column widths
     const colWidths = [
-      { wch: 5 },  // SN
+      { wch: 5 }, // SN
       { wch: 25 }, // Full Name
       { wch: 20 }, // Position
       { wch: 15 }, // Brand
@@ -160,7 +176,7 @@ function exportEmployeeData(employees, type = "Data") {
       { wch: 20 }, // Violation
       { wch: 15 }, // Proximity Code
       { wch: 18 }, // Register Date
-      { wch: 18 }  // Last Update
+      { wch: 18 }, // Last Update
     ];
     ws["!cols"] = colWidths;
 
@@ -178,8 +194,8 @@ function exportEmployeeData(employees, type = "Data") {
           top: { style: "thin", color: { rgb: "000000" } },
           bottom: { style: "thin", color: { rgb: "000000" } },
           left: { style: "thin", color: { rgb: "000000" } },
-          right: { style: "thin", color: { rgb: "000000" } }
-        }
+          right: { style: "thin", color: { rgb: "000000" } },
+        },
       };
     }
 
@@ -192,20 +208,20 @@ function exportEmployeeData(employees, type = "Data") {
         }
 
         if (!ws[cellAddress].s) ws[cellAddress].s = {};
-        
+
         // Add borders
         ws[cellAddress].s.border = {
           top: { style: "thin", color: { rgb: "000000" } },
           bottom: { style: "thin", color: { rgb: "000000" } },
           left: { style: "thin", color: { rgb: "000000" } },
-          right: { style: "thin", color: { rgb: "000000" } }
+          right: { style: "thin", color: { rgb: "000000" } },
         };
 
         // Center align SN column and Status column
         if (col === 0 || col === 4) {
           ws[cellAddress].s.alignment = {
             horizontal: "center",
-            vertical: "center"
+            vertical: "center",
           };
         }
       }
@@ -216,10 +232,15 @@ function exportEmployeeData(employees, type = "Data") {
 
     // Generate filename with current date and time
     const now = new Date();
-    const dateStr = now.getFullYear() + "-" +
-      String(now.getMonth() + 1).padStart(2, "0") + "-" +
+    const dateStr =
+      now.getFullYear() +
+      "-" +
+      String(now.getMonth() + 1).padStart(2, "0") +
+      "-" +
       String(now.getDate()).padStart(2, "0");
-    const timeStr = String(now.getHours()).padStart(2, "0") + "-" +
+    const timeStr =
+      String(now.getHours()).padStart(2, "0") +
+      "-" +
       String(now.getMinutes()).padStart(2, "0");
     const filename = `Employee_Data_${type}_${dateStr}_${timeStr}.xlsx`;
 
@@ -229,9 +250,8 @@ function exportEmployeeData(employees, type = "Data") {
     // Show success message
     showAlert(
       `Successfully exported ${employees.length} employee records to ${filename}`,
-      "success"
+      "success",
     );
-
   } catch (error) {
     console.error("Export employee data error:", error);
     showAlert("Error creating Excel file: " + error.message, "error");
@@ -241,16 +261,22 @@ function exportEmployeeData(employees, type = "Data") {
 // Helper function to format dates
 function formatDate(dateString) {
   if (!dateString) return "";
-  
+
   try {
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return dateString; // Return original if invalid
-    
-    return date.getFullYear() + "-" +
-      String(date.getMonth() + 1).padStart(2, "0") + "-" +
-      String(date.getDate()).padStart(2, "0") + " " +
-      String(date.getHours()).padStart(2, "0") + ":" +
-      String(date.getMinutes()).padStart(2, "0");
+
+    return (
+      date.getFullYear() +
+      "-" +
+      String(date.getMonth() + 1).padStart(2, "0") +
+      "-" +
+      String(date.getDate()).padStart(2, "0") +
+      " " +
+      String(date.getHours()).padStart(2, "0") +
+      ":" +
+      String(date.getMinutes()).padStart(2, "0")
+    );
   } catch (error) {
     console.error("Date formatting error:", error);
     return dateString;
@@ -322,7 +348,7 @@ function exportToExcel(type = "Filtered") {
 
     // Set column widths
     const colWidths = [
-      { wch: 5 },  // SN
+      { wch: 5 }, // SN
       { wch: 25 }, // Full Name
       { wch: 20 }, // Position
       { wch: 15 }, // Brand
@@ -331,7 +357,7 @@ function exportToExcel(type = "Filtered") {
       { wch: 20 }, // Violation
       { wch: 15 }, // Proximity Code
       { wch: 18 }, // Register Date
-      { wch: 18 }  // Last Update
+      { wch: 18 }, // Last Update
     ];
     ws["!cols"] = colWidths;
 
@@ -403,7 +429,7 @@ function exportToExcel(type = "Filtered") {
       `Successfully exported ${
         data.length - 1
       } employee records to ${filename}`,
-      "success"
+      "success",
     );
   } catch (error) {
     console.error("Export error:", error);
@@ -434,12 +460,12 @@ function exportFilteredData() {
 
     // Check if any filters are active
     const hasActiveFilters = Object.values(filters).some(
-      (filter) => filter !== ""
+      (filter) => filter !== "",
     );
 
     if (hasActiveFilters) {
       const result = confirm(
-        "Export filtered data only or export all data?\n\nClick OK to export filtered data\nClick Cancel to export all data"
+        "Export filtered data only or export all data?\n\nClick OK to export filtered data\nClick Cancel to export all data",
       );
       if (result) {
         exportToExcel(); // Export only visible/filtered data
@@ -486,7 +512,7 @@ function excelTemplate(type = "Template") {
       "Status",
       "Shift",
       "Violation",
-      "Proximity Code" // Image column is skipped
+      "Proximity Code", // Image column is skipped
     ];
     data.push(headers);
 
@@ -502,7 +528,7 @@ function excelTemplate(type = "Template") {
       { wch: 12 }, // Status
       { wch: 15 }, // Shift
       { wch: 20 }, // Violation
-      { wch: 15 } // Proximity Code
+      { wch: 15 }, // Proximity Code
     ];
     ws["!cols"] = colWidths;
 
@@ -556,7 +582,6 @@ function excelTemplate(type = "Template") {
 
     // Save file
     XLSX.writeFile(wb, filename);
-
   } catch (error) {
     console.error("Export error:", error);
     showAlert("Error downloading template: " + error.message, "error");
@@ -575,23 +600,23 @@ function excelTemplate(type = "Template") {
 // Function to fetch all proximity code data bypassing pagination
 async function fetchAllCodesForExport() {
   try {
-    const response = await fetch('../cnfg/export_proxcode.php?export=all', {
-      method: 'GET',
+    const response = await fetch("../cnfg/export_proxcode.php?export=all", {
+      method: "GET",
       headers: {
-        'Content-Type': 'application/json',
-      }
+        "Content-Type": "application/json",
+      },
     });
-    
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
+
     const data = await response.json();
-    
+
     if (data.success) {
       return data.employees || [];
     } else {
-      throw new Error(data.message || 'Failed to fetch proximity code');
+      throw new Error(data.message || "Failed to fetch proximity code");
     }
   } catch (error) {
     console.error("Fetch proximity codes error:", error);
@@ -602,21 +627,24 @@ async function fetchAllCodesForExport() {
 // Function to apply current search filters to proximity code
 function applyProximityFilters(proxcodes) {
   const filters = {
-    date: document.getElementById("search_date")?.value?.toLowerCase() || '',
-    qr_code: document.getElementById("search_qr")?.value?.toLowerCase() || ''
+    date: document.getElementById("search_date")?.value?.toLowerCase() || "",
+    qr_code: document.getElementById("search_qr")?.value?.toLowerCase() || "",
   };
 
-  return proxcodes.filter(proxcode => {
+  return proxcodes.filter((proxcode) => {
     // Apply date filter
     if (filters.date && !proxcode.date?.toLowerCase().includes(filters.date)) {
       return false;
     }
-    
+
     // Apply qr_code filter
-    if (filters.qr_code && !proxcode.qr_code?.toLowerCase().includes(filters.qr_code)) {
+    if (
+      filters.qr_code &&
+      !proxcode.qr_code?.toLowerCase().includes(filters.qr_code)
+    ) {
       return false;
     }
-    
+
     return true;
   });
 }
@@ -624,22 +652,21 @@ function applyProximityFilters(proxcodes) {
 // Function to export all data without filters
 function exportAllCodes() {
   showAlert("Exporting all data...", "info");
-  
+
   try {
     fetchAllCodesForExport()
-      .then(proxcode => {
+      .then((proxcode) => {
         if (!proxcode || proxcode.length === 0) {
           showAlert("No proximity code found!", "warning");
           return;
         }
-        
+
         exportProximityCodes(proxcode, "All");
       })
-      .catch(error => {
+      .catch((error) => {
         console.error("Export all data error:", error);
         showAlert("Error fetching all data: " + error.message, "error");
       });
-      
   } catch (error) {
     console.error("Export all data error:", error);
     showAlert("Error exporting all data: " + error.message, "error");
@@ -647,7 +674,7 @@ function exportAllCodes() {
 }
 
 // Updated helper function to export proximity code array
-function exportProximityCodes(proxcodes, type = "Data") {
+async function exportProximityCodes(proxcodes, type = "Data") {
   try {
     if (!proxcodes || proxcodes.length === 0) {
       showAlert("No proximity code to export!", "warning");
@@ -661,18 +688,29 @@ function exportProximityCodes(proxcodes, type = "Data") {
     const headers = [
       "SN",
       "Proximity Code",
+      "Remarks",
       "Register Date",
-      "Last Update"
+      "Last Update",
     ];
     data.push(headers);
 
-    // Add employee data
+    const systemQRCodes = await getSystemEmployeeQRCodes();
+
+    // Add proximity code
     proxcodes.forEach((proxcode, index) => {
+      // 🆕 Check if this proxcode's matches any system.js employee QR code
+      const isOccupied = systemQRCodes.includes(
+        proxcode.qr_code.trim().toLowerCase(),
+      );
+
+      // 🆕 Update proximity remarks dynamically (without backend change)
+      const displayRemarks = isOccupied ? "Occupied" : "Available";
       const rowData = [
         index + 1, // SN
         proxcode.qr_code || "",
+        displayRemarks || "",
         formatDate(proxcode.created_at) || "",
-        formatDate(proxcode.updated_at) || ""
+        formatDate(proxcode.updated_at) || "",
       ];
       data.push(rowData);
     });
@@ -683,10 +721,11 @@ function exportProximityCodes(proxcodes, type = "Data") {
 
     // Set column widths
     const colWidths = [
-      { wch: 5 },  // SN
+      { wch: 5 }, // SN
       { wch: 15 }, // Proximity Code
+      { wch: 15 }, // Remarks
       { wch: 18 }, // Register Date
-      { wch: 18 }  // Last Update
+      { wch: 18 }, // Last Update
     ];
     ws["!cols"] = colWidths;
 
@@ -704,8 +743,8 @@ function exportProximityCodes(proxcodes, type = "Data") {
           top: { style: "thin", color: { rgb: "000000" } },
           bottom: { style: "thin", color: { rgb: "000000" } },
           left: { style: "thin", color: { rgb: "000000" } },
-          right: { style: "thin", color: { rgb: "000000" } }
-        }
+          right: { style: "thin", color: { rgb: "000000" } },
+        },
       };
     }
 
@@ -718,20 +757,20 @@ function exportProximityCodes(proxcodes, type = "Data") {
         }
 
         if (!ws[cellAddress].s) ws[cellAddress].s = {};
-        
+
         // Add borders
         ws[cellAddress].s.border = {
           top: { style: "thin", color: { rgb: "000000" } },
           bottom: { style: "thin", color: { rgb: "000000" } },
           left: { style: "thin", color: { rgb: "000000" } },
-          right: { style: "thin", color: { rgb: "000000" } }
+          right: { style: "thin", color: { rgb: "000000" } },
         };
 
         // Center align SN column and Status column
         if (col === 0 || col === 4) {
           ws[cellAddress].s.alignment = {
             horizontal: "center",
-            vertical: "center"
+            vertical: "center",
           };
         }
       }
@@ -742,10 +781,15 @@ function exportProximityCodes(proxcodes, type = "Data") {
 
     // Generate filename with current date and time
     const now = new Date();
-    const dateStr = now.getFullYear() + "-" +
-      String(now.getMonth() + 1).padStart(2, "0") + "-" +
+    const dateStr =
+      now.getFullYear() +
+      "-" +
+      String(now.getMonth() + 1).padStart(2, "0") +
+      "-" +
       String(now.getDate()).padStart(2, "0");
-    const timeStr = String(now.getHours()).padStart(2, "0") + "-" +
+    const timeStr =
+      String(now.getHours()).padStart(2, "0") +
+      "-" +
       String(now.getMinutes()).padStart(2, "0");
     const filename = `Proximity_${type}_${dateStr}_${timeStr}.xlsx`;
 
@@ -755,9 +799,8 @@ function exportProximityCodes(proxcodes, type = "Data") {
     // Show success message
     showAlert(
       `Successfully exported ${proxcodes.length} proximity code records to ${filename}`,
-      "success"
+      "success",
     );
-
   } catch (error) {
     console.error("Export proximity codes error:", error);
     showAlert("Error creating Excel file: " + error.message, "error");
@@ -784,6 +827,7 @@ function exportCodesToExcel(type = "Filtered") {
     const headers = [
       "SN",
       "Proximity Code", // Image column is skipped
+      "Remarks",
       "Register",
       "Update",
     ];
@@ -798,8 +842,9 @@ function exportCodesToExcel(type = "Filtered") {
           const rowData = [
             cells[0]?.textContent?.trim() || "", // SN
             cells[2]?.textContent?.trim() || "", // Proximity Code (skip Image column)
-            cells[3]?.textContent?.trim() || "",
-            cells[4]?.textContent?.trim() || "",
+            cells[3]?.textContent?.trim() || "", // Remarks
+            cells[4]?.textContent?.trim() || "", // Register
+            cells[5]?.textContent?.trim() || "", // Update
           ];
           data.push(rowData);
         }
@@ -817,10 +862,11 @@ function exportCodesToExcel(type = "Filtered") {
 
     // Set column widths
     const colWidths = [
-      { wch: 5 },  // SN
+      { wch: 5 }, // SN
       { wch: 15 }, // Proximity Code
+      { wch: 15 }, // Status
       { wch: 18 }, // Register Date
-      { wch: 18 }  // Last Update
+      { wch: 18 }, // Last Update
     ];
     ws["!cols"] = colWidths;
 
@@ -889,7 +935,9 @@ function exportCodesToExcel(type = "Filtered") {
 
     // Show success message
     showAlert(
-      `Successfully exported ${data.length - 1} proximity code records to ${filename}`,"success");
+      `Successfully exported ${data.length - 1} proximity code records to ${filename}`,
+      "success",
+    );
   } catch (error) {
     console.error("Export error:", error);
     showAlert("Error exporting to Excel: " + error.message, "error");
@@ -914,12 +962,12 @@ function exportFilteredCodes() {
 
     // Check if any filters are active
     const hasActiveFilters = Object.values(filters).some(
-      (filter) => filter !== ""
+      (filter) => filter !== "",
     );
 
     if (hasActiveFilters) {
       const result = confirm(
-        "Export filtered data only or export all data?\n\nClick OK to export filtered data\nClick Cancel to export all data"
+        "Export filtered data only or export all data?\n\nClick OK to export filtered data\nClick Cancel to export all data",
       );
       if (result) {
         exportCodesToExcel(); // Export only visible/filtered data
@@ -941,7 +989,7 @@ function exportFilteredCodes() {
   }, 1500);
 }
 
-function excelProxCodeTemplate(proxcode= "Proximity Code",type = "Template") {
+function excelProxCodeTemplate(proxcode = "Proximity Code", type = "Template") {
   showAlert(`Exporting Excel ${proxcode} ${type}...`, "info");
   // Your export logic here
   try {
@@ -950,7 +998,7 @@ function excelProxCodeTemplate(proxcode= "Proximity Code",type = "Template") {
 
     // Add headers
     const headers = [
-      proxcode // Image column is skipped
+      proxcode, // Image column is skipped
     ];
     data.push(headers);
 
@@ -960,7 +1008,7 @@ function excelProxCodeTemplate(proxcode= "Proximity Code",type = "Template") {
 
     // Set column widths
     const colWidths = [
-      { wch: 15 } // Proximity Code
+      { wch: 15 }, // Proximity Code
     ];
     ws["!cols"] = colWidths;
 
@@ -1014,10 +1062,12 @@ function excelProxCodeTemplate(proxcode= "Proximity Code",type = "Template") {
 
     // Save file
     XLSX.writeFile(wb, filename);
-
   } catch (error) {
     console.error("Export error:", error);
-    showAlert(`Error downloading ${toLowerCase(type)}: ` + error.message, "error");
+    showAlert(
+      `Error downloading ${toLowerCase(type)}: ` + error.message,
+      "error",
+    );
   } finally {
   }
 
@@ -1030,8 +1080,12 @@ function excelProxCodeTemplate(proxcode= "Proximity Code",type = "Template") {
 
 // Keyboard navigation
 document.addEventListener("keydown", function (e) {
-  if (e.key === "Escape" && typeof isDropdownOpen !== 'undefined' && isDropdownOpen) {
-    if (typeof hideExportOptions === 'function') {
+  if (
+    e.key === "Escape" &&
+    typeof isDropdownOpen !== "undefined" &&
+    isDropdownOpen
+  ) {
+    if (typeof hideExportOptions === "function") {
       hideExportOptions();
     }
   }

@@ -18,6 +18,7 @@ document.addEventListener("DOMContentLoaded", function () {
   loadEmployees();
   setupEventListeners();
   updateTotalAvailable(); // 🆕 Update count on page load
+  fetchWithUserRefresh();
 });
 
 // Load and cache current user ID
@@ -71,7 +72,7 @@ async function getSystemEmployeeQRCodes() {
 async function updateTotalAvailable() {
   try {
     // Fetch system.js employee QR codes
-    const systemQRCodes = await getSystemEmployeeQRCodes();
+    const systemQRCodes = await getSystemEmployeeQRCodes()
     
     // Normalize system QR codes for comparison
     const normalizedSystemQRCodes = systemQRCodes.map(code => 
@@ -96,6 +97,21 @@ async function updateTotalAvailable() {
     }
   } catch (error) {
     console.error("Error updating total available:", error);
+  }
+}
+
+// 🆕 Update total employees count
+async function updateTotalEmployees() {
+  try {
+    const totalEmployeesElement = document.getElementById("total_employees");
+    
+    if (totalEmployeesElement) {
+      // Update with current employees array length
+      totalEmployeesElement.textContent = employees.length;
+      console.log('Total employees updated:', employees.length);
+    }
+  } catch (error) {
+    console.error("Error updating total employees:", error);
   }
 }
 
@@ -298,8 +314,8 @@ async function renderEmployeeTable() {
       // 🆕 Check if this proxcode's QR matches any system.js employee QR code
       const isOccupied = systemQRCodes.includes(employee.qr_code.trim().toLowerCase());
       
-      // 🆕 Update employee status dynamically (without backend change)
-      const displayStatus = isOccupied ? "Occupied" : "Available";
+      // 🆕 Update proximity remarks dynamically (without backend change)
+      const displayRemarks = isOccupied ? "Occupied" : "Available";
 
       // Generate initials for placeholder
       const fullnameInitials = (employee.qr_code || "UN")
@@ -327,7 +343,7 @@ async function renderEmployeeTable() {
             <td class="Col9" onclick="copyQRCode('${escapeHtml(employee.qr_code)}')" title="Copy Proximity code" style="cursor: pointer;">
               <img src="../icon/nfc-icon.png" alt="Copy Proximity code" style="width: 20px; height: 20px;">
             </td>
-            <td><span class="status-${displayStatus.toLowerCase()}">${displayStatus}</span></td>
+            <td><span class="remarks-${displayRemarks.toLowerCase()}">${displayRemarks}</span></td>
             <td><small>${employee.created_at || ''}</small></td>
             <td><small>${employee.updated_at || ''}</small></td>
             <td>
@@ -499,6 +515,7 @@ async function openModal(action, employeeId = null) {
   const modal = document.getElementById("employeeModal");
   const modalTitle = document.getElementById("modalTitle");
   const form = document.getElementById("employeeForm");
+  const qrCodeInput = document.getElementById("qr_code");
 
   if (!modal || !modalTitle || !form) {
     console.error("Modal elements not found");
@@ -526,6 +543,11 @@ async function openModal(action, employeeId = null) {
   }
 
   modal.style.display = "block";
+
+  if (action === "add") {
+    // Autofocus on qr_code input after modal is displayed
+    qrCodeInput.focus();
+  }
 }
 
 // Load proximity code - Modified to preserve pagination
@@ -562,6 +584,7 @@ async function loadEmployees(filters = {}, preservePage = false) {
       }
 
       await renderEmployeeTable();
+      await updateTotalEmployees(); // 🆕 Update total employees count
       await updateTotalAvailable(); // 🆕 Update count after loading
 
       console.log(`Loaded ${data.total || employees.length} employees`);
@@ -666,6 +689,12 @@ async function handleFormSubmit(e) {
       // Preserve current page when updating, reset to page 1 when adding
       const preservePage = currentAction === "edit";
       await loadEmployees({}, preservePage);
+      
+      // 🆕 Update total employees count after form submission
+      await updateTotalEmployees();
+      
+      // 🆕 Update available/occupied counts
+      await updateTotalAvailable();
     } else {
       showAlert(data.message || "Failed to save proximity code", "error");
     }
@@ -751,6 +780,12 @@ async function deleteEmployee(employeeId) {
       showAlert(data.message || "Proximity code deleted successfully", "success");
       // Preserve current page after deletion
       await loadEmployees({}, true);
+      
+      // 🆕 Update total employees count after deletion
+      await updateTotalEmployees();
+      
+      // 🆕 Update available/occupied counts
+      await updateTotalAvailable();
     } else {
       showAlert(data.message || "Failed to delete proximity code", "error");
     }
@@ -806,7 +841,13 @@ async function deleteAllEmployees(employeeId) {
 
     if (data.success) {
       showAlert(data.message, "success");
-      loadEmployees(); // Reload the table (will show empty)
+      await loadEmployees(); // Reload the table (will show empty)
+      
+      // 🆕 Update total employees count after deleting all
+      await updateTotalEmployees();
+      
+      // 🆕 Update available/occupied counts
+      await updateTotalAvailable();
     } else {
       showAlert(data.message, "error");
     }
@@ -814,7 +855,13 @@ async function deleteAllEmployees(employeeId) {
     console.error("Error:", error);
     showAlert("Delete all proximity codes", "success");
     // Force reload anyway to refresh the display
-    loadEmployees();
+    await loadEmployees();
+    
+    // 🆕 Update total employees count
+    await updateTotalEmployees();
+    
+    // 🆕 Update available/occupied counts
+    await updateTotalAvailable();
   } finally {
     showLoading(false);
   }

@@ -7,8 +7,6 @@ require_once '../cnfg/db.php';
 // Get dashboard statistics if database is connected
 $stats = [
   'total_employees' => 0,
-  'active_employees' => 0,
-  'inactive_employees' => 0,
 ];
 
 $recentLogs = [];
@@ -24,7 +22,7 @@ if ($databaseConnected) {
     // Get recent proximity code logs (fixed column references)
     $stmt = $userDb->prepare("
             SELECT el.*, e.qr_code
-            FROM employee_logs el
+            FROM code el
             JOIN code e ON el.employee_id = e.id
             ORDER BY el.timestamp DESC 
             LIMIT 10
@@ -154,7 +152,7 @@ if ($databaseConnected) {
         </div>
         <div class="emp-status">
           <div style="display: flex; gap: 10px;">
-            <div class="total-emp"><i class="fas fa-address-card"></i></div>
+            <div class="total-emp"><i class="fas fa-rectangle-list"></i></div>
             <p>Total Available</p>
             <h3 id="total_available">0</h3>
           </div>
@@ -173,7 +171,7 @@ if ($databaseConnected) {
             <th>SN</th>
             <th class="Col8">Image</th>
             <th class="Col9">Proximity Code</th>
-            <th>Status</th>
+            <th>Remarks</th>
             <th>Register</th>
             <th>Update</th>
             <th>Actions</th>
