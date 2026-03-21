@@ -129,7 +129,7 @@ async function handleImportSubmit(e) {
       showAlert(alertMessage, "success");
 
       setTimeout(() => {
-        closeImportModal();
+        closeModal();
         loadEmployees(); // Refresh the table
       }, 2000);
     } else {
@@ -588,7 +588,7 @@ async function handleImportSubmit(e) {
       showAlert(alertMessage, "success");
 
       setTimeout(() => {
-        closeImportModal();
+        closeModal();
 
         // Refresh the proximity code list if function exists
         if (typeof loadEmployees === 'function') {
@@ -726,6 +726,6 @@ window.onclick = function (event) {
     }
   }
   if (importModal && event.target === importModal) {
-    closeImportModal();
+    closeModal();
   }
 };

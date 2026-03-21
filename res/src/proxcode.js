@@ -1,9 +1,10 @@
-//proxcode.js - Proximity Management System (FIXED WITH QR CODE MATCHING)
+//proxcode.js - Proximity Management System (ENHANCED WITH EMPLOYEE IMAGE MATCHING)
 
 // Global variables
 let currentAction = "add";
 let employees = [];
 let currentUserId = null; // Cache current user ID
+let employeeDataCache = null; // Cache employee data from manpower_backend
 
 // Pagination variables
 let currentPage = 1;
@@ -43,6 +44,56 @@ async function loadCurrentUserId() {
     console.error("Error loading user ID:", error);
     currentUserId = "default";
   }
+}
+
+// 🆕 Fetch employee data from manpower_backend.php and cache it
+async function getManpowerEmployeeData() {
+  try {
+    // Return cached data if available
+    if (employeeDataCache) {
+      return employeeDataCache;
+    }
+
+    const response = await fetch("../cnfg/manpower_backend.php?action=get", {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && Array.isArray(data.data)) {
+        // Cache the employee data
+        employeeDataCache = data.data;
+        return data.data;
+      }
+    }
+  } catch (error) {
+    console.error("Error fetching manpower employee data:", error);
+  }
+
+  return [];
+}
+
+// 🆕 Build a map of QR codes to employee images and details
+async function buildQRToImageMap() {
+  const manpowerEmployees = await getManpowerEmployeeData();
+  const qrImageMap = {};
+
+  manpowerEmployees.forEach((emp) => {
+    if (emp.qr_code) {
+      qrImageMap[emp.qr_code.trim().toLowerCase()] = {
+        image: emp.image,
+        fullname: emp.fullname,
+        position: emp.position,
+        brand: emp.brand,
+        status: emp.status,
+        shift: emp.shift,
+      };
+    }
+  });
+
+  return qrImageMap;
 }
 
 // 🆕 Fetch QR codes from system.js employee data
@@ -274,7 +325,7 @@ async function loadEmployeeData(employeeId) {
   }
 }
 
-// 🆕 Render proximity code table with QR matching logic
+// 🆕 ENHANCED Render proximity code table with QR matching logic AND employee image display
 async function renderEmployeeTable() {
   const tbody = document.getElementById("employeeTableBody");
   const paginationDiv = document.getElementById("pagination");
@@ -315,6 +366,9 @@ async function renderEmployeeTable() {
   // 🆕 Fetch system.js employee QR codes to match against
   const systemQRCodes = await getSystemEmployeeQRCodes();
 
+  // 🆕 Build QR to image map from manpower_backend
+  const qrImageMap = await buildQRToImageMap();
+
   // Render table rows
   tbody.innerHTML = currentEmployees
     .map((employee, index) => {
@@ -326,17 +380,35 @@ async function renderEmployeeTable() {
       // 🆕 Update proximity remarks dynamically (without backend change)
       const displayRemarks = isOccupied ? "Occupied" : "Available";
 
+      // 🆕 Get matched employee data from manpower_backend
+      const matchedEmployeeData =
+        qrImageMap[employee.qr_code.trim().toLowerCase()];
+
+      // Determine which image to display
+      let imageUrl = null;
+      let displayName = employee.qr_code;
+
+      if (matchedEmployeeData && matchedEmployeeData.image) {
+        // Use image from manpower_backend if QR matches
+        imageUrl = `../../uploads/user_${userId}/${matchedEmployeeData.image}`;
+        displayName = matchedEmployeeData.fullname || employee.qr_code;
+      } else if (employee.image) {
+        // Fallback to proxcode's own image
+        imageUrl = `../../uploads/user_${userId}/${employee.image}`;
+      }
+
       // Generate initials for placeholder
-      const fullnameInitials = (employee.qr_code || "UN")
+      const displayInitials = (displayName || "UN")
         .split(" ")
         .map((name) => name.charAt(0))
         .join("")
         .substring(0, 2)
         .toUpperCase();
 
-      const imageUrl = employee.image
-        ? `../../uploads/user_${userId}/${employee.image}`
-        : null;
+      // Additional employee info to display in tooltip
+      const tooltipText = matchedEmployeeData
+        ? `${matchedEmployeeData.fullname}\n${matchedEmployeeData.position}\n${matchedEmployeeData.brand}`
+        : "No matched employee";
 
       return `
         <tr>
@@ -344,9 +416,11 @@ async function renderEmployeeTable() {
             <td class="Col8">
               ${
                 imageUrl
-                  ? `<img src="${imageUrl}" alt="${employee.qr_code}" class="employee-image" onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
-                    <span style="display:none;">📷</span>`
-                  : `<div class="ph-cont"><div class="employee-ph">${fullnameInitials}</div></div>`
+                  ? `<img src="${imageUrl}" alt="${displayName}" class="employee-image" 
+                       title="${tooltipText}" 
+                       onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
+                    <span style="display:none;" title="${tooltipText}">📷</span>`
+                  : `<div class="ph-cont" title="${tooltipText}"><div class="employee-ph">${displayInitials}</div></div>`
               }
             </td>
             <td class="Col9" onclick="copyQRCode('${escapeHtml(employee.qr_code)}')" title="Copy Proximity code" style="cursor: pointer;">
@@ -671,6 +745,9 @@ async function loadEmployees(filters = {}, preservePage = false) {
         currentPage = 1;
       }
 
+      // 🆕 Clear cache when loading new data to get fresh manpower data
+      employeeDataCache = null;
+
       await renderEmployeeTable();
       await updateTotalEmployees(); // 🆕 Update total employees count
       await updateTotalAvailable(); // 🆕 Update count after loading
@@ -705,12 +782,6 @@ function closeModal() {
   const form = document.getElementById("employeeForm");
   if (form) {
     form.reset();
-  }
-
-  // Reset file upload label
-  const fileLabel = document.querySelector(".file-upload-label");
-  if (fileLabel) {
-    fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
   }
 }
 

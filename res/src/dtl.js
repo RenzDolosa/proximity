@@ -1,8 +1,9 @@
-//dtl.js - Employee Management System
+//dtl.js - Employee Management System (ENHANCED WITH EMPLOYEE IMAGE MATCHING)
 
 // Global variables
 let currentAction = "add";
 let employees = [];
+let employeeDataCache = null; // 🆕 Cache employee data from manpower_backend
 
 // Update variables
 let autoUpdateInterval = null;
@@ -329,6 +330,8 @@ async function loadEmployeesAuto(filters = {}) {
 
       if (hasChanges) {
         employees = data.data;
+        // 🆕 Clear cache to fetch fresh manpower data
+        employeeDataCache = null;
         await renderEmployeeTable();
         showAutoUpdateNotification();
         console.log(
@@ -404,6 +407,56 @@ function debounce(func, wait) {
   };
 }
 
+// 🆕 Fetch employee data from manpower_backend.php and cache it
+async function getManpowerEmployeeData() {
+  try {
+    // Return cached data if available
+    if (employeeDataCache) {
+      return employeeDataCache;
+    }
+
+    const response = await fetch("../cnfg/manpower_backend.php?action=get", {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && Array.isArray(data.data)) {
+        // Cache the employee data
+        employeeDataCache = data.data;
+        return data.data;
+      }
+    }
+  } catch (error) {
+    console.error("Error fetching manpower employee data:", error);
+  }
+
+  return [];
+}
+
+// 🆕 Build a map of QR codes to employee images and details
+async function buildQRToImageMap() {
+  const manpowerEmployees = await getManpowerEmployeeData();
+  const qrImageMap = {};
+
+  manpowerEmployees.forEach((emp) => {
+    if (emp.qr_code) {
+      qrImageMap[emp.qr_code.trim().toLowerCase()] = {
+        image: emp.image,
+        fullname: emp.fullname,
+        position: emp.position,
+        brand: emp.brand,
+        status: emp.status,
+        shift: emp.shift,
+      };
+    }
+  });
+
+  return qrImageMap;
+}
+
 // Load single employee data for editing
 async function loadEmployeeData(employeeId) {
   try {
@@ -459,7 +512,7 @@ async function loadEmployeeData(employeeId) {
   }
 }
 
-// Render employee table with improved error handling
+// 🆕 ENHANCED Render employee table with QR matching logic AND employee image display
 async function renderEmployeeTable() {
   const tbody = document.getElementById("employeeTableBody");
   const paginationDiv = document.getElementById("pagination");
@@ -481,6 +534,15 @@ async function renderEmployeeTable() {
 
   // Calculate pagination
   totalPages = Math.ceil(employees.length / itemsPerPage);
+  
+  // Ensure currentPage is within valid range
+  if (currentPage > totalPages && totalPages > 0) {
+    currentPage = totalPages;
+  }
+  if (currentPage < 1) {
+    currentPage = 1;
+  }
+
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentEmployees = employees.slice(startIndex, endIndex);
@@ -488,11 +550,34 @@ async function renderEmployeeTable() {
   // Get current user ID asynchronously
   const currentUserId = await getCurrentUserId();
 
+  // 🆕 Build QR to image map from manpower_backend
+  const qrImageMap = await buildQRToImageMap();
+
   // Render table rows
   tbody.innerHTML = currentEmployees
     .map((employee, index) => {
+      // 🆕 Get matched employee data from manpower_backend
+      const matchedEmployeeData =
+        qrImageMap[employee.qr_code.trim().toLowerCase()];
+
+      // Determine which image to display
+      let imageUrl = null;
+      let displayName = employee.fullname || "N/A";
+      let tooltipText = displayName;
+
+      if (matchedEmployeeData && matchedEmployeeData.image) {
+        // Use image from manpower_backend if QR matches
+        imageUrl = `../../uploads/user_${currentUserId}/${matchedEmployeeData.image}`;
+        displayName = matchedEmployeeData.fullname || employee.fullname;
+        tooltipText = `${matchedEmployeeData.fullname}\n${matchedEmployeeData.position}\n${matchedEmployeeData.brand}`;
+      } else if (employee.image) {
+        // Fallback to datalog's own image
+        imageUrl = `../../uploads/user_${currentUserId}/${employee.image}`;
+        tooltipText = `${employee.fullname}\n${employee.position}\n${employee.brand}`;
+      }
+
       // Generate initials for placeholder
-      const fullnameInitials = (employee.fullname || "UN")
+      const fullnameInitials = (displayName || "UN")
         .split(" ")
         .map((name) => name.charAt(0))
         .join("")
@@ -502,9 +587,9 @@ async function renderEmployeeTable() {
       return `
           <tr>
               <td>${startIndex + index + 1}</td>
-              <td><strong>${employee.fullname || "N/A"}</strong></td>
-              <td>${employee.position || "N/A"}</td>
-              <td>${employee.brand || "N/A"}</td>
+              <td><strong>${displayName}</strong></td>
+              <td>${matchedEmployeeData ? matchedEmployeeData.position : employee.position || "N/A"}</td>
+              <td>${matchedEmployeeData ? matchedEmployeeData.brand : employee.brand || "N/A"}</td>
               <td><span class="status-${(employee.status || "").toLowerCase()}">${
                 employee.status || "N/A"
               }</span></td>
@@ -512,14 +597,16 @@ async function renderEmployeeTable() {
               <td class="Col7"><div style="height: 50px; overflow-y: auto; scrollbar-width: thin; align-content: center;">
                 <small>${employee.violation || "None"}</small></div></td>
               <td class="Col8">${
-                employee.image
+                imageUrl
                   ? `
-                <img src="../../uploads/user_${currentUserId}/${employee.image}" alt="${employee.fullname}" class="employee-image" onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
-                  <span style="display:none;">📷</span>`
-                  : `<div class="ph-cont"><div class="employee-ph">${fullnameInitials}</div></div>`
+                <img src="${imageUrl}" alt="${displayName}" class="employee-image" 
+                     title="${tooltipText}" 
+                     onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
+                  <span style="display:none;" title="${tooltipText}">📷</span>`
+                  : `<div class="ph-cont" title="${tooltipText}"><div class="employee-ph">${fullnameInitials}</div></div>`
               }
               </td>
-              <td class="Col9" onclick="copyQRCode('${employee.qr_code || ""}')" title="Copy Proximity code">
+              <td class="Col9" onclick="copyQRCode('${escapeHtml(employee.qr_code || "")}')" title="Copy Proximity code" style="cursor: pointer;">
               <img src="../icon/nfc-icon.png" alt="Copy Proximity code" style="width: 20px; height: 20px;"></td>
               <td class="employee-timestamp"><small>${employee.access_timestamp || "N/A"}</small></td>
               <td><div class="check-status-${(employee.check_status || "").toLowerCase()}"><div class="employee-ph">${
@@ -532,6 +619,18 @@ async function renderEmployeeTable() {
 
   // Update pagination controls
   updatePaginationControls();
+}
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+  const map = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
+  };
+  return text.replace(/[&<>"']/g, (m) => map[m]);
 }
 
 // Get current user ID with better error handling
@@ -733,7 +832,6 @@ async function openModal(action, employeeId = null) {
 function openDeleteModal(employeeId = null, requireConfirmation = false) {
   const modal = document.getElementById("deleteModal");
   const confirmBtn = document.getElementById("confirmDeleteBtn");
-  const cancelBtn = document.getElementById("cancelDeleteBtn");
   const confirmationInput = document.getElementById("confirmationInput");
   const confirmationContainer = document.getElementById("confirmationContainer");
   const modalTitle = document.getElementById("deleteModalTitle");
@@ -773,9 +871,7 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
  
   // Remove previous listeners to avoid duplicates
   const newConfirmBtn = confirmBtn.cloneNode(true);
-  const newCancelBtn = cancelBtn.cloneNode(true);
   confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
-  cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
  
   // Handle confirmation input (if delete all)
   if (requireConfirmation && confirmationInput) {
@@ -801,11 +897,6 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
     } else {
       deleteEmployee(id);
     }
-    modal.style.display = "none";
-  });
- 
-  // Handle cancel click
-  newCancelBtn.addEventListener("click", () => {
     modal.style.display = "none";
   });
  
@@ -849,6 +940,9 @@ async function loadEmployees(filters = {}, preservePage = false) {
       if (!preservePage && Object.keys(filters).length === 0) {
         currentPage = 1;
       }
+
+      // 🆕 Clear cache to fetch fresh manpower data
+      employeeDataCache = null;
 
       await renderEmployeeTable();
       lastUpdateTimestamp = Date.now();
@@ -961,6 +1055,8 @@ async function handleFormSubmit(e) {
         "success",
       );
       closeModal();
+      // 🆕 Clear cache and reload with fresh manpower data
+      employeeDataCache = null;
       await loadEmployees(); // Reload the employee list
     } else {
       showAlert(data.message || "Failed to save employee", "error");
@@ -1038,6 +1134,8 @@ async function deleteEmployee(employeeId) {
 
     if (data.success) {
       showAlert(data.message, "success");
+      // 🆕 Clear cache and reload
+      employeeDataCache = null;
       await loadEmployees();
     } else {
       showAlert(data.message, "error");
@@ -1070,7 +1168,9 @@ async function deleteAllEmployees() {
 
     if (data.success) {
       showAlert(data.message, "success");
-      await loadEmployees(); // Reload the table (will show empty)
+      // 🆕 Clear cache and reload the table (will show empty)
+      employeeDataCache = null;
+      await loadEmployees();
     } else {
       showAlert(data.message, "error");
     }
@@ -1078,6 +1178,7 @@ async function deleteAllEmployees() {
     console.error("Error:", error);
     showAlert("Delete all employees", "success");
     // Force reload anyway to refresh the display
+    employeeDataCache = null;
     await loadEmployees();
   } finally {
     showLoading(false);

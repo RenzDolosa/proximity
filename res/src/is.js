@@ -302,7 +302,7 @@ async function handleImportSubmit(e) {
       showAlert(alertMessage, "success");
 
       setTimeout(() => {
-        closeImportModal();
+        closeModal();
         loadEmployees(); // Refresh the table
       }, 2000);
     } else {
@@ -391,6 +391,6 @@ window.onclick = function (event) {
     closeModal();
   }
   if (event.target === importModal) {
-    closeImportModal();
+    closeModal();
   }
 };
