@@ -18,6 +18,8 @@ document.getElementById("username").addEventListener("input", function () {
   }
 });
 
+document.getElementById("username").focus();
+
 document.getElementById("password").addEventListener("input", function () {
   const password = this.value;
   if (password.length > 0) {
