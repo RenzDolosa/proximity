@@ -74,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   // If no errors, create user with database using config.php function
   if (empty($errors)) {
-    $result = registerUser($username, $email, $password, $first_name, $last_name, $myDatabase);
+    $result = registerUser($username, $email, $password, $first_name, $last_name, $myDatabase, $phone);
 
     if ($result['success']) {
       $success = "Registration successful! Your personal database has been created. You can now login.";
@@ -87,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       );
 
       // Clear form data on success
-      $username = $email = $first_name = $last_name = $myDatabase;
+      $username = $email = $first_name = $last_name = $myDatabase = $phone = '';
 
       // // Optional: Auto-login the user after registration
       // // Uncomment the following lines if you want auto-login:
@@ -97,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       // $_SESSION['email'] = $email;
       // $_SESSION['first_name'] = $first_name;
       // $_SESSION['last_name'] = $last_name;
-      // header('Location: portal.php');
+      // header('Location: ../../portal.php');
       // exit;
 
     } else {
@@ -110,21 +110,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       );
     }
   }
-}
-
-function handleRegistrationError($error, $context = [])
-{
-  $errorMessage = "Registration Error: " . $error;
-  if (!empty($context)) {
-    $errorMessage .= " | Context: " . json_encode($context);
-  }
-
-  error_log($errorMessage);
-
-  // Log to system logs
-  logSystemAction(null, 'REGISTRATION_ERROR', $errorMessage);
-
-  return "An error occurred during registration. Please try again.";
 }
 ?>
 
@@ -161,49 +146,49 @@ function handleRegistrationError($error, $context = [])
     <?php if (!empty($errors)): ?>
       <div class="error">
         <?php foreach ($errors as $error): ?>
-          <div><?php echo htmlspecialchars($error); ?></div>
+          <div><?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?></div>
         <?php endforeach; ?>
       </div>
     <?php endif; ?>
 
     <?php if ($success): ?>
-      <div class="success"><?php echo htmlspecialchars($success); ?></div>
+      <div class="success"><?php echo htmlspecialchars($success, ENT_QUOTES, 'UTF-8'); ?></div>
     <?php endif; ?>
 
     <form method="POST" action="" id="registerForm">
       <div class="form-group">
         <label for="my_database">Create Database Name<span style="color: #ff6b6b;">*</span></label>
-        <input type="text" id="my_database" name="my_database" value="<?php echo htmlspecialchars($myDatabase ?? ''); ?>"
+        <input type="text" id="my_database" name="my_database" value="<?php echo htmlspecialchars($myDatabase ?? '', ENT_QUOTES, 'UTF-8'); ?>"
           placeholder="Choose a unique Database Name">
       </div>
       <div class="form-row">
         <div class="form-group">
           <label for="first_name">First Name <span style="color: #ff6b6b;">*</span></label>
           <input type="text" id="first_name" name="first_name"
-            value="<?php echo htmlspecialchars($first_name ?? ''); ?>">
+            value="<?php echo htmlspecialchars($first_name ?? '', ENT_QUOTES, 'UTF-8'); ?>">
         </div>
 
         <div class="form-group">
           <label for="last_name">Last Name <span style="color: #ff6b6b;">*</span></label>
-          <input type="text" id="last_name" name="last_name" value="<?php echo htmlspecialchars($last_name ?? ''); ?>">
+          <input type="text" id="last_name" name="last_name" value="<?php echo htmlspecialchars($last_name ?? '', ENT_QUOTES, 'UTF-8'); ?>">
         </div>
       </div>
 
       <div class="form-group">
         <label for="username">Username <span style="color: #ff6b6b;">*</span></label>
-        <input type="text" id="username" name="username" value="<?php echo htmlspecialchars($username ?? ''); ?>"
+        <input type="text" id="username" name="username" value="<?php echo htmlspecialchars($username ?? '', ENT_QUOTES, 'UTF-8'); ?>"
           placeholder="Choose a unique username">
       </div>
 
       <div class="form-group">
         <label for="email">Email Address <span style="color: #ff6b6b;">*</span></label>
-        <input type="email" id="email" name="email" value="<?php echo htmlspecialchars($email ?? ''); ?>"
+        <input type="email" id="email" name="email" value="<?php echo htmlspecialchars($email ?? '', ENT_QUOTES, 'UTF-8'); ?>"
           placeholder="your.email@example.com">
       </div>
 
       <div class="form-group">
         <label for="phone">Phone Number</label>
-        <input type="tel" id="phone" name="phone" value="<?php echo htmlspecialchars($phone ?? ''); ?>"
+        <input type="tel" id="phone" name="phone" value="<?php echo htmlspecialchars($phone ?? '', ENT_QUOTES, 'UTF-8'); ?>"
           placeholder="+63 912 345 6789">
       </div>
 
