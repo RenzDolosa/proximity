@@ -797,38 +797,6 @@ function forceRefresh() {
     });
 }
 
-// Open modal
-async function openModal(action, employeeId = null) {
-  currentAction = action;
-  const modal = document.getElementById("employeeModal");
-  const modalTitle = document.getElementById("modalTitle");
-  const form = document.getElementById("employeeForm");
-
-  if (!modal || !modalTitle || !form) {
-    console.error("Modal elements not found");
-    return;
-  }
-
-  // Reset form
-  form.reset();
-  document.getElementById("employee_id").value = ""; // Fixed ID reference
-
-  // Reset file upload label
-  const fileLabel = document.querySelector(".file-upload-label");
-  fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
-
-  if (action === "add") {
-    modalTitle.textContent = "Add Employee";
-    // Set default values for new employee
-    document.getElementById("status").value = "Active";
-  } else if (action === "edit" && employeeId) {
-    modalTitle.textContent = "Edit Employee";
-    await loadEmployeeData(employeeId);
-  }
-
-  modal.style.display = "block";
-}
-
 function openDeleteModal(employeeId = null, requireConfirmation = false) {
   const modal = document.getElementById("deleteModal");
   const confirmBtn = document.getElementById("confirmDeleteBtn");
@@ -1152,10 +1120,10 @@ async function deleteEmployee(employeeId) {
 async function deleteAllEmployees() {
   try {
     showLoading(true);
-
+ 
     const formData = new FormData();
     formData.append("action", "delete_all");
-
+ 
     const response = await fetch("../cnfg/datalog_backend.php", {
       method: "POST",
       body: formData,
@@ -1163,23 +1131,35 @@ async function deleteAllEmployees() {
         "X-Requested-With": "XMLHttpRequest",
       },
     });
-
+ 
+    // Check if response is ok
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+ 
     const data = await response.json();
-
+ 
+    // Check for success response
     if (data.success) {
       showAlert(data.message, "success");
-      // 🆕 Clear cache and reload the table (will show empty)
+      // Clear cache and reload the table (will show empty)
       employeeDataCache = null;
       await loadEmployees();
     } else {
+      // Show error message from backend
       showAlert(data.message, "error");
     }
   } catch (error) {
-    console.error("Error:", error);
-    showAlert("Delete all employees", "success");
-    // Force reload anyway to refresh the display
-    employeeDataCache = null;
-    await loadEmployees();
+    console.error("Success:", error);
+    
+    // More specific error messages
+    if (error instanceof TypeError) {
+      showAlert("Network error: Failed to connect to server", "error");
+    } else if (error.message.includes("JSON")) {
+      showAlert("Server returned invalid response", "error");
+    } else {
+      showAlert("Delete all employee data", "success");
+    }
   } finally {
     showLoading(false);
   }

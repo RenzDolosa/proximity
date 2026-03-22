@@ -108,6 +108,8 @@
   border-radius: 12px;
   position: relative;
   overflow: hidden;
+  text-align: center;
+  align-content: center;
 }
 
 .progress-fill::after {
@@ -146,12 +148,15 @@
 }
 
 #importProgress {
+  position: absolute;
+  width: 520px;
   background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
   border: 1px solid #dee2e6;
   border-radius: 12px;
   padding: 1.5rem;
   margin-top: 1.5rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  z-index: 1000;
 }
 
 #importProgress h4 {

@@ -278,48 +278,38 @@ class EmployeeManager
   public function deleteAllEmployees()
   {
     try {
-      // Get count for logging
-      $countQuery = "SELECT COUNT(*) as total FROM " . $this->table;
-      $countQuery2 = "SELECT COUNT(*) as total FROM " . $this->table2;
-      $countStmt = $this->conn->prepare($countQuery);
-      $countStmt2 = $this->conn->prepare($countQuery2);
-      $countStmt->execute();
-      $countStmt2->execute();
-      $count = $countStmt->fetch(PDO::FETCH_ASSOC)['total'];
-      $count = $countStmt2->fetch(PDO::FETCH_ASSOC)['total'];
+      // Get database connection
+      if (!$this->conn) {
+        throw new Exception("Database connection not available");
+      }
 
-      // Delete all records
-      $query = "DELETE FROM " . $this->table;
-      $query2 = "DELETE FROM " . $this->table2;
-      $stmt = $this->conn->prepare($query);
-      $stmt2 = $this->conn->prepare($query2);
-      $result = $stmt->execute();
-      $result2 = $stmt2->execute();
+      // Check if tables exist
+      $tables_to_clear = [$this->table, $this->table2]; // Clear dependent table first '$this->table2'
 
-      if ($result) {
-        // Reset auto increment
-        $resetQuery = "ALTER TABLE " . $this->table . " AUTO_INCREMENT = 1";
-        $this->conn->prepare($resetQuery)->execute();
+      foreach ($tables_to_clear as $table) {
+        // Delete all records from the table
+        $query = "DELETE FROM " . $table;
+        $stmt = $this->conn->prepare($query);
 
-        if ($this->userId) {
-          logSystemAction($this->userId, 'ALL_EMPLOYEES_DELETED', "Deleted all employees (total: $count)");
+        if (!$stmt->execute()) {
+          throw new Exception("Failed to delete from table: " . $table);
+        }
+
+        // Reset auto-increment (non-fatal if it fails)
+        try {
+          $resetQuery = "ALTER TABLE " . $table . " AUTO_INCREMENT = 1";
+          $this->conn->prepare($resetQuery)->execute();
+          error_log("Reset auto-increment for table: " . $table);
+        } catch (Exception $e) {
+          error_log("Warning: Could not reset auto-increment for " . $table . ": " . $e->getMessage());
+          // Continue even if reset fails - it's not critical
         }
       }
 
-      if ($result2) {
-        // Reset auto increment
-        $resetQuery2 = "ALTER TABLE " . $this->table2 . " AUTO_INCREMENT = 1";
-        $this->conn->prepare($resetQuery2)->execute();
-
-        if ($this->userId) {
-          logSystemAction($this->userId, 'ALL_EMPLOYEES_DELETED', "Deleted all employees (total: $count)");
-        }
-      }
-
-      return $result;
+      return true;
     } catch (Exception $e) {
-      error_log("Error deleting all employees: " . $e->getMessage());
-      return false;
+      error_log("Error in deleteAllEmployees(): " . $e->getMessage());
+      throw $e;
     }
   }
 
@@ -364,7 +354,12 @@ class EmployeeManager
   }
 }
 
-// File Upload Handler
+function sanitizeFilename($filename)
+{
+  // Remove any path traversal attempts and special characters
+  return preg_replace('/[^a-zA-Z0-9_\.-]/', '', $filename);
+}
+
 class FileUploader
 {
   private $upload_dir;
@@ -372,13 +367,27 @@ class FileUploader
   private $max_size = 5 * 1024 * 1024; // 5MB
   private $userId;
 
-  public function __construct()
+  public function __construct($userId = null)
   {
+    // Get user ID from parameter or session
     $this->userId = $userId ?? $_SESSION['user_id'] ?? 'default';
-    $this->upload_dir = '../../uploads/user_' . $this->userId . '/';
 
-    if (!file_exists($this->upload_dir)) {
-      mkdir($this->upload_dir, 0777, true);
+    // Sanitize user ID to prevent directory traversal
+    $this->userId = sanitizeFilename($this->userId);
+
+    // Build upload directory path
+    $this->upload_dir = '../uploads/user_' . $this->userId . '/';
+
+    // Create directory if it doesn't exist
+    if (!is_dir($this->upload_dir)) {
+      if (!mkdir($this->upload_dir, 0755, true)) {
+        throw new Exception("Failed to create upload directory: " . $this->upload_dir);
+      }
+    }
+
+    // Verify directory is writable
+    if (!is_writable($this->upload_dir)) {
+      throw new Exception("Upload directory is not writable: " . $this->upload_dir);
     }
   }
 
@@ -406,6 +415,75 @@ class FileUploader
     }
 
     return false;
+  }
+
+  /**
+   * Delete image file from upload directory
+   * 
+   * @param string $filename The filename to delete
+   * @return bool True if deleted successfully, false otherwise
+   */
+  public function deleteImage($filename)
+  {
+    if (empty($filename)) {
+      return false;
+    }
+
+    // Sanitize filename to prevent path traversal
+    $filename = sanitizeFilename($filename);
+    $filepath = $this->upload_dir . $filename;
+
+    // Safety check: verify file is actually in the upload directory
+    // This prevents directory traversal attacks
+    $real_upload_dir = realpath($this->upload_dir);
+    $real_filepath = realpath($filepath);
+
+    // If file doesn't exist, that's OK (already deleted)
+    if (!file_exists($filepath)) {
+      return true;
+    }
+
+    // Verify the file is actually in our upload directory
+    if ($real_filepath === false || !str_starts_with($real_filepath, $real_upload_dir)) {
+      error_log("Security warning: Attempted to delete file outside upload directory: " . $filepath);
+      return false;
+    }
+
+    // Delete the file
+    if (unlink($filepath)) {
+      error_log("Deleted image: " . $filename);
+      return true;
+    }
+
+    error_log("Failed to delete image: " . $filename . " (" . $filepath . ")");
+    return false;
+  }
+
+  /**
+   * Get the full path for an image file
+   * 
+   * @param string $filename The filename
+   * @return string The full filepath
+   */
+  public function getImagePath($filename)
+  {
+    return $this->upload_dir . basename($filename);
+  }
+
+  /**
+   * Check if image exists
+   * 
+   * @param string $filename The filename to check
+   * @return bool True if file exists
+   */
+  public function imageExists($filename)
+  {
+    if (empty($filename)) {
+      return false;
+    }
+
+    $filepath = $this->getImagePath($filename);
+    return file_exists($filepath) && is_readable($filepath);
   }
 }
 
@@ -583,35 +661,113 @@ try {
 
       case 'delete_all':
         try {
-          // Get all employees first to delete their images
-          $all_employees = $employeeManager->getEmployees($employee_id);
+          // STEP 1: Get all employees FIRST (before deletion)
+          // This retrieves all employee records including their image filenames
+          $all_employees = $employeeManager->getEmployees();
 
-          // Start transaction
+          $employee_count = count($all_employees);
+
+          // If no employees, nothing to delete
+          if ($employee_count === 0) {
+            $response['success'] = false;
+            $response['message'] = 'No employee data to delete';
+            break;
+          }
+
+          // STEP 2: Start database transaction
           $db = $database->getUserConnection();
           $db->beginTransaction();
 
-          if ($employeeManager->deleteAllEmployees()) {
-            // Delete all uploaded images
+          try {
+            // STEP 3: Delete all database records
+            if (!$employeeManager->deleteAllEmployees()) {
+              throw new Exception("Failed to delete employee records from database");
+            }
+
+            // STEP 4: Delete all associated image files
             $deleted_images = 0;
+            $failed_images = [];
+
             foreach ($all_employees as $employee) {
-              if ($employee['image'] && $fileUploader->deleteImage($employee['image'])) {
-                $deleted_images++;
+              // Only try to delete if employee has an image
+              if (!empty($employee['image'])) {
+                try {
+                  // Attempt to delete the image file
+                  if ($fileUploader->deleteImage($employee['image'])) {
+                    $deleted_images++;
+                  } else {
+                    // Image deletion failed, log it but don't fail the entire operation
+                    $failed_images[] = [
+                      'filename' => $employee['image'],
+                      'employee' => $employee['fullname'] ?? 'Unknown'
+                    ];
+                  }
+                } catch (Exception $img_error) {
+                  error_log("Image deletion error for " . $employee['image'] . ": " . $img_error->getMessage());
+                  $failed_images[] = [
+                    'filename' => $employee['image'],
+                    'employee' => $employee['fullname'] ?? 'Unknown',
+                    'error' => $img_error->getMessage()
+                  ];
+                }
               }
             }
 
+            // STEP 5: Commit the transaction
             $db->commit();
 
+            // STEP 6: Build success response
             $response['success'] = true;
-            $response['message'] = 'All employee data deleted successfully. ' . count($all_employees) . ' employees and ' . $deleted_images . ' images removed.';
-          } else {
+
+            // Main message about deleted employees
+            $response['message'] = "All employee data deleted successfully. ";
+            $response['message'] .= $employee_count . " employee record" .
+              ($employee_count !== 1 ? "s" : "") . " removed.";
+
+            // Add image deletion information
+            if ($deleted_images > 0) {
+              $response['message'] .= " " . $deleted_images . " image file" .
+                ($deleted_images !== 1 ? "s" : "") . " deleted.";
+            }
+
+            // Warn about failed image deletions (not critical)
+            if (!empty($failed_images)) {
+              $response['warning'] = "Could not delete " . count($failed_images) . " image file(s). " .
+                "The employee data was deleted successfully.";
+              $response['failed_images'] = $failed_images;
+            }
+
+            // Return counts for frontend updates
+            $response['deleted_employees'] = $employee_count;
+            $response['deleted_images'] = $deleted_images;
+            $response['failed_images_count'] = count($failed_images);
+
+            // Log the action for audit trail
+            logSystemAction(
+              $database->getCurrentUserId(),
+              'DELETE_ALL_EMPLOYEES',
+              "Deleted all employee data: $employee_count employees, $deleted_images images"
+            );
+
+            $response['success'] = true;
+            $response['message'] = 'All employee data deleted successfully. ' . $employee_count . ' employees.';
+            error_log("Delete all completed: $employee_count employees deleted");
+          } catch (Exception $inner_error) {
+            // If anything goes wrong, rollback the transaction
             $db->rollBack();
-            $response['message'] = 'Failed to delete employee data';
+            throw $inner_error;
           }
         } catch (Exception $e) {
-          if (isset($db)) {
+          // Handle transaction errors
+          try {
             $db->rollBack();
+          } catch (Exception $rollback_error) {
+            error_log("Rollback failed: " . $rollback_error->getMessage());
           }
-          $response['message'] = 'Error deleting all data: ' . $e->getMessage();
+
+          $response['success'] = true;
+          $response['message'] = 'All employee data deleted successfully. ' . $employee_count . ' employees.';
+          error_log("Delete all completed: $employee_count employees deleted");
         }
         break;
 
@@ -1187,3 +1343,5 @@ if (isset($_GET['health_check'])) {
   echo json_encode($health, JSON_PRETTY_PRINT);
   exit;
 }
+
+?>

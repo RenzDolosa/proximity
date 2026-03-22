@@ -1,10 +1,10 @@
 <?php
 // config.php
 
-// $server = "sql208.infinityfree.com";
-// $username = "if0_39822692";
-// $password = "GXDMgGMv9Kv0";
-// $dbbase = "if0_39822692_system_database";
+// $server = "sql212.infinityfree.com";
+// $username = "if0_41430152";
+// $password = "kGq47fPWAS41";
+// $dbbase = "if0_41430152_proximity3pl";
 
 // $conn = mysqli_connect($server, $username, $password, $dbbase);
 
@@ -14,7 +14,7 @@
 
 // Database configuration
 define('DB_HOST', 'localhost'); // localhost
-define('DB_NAME', 'system_database'); // system_database
+define('DB_NAME', 'if0_41430152_proximity3pl'); // system_database
 define('DB_USER', 'root'); // root
 define('DB_PASS', ''); // empty for local development
 
@@ -218,6 +218,20 @@ function createUserDatabase($userId)
             INDEX idx_qr_code (qr_code),
             INDEX idx_access_timestamp (access_timestamp),
             INDEX idx_access_type (access_type)
+        );
+
+        CREATE TABLE IF NOT EXISTS check_in_out (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            employee_id INT NOT NULL,
+            qr_code VARCHAR(255) NOT NULL,
+            fullname VARCHAR(255) NOT NULL,
+            check_type ENUM('IN', 'OUT') NOT NULL,
+            scan_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            ip_address VARCHAR(45),
+            user_agent TEXT,
+            INDEX idx_employee_id (employee_id),
+            INDEX idx_qr_code (qr_code),
+            INDEX idx_timestamp (scan_timestamp)
         );
 
         CREATE TABLE IF NOT EXISTS query_statistics (

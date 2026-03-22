@@ -241,6 +241,13 @@ if ($databaseConnected) {
   <!-- CSV / Excel Import Modal -->
   <div id="importModal" class="modal">
     <div class="modal-content">
+      <div id="importProgress" style="display: none;">
+        <h4>Import Progress:</h4>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div id="importStatus"></div>
+      </div>
       <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
       <h2>Import Proximity Codes from File</h2>
 
@@ -291,14 +298,6 @@ if ($databaseConnected) {
           <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
         </div>
       </form>
-
-      <div id="importProgress" style="display: none;">
-        <h4>Import Progress:</h4>
-        <div class="progress-bar">
-          <div class="progress-fill" id="progressFill"></div>
-        </div>
-        <div id="importStatus"></div>
-      </div>
     </div>
   </div>
 

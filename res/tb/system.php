@@ -1,5 +1,5 @@
 <?php
-// system.php
+// system.php - ENHANCED WITH CAMERA SUPPORT
 
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
@@ -71,6 +71,253 @@ if ($databaseConnected) {
   <link rel="stylesheet" href="../css/pg.css">
   <link rel="stylesheet" href="../css/loading.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+    /* Camera Modal Styles */
+    .camera-modal {
+      display: none;
+      position: fixed;
+      z-index: 2000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.9);
+      overflow: auto;
+    }
+
+    .camera-modal-content {
+      background-color: #1a1a1a;
+      margin: auto;
+      padding: 0;
+      width: 90%;
+      max-width: 600px;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .camera-modal-header {
+      padding: 20px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 12px 12px 0 0;
+      color: white;
+    }
+
+    .camera-modal-header h2 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .camera-modal-header .close-camera {
+      background: none;
+      border: none;
+      font-size: 28px;
+      color: white;
+      cursor: pointer;
+      padding: 0;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: background 0.3s ease;
+    }
+
+    .camera-modal-header .close-camera:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .camera-modal-body {
+      padding: 20px;
+      background-color: #1a1a1a;
+      text-align: center;
+      color: #fff;
+    }
+
+    .camera-container {
+      position: relative;
+      width: 100%;
+      max-width: 500px;
+      margin: 0 auto;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    #cameraStream {
+      width: 100%;
+      height: auto;
+      display: block;
+      transform: scaleX(-1);
+      border-radius: 8px;
+    }
+
+    #cameraPreview {
+      width: 100%;
+      height: auto;
+      display: none;
+      border-radius: 8px;
+      background: #000;
+    }
+
+    .camera-controls {
+      display: flex;
+      gap: 15px;
+      margin-top: 20px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .camera-btn {
+      padding: 12px 24px;
+      font-size: 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .camera-btn.capture {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .camera-btn.capture:hover:not(:disabled) {
+      transform: scale(1.05);
+      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .camera-btn.capture:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .camera-btn.retake {
+      background-color: #ff6b6b;
+      color: white;
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .camera-btn.retake:hover {
+      background-color: #ff5252;
+      transform: scale(1.05);
+    }
+
+    .camera-btn.upload {
+      background-color: #51cf66;
+      color: white;
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .camera-btn.upload:hover {
+      background-color: #40c057;
+      transform: scale(1.05);
+    }
+
+    .camera-btn.cancel {
+      background-color: #495057;
+      color: white;
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .camera-btn.cancel:hover {
+      background-color: #373c43;
+    }
+
+    .camera-status {
+      margin-top: 15px;
+      padding: 12px;
+      background-color: #2d2d2d;
+      border-radius: 6px;
+      font-size: 14px;
+      color: #aaa;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .camera-status.success {
+      background-color: rgba(81, 207, 102, 0.1);
+      color: #51cf66;
+      border: 1px solid #51cf66;
+    }
+
+    .camera-status.error {
+      background-color: rgba(255, 107, 107, 0.1);
+      color: #ff6b6b;
+      border: 1px solid #ff6b6b;
+    }
+
+    /* Enhanced file upload area */
+    .file-upload-wrapper {
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
+      margin-bottom: 10px;
+    }
+
+    .file-upload {
+      flex: 1;
+    }
+
+    .camera-toggle-btn {
+      padding: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      width: 50px;
+      height: auto;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+    }
+
+    .camera-toggle-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    @media (max-width: 768px) {
+      .camera-modal-content {
+        width: 95%;
+        max-width: 100%;
+      }
+
+      .camera-controls {
+        flex-direction: column;
+      }
+
+      .camera-btn {
+        width: 100%;
+        min-width: unset;
+      }
+    }
+  </style>
 </head>
 
 <body>
@@ -293,11 +540,16 @@ if ($databaseConnected) {
           <div class="right-column">
             <div class="form-group">
               <label for="image">Employee Image</label>
-              <div class="file-upload">
-                <input type="file" id="image" name="image" accept="image/*">
-                <label for="image" class="file-upload-label">
-                  <i class="fas fa-file-image"></i> Click to select image (Max 1MB)
-                </label>
+              <div class="file-upload-wrapper">
+                <div class="file-upload">
+                  <input type="file" id="image" name="image" accept="image/*">
+                  <label for="image" class="file-upload-label">
+                    <i class="fas fa-file-image"></i> Click to select image (Max 5MB)
+                  </label>
+                </div>
+                <button type="button" class="camera-toggle-btn" onclick="openCameraModal()" title="Capture from camera">
+                  <i class="fas fa-camera"></i>
+                </button>
               </div>
             </div>
           </div>
@@ -307,6 +559,43 @@ if ($databaseConnected) {
           <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Camera Modal -->
+  <div id="cameraModal" class="camera-modal">
+    <div class="camera-modal-content">
+      <div class="camera-modal-header">
+        <h2><i class="fas fa-camera"></i> Capture Photo</h2>
+        <button type="button" class="close-camera" onclick="closeCameraModal()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="camera-modal-body">
+        <div class="camera-container">
+          <video id="cameraStream" playsinline autoplay></video>
+          <canvas id="cameraPreview" style="display: none;"></canvas>
+        </div>
+
+        <div class="camera-status" id="cameraStatus">
+          Initializing camera...
+        </div>
+
+        <div class="camera-controls">
+          <button type="button" class="camera-btn capture" id="captureBtn" onclick="capturePhoto()">
+            <i class="fas fa-circle"></i> Capture
+          </button>
+          <button type="button" class="camera-btn retake" id="retakeBtn" onclick="retakePhoto()" style="display: none;">
+            <i class="fas fa-redo"></i> Retake
+          </button>
+          <button type="button" class="camera-btn upload" id="uploadCameraBtn" onclick="uploadCameraPhoto()" style="display: none;">
+            <i class="fas fa-check"></i> Use Photo
+          </button>
+          <button type="button" class="camera-btn cancel" onclick="closeCameraModal()">
+            <i class="fas fa-times"></i> Cancel
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -336,6 +625,13 @@ if ($databaseConnected) {
   <!-- CSV / Excel Import Modal -->
   <div id="importModal" class="modal">
     <div class="modal-content">
+      <div id="importProgress" style="display: none;">
+        <h4>Import Progress:</h4>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div id="importStatus"></div>
+      </div>
       <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
       <h2>Import Employees from File</h2>
 
@@ -392,14 +688,6 @@ if ($databaseConnected) {
           <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
         </div>
       </form>
-
-      <div id="importProgress" style="display: none;">
-        <h4>Import Progress:</h4>
-        <div class="progress-bar">
-          <div class="progress-fill" id="progressFill"></div>
-        </div>
-        <div id="importStatus"></div>
-      </div>
     </div>
   </div>
 
@@ -410,6 +698,7 @@ if ($databaseConnected) {
   <!-- Add XLSX library for Excel file support -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="../src/system.js"></script>
+  <script src="../src/system-camera.js"></script>
   <script src="../src/is.js"></script>
   <script src="../src/eas.js"></script>
   <script src="../src/opt-btn.js"></script>

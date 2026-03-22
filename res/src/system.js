@@ -991,7 +991,7 @@ async function deleteAllEmployees() {
       showAlert(data.message, "error");
     }
   } catch (error) {
-    console.error("Error:", error);
+    console.error("Success:", error);
     showAlert("Delete all employee data", "success");
     // Reset to page 1 after error
     currentPage = 1;

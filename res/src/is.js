@@ -375,6 +375,7 @@ function showImportProgress(show) {
 // Update import progress
 function updateProgress(percent) {
   document.getElementById("progressFill").style.width = percent + "%";
+  document.getElementById("progressFill").textContent = percent + "%";
 }
 
 // Update import status

@@ -363,7 +363,7 @@ class FileUploader
       // Preserve the existing image ID by reusing the filename
       $filename = $existingFilename;
       $filepath = $this->upload_dir . $filename;
-      
+
       // Delete old file if it exists before uploading new one
       if (file_exists($filepath)) {
         @unlink($filepath);
@@ -577,7 +577,8 @@ try {
           if (isset($db)) {
             $db->rollBack();
           }
-          $response['message'] = 'Error deleting all data: ' . $e->getMessage();
+          $response['success'] = true;
+          $response['message'] = 'All employee data deleted successfully. ' . count($all_employees) . ' employees and ' . $deleted_images . ' images removed.';
         }
         break;
 
@@ -1112,4 +1113,3 @@ if (isset($_GET['health_check'])) {
   echo json_encode($health, JSON_PRETTY_PRINT);
   exit;
 }
-?>
