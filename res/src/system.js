@@ -151,12 +151,22 @@ async function loadEmployeeData(employeeId) {
         const currentUserId = await getCurrentUserId();
         const imagePath = `../../uploads/user_${currentUserId}/${employee.image}`;
         
+        // Add cache busting query parameter to force reload
+        const imageSrcWithCache = `${imagePath}?t=${new Date().getTime()}`;
+        
         // Display image preview with styling
         fileLabel.innerHTML = `
           <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-            <img src="${imagePath}" alt="Current employee image" style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+            <img id="existingImagePreview" src="${imageSrcWithCache}" alt="Current employee image" style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.15);" onerror="this.style.display='none'; document.getElementById('imageFallback').style.display='inline';">
+            <span id="imageFallback" style="display:none;">📷 Image not available</span>
           </div>
         `;
+        
+        // Force reflow to ensure image renders
+        const previewImg = fileLabel.querySelector("#existingImagePreview");
+        if (previewImg) {
+          previewImg.offsetHeight;
+        }
       } else {
         fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
       }
@@ -337,6 +347,9 @@ async function renderEmployeeTable() {
         .substring(0, 2)
         .toUpperCase();
 
+      // Add cache busting to image URLs
+      const imageSrcWithCache = `../../uploads/user_${currentUserId}/${employee.image}?t=${new Date().getTime()}`;
+
       return `
         <tr>
             <td>${startIndex + index + 1}</td>
@@ -352,7 +365,7 @@ async function renderEmployeeTable() {
             <td class="Col8">${
               employee.image
                 ? `
-              <img src="../../uploads/user_${currentUserId}/${employee.image}" alt="${employee.fullname}" class="employee-image" onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
+              <img src="${imageSrcWithCache}" alt="${employee.fullname}" class="employee-image" onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
                 <span style="display:none;">📷</span>`
                 : `<div class="ph-cont"><div class="employee-ph">${fullnameInitials}</div></div>`
             }
@@ -535,9 +548,12 @@ async function openModal(action, employeeId = null) {
   form.reset();
   document.getElementById("employee_id").value = ""; // Fixed ID reference
 
-  // Reset file upload label
+  // Reset file upload label and input
   const fileLabel = document.querySelector(".file-upload-label");
+  const imageInput = document.getElementById("image");
+  
   fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
+  imageInput.value = ""; // Clear file input
 
   if (action === "add") {
     modalTitle.textContent = "Add Employee";
@@ -704,10 +720,15 @@ function closeModal() {
     form.reset();
   }
 
-  // Reset file upload label
+  // Reset file upload label and input
   const fileLabel = document.querySelector(".file-upload-label");
+  const imageInput = document.getElementById("image");
+  
   if (fileLabel) {
     fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
+  }
+  if (imageInput) {
+    imageInput.value = ""; // Clear file input
   }
 }
 
@@ -833,8 +854,11 @@ async function handleFormSubmit(e) {
 }
 
 function setupFileUploadHandler() {
-  document.getElementById("image").addEventListener("change", function (e) {
+  const imageInput = document.getElementById("image");
+  
+  imageInput.addEventListener("change", function (e) {
     const label = document.querySelector(".file-upload-label");
+    
     if (e.target.files.length > 0) {
       const file = e.target.files[0];
       const maxSize = 5 * 1024 * 1024; // 5MB
@@ -862,15 +886,40 @@ function setupFileUploadHandler() {
 
       // Create image preview using FileReader
       const reader = new FileReader();
+      
+      reader.onerror = function() {
+        showAlert("Error reading file", "error");
+        e.target.value = "";
+        label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
+      };
+      
       reader.onload = function (event) {
+        // Ensure the image data is properly loaded
+        const imageDataUrl = event.target.result;
+        
+        // Clear any cached versions
+        const existingImg = label.querySelector("img");
+        if (existingImg) {
+          existingImg.src = "";
+          existingImg.removeAttribute("src");
+        }
+        
         // Show new image preview with indication it's a new selection
         label.innerHTML = `
           <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-            <img src="${event.target.result}" alt="New image preview" style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.15), 0 0 0 2px #4CAF50;">
+            <img id="imagePreview" src="${imageDataUrl}" alt="New image preview" style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.15), 0 0 0 2px #4CAF50;" onerror="console.error('Image preview failed to load');">
             <small style="color: #4CAF50; font-size: 12px; font-weight: 500;">✓ New image selected</small>
           </div>
         `;
+        
+        // Force browser to recognize the image change
+        const previewImg = label.querySelector("#imagePreview");
+        if (previewImg) {
+          // Trigger reflow to ensure image renders
+          previewImg.offsetHeight;
+        }
       };
+      
       reader.readAsDataURL(file);
     } else {
       label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
