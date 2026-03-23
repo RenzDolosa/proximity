@@ -1,5 +1,5 @@
 <?php
-// config.php - FIXED VERSION
+// config.php - FIXED VERSION with clarification on my_database usage
 
 // Database configuration
 define('DB_HOST', 'localhost'); // localhost // sql212.infinityfree.com
@@ -7,16 +7,20 @@ define('DB_NAME', 'if0_41430152_proximity3pl'); // system_database // if0_414301
 define('DB_USER', 'root'); // root // if0_41430152
 define('DB_PASS', ''); // empty for local development // kGq47fPWAS41
 
-// FIXED: Use shorter, properly formatted database prefix
-// Change from: define('USER_DB_PREFIX', DB_NAME); 
-// To:
-define('USER_DB_PREFIX', 'user_'); // Much shorter: user_1, user_2, user_3, etc.
+// FIXED: Database naming strategy
+// Actual database names are: user_1, user_2, user_3, etc. (based on user ID)
+// The 'my_database' field from registration is stored as metadata only
+define('USER_DB_PREFIX', 'user_'); // Creates user_1, user_2, user_3, etc.
 define('USER_DB_HOST', DB_HOST);
 define('USER_DB_USER', DB_USER);
 define('USER_DB_PASS', DB_PASS);
 
 // ADDED: Maximum database name length for MySQL
 define('MAX_DB_NAME_LENGTH', 64);
+
+// ============================================================================
+// DATABASE CONNECTION FUNCTIONS
+// ============================================================================
 
 // Create main database connection
 function getDBConnection()
@@ -480,6 +484,10 @@ function deleteUserDatabase($userId)
   }
 }
 
+// ============================================================================
+// SESSION AND SECURITY FUNCTIONS
+// ============================================================================
+
 // Start session if not already started
 if (session_status() === PHP_SESSION_NONE) {
   session_start();
@@ -528,7 +536,28 @@ function customDatabaseExists($dbName)
   }
 }
 
-// FIXED: Enhanced User Registration Function with proper error handling
+// ============================================================================
+// REGISTRATION AND LOGIN FUNCTIONS (FIXED VERSION)
+// ============================================================================
+
+/**
+ * FIXED: Enhanced User Registration Function
+ * 
+ * DATABASE NAMING STRATEGY:
+ * - Actual database created: user_{$userId} (e.g., user_1, user_2, user_3)
+ * - The 'my_database' field is stored in users table as METADATA ONLY
+ * - This ensures clean, predictable database names while preserving user's custom name
+ * 
+ * @param string $username - Unique username (3+ chars)
+ * @param string $email - Valid email address
+ * @param string $password - Strong password (8+ chars, uppercase, lowercase, number)
+ * @param string $firstName - User's first name
+ * @param string $lastName - User's last name
+ * @param string|null $myDatabase - Custom database name (stored as metadata)
+ * @param string|null $phoneNum - User's phone number
+ * 
+ * @return array - ['success' => bool, 'user_id' => int, 'database_created' => bool, 'database_name' => string, 'message' => string, 'errors' => array]
+ */
 function registerUser($username, $email, $password, $firstName, $lastName, $myDatabase = null, $phoneNum = null)
 {
   $errors = [];
@@ -573,7 +602,7 @@ function registerUser($username, $email, $password, $firstName, $lastName, $myDa
     // Hash password
     $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-    // Insert new user
+    // Insert new user with my_database as metadata
     $stmt = $pdo->prepare("
         INSERT INTO users (username, email, password, first_name, last_name, my_database, phone, created_at) 
         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
@@ -585,7 +614,7 @@ function registerUser($username, $email, $password, $firstName, $lastName, $myDa
       $hashedPassword,
       sanitizeInput($firstName),
       sanitizeInput($lastName),
-      sanitizeInput($myDatabase ?? ''),
+      sanitizeInput($myDatabase ?? ''), // STORED AS METADATA ONLY
       $phoneNum ? sanitizeInput($phoneNum) : null
     ]);
 
@@ -594,9 +623,9 @@ function registerUser($username, $email, $password, $firstName, $lastName, $myDa
     // Commit the user creation first
     $pdo->commit();
 
-    error_log("User created successfully: ID=$userId, Username=$username");
+    error_log("User created successfully: ID=$userId, Username=$username, My_Database=$myDatabase");
 
-    // Now create user-specific database
+    // Now create user-specific database with actual name: user_{$userId}
     $dbResult = createUserDatabase($userId);
     
     if (!$dbResult['success']) {
@@ -616,13 +645,14 @@ function registerUser($username, $email, $password, $firstName, $lastName, $myDa
     }
 
     // Log successful registration
-    logSystemAction($userId, 'USER_REGISTERED', "User registered with database: " . $dbResult['database_name']);
+    logSystemAction($userId, 'USER_REGISTERED', "User registered with database: " . $dbResult['database_name'] . " (custom name: $myDatabase)");
 
     return [
       'success' => true,
       'user_id' => $userId,
       'database_created' => true,
-      'database_name' => $dbResult['database_name'],
+      'database_name' => $dbResult['database_name'], // Returns: user_1, user_2, etc.
+      'custom_name' => $myDatabase, // User's custom name (for display)
       'message' => 'Registration successful! Your personal database has been created.'
     ];
   } catch (PDOException $e) {
@@ -670,7 +700,7 @@ function loginUser($username, $password)
       $_SESSION['email'] = $user['email'];
       $_SESSION['first_name'] = $user['first_name'];
       $_SESSION['last_name'] = $user['last_name'];
-      $_SESSION['my_database'] = $user['my_database'];
+      $_SESSION['my_database'] = $user['my_database']; // Store custom name in session
 
       // Update last login
       $updateStmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
@@ -704,7 +734,7 @@ function createMainTables()
             first_name VARCHAR(50) NOT NULL,
             last_name VARCHAR(50) NOT NULL,
             phone VARCHAR(20),
-            my_database VARCHAR(50),
+            my_database VARCHAR(100), -- CUSTOM DATABASE NAME (METADATA ONLY)
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             last_login TIMESTAMP NULL,
@@ -798,7 +828,7 @@ function getCurrentUser()
     'email' => $_SESSION['email'],
     'first_name' => $_SESSION['first_name'],
     'last_name' => $_SESSION['last_name'],
-    'my_database' => $_SESSION['my_database']
+    'my_database' => $_SESSION['my_database'] // Custom name from metadata
   ];
 }
 

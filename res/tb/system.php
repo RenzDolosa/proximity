@@ -63,6 +63,7 @@ if ($databaseConnected) {
   <title><?php echo htmlspecialchars($myDatabase); ?> - Manage</title>
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../css/system.css">
+  <link rel="stylesheet" href="../css/system-camera.css">
   <link rel="stylesheet" href="../css/ptl.css">
   <link rel="stylesheet" href="../css/modal.css">
   <link rel="stylesheet" href="../css/btn.css">
@@ -71,253 +72,6 @@ if ($databaseConnected) {
   <link rel="stylesheet" href="../css/pg.css">
   <link rel="stylesheet" href="../css/loading.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <style>
-    /* Camera Modal Styles */
-    .camera-modal {
-      display: none;
-      position: fixed;
-      z-index: 2000;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0, 0, 0, 0.9);
-      overflow: auto;
-    }
-
-    .camera-modal-content {
-      background-color: #1a1a1a;
-      margin: auto;
-      padding: 0;
-      width: 90%;
-      max-width: 600px;
-      border-radius: 12px;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      display: flex;
-      flex-direction: column;
-    }
-
-    .camera-modal-header {
-      padding: 20px;
-      border-bottom: 1px solid #333;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-radius: 12px 12px 0 0;
-      color: white;
-    }
-
-    .camera-modal-header h2 {
-      margin: 0;
-      font-size: 20px;
-      font-weight: 600;
-    }
-
-    .camera-modal-header .close-camera {
-      background: none;
-      border: none;
-      font-size: 28px;
-      color: white;
-      cursor: pointer;
-      padding: 0;
-      width: 40px;
-      height: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 50%;
-      transition: background 0.3s ease;
-    }
-
-    .camera-modal-header .close-camera:hover {
-      background: rgba(255, 255, 255, 0.2);
-    }
-
-    .camera-modal-body {
-      padding: 20px;
-      background-color: #1a1a1a;
-      text-align: center;
-      color: #fff;
-    }
-
-    .camera-container {
-      position: relative;
-      width: 100%;
-      max-width: 500px;
-      margin: 0 auto;
-      background: #000;
-      border-radius: 8px;
-      overflow: hidden;
-    }
-
-    #cameraStream {
-      width: 100%;
-      height: auto;
-      display: block;
-      transform: scaleX(-1);
-      border-radius: 8px;
-    }
-
-    #cameraPreview {
-      width: 100%;
-      height: auto;
-      display: none;
-      border-radius: 8px;
-      background: #000;
-    }
-
-    .camera-controls {
-      display: flex;
-      gap: 15px;
-      margin-top: 20px;
-      justify-content: center;
-      flex-wrap: wrap;
-    }
-
-    .camera-btn {
-      padding: 12px 24px;
-      font-size: 14px;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 600;
-      transition: all 0.3s ease;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .camera-btn.capture {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      flex: 1;
-      min-width: 120px;
-    }
-
-    .camera-btn.capture:hover:not(:disabled) {
-      transform: scale(1.05);
-      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
-    }
-
-    .camera-btn.capture:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .camera-btn.retake {
-      background-color: #ff6b6b;
-      color: white;
-      flex: 1;
-      min-width: 120px;
-    }
-
-    .camera-btn.retake:hover {
-      background-color: #ff5252;
-      transform: scale(1.05);
-    }
-
-    .camera-btn.upload {
-      background-color: #51cf66;
-      color: white;
-      flex: 1;
-      min-width: 120px;
-    }
-
-    .camera-btn.upload:hover {
-      background-color: #40c057;
-      transform: scale(1.05);
-    }
-
-    .camera-btn.cancel {
-      background-color: #495057;
-      color: white;
-      flex: 1;
-      min-width: 120px;
-    }
-
-    .camera-btn.cancel:hover {
-      background-color: #373c43;
-    }
-
-    .camera-status {
-      margin-top: 15px;
-      padding: 12px;
-      background-color: #2d2d2d;
-      border-radius: 6px;
-      font-size: 14px;
-      color: #aaa;
-      min-height: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .camera-status.success {
-      background-color: rgba(81, 207, 102, 0.1);
-      color: #51cf66;
-      border: 1px solid #51cf66;
-    }
-
-    .camera-status.error {
-      background-color: rgba(255, 107, 107, 0.1);
-      color: #ff6b6b;
-      border: 1px solid #ff6b6b;
-    }
-
-    /* Enhanced file upload area */
-    .file-upload-wrapper {
-      display: flex;
-      gap: 10px;
-      align-items: stretch;
-      margin-bottom: 10px;
-    }
-
-    .file-upload {
-      flex: 1;
-    }
-
-    .camera-toggle-btn {
-      padding: 0;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      width: 50px;
-      height: auto;
-      font-size: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.3s ease;
-    }
-
-    .camera-toggle-btn:hover {
-      transform: scale(1.05);
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-    }
-
-    @media (max-width: 768px) {
-      .camera-modal-content {
-        width: 95%;
-        max-width: 100%;
-      }
-
-      .camera-controls {
-        flex-direction: column;
-      }
-
-      .camera-btn {
-        width: 100%;
-        min-width: unset;
-      }
-    }
-  </style>
 </head>
 
 <body>
@@ -572,15 +326,28 @@ if ($databaseConnected) {
         </button>
       </div>
       <div class="camera-modal-body">
+        <div class="camera-selextor-grid">
+          <!-- CAMERA SELECTOR (NEW FEATURE) -->
+          <div class="camera-selector-container">
+            <label for="cameraSelector">
+              <i class="fas fa-video"></i> Select Camera:
+            </label>
+            <select id="cameraSelector">
+              <option value="">Loading cameras...</option>
+            </select>
+          </div>
+          <!-- STATUS MESSAGE -->
+          <div class="camera-status" id="cameraStatus">
+            Initializing camera...
+          </div>
+        </div>
+        <!-- CAMERA PREVIEW AREA -->
         <div class="camera-container">
           <video id="cameraStream" playsinline autoplay></video>
           <canvas id="cameraPreview" style="display: none;"></canvas>
         </div>
 
-        <div class="camera-status" id="cameraStatus">
-          Initializing camera...
-        </div>
-
+        <!-- BUTTONS -->
         <div class="camera-controls">
           <button type="button" class="camera-btn capture" id="captureBtn" onclick="capturePhoto()">
             <i class="fas fa-circle"></i> Capture
@@ -597,113 +364,112 @@ if ($databaseConnected) {
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Delete Modal -->
-  <div id="deleteModal" class="modal-overlay">
-    <div class="modal-delete-content">
-      <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
-      <div class="modal-header">
-        <h2 id="deleteModalTitle">Delete Employee</h2>
-      </div>
-
-      <div class="modal-body">
-        <p id="deleteModalMessage">Are you sure you want to delete this employee?</p>
-
-        <!-- Confirmation input for delete all -->
-        <div id="confirmationContainer" style="display: none; margin-top: 20px;">
-          <label for="confirmationInput" style="display: block; margin-bottom: 10px; font-weight: bold;">Type "DELETE ALL" to confirm:</label>
-          <input type="text" id="confirmationInput" placeholder="Type DELETE ALL" style="margin-bottom: 10px;" />
+    <!-- Delete Modal -->
+    <div id="deleteModal" class="modal-overlay">
+      <div class="modal-delete-content">
+        <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
+        <div class="modal-header">
+          <h2 id="deleteModalTitle">Delete Employee</h2>
         </div>
-      </div>
 
-      <button id="confirmDeleteBtn" class="btn btn-danger">Delete</button>
-      <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
-    </div>
-  </div>
+        <div class="modal-body">
+          <p id="deleteModalMessage">Are you sure you want to delete this employee?</p>
 
-  <!-- CSV / Excel Import Modal -->
-  <div id="importModal" class="modal">
-    <div class="modal-content">
-      <div id="importProgress" style="display: none;">
-        <h4>Import Progress:</h4>
-        <div class="progress-bar">
-          <div class="progress-fill" id="progressFill"></div>
-        </div>
-        <div id="importStatus"></div>
-      </div>
-      <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
-      <h2>Import Employees from File</h2>
-
-      <div class="import-instructions">
-        <h4>Supported File Formats:</h4>
-        <p><strong>&#128196; CSV (.csv)</strong> | <strong>&#128202; Excel (.xlsx, .xls)</strong></p>
-
-        <h4>File Format Requirements:</h4>
-        <p>Your file should have the following columns in this order:</p>
-        <ul>
-          <li><strong>fullname</strong> - Employee's full name (required)</li>
-          <li><strong>position</strong> - Job position</li>
-          <li><strong>brand</strong> - Brand/Department</li>
-          <li><strong>status</strong> - Active or Inactive (default: Active)</li>
-          <li><strong>shift</strong> - Day Shift, Night Shift, or Graveyard Shift (required)</li>
-          <li><strong>violation</strong> - Any violations (optional)</li>
-          <li><strong>proximity code</strong> - If have Proximity Code (optional)</li>
-        </ul>
-        <p><em>Note: If blank Proximity Codes will be automatically generated for each employee.</em></p>
-      </div>
-
-      <form id="importForm" enctype="multipart/form-data">
-        <div class="form-group">
-          <div class="form-row">
-            <label for="dataFile">
-              <div class="download-label">Select File</div>
-            </label>
-            <a href="#" onclick="excelTemplate()" style="display: flex; align-items: center; gap: 5px; margin-left: auto; text-decoration: none; color: #007bff;">
-              <i class="fas fa-download"></i> Download Excel Template
-            </a>
-          </div>
-          <div class="file-upload">
-            <input type="file" id="dataFile" name="dataFile" accept=".csv,.xlsx,.xls" required>
-            <label for="dataFile" class="file-upload-label">
-              <i class="fas fa-file"></i> Click to select file (.csv, .xlsx, .xls)
-            </label>
+          <!-- Confirmation input for delete all -->
+          <div id="confirmationContainer" style="display: none; margin-top: 20px;">
+            <label for="confirmationInput" style="display: block; margin-bottom: 10px; font-weight: bold;">Type "DELETE ALL" to confirm:</label>
+            <input type="text" id="confirmationInput" placeholder="Type DELETE ALL" style="margin-bottom: 10px;" />
           </div>
         </div>
 
-        <div class="form-group">
-          <label style="display: grid; grid-template-columns: 300px 20px">
-            Skip first row (if it contains headers)
-            <input type="checkbox" id="skipHeader" name="skipHeader" checked>
-          </label>
-        </div>
-
-        <div id="importPreview" style="display: none;">
-          <h4>Preview (First 5 rows):</h4>
-        </div>
-
-        <div class="form-row" style="margin-top: 2rem;">
-          <button type="button" class="btn btn-primary" onclick="previewFile()"><i class="fas fa-list-ul"></i> Preview</button>
-          <button type="submit" class="btn btn-import"><i class="fas fa-upload"></i> Import</button>
-          <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
-        </div>
-      </form>
+        <button id="confirmDeleteBtn" class="btn btn-danger">Delete</button>
+        <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
+      </div>
     </div>
-  </div>
 
-  <audio id="successSound" src="../sounds/success.mp3" preload="auto"></audio>
-  <audio id="noResultSound" src="../sounds/noResultsFound.mp3" preload="auto"></audio>
-  <audio id="warningSound" src="../sounds/ohh-ow.mp3" preload="auto"></audio>
-  <audio id="inactiveSound" src="../sounds/inactive.mp3" preload="auto"></audio>
-  <!-- Add XLSX library for Excel file support -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="../src/system.js"></script>
-  <script src="../src/system-camera.js"></script>
-  <script src="../src/is.js"></script>
-  <script src="../src/eas.js"></script>
-  <script src="../src/opt-btn.js"></script>
-  <script src="../src/loading.js"></script>
-  <script src="../src/req.js"></script>
+    <!-- CSV / Excel Import Modal -->
+    <div id="importModal" class="modal">
+      <div class="modal-content">
+        <div id="importProgress" style="display: none;">
+          <h4>Import Progress:</h4>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <div id="importStatus"></div>
+        </div>
+        <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
+        <h2>Import Employees from File</h2>
+
+        <div class="import-instructions">
+          <h4>Supported File Formats:</h4>
+          <p><strong>&#128196; CSV (.csv)</strong> | <strong>&#128202; Excel (.xlsx, .xls)</strong></p>
+
+          <h4>File Format Requirements:</h4>
+          <p>Your file should have the following columns in this order:</p>
+          <ul>
+            <li><strong>fullname</strong> - Employee's full name (required)</li>
+            <li><strong>position</strong> - Job position</li>
+            <li><strong>brand</strong> - Brand/Department</li>
+            <li><strong>status</strong> - Active or Inactive (default: Active)</li>
+            <li><strong>shift</strong> - Day Shift, Night Shift, or Graveyard Shift (required)</li>
+            <li><strong>violation</strong> - Any violations (optional)</li>
+            <li><strong>proximity code</strong> - If have Proximity Code (optional)</li>
+          </ul>
+          <p><em>Note: If blank Proximity Codes will be automatically generated for each employee.</em></p>
+        </div>
+
+        <form id="importForm" enctype="multipart/form-data">
+          <div class="form-group">
+            <div class="form-row">
+              <label for="dataFile">
+                <div class="download-label">Select File</div>
+              </label>
+              <a href="#" onclick="excelTemplate()" style="display: flex; align-items: center; gap: 5px; margin-left: auto; text-decoration: none; color: #007bff;">
+                <i class="fas fa-download"></i> Download Excel Template
+              </a>
+            </div>
+            <div class="file-upload">
+              <input type="file" id="dataFile" name="dataFile" accept=".csv,.xlsx,.xls" required>
+              <label for="dataFile" class="file-upload-label">
+                <i class="fas fa-file"></i> Click to select file (.csv, .xlsx, .xls)
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label style="display: grid; grid-template-columns: 300px 20px">
+              Skip first row (if it contains headers)
+              <input type="checkbox" id="skipHeader" name="skipHeader" checked>
+            </label>
+          </div>
+
+          <div id="importPreview" style="display: none;">
+            <h4>Preview (First 5 rows):</h4>
+          </div>
+
+          <div class="form-row" style="margin-top: 2rem;">
+            <button type="button" class="btn btn-primary" onclick="previewFile()"><i class="fas fa-list-ul"></i> Preview</button>
+            <button type="submit" class="btn btn-import"><i class="fas fa-upload"></i> Import</button>
+            <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <audio id="successSound" src="../sounds/success.mp3" preload="auto"></audio>
+    <audio id="noResultSound" src="../sounds/noResultsFound.mp3" preload="auto"></audio>
+    <audio id="warningSound" src="../sounds/ohh-ow.mp3" preload="auto"></audio>
+    <audio id="inactiveSound" src="../sounds/inactive.mp3" preload="auto"></audio>
+    <!-- Add XLSX library for Excel file support -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="../src/system.js"></script>
+    <script src="../src/system-camera.js"></script>
+    <script src="../src/is.js"></script>
+    <script src="../src/eas.js"></script>
+    <script src="../src/opt-btn.js"></script>
+    <script src="../src/loading.js"></script>
+    <script src="../src/req.js"></script>
 </body>
 
 </html>

@@ -376,7 +376,7 @@ class FileUploader
     $this->userId = sanitizeFilename($this->userId);
 
     // Build upload directory path
-    $this->upload_dir = '../uploads/user_' . $this->userId . '/';
+    $this->upload_dir = '../../uploads/user_' . $this->userId . '/';
 
     // Create directory if it doesn't exist
     if (!is_dir($this->upload_dir)) {
@@ -684,34 +684,34 @@ try {
               throw new Exception("Failed to delete employee records from database");
             }
 
-            // STEP 4: Delete all associated image files
-            $deleted_images = 0;
-            $failed_images = [];
+            // // STEP 4: Delete all associated image files
+            // $deleted_images = 0;
+            // $failed_images = [];
 
-            foreach ($all_employees as $employee) {
-              // Only try to delete if employee has an image
-              if (!empty($employee['image'])) {
-                try {
-                  // Attempt to delete the image file
-                  if ($fileUploader->deleteImage($employee['image'])) {
-                    $deleted_images++;
-                  } else {
-                    // Image deletion failed, log it but don't fail the entire operation
-                    $failed_images[] = [
-                      'filename' => $employee['image'],
-                      'employee' => $employee['fullname'] ?? 'Unknown'
-                    ];
-                  }
-                } catch (Exception $img_error) {
-                  error_log("Image deletion error for " . $employee['image'] . ": " . $img_error->getMessage());
-                  $failed_images[] = [
-                    'filename' => $employee['image'],
-                    'employee' => $employee['fullname'] ?? 'Unknown',
-                    'error' => $img_error->getMessage()
-                  ];
-                }
-              }
-            }
+            // foreach ($all_employees as $employee) {
+            //   // Only try to delete if employee has an image
+            //   if (!empty($employee['image'])) {
+            //     try {
+            //       // Attempt to delete the image file
+            //       if ($fileUploader->deleteImage($employee['image'])) {
+            //         $deleted_images++;
+            //       } else {
+            //         // Image deletion failed, log it but don't fail the entire operation
+            //         $failed_images[] = [
+            //           'filename' => $employee['image'],
+            //           'employee' => $employee['fullname'] ?? 'Unknown'
+            //         ];
+            //       }
+            //     } catch (Exception $img_error) {
+            //       error_log("Image deletion error for " . $employee['image'] . ": " . $img_error->getMessage());
+            //       $failed_images[] = [
+            //         'filename' => $employee['image'],
+            //         'employee' => $employee['fullname'] ?? 'Unknown',
+            //         'error' => $img_error->getMessage()
+            //       ];
+            //     }
+            //   }
+            // }
 
             // STEP 5: Commit the transaction
             $db->commit();
