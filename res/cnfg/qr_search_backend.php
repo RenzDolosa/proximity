@@ -39,10 +39,10 @@ $currentUserId = $_SESSION['user_id'];
 // User Database configuration - connects to current user's database
 class Database
 {
-  private $host = 'localhost';
-  private $db_name = '';
-  private $username = 'root';
-  private $password = '';
+  private $host = DB_HOST;
+  private $db_name = DB_NAME;
+  private $username = DB_USER;
+  private $password = DB_PASS;
   private $conn;
   private $userId;
 
@@ -157,6 +157,7 @@ class QueryLogger
       logSystemAction($this->userId, 'check_in_out', json_encode([
         'employee_id' => $employeeId,
         'fullname' => $fullname,
+        'qr_code' => $qrCode,
         'check_type' => $checkType
       ]));
 
@@ -170,7 +171,7 @@ class QueryLogger
   // Get employee's current check status
   public function getEmployeeCheckStatus($employeeId, $qrCode = null)
   {
-    if (!$this->conn) return 'OUT'; // Default to OUT if no connection
+    if (!$this->conn) return 'IN'; // Default to OUT if no connection
 
     try {
       $query = "SELECT check_type FROM check_in_out 

@@ -1,11 +1,11 @@
 <?php
 // f-pass.php
 
-require_once '../cnfg/config.php';
+require_once 'res/cnfg/config.php';
 
 // Redirect if already logged in
 if (isset($_SESSION['user_id'])) {
-  header('Location: ../../portal.php');
+  header('Location: portal.php');
   exit();
 }
 
@@ -99,14 +99,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Forgot Password</title>
-  <link rel="stylesheet" href="../css/r-l.css">
+  <link rel="stylesheet" href="res/css/r-l.css">
 </head>
 
 <body>
 
   <div class="container">
     <div class="header">
-      <div><img src="../logo/database.png" alt="My Database Logo" class="logo"></div>
+      <div><img src="res/logo/database.png" alt="My Database Logo" class="logo"></div>
       <h2>Forgot Password</h2>
       <p class="subtitle">Enter your email address and we'll send you instructions to reset your password.</p>
     </div>
@@ -135,12 +135,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </form>
 
     <div class="login-link">
-      <a href="../../index.php">← Back to Login</a>
+      <a href="index.php">← Back to Login</a>
     </div>
   </div>
 
-  <script src="../src/req.js"></script>
-  <script src="../src/ver.js"></script>
+  <script src="res/src/req.js"></script>
+  <script src="re/src/ver.js"></script>
 </body>
 
 </html>

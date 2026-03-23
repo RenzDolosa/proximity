@@ -1,57 +1,52 @@
-// Enhanced reg.js with password toggle functionality
+// Enhanced reg.js with improved error handling and validation
 document.addEventListener('DOMContentLoaded', function() {
-    // Add password toggle functionality
     addPasswordToggle();
-    
-    // Form validation enhancement
     enhanceFormValidation();
-    
-    // Auto-hide alerts after 5 seconds
     autoHideAlerts();
-    
-    // Add form submission handling
     handleFormSubmission();
+    testServerConnection(); // NEW: Test connection on page load
 });
 
+// NEW FUNCTION: Test server connection
+function testServerConnection() {
+    fetch(window.location.pathname, { method: 'HEAD' })
+        .catch(err => {
+            console.error('Server connection issue:', err);
+            showAlert('Connection issue detected. Please check your internet connection.', 'error');
+        });
+}
+
 function addPasswordToggle() {
-    const passwordFields = [
-        'password',
-        'confirm_password'
-    ];
+    const passwordFields = ['password', 'confirm_password'];
     
     passwordFields.forEach(fieldId => {
         const field = document.getElementById(fieldId);
-        if (field) {
-            // Find existing toggle button or create one
-            let toggleBtn = field.parentNode.querySelector('.password-toggle-btn');
+        if (!field) return;
+        
+        let toggleBtn = field.parentNode.querySelector('.password-toggle-btn');
+        
+        if (!toggleBtn) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'password-input-wrapper';
+            field.parentNode.insertBefore(wrapper, field);
+            wrapper.appendChild(field);
             
-            if (!toggleBtn) {
-                // Create toggle button if it doesn't exist
-                toggleBtn = document.createElement('button');
-                toggleBtn.type = 'button';
-                toggleBtn.className = 'password-toggle-btn';
-                toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
-                toggleBtn.setAttribute('aria-label', 'Toggle password visibility');
-                
-                // Check if wrapper exists, if not create it
-                if (!field.parentNode.classList.contains('password-input-wrapper')) {
-                    const wrapper = document.createElement('div');
-                    wrapper.className = 'password-input-wrapper';
-                    field.parentNode.insertBefore(wrapper, field);
-                    wrapper.appendChild(field);
-                }
-                
-                field.parentNode.appendChild(toggleBtn);
-            }
-            
-            // Add click event listener (remove existing to avoid duplicates)
-            toggleBtn.replaceWith(toggleBtn.cloneNode(true));
-            toggleBtn = field.parentNode.querySelector('.password-toggle-btn');
-            
-            toggleBtn.addEventListener('click', function() {
-                togglePasswordVisibility(field, toggleBtn);
-            });
+            toggleBtn = document.createElement('button');
+            toggleBtn.type = 'button';
+            toggleBtn.className = 'password-toggle-btn';
+            toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
+            toggleBtn.setAttribute('aria-label', 'Toggle password visibility');
+            wrapper.appendChild(toggleBtn);
         }
+        
+        // Remove old event listeners
+        const newToggleBtn = toggleBtn.cloneNode(true);
+        toggleBtn.parentNode.replaceChild(newToggleBtn, toggleBtn);
+        
+        newToggleBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            togglePasswordVisibility(field, newToggleBtn);
+        });
     });
 }
 
@@ -75,43 +70,79 @@ function enhanceFormValidation() {
     const confirmPasswordField = document.getElementById('confirm_password');
     
     if (passwordField) {
-        // Add real-time password strength indicator
         passwordField.addEventListener('input', function() {
             validatePasswordStrength(this.value);
         });
     }
     
     if (confirmPasswordField) {
-        // Add real-time password match validation
         confirmPasswordField.addEventListener('input', function() {
             validatePasswordMatch(passwordField.value, this.value);
         });
     }
     
-    // Enhanced form validation on submit
     if (form) {
         form.addEventListener('submit', function(e) {
-            const password = passwordField.value;
-            const confirmPassword = confirmPasswordField.value;
-            
-            // Check password match
-            if (password !== confirmPassword) {
-                e.preventDefault();
-                showError('Passwords do not match!');
+            if (!validateFormBeforeSubmit(e)) {
                 return false;
             }
-            
-            // Check password strength
-            if (!isValidPassword(password)) {
-                e.preventDefault();
-                showError('Password must be at least 8 characters and contain uppercase, lowercase, and number.');
-                return false;
-            }
-            
-            // Show loading state
-            showLoadingState(true);
         });
     }
+}
+
+function validateFormBeforeSubmit(e) {
+    const password = document.getElementById('password').value;
+    const confirmPassword = document.getElementById('confirm_password').value;
+    const username = document.getElementById('username').value;
+    const email = document.getElementById('email').value;
+    const firstName = document.getElementById('first_name').value;
+    const lastName = document.getElementById('last_name').value;
+    
+    // Client-side validation
+    if (!username || username.length < 3) {
+        e.preventDefault();
+        showAlert('Username must be at least 3 characters long.', 'error');
+        return false;
+    }
+    
+    if (!email || !isValidEmailFormat(email)) {
+        e.preventDefault();
+        showAlert('Please enter a valid email address.', 'error');
+        return false;
+    }
+    
+    if (!firstName || !lastName) {
+        e.preventDefault();
+        showAlert('First name and last name are required.', 'error');
+        return false;
+    }
+    
+    if (!password || password.length < 8) {
+        e.preventDefault();
+        showAlert('Password must be at least 8 characters long.', 'error');
+        return false;
+    }
+    
+    if (!isValidPassword(password)) {
+        e.preventDefault();
+        showAlert('Password must contain uppercase, lowercase, and number.', 'error');
+        return false;
+    }
+    
+    if (password !== confirmPassword) {
+        e.preventDefault();
+        showAlert('Passwords do not match!', 'error');
+        return false;
+    }
+    
+    // All validations passed - show loading state
+    showLoadingState(true);
+    return true;
+}
+
+function isValidEmailFormat(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
 }
 
 function validatePasswordStrength(password) {
@@ -134,7 +165,6 @@ function validatePasswordStrength(password) {
     strengthIndicator.style.color = color;
     strengthIndicator.style.display = password.length > 0 ? 'block' : 'none';
     
-    // Show detailed requirements
     updatePasswordRequirements(requirements);
 }
 
@@ -220,26 +250,40 @@ function isValidPassword(password) {
            /\d/.test(password);
 }
 
-function showError(message) {
-    // Remove existing error alerts
-    const existingErrors = document.querySelectorAll('.error-alert');
-    existingErrors.forEach(error => error.remove());
+// IMPROVED: Better alert system
+function showAlert(message, type = 'error') {
+    removeExistingAlerts();
     
-    // Create new error alert
-    const errorDiv = document.createElement('div');
-    errorDiv.className = 'error error-alert';
-    errorDiv.textContent = message;
-    errorDiv.style.marginBottom = '15px';
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `${type} alert-box`;
+    alertDiv.innerHTML = `<div>${message}</div>`;
+    alertDiv.style.marginBottom = '15px';
+    alertDiv.style.padding = '12px 15px';
+    alertDiv.style.borderRadius = '4px';
+    alertDiv.style.display = 'block';
     
     const form = document.getElementById('registerForm');
-    form.insertAdjacentElement('beforebegin', errorDiv);
+    form.insertAdjacentElement('beforebegin', alertDiv);
     
-    // Auto-hide after 5 seconds
+    // Auto-hide after 8 seconds
     setTimeout(() => {
-        errorDiv.style.opacity = '0';
-        errorDiv.style.transition = 'opacity 0.5s ease';
-        setTimeout(() => errorDiv.remove(), 500);
-    }, 5000);
+        fadeOut(alertDiv);
+    }, 8000);
+}
+
+function removeExistingAlerts() {
+    const existingAlerts = document.querySelectorAll('.alert-box');
+    existingAlerts.forEach(alert => alert.remove());
+}
+
+function fadeOut(element) {
+    element.style.opacity = '0';
+    element.style.transition = 'opacity 0.5s ease';
+    setTimeout(() => {
+        if (element.parentNode) {
+            element.remove();
+        }
+    }, 500);
 }
 
 function showLoadingState(show) {
@@ -249,40 +293,48 @@ function showLoadingState(show) {
     if (show) {
         submitBtn.disabled = true;
         submitBtn.style.opacity = '0.7';
-        if (loadingSpan) {
-            loadingSpan.style.display = 'inline-block';
-        }
+        submitBtn.textContent = 'Creating Account...';
     } else {
         submitBtn.disabled = false;
         submitBtn.style.opacity = '1';
-        if (loadingSpan) {
-            loadingSpan.style.display = 'none';
-        }
+        submitBtn.textContent = 'Create Account';
     }
 }
 
 function handleFormSubmission() {
     const form = document.getElementById('registerForm');
     
-    // Reset loading state when page loads (in case of form resubmission)
     showLoadingState(false);
     
-    // Handle back button or page reload
     window.addEventListener('pageshow', function() {
         showLoadingState(false);
     });
+    
+    // Handle form submission with timeout
+    if (form) {
+        form.addEventListener('submit', function() {
+            const timeoutId = setTimeout(() => {
+                showLoadingState(false);
+                showAlert('Request took too long. Please check your connection and try again.', 'error');
+            }, 15000); // 15 second timeout
+            
+            // Clear timeout if response comes back
+            const observer = new MutationObserver(() => {
+                clearTimeout(timeoutId);
+                observer.disconnect();
+            });
+            
+            observer.observe(document.body, { childList: true, subtree: true });
+        });
+    }
 }
 
 function autoHideAlerts() {
     const alerts = document.querySelectorAll('.error, .success');
     alerts.forEach(alert => {
-        if (!alert.classList.contains('error-alert')) { // Don't auto-hide our custom error alerts
+        if (!alert.classList.contains('alert-box')) {
             setTimeout(() => {
-                alert.style.opacity = '0';
-                alert.style.transition = 'opacity 0.5s ease';
-                setTimeout(() => {
-                    alert.style.display = 'none';
-                }, 500);
+                fadeOut(alert);
             }, 5000);
         }
     });

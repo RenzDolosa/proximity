@@ -1,28 +1,22 @@
 <?php
-// config.php
-
-// $server = "sql212.infinityfree.com";
-// $username = "if0_41430152";
-// $password = "kGq47fPWAS41";
-// $dbbase = "if0_41430152_proximity3pl";
-
-// $conn = mysqli_connect($server, $username, $password, $dbbase);
-
-// if (!$conn) {
-//   die("Connection failed: " . mysqli_connect_error());
-// }
+// config.php - FIXED VERSION
 
 // Database configuration
-define('DB_HOST', 'localhost'); // localhost
-define('DB_NAME', 'if0_41430152_proximity3pl'); // system_database
-define('DB_USER', 'root'); // root
-define('DB_PASS', ''); // empty for local development
+define('DB_HOST', 'localhost'); // localhost // sql212.infinityfree.com
+define('DB_NAME', 'if0_41430152_proximity3pl'); // system_database // if0_41430152_proximity3pl
+define('DB_USER', 'root'); // root // if0_41430152
+define('DB_PASS', ''); // empty for local development // kGq47fPWAS41
 
-// User database configuration
-define('USER_DB_PREFIX', DB_NAME); // Prefix for user databases 'user_db_'
+// FIXED: Use shorter, properly formatted database prefix
+// Change from: define('USER_DB_PREFIX', DB_NAME); 
+// To:
+define('USER_DB_PREFIX', 'user_'); // Much shorter: user_1, user_2, user_3, etc.
 define('USER_DB_HOST', DB_HOST);
 define('USER_DB_USER', DB_USER);
 define('USER_DB_PASS', DB_PASS);
+
+// ADDED: Maximum database name length for MySQL
+define('MAX_DB_NAME_LENGTH', 64);
 
 // Create main database connection
 function getDBConnection()
@@ -105,16 +99,24 @@ function userDatabaseExists($userId)
   }
 }
 
-// Create user-specific database and tables
+// FIXED: Create user-specific database and tables with better error handling
 function createUserDatabase($userId)
 {
   if (!is_numeric($userId) || $userId <= 0) {
-    error_log("Invalid user ID for database creation: $userId");
-    return false;
+    $errorMsg = "Invalid user ID for database creation: $userId";
+    error_log($errorMsg);
+    return ['success' => false, 'error' => $errorMsg];
   }
 
   $userId = intval($userId);
   $dbName = USER_DB_PREFIX . $userId;
+
+  // ADDED: Validate database name length
+  if (strlen($dbName) > MAX_DB_NAME_LENGTH) {
+    $errorMsg = "Database name exceeds maximum length of " . MAX_DB_NAME_LENGTH . " characters. Generated name: '$dbName' (" . strlen($dbName) . " chars)";
+    error_log($errorMsg);
+    return ['success' => false, 'error' => $errorMsg];
+  }
 
   try {
     // Connect without specifying database
@@ -125,8 +127,12 @@ function createUserDatabase($userId)
       [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
 
-    // Create database - FIXED: Backticks prevent SQL injection
-    $pdo->exec("CREATE DATABASE IF NOT EXISTS `" . str_replace("`", "``", $dbName) . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    // Create database with backticks and proper escaping
+    $createDbQuery = "CREATE DATABASE IF NOT EXISTS `" . str_replace("`", "``", $dbName) . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+    
+    error_log("Attempting to create database: $dbName with query: $createDbQuery");
+    $pdo->exec($createDbQuery);
+    error_log("Database created successfully: $dbName");
 
     // Connect to the new database
     $userPdo = new PDO(
@@ -135,6 +141,8 @@ function createUserDatabase($userId)
       USER_DB_PASS,
       [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
+
+    error_log("Connected to new database: $dbName");
 
     // Create user-specific tables
     $sql = "
@@ -282,11 +290,15 @@ function createUserDatabase($userId)
         );
     ";
 
+    error_log("Creating tables in database: $dbName");
     $userPdo->exec($sql);
-    return true;
+    error_log("Tables created successfully in database: $dbName");
+
+    return ['success' => true, 'database_name' => $dbName];
   } catch (PDOException $e) {
-    error_log("Error creating user database: " . $e->getMessage());
-    return false;
+    $errorMsg = "Error creating user database for user $userId: " . $e->getMessage();
+    error_log($errorMsg);
+    return ['success' => false, 'error' => $errorMsg];
   }
 }
 
@@ -516,7 +528,7 @@ function customDatabaseExists($dbName)
   }
 }
 
-// Enhanced User Registration Function with Database Creation
+// FIXED: Enhanced User Registration Function with proper error handling
 function registerUser($username, $email, $password, $firstName, $lastName, $myDatabase = null, $phoneNum = null)
 {
   $errors = [];
@@ -582,29 +594,35 @@ function registerUser($username, $email, $password, $firstName, $lastName, $myDa
     // Commit the user creation first
     $pdo->commit();
 
+    error_log("User created successfully: ID=$userId, Username=$username");
+
     // Now create user-specific database
-    if (!createUserDatabase($userId)) {
+    $dbResult = createUserDatabase($userId);
+    
+    if (!$dbResult['success']) {
       // If database creation fails, remove the user record
       try {
         $pdo->beginTransaction();
         $deleteStmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
         $deleteStmt->execute([$userId]);
         $pdo->commit();
+        error_log("User deleted due to database creation failure: ID=$userId");
       } catch (PDOException $e) {
         error_log("Error rolling back user creation: " . $e->getMessage());
       }
 
-      return ['success' => false, 'errors' => ['Failed to create user database. Registration cancelled.']];
+      // Return the actual error from database creation
+      return ['success' => false, 'errors' => [$dbResult['error']]];
     }
 
     // Log successful registration
-    logSystemAction($userId, 'USER_REGISTERED', "User registered with database: " . USER_DB_PREFIX . $userId);
+    logSystemAction($userId, 'USER_REGISTERED', "User registered with database: " . $dbResult['database_name']);
 
     return [
       'success' => true,
       'user_id' => $userId,
       'database_created' => true,
-      'database_name' => USER_DB_PREFIX . $userId,
+      'database_name' => $dbResult['database_name'],
       'message' => 'Registration successful! Your personal database has been created.'
     ];
   } catch (PDOException $e) {
@@ -617,8 +635,9 @@ function registerUser($username, $email, $password, $firstName, $lastName, $myDa
       error_log("Error during rollback: " . $rollbackError->getMessage());
     }
 
-    error_log("Registration error: " . $e->getMessage());
-    return ['success' => false, 'errors' => ['Database error occurred during registration. Please try again.']];
+    $errorMsg = "Registration error: " . $e->getMessage();
+    error_log($errorMsg);
+    return ['success' => false, 'errors' => ['Database error occurred during registration. ' . $e->getMessage()]];
   }
 }
 
@@ -636,8 +655,9 @@ function loginUser($username, $password)
       // Check if user database exists
       if (!userDatabaseExists($user['id'])) {
         // Create user database if it doesn't exist
-        if (!createUserDatabase($user['id'])) {
-          return ['success' => false, 'errors' => ['Failed to initialize user database']];
+        $dbResult = createUserDatabase($user['id']);
+        if (!$dbResult['success']) {
+          return ['success' => false, 'errors' => ['Failed to initialize user database: ' . $dbResult['error']]];
         }
       } else {
         // Database exists, but verify/create tables if needed
@@ -665,7 +685,7 @@ function loginUser($username, $password)
     }
   } catch (PDOException $e) {
     error_log("Login error: " . $e->getMessage());
-    return ['success' => false, 'errors' => ['Database error occurred during login']];
+    return ['success' => false, 'errors' => ['Database error occurred during login: ' . $e->getMessage()]];
   }
 }
 
@@ -726,6 +746,7 @@ function createMainTables()
     ";
 
     $pdo->exec($sql);
+    error_log("Main system tables created successfully");
     return true;
   } catch (PDOException $e) {
     error_log("Error creating main tables: " . $e->getMessage());

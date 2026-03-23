@@ -29,9 +29,9 @@ if (!isset($_SESSION['login_attempts'])) {
 
 // Check if user is rate limited (5 attempts per 15 minutes)
 $current_time = time();
-if ($_SESSION['login_attempts'] >= 5 && ($current_time - $_SESSION['last_attempt']) < 900) {
+if ($_SESSION['login_attempts'] >= 10 && ($current_time - $_SESSION['last_attempt']) < 10) {
   $errors[] = "Too many login attempts. Please try again in " .
-    ceil((900 - ($current_time - $_SESSION['last_attempt'])) / 60) . " minutes.";
+    ceil((10 - ($current_time - $_SESSION['last_attempt'])) / 60) . " minutes.";
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($errors)) {
@@ -212,11 +212,11 @@ if (!isset($_SESSION['csrf_token'])) {
     </form>
 
     <div class="forgot-password">
-      <a href="res/r-l/f-pass.php">Forgot your password?</a>
+      <a href="f-pass.php">Forgot your password?</a>
     </div>
 
     <div class="register-link">
-      Don't have an account? <a href="res/r-l/reg.php">Create one here</a>
+      Don't have an account? <a href="reg.php">Create one here</a>
     </div>
   </div>
 

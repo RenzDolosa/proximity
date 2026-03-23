@@ -1,14 +1,14 @@
 <?php
 // register.php
 
-require_once '../cnfg/config.php';
+require_once 'res/cnfg/config.php';
 
 $errors = [];
 $success = '';
 
 // Check if user is already logged in
 if (isset($_SESSION['user_id'])) {
-  header('Location: ../../portal.php'); // or wherever logged-in users should go
+  header('Location: portal.php'); // or wherever logged-in users should go
   exit;
 }
 
@@ -97,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       // $_SESSION['email'] = $email;
       // $_SESSION['first_name'] = $first_name;
       // $_SESSION['last_name'] = $last_name;
-      // header('Location: ../../portal.php');
+      // header('Location: portal.php');
       // exit;
 
     } else {
@@ -120,8 +120,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Register</title>
-  <link rel="icon" href="../icon/database-icon.png" type="image/png">
-  <link rel="stylesheet" href="../css/r-l.css">
+  <link rel="icon" href="res/icon/database-icon.png" type="image/png">
+  <link rel="stylesheet" href="res/css/r-l.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
@@ -133,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <div class="container">
     <div class="header">
-      <div><img src="../logo/database.png" alt="My Database Logo" class="logo"></div>
+      <div><img src="res/logo/database.png" alt="My Database Logo" class="logo"></div>
       <h2>Create Your Account</h2>
       <p class="subtitle">Sign up to Proximity Database</p>
     </div>
@@ -221,13 +221,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </form>
 
     <div class="login-link">
-      Already have an account? <a href="../../index.php">Sign in here</a>
+      Already have an account? <a href="index.php">Sign in here</a>
     </div>
   </div>
 
-  <script src="../src/reg.js"></script>
-  <script src="../src/req.js"></script>
-  <script src="../src/ver.js"></script>
+  <script src="res/src/reg.js"></script>
+  <script src="res/src/req.js"></script>
+  <script src="res/src/ver.js"></script>
 </body>
 
 </html>

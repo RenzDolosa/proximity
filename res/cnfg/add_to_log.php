@@ -106,6 +106,22 @@ class EmployeeLogManager
 
       $this->conn->exec($query);
 
+      $checkinoutTable = "CREATE TABLE IF NOT EXISTS check_in_out (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            employee_id INT NOT NULL,
+            qr_code VARCHAR(255) NOT NULL,
+            fullname VARCHAR(255) NOT NULL,
+            check_type ENUM('IN', 'OUT') NOT NULL,
+            scan_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            ip_address VARCHAR(45),
+            user_agent TEXT,
+            INDEX idx_employee_id (employee_id),
+            INDEX idx_qr_code (qr_code),
+            INDEX idx_timestamp (scan_timestamp)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+      $this->conn->exec($checkinoutTable);
+
       // Create search_queries table (for compatibility with QR Search Backend)
       $searchQueriesTable = "CREATE TABLE IF NOT EXISTS search_queries (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -125,7 +141,6 @@ class EmployeeLogManager
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
       $this->conn->exec($searchQueriesTable);
-      
     } catch (PDOException $e) {
       error_log("Failed to create tables: " . $e->getMessage());
       throw new Exception("Failed to initialize database tables");
@@ -136,24 +151,36 @@ class EmployeeLogManager
   public function addToLog($logData)
   {
     try {
+      // Validate required fields
+      if (empty($logData['fullname']) || empty($logData['qr_code'])) {
+        throw new Exception("Missing required fields: fullname, qr_code");
+      }
+
       $query = "INSERT INTO employee_access_log 
-                      (employee_id, fullname, position, brand, status, shift, violation, 
-                       image, qr_code, check_status, access_type, 
-                       ip_address, user_agent) 
-                      VALUES 
-                      (:employee_id, :fullname, :position, :brand, :status, :shift, 
-                       :violation, :image, :qr_code, :check_status, :access_type, 
-                       :ip_address, :user_agent)";
+                    (employee_id, fullname, position, brand, status, shift, violation, 
+                     image, qr_code, check_status, access_type, 
+                     ip_address, user_agent) 
+                    VALUES 
+                    (:employee_id, :fullname, :position, :brand, :status, :shift, 
+                     :violation, :image, :qr_code, :check_status, :access_type, 
+                     :ip_address, :user_agent)";
 
+      $checkinoutTable = "INSERT INTO check_in_out 
+              (employee_id, qr_code, fullname, check_type, ip_address, user_agent) 
+              VALUES (:employee_id, :qr_code, :fullname, :check_type, :ip_address, :user_agent)";
+
+      // Start transaction to ensure data consistency
+      $this->conn->beginTransaction();
+
+      // Prepare and execute FIRST insert
       $stmt = $this->conn->prepare($query);
-
       $result = $stmt->execute([
         ':employee_id' => $logData['employee_id'] ?? null,
         ':fullname' => $logData['fullname'],
-        ':position' => $logData['position'],
-        ':brand' => $logData['brand'],
-        ':status' => $logData['status'],
-        ':shift' => $logData['shift'],
+        ':position' => $logData['position'] ?? null,
+        ':brand' => $logData['brand'] ?? null,
+        ':status' => $logData['status'] ?? null,
+        ':shift' => $logData['shift'] ?? null,
         ':violation' => $logData['violation'] ?? '',
         ':image' => $logData['image'] ?? '',
         ':qr_code' => $logData['qr_code'],
@@ -163,24 +190,54 @@ class EmployeeLogManager
         ':user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown'
       ]);
 
-      if ($result) {
-        $logId = $this->conn->lastInsertId();
-
-        // Log system action for audit trail
-        logSystemAction($this->userId, 'employee_log_entry', json_encode([
-          'log_id' => $logId,
-          'fullname' => $logData['fullname'],
-          'qr_code' => $logData['qr_code'],
-          'check_status' => $logData['check_status'] ?? 'IN'
-        ]));
-
-        return $logId;
+      if (!$result) {
+        throw new Exception("Failed to insert into employee_access_log");
       }
 
-      return false;
+      // Get the ID from the first insert
+      $logId = $this->conn->lastInsertId();
+
+      // Prepare and execute SECOND insert (different statement)
+      $stmt2 = $this->conn->prepare($checkinoutTable);
+      $resultCheck = $stmt2->execute([
+        ':employee_id' => $logData['employee_id'] ?? null,
+        ':qr_code' => $logData['qr_code'],
+        ':fullname' => $logData['fullname'],
+        ':check_type' => $logData['check_status'] ?? 'IN',
+        ':ip_address' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+        ':user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown'
+      ]);
+
+      if (!$resultCheck) {
+        throw new Exception("Failed to insert into check_in_out");
+      }
+
+      // Commit transaction if both inserts succeeded
+      $this->conn->commit();
+
+      logSystemAction($this->userId, 'check_in_out', json_encode([
+        'employee_id' => $logId,
+        'fullname' => $logData['fullname'],
+        'qr_code' => $logData['qr_code'],
+        'check_status' => $logData['check_status'] ?? 'IN'
+      ]));
+
+
+      return $logId;
     } catch (PDOException $e) {
+      // Rollback transaction on database error
+      if ($this->conn->inTransaction()) {
+        $this->conn->rollBack();
+      }
       error_log("Add to log error: " . $e->getMessage());
       throw new Exception("Failed to add employee to log: " . $e->getMessage());
+    } catch (Exception $e) {
+      // Rollback transaction on any other error
+      if ($this->conn->inTransaction()) {
+        $this->conn->rollBack();
+      }
+      error_log("Add to log error: " . $e->getMessage());
+      throw $e;
     }
   }
 
