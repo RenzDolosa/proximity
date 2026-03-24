@@ -69,7 +69,7 @@ require_once 'res/cnfg/req.php';
   <header class="header">
     <div class="myDatabase-logo">
       <a href="portal.php" class="link">
-        <img src="res/logo/Mysql.png" alt="MySql Logo" class="header-logo">
+        <img src="res/logo/mysql.png" alt="MySql Logo" class="header-logo">
         <h1 style="padding-left: 50px; margin: 0;"><?= htmlspecialchars($myDatabase ?? 'My Database'); ?></h1>
       </a>
     </div>
