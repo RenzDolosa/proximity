@@ -168,6 +168,7 @@ if ($databaseConnected) {
           <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All
             Data</button>
         </div>
+        <div class="filter-status" id="filter-status"></div>
       </div>
     </div>
 

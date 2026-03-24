@@ -190,6 +190,7 @@ if ($databaseConnected) {
           <div id="lastUpdateTime"></div>
           <div id="autoUpdateNotification"></div>
         </div>
+        <div class="filter-status" id="filter-status"></div>
       </div>
     </div>
 

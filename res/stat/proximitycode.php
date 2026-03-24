@@ -92,7 +92,7 @@ if ($databaseConnected) {
         </div>
         <img src="../icon/nfc-icon.png" alt="Proximity" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
       </form>
-      <div class="form-row">
+      <div class="form-row-btn">
         <div class="search-btn">
           <button type="button" class="btn btn-primary" onclick="searchEmployees()"><i class="fas fa-search"></i> Search</button>
         </div>
@@ -126,6 +126,7 @@ if ($databaseConnected) {
           <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All
             Data</button>
         </div>
+        <div class="filter-status" id="filter-status"></div>
       </div>
     </div>
 
