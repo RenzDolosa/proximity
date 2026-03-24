@@ -10,7 +10,14 @@ require_once '../cnfg/db.php';
 
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Security Headers -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; script-src 'self';">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="X-Frame-Options" content="DENY">
+  <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
   <title><?= htmlspecialchars($myDatabase ?? 'My Database'); ?> - Portal</title>
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../css/system.css">
@@ -67,7 +74,7 @@ require_once '../cnfg/db.php';
       <div class="menu-card" onclick="navigateWithLoading('../tb/system.php');">
         <a href="../tb/system.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/system.php');">Input Employee</a>
         <div class="favi">
-          <img src="../logo/Mysql-logo.png" alt="MySql Logo" style="width: 125px; height: 100px;">
+          <img src="../logo/mysql-logo.png" alt="MySql Logo" style="width: 125px; height: 100px;">
           <div>
             <h3>Employee Manager</h3>
             <p>Manage your employee information</p>

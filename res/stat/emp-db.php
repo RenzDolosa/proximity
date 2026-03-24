@@ -108,6 +108,12 @@ if ($databaseConnected && $employeeManager) {
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Security Headers -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; script-src 'self';">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="X-Frame-Options" content="DENY">
+  <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Employee Dashboard</title>
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../css/system.css">
@@ -121,14 +127,7 @@ if ($databaseConnected && $employeeManager) {
 
 <body>
 
-  <div onclick="window.location.href='../iframe/ptl.php';" style="position: fixed;
-      top: 0;
-      right: 1vmin;
-      padding: 1vmin;
-      z-index: 1000;
-      cursor: pointer;
-      color: red;
-      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);">
+  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close">
     <i class="fas fa-times"></i>
   </div>
 
@@ -342,6 +341,7 @@ if ($databaseConnected && $employeeManager) {
     </section>
   </main>
 
+  <script src="../src/btn.js"></script>
   <script src="../src/req.js"></script>
 </body>
 

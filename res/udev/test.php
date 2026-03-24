@@ -99,8 +99,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $databaseConnected) {
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Security Headers -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; script-src 'self';">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="X-Frame-Options" content="DENY">
+  <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Dashboard</title>
   <link rel="icon" href="res/icon/database-icon.png" type="image/png">
+  <link rel="stylesheet" href="../css/btn.css">
   <style>
     * {
       margin: 0;
@@ -456,6 +463,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $databaseConnected) {
     <p id="version"></p>
   </version_compare>
 
+  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close">
+    <i class="fas fa-times"></i>
+  </div>
+
   <div class="header">
     <div class="header-content">
       <div class="logo-section">
@@ -668,8 +679,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $databaseConnected) {
     </div>
   </div>
 
-  <script src="res/src/req.js"></script>
-  <script src="res/src/ver.js"></script>
+  <script src="../src/btn.js"></script>
+  <script src="../src/req.js"></script>
+  <script src="../src/ver.js"></script>
   <script>
     function toggleEmployeeForm() {
       const form = document.getElementById('employeeForm');

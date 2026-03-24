@@ -10,7 +10,7 @@ define('DB_PASS', ''); // empty for local development // kGq47fPWAS41
 // FIXED: Database naming strategy
 // Actual database names are: user_1, user_2, user_3, etc. (based on user ID)
 // The 'my_database' field from registration is stored as metadata only
-define('USER_DB_PREFIX', 'user_'); // Creates user_1, user_2, user_3, etc.
+define('USER_DB_PREFIX', 'if0_41430152' . '_'); // Creates user_1, user_2, user_3, etc.
 define('USER_DB_HOST', DB_HOST);
 define('USER_DB_USER', DB_USER);
 define('USER_DB_PASS', DB_PASS);
@@ -133,7 +133,7 @@ function createUserDatabase($userId)
 
     // Create database with backticks and proper escaping
     $createDbQuery = "CREATE DATABASE IF NOT EXISTS `" . str_replace("`", "``", $dbName) . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
-    
+
     error_log("Attempting to create database: $dbName with query: $createDbQuery");
     $pdo->exec($createDbQuery);
     error_log("Database created successfully: $dbName");
@@ -150,7 +150,8 @@ function createUserDatabase($userId)
 
     // Create user-specific tables
     $sql = "
-        CREATE TABLE IF NOT EXISTS employees (
+        CREATE TABLE
+          IF NOT EXISTS employees (
             id INT AUTO_INCREMENT PRIMARY KEY,
             fullname VARCHAR(100) NOT NULL,
             position VARCHAR(50) NOT NULL,
@@ -161,17 +162,20 @@ function createUserDatabase($userId)
             image VARCHAR(255),
             qr_code VARCHAR(100) UNIQUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        );
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_qr_code (qr_code)
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
 
-        CREATE TABLE IF NOT EXISTS code (
+        CREATE TABLE
+          IF NOT EXISTS code (
             id INT AUTO_INCREMENT PRIMARY KEY,
             qr_code VARCHAR(100) UNIQUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        );
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
 
-        CREATE TABLE IF NOT EXISTS violations (
+        CREATE TABLE
+          IF NOT EXISTS violations (
             id INT AUTO_INCREMENT PRIMARY KEY,
             employee_id INT NOT NULL,
             violation_type VARCHAR(100),
@@ -179,9 +183,10 @@ function createUserDatabase($userId)
             violation_date DATE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
-        );
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
 
-        CREATE TABLE IF NOT EXISTS status_history (
+        CREATE TABLE
+          IF NOT EXISTS status_history (
             id INT AUTO_INCREMENT PRIMARY KEY,
             employee_id INT NOT NULL,
             old_status VARCHAR(20),
@@ -190,9 +195,10 @@ function createUserDatabase($userId)
             change_reason TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
-        );
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
 
-        CREATE TABLE IF NOT EXISTS search_queries (
+        CREATE TABLE
+          IF NOT EXISTS search_queries (
             id INT AUTO_INCREMENT PRIMARY KEY,
             query_type VARCHAR(50) NOT NULL,
             search_term VARCHAR(255) DEFAULT NULL,
@@ -202,88 +208,54 @@ function createUserDatabase($userId)
             ip_address VARCHAR(45) DEFAULT NULL,
             user_agent TEXT DEFAULT NULL,
             query_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            execution_time_ms DECIMAL(10,3) DEFAULT NULL,
+            execution_time_ms DECIMAL(10, 3) DEFAULT NULL,
             success BOOLEAN DEFAULT FALSE,
             error_message TEXT DEFAULT NULL,
             INDEX idx_query_type (query_type),
             INDEX idx_timestamp (query_timestamp),
             INDEX idx_success (success)
-        );
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
 
-        CREATE TABLE IF NOT EXISTS employee_access_log (
+        CREATE TABLE
+          IF NOT EXISTS employee_access_log (
             id INT AUTO_INCREMENT PRIMARY KEY,
             employee_id INT DEFAULT NULL,
             fullname VARCHAR(100) DEFAULT NULL,
             position VARCHAR(50) DEFAULT NULL,
             brand VARCHAR(50) DEFAULT NULL,
-            status ENUM('Active', 'Inactive') DEFAULT NULL,
-            shift ENUM('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
+            status ENUM ('Active', 'Inactive') DEFAULT NULL,
+            shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
             violation TEXT DEFAULT NULL,
             image VARCHAR(255) DEFAULT NULL,
             qr_code VARCHAR(100) DEFAULT NULL,
             access_type VARCHAR(50) DEFAULT NULL,
             ip_address VARCHAR(45) DEFAULT NULL,
             user_agent TEXT DEFAULT NULL,
-            check_status ENUM('IN', 'OUT') DEFAULT NULL,
+            check_status ENUM ('IN', 'OUT') DEFAULT NULL,
             access_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_employee_id (employee_id),
             INDEX idx_qr_code (qr_code),
             INDEX idx_access_timestamp (access_timestamp),
             INDEX idx_access_type (access_type)
-        );
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
 
-        CREATE TABLE IF NOT EXISTS check_in_out (
+        CREATE TABLE
+          IF NOT EXISTS check_in_out (
             id INT AUTO_INCREMENT PRIMARY KEY,
             employee_id INT NOT NULL,
             qr_code VARCHAR(255) NOT NULL,
             fullname VARCHAR(255) NOT NULL,
-            check_type ENUM('IN', 'OUT') NOT NULL,
+            check_type ENUM ('IN', 'OUT') NOT NULL,
             scan_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             ip_address VARCHAR(45),
             user_agent TEXT,
             INDEX idx_employee_id (employee_id),
             INDEX idx_qr_code (qr_code),
             INDEX idx_timestamp (scan_timestamp)
-        );
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
 
-        CREATE TABLE IF NOT EXISTS query_statistics (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            date_period DATE NOT NULL,
-            period_type ENUM('daily', 'monthly') NOT NULL,
-            total_queries INT DEFAULT 0,
-            successful_queries INT DEFAULT 0,
-            failed_queries INT DEFAULT 0,
-            unique_employees_accessed INT DEFAULT 0,
-            most_searched_terms JSON DEFAULT NULL,
-            average_response_time_ms DECIMAL(10,3) DEFAULT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_period (date_period, period_type)
-        );
-
-        CREATE TABLE IF NOT EXISTS employee_logs (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            employee_id INT NOT NULL,
-            action_type ENUM('clock_in', 'clock_out', 'break_start', 'break_end', 'scan') DEFAULT 'scan',
-            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            location VARCHAR(100),
-            notes TEXT,
-            created_by INT,
-            INDEX idx_employee_id (employee_id),
-            INDEX idx_timestamp (timestamp),
-            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE IF NOT EXISTS user_settings (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            setting_key VARCHAR(100) NOT NULL,
-            setting_value TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_setting (setting_key)
-        );
-
-        CREATE TABLE IF NOT EXISTS user_audio_settings (
+        CREATE TABLE
+          IF NOT EXISTS user_audio_settings (
             id INT AUTO_INCREMENT PRIMARY KEY,
             success_audio_path VARCHAR(255),
             not_found_audio_path VARCHAR(255),
@@ -291,7 +263,7 @@ function createUserDatabase($userId)
             violations_audio_path VARCHAR(255),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        );
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
     ";
 
     error_log("Creating tables in database: $dbName");
@@ -319,7 +291,8 @@ function ensureUserTablesExist($userId)
 
     // SQL to create tables if they don't exist
     $sql = "
-        CREATE TABLE IF NOT EXISTS employees (
+        CREATE TABLE
+          IF NOT EXISTS employees (
             id INT AUTO_INCREMENT PRIMARY KEY,
             fullname VARCHAR(100) NOT NULL,
             position VARCHAR(50) NOT NULL,
@@ -330,17 +303,20 @@ function ensureUserTablesExist($userId)
             image VARCHAR(255),
             qr_code VARCHAR(100) UNIQUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        );
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_qr_code (qr_code)
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
 
-        CREATE TABLE IF NOT EXISTS code (
+        CREATE TABLE
+          IF NOT EXISTS code (
             id INT AUTO_INCREMENT PRIMARY KEY,
             qr_code VARCHAR(100) UNIQUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        );
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
 
-        CREATE TABLE IF NOT EXISTS violations (
+        CREATE TABLE
+          IF NOT EXISTS violations (
             id INT AUTO_INCREMENT PRIMARY KEY,
             employee_id INT NOT NULL,
             violation_type VARCHAR(100),
@@ -348,9 +324,10 @@ function ensureUserTablesExist($userId)
             violation_date DATE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
-        );
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
 
-        CREATE TABLE IF NOT EXISTS status_history (
+        CREATE TABLE
+          IF NOT EXISTS status_history (
             id INT AUTO_INCREMENT PRIMARY KEY,
             employee_id INT NOT NULL,
             old_status VARCHAR(20),
@@ -359,9 +336,10 @@ function ensureUserTablesExist($userId)
             change_reason TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
-        );
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
 
-        CREATE TABLE IF NOT EXISTS search_queries (
+        CREATE TABLE
+          IF NOT EXISTS search_queries (
             id INT AUTO_INCREMENT PRIMARY KEY,
             query_type VARCHAR(50) NOT NULL,
             search_term VARCHAR(255) DEFAULT NULL,
@@ -371,74 +349,54 @@ function ensureUserTablesExist($userId)
             ip_address VARCHAR(45) DEFAULT NULL,
             user_agent TEXT DEFAULT NULL,
             query_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            execution_time_ms DECIMAL(10,3) DEFAULT NULL,
+            execution_time_ms DECIMAL(10, 3) DEFAULT NULL,
             success BOOLEAN DEFAULT FALSE,
             error_message TEXT DEFAULT NULL,
             INDEX idx_query_type (query_type),
             INDEX idx_timestamp (query_timestamp),
             INDEX idx_success (success)
-        );
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
 
-        CREATE TABLE IF NOT EXISTS employee_access_log (
+        CREATE TABLE
+          IF NOT EXISTS employee_access_log (
             id INT AUTO_INCREMENT PRIMARY KEY,
             employee_id INT DEFAULT NULL,
             fullname VARCHAR(100) DEFAULT NULL,
             position VARCHAR(50) DEFAULT NULL,
             brand VARCHAR(50) DEFAULT NULL,
-            status ENUM('Active', 'Inactive') DEFAULT NULL,
-            shift ENUM('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
+            status ENUM ('Active', 'Inactive') DEFAULT NULL,
+            shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
             violation TEXT DEFAULT NULL,
             image VARCHAR(255) DEFAULT NULL,
             qr_code VARCHAR(100) DEFAULT NULL,
             access_type VARCHAR(50) DEFAULT NULL,
             ip_address VARCHAR(45) DEFAULT NULL,
             user_agent TEXT DEFAULT NULL,
-            check_status ENUM('IN', 'OUT') DEFAULT NULL,
+            check_status ENUM ('IN', 'OUT') DEFAULT NULL,
             access_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_employee_id (employee_id),
             INDEX idx_qr_code (qr_code),
             INDEX idx_access_timestamp (access_timestamp),
             INDEX idx_access_type (access_type)
-        );
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
 
-        CREATE TABLE IF NOT EXISTS query_statistics (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            date_period DATE NOT NULL,
-            period_type ENUM('daily', 'monthly') NOT NULL,
-            total_queries INT DEFAULT 0,
-            successful_queries INT DEFAULT 0,
-            failed_queries INT DEFAULT 0,
-            unique_employees_accessed INT DEFAULT 0,
-            most_searched_terms JSON DEFAULT NULL,
-            average_response_time_ms DECIMAL(10,3) DEFAULT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_period (date_period, period_type)
-        );
-
-        CREATE TABLE IF NOT EXISTS employee_logs (
+        CREATE TABLE
+          IF NOT EXISTS check_in_out (
             id INT AUTO_INCREMENT PRIMARY KEY,
             employee_id INT NOT NULL,
-            action_type ENUM('clock_in', 'clock_out', 'break_start', 'break_end', 'scan') DEFAULT 'scan',
-            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            location VARCHAR(100),
-            notes TEXT,
-            created_by INT,
+            qr_code VARCHAR(255) NOT NULL,
+            fullname VARCHAR(255) NOT NULL,
+            check_type ENUM ('IN', 'OUT') NOT NULL,
+            scan_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            ip_address VARCHAR(45),
+            user_agent TEXT,
             INDEX idx_employee_id (employee_id),
-            INDEX idx_timestamp (timestamp),
-            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
-        );
+            INDEX idx_qr_code (qr_code),
+            INDEX idx_timestamp (scan_timestamp)
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
 
-        CREATE TABLE IF NOT EXISTS user_settings (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            setting_key VARCHAR(100) NOT NULL,
-            setting_value TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_setting (setting_key)
-        );
-
-        CREATE TABLE IF NOT EXISTS user_audio_settings (
+        CREATE TABLE
+          IF NOT EXISTS user_audio_settings (
             id INT AUTO_INCREMENT PRIMARY KEY,
             success_audio_path VARCHAR(255),
             not_found_audio_path VARCHAR(255),
@@ -446,7 +404,7 @@ function ensureUserTablesExist($userId)
             violations_audio_path VARCHAR(255),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        );
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
     ";
 
     $userPdo->exec($sql);
@@ -627,7 +585,7 @@ function registerUser($username, $email, $password, $firstName, $lastName, $myDa
 
     // Now create user-specific database with actual name: user_{$userId}
     $dbResult = createUserDatabase($userId);
-    
+
     if (!$dbResult['success']) {
       // If database creation fails, remove the user record
       try {

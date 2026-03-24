@@ -1,4 +1,4 @@
-//system.js - Employee Management System
+//system.js - Employee Management System WITH PERSISTENT FILTER CHECKING AND FILTERED DELETE ALL
 
 // Global variables
 let currentAction = "add";
@@ -11,10 +11,14 @@ let totalPages = 1;
 
 let currentAudio = null;
 
+// 🆕 FILTER STATE - Track active filters
+let activeFilters = {};
+
 // Initialize the application
 document.addEventListener("DOMContentLoaded", function () {
   loadEmployees();
   setupEventListeners();
+  updateDeleteButtonState();
 });
 
 // Setup event listeners
@@ -75,6 +79,104 @@ function debounce(func, wait) {
     clearTimeout(timeout);
     timeout = setTimeout(later, wait);
   };
+}
+
+// 🆕 GET CURRENT ACTIVE FILTERS FROM FORM
+function getActiveFilters() {
+  const searchForm = document.getElementById("searchForm");
+  const filters = {};
+
+  if (!searchForm) return filters;
+
+  const formData = new FormData(searchForm);
+
+  for (let [key, value] of formData.entries()) {
+    if (value && value.trim()) {
+      filters[key] = value.trim();
+    }
+  }
+
+  return filters;
+}
+
+// 🆕 CHECK IF ANY FILTERS ARE ACTIVE
+function hasActiveFilters() {
+  const filters = getActiveFilters();
+  return Object.keys(filters).length > 0;
+}
+
+// 🆕 DISPLAY FILTER STATUS IN UI
+function displayFilterStatus() {
+  const filters = getActiveFilters();
+  const filterInfo = document.createElement("div");
+
+  // Remove existing filter status if any
+  const existingStatus = document.getElementById("filter-status");
+  if (existingStatus) {
+    existingStatus.remove();
+  }
+
+  if (Object.keys(filters).length > 0) {
+    filterInfo.id = "filter-status";
+    filterInfo.style.cssText = `
+      background: #e3f2fd;
+      border-left: 4px solid #2196F3;
+      padding: 12px 16px;
+      margin-left: 16px;
+      border-radius: 4px;
+      font-size: 14px;
+      color: #1565c0;
+      display: inline-flex;
+      justify-content: space-between;
+      align-items: center;
+    `;
+
+    // Create a container for the icon and text
+    const filterLabel = document.createElement("span");
+    filterLabel.style.display = "inline-flex";
+    filterLabel.style.alignItems = "center";
+    filterLabel.style.gap = "8px";
+
+    // Create and add the icon element
+    const icon = document.createElement("i");
+    icon.className = "fas fa-filter";
+    filterLabel.appendChild(icon);
+
+    // Add the text content
+    const textSpan = document.createElement("span");
+    textSpan.appendChild(document.createTextNode("Active Filters: "));
+
+    // Build filter parts with proper strong elements and proper text formatting
+    const filterEntries = Object.entries(filters);
+    filterEntries.forEach(([key, value], index) => {
+      if (index > 0) {
+        textSpan.appendChild(document.createTextNode(" | "));
+      }
+
+      // Create strong element for the key
+      const strong = document.createElement("strong");
+      // Convert key to proper case (capitalize first letter of each word)
+      const properKey = key
+        .split(/(?=[A-Z])/) // Split on capital letters
+        .map(
+          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
+        )
+        .join(" ");
+      strong.textContent = `${properKey}:`;
+      textSpan.appendChild(strong);
+
+      // Add the value
+      textSpan.appendChild(document.createTextNode(` ${value}`));
+    });
+
+    filterLabel.appendChild(textSpan);
+    filterInfo.appendChild(filterLabel);
+
+    const controlsDiv = document.querySelector(".controls");
+    if (controlsDiv) {
+      controlsDiv.appendChild(filterInfo);
+    }
+  }
 }
 
 // Function to stop any currently playing audio
@@ -150,10 +252,10 @@ async function loadEmployeeData(employeeId) {
         // Get current user ID to construct proper image path
         const currentUserId = await getCurrentUserId();
         const imagePath = `../../uploads/user_${currentUserId}/${employee.image}`;
-        
+
         // Add cache busting query parameter to force reload
         const imageSrcWithCache = `${imagePath}?t=${new Date().getTime()}`;
-        
+
         // Display image preview with styling
         fileLabel.innerHTML = `
           <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
@@ -161,7 +263,7 @@ async function loadEmployeeData(employeeId) {
             <span id="imageFallback" style="display:none;">📷 Image not available</span>
           </div>
         `;
-        
+
         // Force reflow to ensure image renders
         const previewImg = fileLabel.querySelector("#existingImagePreview");
         if (previewImg) {
@@ -183,7 +285,7 @@ async function loadEmployeeData(employeeId) {
 async function updateTotalEmployees() {
   try {
     const totalEmployeesElement = document.getElementById("total_employees");
- 
+
     if (totalEmployeesElement) {
       // Update with current employees array length
       totalEmployeesElement.textContent = employees.length;
@@ -198,31 +300,32 @@ async function updateTotalEmployees() {
 async function updateActiveEmployees() {
   try {
     const activeEmployeesElement = document.getElementById("active_employees");
-    const inactiveEmployeesElement = document.getElementById("inactive_employees");
- 
+    const inactiveEmployeesElement =
+      document.getElementById("inactive_employees");
+
     if (!activeEmployeesElement || !inactiveEmployeesElement) {
       console.warn("Active employees element not found");
       return 0;
     }
- 
+
     if (!Array.isArray(employees)) {
       console.error("Employees array not initialized");
       return 0;
     }
- 
+
     // Filter employees with "Active" status (case-insensitive)
     const activeCount = employees.filter(
-      (emp) => emp.status && emp.status.toLowerCase() === "active"
+      (emp) => emp.status && emp.status.toLowerCase() === "active",
     ).length;
 
     const inactiveCount = employees.length - activeCount;
- 
+
     activeEmployeesElement.textContent = activeCount;
     inactiveEmployeesElement.textContent = inactiveCount;
     console.log("✓ Active employees updated:", activeCount);
     console.log("✓ Inactive employees updated:", inactiveCount);
- 
-    return count;
+
+    return activeCount;
   } catch (error) {
     console.error("Error updating active employees:", error);
     return 0;
@@ -294,8 +397,9 @@ async function addToLog(employeeId, checkStatus = "IN") {
     console.error("Error adding to log:", error);
     showAlert("Error: " + error.message, "error");
   } finally {
-    // Reset button state
+    // Reset button state and RELOAD WITH ACTIVE FILTERS
     setTimeout(() => {
+      // 🆕 Reload using active filters instead of empty filters
       searchEmployees();
       button.innerHTML = "⏳ Added...";
       button.disabled = false;
@@ -498,37 +602,47 @@ function goToPage(page) {
   }
 }
 
-// Search employees
+// 🆕 SEARCH EMPLOYEES - NOW RESPECTS ACTIVE FILTERS
 function searchEmployees() {
   const searchForm = document.getElementById("searchForm");
   const searchQuery = document.getElementById("search_qr").value.trim();
 
   if (!searchForm) return;
 
-  const formData = new FormData(searchForm);
-  const filters = {};
+  // 🆕 Get active filters from the form
+  const filters = getActiveFilters();
 
-  for (let [key, value] of formData.entries()) {
-    if (value.trim()) {
-      filters[key] = value.trim();
-    }
-  }
-
-  loadEmployees(filters);
+  // Load employees with the current filters
+  loadEmployees(filters, true); // true = preserve page when filtering
 
   // ✅ AUTO-CLEAR AFTER SUCCESSFUL SEARCH
   if (searchQuery) {
     document.getElementById("search_qr").value = "";
   }
+
+  // 🆕 Display filter status
+  displayFilterStatus();
+  updateDeleteButtonState();
 }
 
-// Clear search
+// 🆕 CLEAR SEARCH - Properly reset and reload all
 function clearSearch() {
   const searchForm = document.getElementById("searchForm");
   if (searchForm) {
     searchForm.reset();
-    loadEmployees();
   }
+
+  // Remove filter status display
+  const filterStatus = document.getElementById("filter-status");
+  if (filterStatus) {
+    filterStatus.remove();
+  }
+
+  // Reset to page 1 and load all employees
+  currentPage = 1;
+  activeFilters = {};
+  loadEmployees({}, false); // Load without filters
+  updateDeleteButtonState();
 }
 
 // Open modal
@@ -551,7 +665,7 @@ async function openModal(action, employeeId = null) {
   // Reset file upload label and input
   const fileLabel = document.querySelector(".file-upload-label");
   const imageInput = document.getElementById("image");
-  
+
   fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
   imageInput.value = ""; // Clear file input
 
@@ -573,24 +687,61 @@ async function openModal(action, employeeId = null) {
   }
 }
 
+// ✨ 🆕 ENHANCED DELETE MODAL - WITH FILTERED DELETE SUPPORT
 function openDeleteModal(employeeId = null, requireConfirmation = false) {
   const modal = document.getElementById("deleteModal");
   const confirmBtn = document.getElementById("confirmDeleteBtn");
   const confirmationInput = document.getElementById("confirmationInput");
-  const confirmationContainer = document.getElementById("confirmationContainer");
+  const confirmationContainer = document.getElementById(
+    "confirmationContainer",
+  );
   const modalTitle = document.getElementById("deleteModalTitle");
   const modalMessage = document.getElementById("deleteModalMessage");
- 
+
+  // 🆕 NEW: Check if filters are active
+  const hasFilters = hasActiveFilters();
+
   // Store the employeeId for use in confirm handler
   confirmBtn.dataset.employeeId = employeeId;
   confirmBtn.dataset.requireConfirmation = requireConfirmation;
- 
+  confirmBtn.dataset.hasFilters = hasFilters; // 🆕 NEW: Store filter state
+
   // Update modal content based on delete type
   if (requireConfirmation) {
-    // Delete all employees
-    modalTitle.textContent = "⚠️ Delete All Employees";
-    modalMessage.textContent =
-      "This will permanently delete ALL employee data. This action cannot be undone.";
+    // 🆕 DELETE BASED ON FILTERS
+    if (hasFilters) {
+      // Delete filtered employees
+      modalTitle.textContent = "⚠️ Delete Filtered Employees";
+      modalMessage.innerHTML = `
+        <div>
+          <p style="margin-bottom: 15px;"><strong>This will delete ${employees.length} employee(s) matching your filters:</strong></p>
+          <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 4px; margin-bottom: 15px;">
+            ${Object.entries(getActiveFilters())
+              .map(([key, value]) => {
+                const properKey = key
+                  .split(/(?=[A-Z])/)
+                  .map(
+                    (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
+                  )
+                  .join(" ");
+                return `<div style="margin: 5px 0;"><strong>${properKey}:</strong> ${value}</div>`;
+              })
+              .join("")}
+          </div>
+          <p style="color: #d63031; font-weight: bold;">This action cannot be undone.</p>
+        </div>
+      `;
+    } else {
+      // Delete all employees
+      modalTitle.textContent = "⚠️ Delete All Employees";
+      modalMessage.innerHTML = `
+        <div>
+          <p style="margin-bottom: 15px;"><strong>This will permanently delete ALL ${employees.length} employee(s).</strong></p>
+          <p style="color: #d63031; font-weight: bold;">This action cannot be undone.</p>
+        </div>
+      `;
+    }
+
     confirmationContainer.style.display = "block";
     confirmBtn.disabled = true;
     confirmBtn.style.opacity = "0.5";
@@ -604,46 +755,68 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
     confirmBtn.style.opacity = "1";
     confirmBtn.style.cursor = "pointer";
   }
- 
+
   // Clear input field
   if (confirmationInput) {
     confirmationInput.value = "";
   }
- 
+
   // Show modal
   modal.style.display = "flex";
- 
+
   // Remove previous listeners to avoid duplicates
   const newConfirmBtn = confirmBtn.cloneNode(true);
   confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
- 
+
   // Handle confirmation input (if delete all)
   if (requireConfirmation && confirmationInput) {
     const newConfirmationInput = confirmationInput.cloneNode(true);
-    confirmationInput.parentNode.replaceChild(newConfirmationInput, confirmationInput);
+    confirmationInput.parentNode.replaceChild(
+      newConfirmationInput,
+      confirmationInput,
+    );
 
     newConfirmationInput.focus();
- 
+
     newConfirmationInput.addEventListener("input", () => {
       newConfirmBtn.disabled = newConfirmationInput.value !== "DELETE ALL";
       newConfirmBtn.style.opacity = newConfirmBtn.disabled ? "0.5" : "1";
-      newConfirmBtn.style.cursor = newConfirmBtn.disabled ? "not-allowed" : "pointer";
+      newConfirmBtn.style.cursor = newConfirmBtn.disabled
+        ? "not-allowed"
+        : "pointer";
     });
   }
- 
-  // Handle confirm click
-  newConfirmBtn.addEventListener("click", () => {
+
+  // Handle confirm click or Enter key
+  const handleConfirm = () => {
     const id = newConfirmBtn.dataset.employeeId;
-    const requiresConfirm = newConfirmBtn.dataset.requireConfirmation === "true";
- 
+    const requiresConfirm =
+      newConfirmBtn.dataset.requireConfirmation === "true";
+    const hasFiltersFlag = newConfirmBtn.dataset.hasFilters === "true";
+
     if (requiresConfirm) {
-      deleteAllEmployees();
+      if (hasFiltersFlag) {
+        deleteFilteredEmployees();
+      } else {
+        showAlert("Cannot be Deleted!, Try changing filters.", "error");
+      }
     } else {
       deleteEmployee(id);
     }
     modal.style.display = "none";
+  };
+
+  newConfirmBtn.addEventListener("click", handleConfirm);
+
+  document.addEventListener("keydown", function onEnterKey(e) {
+    if (e.key === "Enter" && modal.style.display === "flex") {
+      if (!newConfirmBtn.disabled) {
+        handleConfirm();
+      }
+      document.removeEventListener("keydown", onEnterKey);
+    }
   });
- 
+
   // Handle clicking outside modal
   modal.addEventListener("click", (e) => {
     if (e.target === modal) {
@@ -652,10 +825,88 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
   });
 }
 
-// Load employee data - Modified to preserve pagination
+// 🆕 UPDATE DELETE BUTTON STATE based on active filters
+function updateDeleteButtonState() {
+  const deleteBtn = document.querySelector('.delete-all-btn .btn-danger');
+  if (!deleteBtn) return;
+
+  const hasFilters = hasActiveFilters();
+
+  if (hasFilters) {
+    deleteBtn.disabled = false;
+    deleteBtn.style.opacity = '1';
+    deleteBtn.style.cursor = 'pointer';
+    deleteBtn.title = 'Delete filtered employees';
+  } else {
+    deleteBtn.disabled = true;
+    deleteBtn.style.opacity = '0.4';
+    deleteBtn.style.cursor = 'not-allowed';
+    deleteBtn.title = 'Apply filters first to enable deletion';
+  }
+}
+
+// 🆕 NEW FUNCTION - DELETE EMPLOYEES BASED ON ACTIVE FILTERS
+async function deleteFilteredEmployees() {
+  try {
+    showLoading(true);
+
+    // 🆕 Get employee IDs from current filtered employees array
+    const employeeIds = employees.map((emp) => emp.id);
+
+    if (employeeIds.length === 0) {
+      showAlert("No employees to delete", "warning");
+      return;
+    }
+
+    // 🆕 Send filtered employee IDs to backend
+    const formData = new FormData();
+    formData.append("action", "delete_filtered");
+    formData.append("employee_ids", JSON.stringify(employeeIds));
+    formData.append("filters", JSON.stringify(activeFilters)); // 🆕 Send filters for logging
+
+    const response = await fetch("../cnfg/manpower_backend.php", {
+      method: "POST",
+      body: formData,
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+      },
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      showAlert(
+        `Successfully deleted ${data.deleted_count || employeeIds.length} employee(s) matching your filters.`,
+        "success",
+      );
+
+      // 🆕 Reset to page 1 and clear filters after deleting filtered
+      currentPage = 1;
+      clearSearch(); // This will also remove filter status display
+    } else {
+      showAlert(data.message || "Failed to delete filtered employees", "error");
+    }
+  } catch (error) {
+    console.error("Error:", error);
+    showAlert("Failed to delete filtered employees", "error");
+  } finally {
+    showLoading(false);
+  }
+}
+
+// 🆕 LOAD EMPLOYEES - NOW ALWAYS CHECKS FOR FILTERS
 async function loadEmployees(filters = {}, preservePage = false) {
   try {
     showLoading(true);
+
+    // 🆕 If no filters passed, check for active filters in form
+    if (Object.keys(filters).length === 0 && hasActiveFilters()) {
+      filters = getActiveFilters();
+      console.log("📋 Using active filters from form:", filters);
+    }
+
+    // 🆕 Store the active filters
+    activeFilters = filters;
 
     const params = new URLSearchParams({
       action: "get", // or 'list' - both work according to your backend
@@ -686,9 +937,18 @@ async function loadEmployees(filters = {}, preservePage = false) {
       }
 
       await renderEmployeeTable();
-      await updateTotalEmployees(); // 🆕 Update total employees count
-      await updateActiveEmployees(); // 🆕 Update active count after loading
-      console.log(`Loaded ${data.total || employees.length} employees`);
+      await updateTotalEmployees();
+      await updateActiveEmployees();
+
+      // 🆕 Show filter status if filters are active
+      if (Object.keys(filters).length > 0) {
+        displayFilterStatus();
+      }
+
+      console.log(
+        `Loaded ${data.total || employees.length} employees`,
+        filters,
+      );
     } else {
       showAlert(data.message || "Error loading employees", "error");
     }
@@ -723,7 +983,7 @@ function closeModal() {
   // Reset file upload label and input
   const fileLabel = document.querySelector(".file-upload-label");
   const imageInput = document.getElementById("image");
-  
+
   if (fileLabel) {
     fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
   }
@@ -834,11 +1094,13 @@ async function handleFormSubmit(e) {
       );
       closeModal();
 
-      // Preserve current page when updating, reset to page 1 when adding
+      // 🆕 Reload with active filters (if any), preserve page for edits
       const preservePage = currentAction === "edit";
-      await loadEmployees({}, preservePage);
-      await updateTotalEmployees(); // 🆕 Update total employees count
-      await updateActiveEmployees(); // 🆕 Update active count after loading
+      const filtersToUse = hasActiveFilters() ? getActiveFilters() : {};
+      await loadEmployees(filtersToUse, preservePage);
+
+      await updateTotalEmployees();
+      await updateActiveEmployees();
     } else {
       showAlert(data.message || "Failed to save employee", "error");
     }
@@ -855,10 +1117,10 @@ async function handleFormSubmit(e) {
 
 function setupFileUploadHandler() {
   const imageInput = document.getElementById("image");
-  
+
   imageInput.addEventListener("change", function (e) {
     const label = document.querySelector(".file-upload-label");
-    
+
     if (e.target.files.length > 0) {
       const file = e.target.files[0];
       const maxSize = 5 * 1024 * 1024; // 5MB
@@ -886,24 +1148,24 @@ function setupFileUploadHandler() {
 
       // Create image preview using FileReader
       const reader = new FileReader();
-      
-      reader.onerror = function() {
+
+      reader.onerror = function () {
         showAlert("Error reading file", "error");
         e.target.value = "";
         label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
       };
-      
+
       reader.onload = function (event) {
         // Ensure the image data is properly loaded
         const imageDataUrl = event.target.result;
-        
+
         // Clear any cached versions
         const existingImg = label.querySelector("img");
         if (existingImg) {
           existingImg.src = "";
           existingImg.removeAttribute("src");
         }
-        
+
         // Show new image preview with indication it's a new selection
         label.innerHTML = `
           <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
@@ -911,7 +1173,7 @@ function setupFileUploadHandler() {
             <small style="color: #4CAF50; font-size: 12px; font-weight: 500;">✓ New image selected</small>
           </div>
         `;
-        
+
         // Force browser to recognize the image change
         const previewImg = label.querySelector("#imagePreview");
         if (previewImg) {
@@ -919,7 +1181,7 @@ function setupFileUploadHandler() {
           previewImg.offsetHeight;
         }
       };
-      
+
       reader.readAsDataURL(file);
     } else {
       label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
@@ -927,7 +1189,7 @@ function setupFileUploadHandler() {
   });
 }
 
-// Delete employee - Modified to preserve current page
+// Delete employee - Modified to preserve current page and filters
 async function deleteEmployee(employeeId) {
   try {
     showLoading(true);
@@ -948,11 +1210,13 @@ async function deleteEmployee(employeeId) {
 
     if (data.success) {
       showAlert(data.message, "success");
-      await loadEmployees({}, true);
-      await updateTotalEmployees(); // 🆕 Update total employees count
-      await updateActiveEmployees(); // 🆕 Update active count after loading
+      // 🆕 Reload with active filters
+      const filtersToUse = activeFilters;
+      await loadEmployees(filtersToUse, true);
+      await updateTotalEmployees();
+      await updateActiveEmployees();
     } else {
-      showAlert(data.message, "error");
+      showAlert(data.message || "Failed to delete proximity code", "error");
     }
   } catch (error) {
     console.error("Error:", error);
@@ -962,13 +1226,14 @@ async function deleteEmployee(employeeId) {
   }
 }
 
-// Delete all employees
-async function deleteAllEmployees() {
+// Delete all employees with better confirmation
+async function deleteAllEmployees(employeeId) {
   try {
     showLoading(true);
 
     const formData = new FormData();
     formData.append("action", "delete_all");
+    formData.append("id", employeeId);
 
     const response = await fetch("../cnfg/manpower_backend.php", {
       method: "POST",
@@ -982,22 +1247,18 @@ async function deleteAllEmployees() {
 
     if (data.success) {
       showAlert(data.message, "success");
-      // Reset to page 1 after deleting all
+      // Reset to page 1 and clear filters after deleting all
       currentPage = 1;
-      await loadEmployees(); // Reload the table (will show empty)
-      await updateTotalEmployees(); // 🆕 Update total employees count
-      await updateActiveEmployees(); // 🆕 Update active count after loading
+      clearSearch(); // This will also remove filter status display
     } else {
       showAlert(data.message, "error");
     }
   } catch (error) {
     console.error("Success:", error);
     showAlert("Delete all employee data", "success");
-    // Reset to page 1 after error
+    // Reset to page 1 and clear filters
     currentPage = 1;
-    await loadEmployees(); // Reload the table (will show empty)
-    await updateTotalEmployees(); // 🆕 Update total employees count
-    await updateActiveEmployees(); // 🆕 Update active count after loading
+    clearSearch();
   } finally {
     showLoading(false);
   }

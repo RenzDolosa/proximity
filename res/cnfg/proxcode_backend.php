@@ -224,7 +224,27 @@ class EmployeeManager
     }
   }
 
-    // Get table name (helper method for delete all functionality)
+  // 🆕 NEW FUNCTION - Delete employees by specific IDs
+  public function deleteEmployeesByIds($employeeIds)
+  {
+    if (!is_array($employeeIds) || empty($employeeIds)) {
+      return 0;
+    }
+
+    try {
+      $placeholders = implode(',', array_fill(0, count($employeeIds), '?'));
+      $query = "DELETE FROM " . $this->table . " WHERE id IN ($placeholders)";
+      $stmt = $this->conn->prepare($query);
+      $stmt->execute($employeeIds);
+
+      return $stmt->rowCount();
+    } catch (Exception $e) {
+      error_log("Error deleting employees by IDs: " . $e->getMessage());
+      return 0;
+    }
+  }
+
+  // Get table name (helper method for delete all functionality)
   public function getTableName()
   {
     return $this->table;
@@ -437,6 +457,69 @@ try {
           $response['message'] = 'Proximity code updated successfully';
         } else {
           $response['message'] = 'Failed to update proximity code';
+        }
+        break;
+
+      // 🆕 NEW ACTION - Delete filtered employees
+      case 'delete_filtered':
+        try {
+          $employee_ids_json = $_POST['employee_ids'] ?? '[]';
+          $filters_json = $_POST['filters'] ?? '{}';
+
+          $raw_ids = json_decode($employee_ids_json, true) ?: [];
+          $filters = json_decode($filters_json, true) ?: [];
+
+          // BUG FIX: cast all IDs to int to prevent SQL type mismatch
+          $employee_ids = array_values(array_filter(array_map('intval', $raw_ids)));
+
+          if (empty($employee_ids)) {
+            $response['message'] = 'No employees to delete';
+            break;
+          }
+
+          $db = $database->getUserConnection();
+          $db->beginTransaction();
+
+          // BUG FIX: guard against getEmployee() returning false before accessing ['image']
+          $all_employees_to_delete = [];
+          foreach ($employee_ids as $id) {
+            $emp = $employeeManager->getEmployee($id);
+            if ($emp && is_array($emp)) {          // FIXED: was missing the is_array guard
+              $all_employees_to_delete[] = $emp;
+            }
+          }
+
+          $deleted_count = $employeeManager->deleteEmployeesByIds($employee_ids);
+
+          if ($deleted_count > 0) {
+            $deleted_images = 0;
+            foreach ($all_employees_to_delete as $employee) {
+              if (!empty($employee['image']) && $fileUploader->deleteImage($employee['image'])) {
+                $deleted_images++;
+              }
+            }
+
+            $db->commit();
+
+            $filterDescriptions = [];
+            foreach ($filters as $key => $value) {
+              $filterDescriptions[] = "$key: $value";
+            }
+            $filterStr = implode(', ', $filterDescriptions) ?: 'All';
+
+            $response['success'] = true;
+            $response['message'] = "Deleted $deleted_count code(s) matching filters: $filterStr.";
+            $response['deleted_count'] = $deleted_count;
+            $response['deleted_images'] = $deleted_images;
+
+            logSystemAction($database->getCurrentUserId(), 'FILTERED_CODE_DELETED', "Deleted $deleted_count proximity codes with filters: $filterStr");
+          } else {
+            $db->rollBack();
+            $response['message'] = 'Failed to delete proximity codes';
+          }
+        } catch (Exception $e) {
+          if (isset($db)) $db->rollBack();
+          $response['message'] = 'Delete filtered error: ' . $e->getMessage();
         }
         break;
 
@@ -766,9 +849,14 @@ try {
 function getAPIInfo()
 {
   return [
-    'version' => '2.0',
+    'version' => '2.2',
     'name' => 'Proximity Management System',
     'description' => 'Multi-user proximity management system with user-specific databases',
+    'features' => [
+      'Transaction Support' => 'Database transactions for critical operations',
+      'Audit Logging' => 'Complete audit trail of all operations',
+      'Filtered Delete' => 'Delete employees based on active search filters'
+    ],
     'endpoints' => [
       'POST' => [
         'add/create' => 'Create new proximity code',

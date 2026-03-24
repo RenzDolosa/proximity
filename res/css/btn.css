@@ -85,6 +85,35 @@
 .close:hover {
   color: #000;
 }
+
+.close-button {
+  position: fixed;
+  top: 0;
+  right: 1vmin;
+  padding: 1vmin;
+  z-index: 1000;
+  cursor: pointer;
+  color: red;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  font-size: 1.5rem;
+  transition: opacity 0.2s ease;
+  border-radius: 100%;
+}
+
+.close-button:hover {
+  opacity: 0.8;
+}
+
+.close-button:focus {
+  outline-offset: 2px;
+}
+
+.form-row-btn {
+  display: inline-flex;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  flex-wrap: wrap;
+}
 /*<--*/
 
 @media (max-width: 768px) {

@@ -60,6 +60,12 @@ if ($databaseConnected) {
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Security Headers -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; script-src 'self';">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="X-Frame-Options" content="DENY">
+  <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Manage</title>
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../css/system.css">
@@ -84,14 +90,7 @@ if ($databaseConnected) {
     </div>
   </div>
 
-  <div onclick="window.location.href='../iframe/ptl.php';" style="position: fixed;
-      top: 0;
-      right: 1vmin;
-      padding: 1vmin;
-      z-index: 1000;
-      cursor: pointer;
-      color: red;
-      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);">
+  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close">
     <i class="fas fa-times"></i>
   </div>
 
@@ -141,7 +140,7 @@ if ($databaseConnected) {
         </div>
         <img src="../icon/nfc-icon.png" alt="Proximity" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
       </form>
-      <div class="form-row">
+      <div class="form-row-btn">
         <div class="search-btn">
           <button type="button" class="btn btn-primary" onclick="searchEmployees()"><i class="fas fa-search"></i> Search</button>
         </div>
@@ -249,17 +248,17 @@ if ($databaseConnected) {
         <div class="form-row">
           <div class="form-group">
             <label for="fullname">Full Name *</label>
-            <input type="text" id="fullname" name="fullname" required>
+            <input type="text" id="fullname" name="fullname">
           </div>
           <div class="form-group">
             <label for="position">Position *</label>
-            <input type="text" id="position" name="position" required>
+            <input type="text" id="position" name="position">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
             <label for="brand">Brand *</label>
-            <input type="text" id="brand" name="brand" required>
+            <input type="text" id="brand" name="brand">
           </div>
           <div class="form-group">
             <label for="status">Status</label>
@@ -272,7 +271,7 @@ if ($databaseConnected) {
         <div class="form-row">
           <div class="form-group">
             <label for="shift">Shift *</label>
-            <select id="shift" name="shift" required>
+            <select id="shift" name="shift">
               <option value="">Select Shift</option>
               <option value="Day Shift">Day Shift</option>
               <option value="Night Shift">Night Shift</option>
@@ -364,112 +363,114 @@ if ($databaseConnected) {
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Delete Modal -->
-    <div id="deleteModal" class="modal-overlay">
-      <div class="modal-delete-content">
-        <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
-        <div class="modal-header">
-          <h2 id="deleteModalTitle">Delete Employee</h2>
-        </div>
-
-        <div class="modal-body">
-          <p id="deleteModalMessage">Are you sure you want to delete this employee?</p>
-
-          <!-- Confirmation input for delete all -->
-          <div id="confirmationContainer" style="display: none; margin-top: 20px;">
-            <label for="confirmationInput" style="display: block; margin-bottom: 10px; font-weight: bold;">Type "DELETE ALL" to confirm:</label>
-            <input type="text" id="confirmationInput" placeholder="Type DELETE ALL" style="margin-bottom: 10px;" />
-          </div>
-        </div>
-
-        <button id="confirmDeleteBtn" class="btn btn-danger">Delete</button>
-        <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
+  <!-- Delete Modal -->
+  <div id="deleteModal" class="modal-overlay">
+    <div class="modal-delete-content">
+      <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
+      <div class="modal-header">
+        <h2 id="deleteModalTitle">Delete Employee</h2>
       </div>
+
+      <div class="modal-body">
+        <p id="deleteModalMessage">Are you sure you want to delete this employee?</p>
+
+        <!-- Confirmation input for delete all -->
+        <div id="confirmationContainer" style="display: none; margin-top: 20px;">
+          <label for="confirmationInput" style="display: block; margin-bottom: 10px; font-weight: bold;">Type "DELETE ALL" to confirm:</label>
+          <input type="text" id="confirmationInput" placeholder="Type DELETE ALL" style="margin-bottom: 10px;" />
+        </div>
+      </div>
+
+      <button type="button" id="confirmDeleteBtn" class="btn btn-danger">Delete</button>
+      <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
     </div>
+  </div>
 
-    <!-- CSV / Excel Import Modal -->
-    <div id="importModal" class="modal">
-      <div class="modal-content">
-        <div id="importProgress" style="display: none;">
-          <h4>Import Progress:</h4>
-          <div class="progress-bar">
-            <div class="progress-fill" id="progressFill"></div>
-          </div>
-          <div id="importStatus"></div>
+  <!-- CSV / Excel Import Modal -->
+  <div id="importModal" class="modal">
+    <div class="modal-content">
+      <div id="importProgress" style="display: none;">
+        <h4>Import Progress:</h4>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
         </div>
-        <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
-        <h2>Import Employees from File</h2>
+        <div id="importStatus"></div>
+      </div>
+      <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
+      <h2>Import Employees from File</h2>
 
-        <div class="import-instructions">
-          <h4>Supported File Formats:</h4>
-          <p><strong>&#128196; CSV (.csv)</strong> | <strong>&#128202; Excel (.xlsx, .xls)</strong></p>
+      <div class="import-instructions">
+        <h4>Supported File Formats:</h4>
+        <p><strong>&#128196; CSV (.csv)</strong> | <strong>&#128202; Excel (.xlsx, .xls)</strong></p>
 
-          <h4>File Format Requirements:</h4>
-          <p>Your file should have the following columns in this order:</p>
-          <ul>
-            <li><strong>fullname</strong> - Employee's full name (required)</li>
-            <li><strong>position</strong> - Job position</li>
-            <li><strong>brand</strong> - Brand/Department</li>
-            <li><strong>status</strong> - Active or Inactive (default: Active)</li>
-            <li><strong>shift</strong> - Day Shift, Night Shift, or Graveyard Shift (required)</li>
-            <li><strong>violation</strong> - Any violations (optional)</li>
-            <li><strong>proximity code</strong> - If have Proximity Code (optional)</li>
-          </ul>
-          <p><em>Note: If blank Proximity Codes will be automatically generated for each employee.</em></p>
-        </div>
+        <h4>File Format Requirements:</h4>
+        <p>Your file should have the following columns in this order:</p>
+        <ul>
+          <li><strong>fullname</strong> - Employee's full name (required)</li>
+          <li><strong>position</strong> - Job position</li>
+          <li><strong>brand</strong> - Brand/Department</li>
+          <li><strong>status</strong> - Active or Inactive (default: Active)</li>
+          <li><strong>shift</strong> - Day Shift, Night Shift, or Graveyard Shift (required)</li>
+          <li><strong>violation</strong> - Any violations (optional)</li>
+          <li><strong>proximity code</strong> - If have Proximity Code (optional)</li>
+        </ul>
+        <p><em>Note: If blank Proximity Codes will be automatically generated for each employee.</em></p>
+      </div>
 
-        <form id="importForm" enctype="multipart/form-data">
-          <div class="form-group">
-            <div class="form-row">
-              <label for="dataFile">
-                <div class="download-label">Select File</div>
-              </label>
-              <a href="#" onclick="excelTemplate()" style="display: flex; align-items: center; gap: 5px; margin-left: auto; text-decoration: none; color: #007bff;">
-                <i class="fas fa-download"></i> Download Excel Template
-              </a>
-            </div>
-            <div class="file-upload">
-              <input type="file" id="dataFile" name="dataFile" accept=".csv,.xlsx,.xls" required>
-              <label for="dataFile" class="file-upload-label">
-                <i class="fas fa-file"></i> Click to select file (.csv, .xlsx, .xls)
-              </label>
-            </div>
+      <form id="importForm" enctype="multipart/form-data">
+        <div class="form-group">
+          <div class="form-row">
+            <label for="dataFile">
+              <div class="download-label">Select File</div>
+            </label>
+            <a href="#" onclick="excelTemplate()" style="display: flex; align-items: center; gap: 5px; margin-left: auto; text-decoration: none; color: #007bff;">
+              <i class="fas fa-download"></i> Download Excel Template
+            </a>
           </div>
-
-          <div class="form-group">
-            <label style="display: grid; grid-template-columns: 300px 20px">
-              Skip first row (if it contains headers)
-              <input type="checkbox" id="skipHeader" name="skipHeader" checked>
+          <div class="file-upload">
+            <input type="file" id="dataFile" name="dataFile" accept=".csv,.xlsx,.xls" required>
+            <label for="dataFile" class="file-upload-label">
+              <i class="fas fa-file"></i> Click to select file (.csv, .xlsx, .xls)
             </label>
           </div>
+        </div>
 
-          <div id="importPreview" style="display: none;">
-            <h4>Preview (First 5 rows):</h4>
-          </div>
+        <div class="form-group">
+          <label style="display: grid; grid-template-columns: 300px 20px">
+            Skip first row (if it contains headers)
+            <input type="checkbox" id="skipHeader" name="skipHeader" checked>
+          </label>
+        </div>
 
-          <div class="form-row" style="margin-top: 2rem;">
-            <button type="button" class="btn btn-primary" onclick="previewFile()"><i class="fas fa-list-ul"></i> Preview</button>
-            <button type="submit" class="btn btn-import"><i class="fas fa-upload"></i> Import</button>
-            <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
-          </div>
-        </form>
-      </div>
+        <div id="importPreview" style="display: none;">
+          <h4>Preview (First 5 rows):</h4>
+        </div>
+
+        <div class="form-row" style="margin-top: 2rem;">
+          <button type="button" class="btn btn-primary" onclick="previewFile()"><i class="fas fa-list-ul"></i> Preview</button>
+          <button type="submit" class="btn btn-import"><i class="fas fa-upload"></i> Import</button>
+          <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
+        </div>
+      </form>
     </div>
+  </div>
 
-    <audio id="successSound" src="../sounds/success.mp3" preload="auto"></audio>
-    <audio id="noResultSound" src="../sounds/noResultsFound.mp3" preload="auto"></audio>
-    <audio id="warningSound" src="../sounds/ohh-ow.mp3" preload="auto"></audio>
-    <audio id="inactiveSound" src="../sounds/inactive.mp3" preload="auto"></audio>
-    <!-- Add XLSX library for Excel file support -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="../src/system.js"></script>
-    <script src="../src/system-camera.js"></script>
-    <script src="../src/is.js"></script>
-    <script src="../src/eas.js"></script>
-    <script src="../src/opt-btn.js"></script>
-    <script src="../src/loading.js"></script>
-    <script src="../src/req.js"></script>
+  <audio id="successSound" src="../sounds/success.mp3" preload="auto"></audio>
+  <audio id="noResultSound" src="../sounds/noResultsFound.mp3" preload="auto"></audio>
+  <audio id="warningSound" src="../sounds/ohh-ow.mp3" preload="auto"></audio>
+  <audio id="inactiveSound" src="../sounds/inactive.mp3" preload="auto"></audio>
+  <!-- Add XLSX library for Excel file support -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="../src/system.js"></script>
+  <script src="../src/system-camera.js"></script>
+  <script src="../src/is.js"></script>
+  <script src="../src/eas.js"></script>
+  <script src="../src/opt-btn.js"></script>
+  <script src="../src/btn.js"></script>
+  <script src="../src/loading.js"></script>
+  <script src="../src/req.js"></script>
 </body>
 
 </html>

@@ -94,7 +94,7 @@
   margin-bottom: 1rem;
   height: 160px;
   cursor: default;
-  animation: slideInUp 0.8s ease-out;
+  /* animation: slideInUp 0.8s ease-out; */
   transition: all 0.3s ease;
 }
 

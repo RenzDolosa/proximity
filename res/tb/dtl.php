@@ -71,9 +71,15 @@ if ($databaseConnected) {
 <html lang="en">
 
 <head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Security Headers -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; script-src 'self';">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="X-Frame-Options" content="DENY">
+  <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Scanned Log</title>
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../css/system.css">
@@ -97,14 +103,7 @@ if ($databaseConnected) {
     </div>
   </div>
 
-  <div onclick="window.location.href='../iframe/ptl.php';" style="position: fixed;
-      top: 0;
-      right: 1vmin;
-      padding: 1vmin;
-      z-index: 1000;
-      cursor: pointer;
-      color: red;
-      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);">
+  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close">
     <i class="fas fa-times"></i>
   </div>
 
@@ -154,7 +153,7 @@ if ($databaseConnected) {
         </div>
         <img src="../icon/nfc-icon.png" alt="Proximity" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
       </form>
-      <div class="form-row">
+      <div class="form-row-btn">
         <div class="search-btn">
           <button type="button" class="btn btn-primary" onclick="searchEmployees()"><i class="fas fa-search"></i> Search</button>
         </div>
@@ -299,6 +298,7 @@ if ($databaseConnected) {
   <script src="../src/i-dtl.js"></script>
   <script src="../src/ea-dtl.js"></script>
   <script src="../src/opt-btn.js"></script>
+  <script src="../src/btn.js"></script>
   <script src="../src/loading.js"></script>
   <script src="../src/req.js"></script>
 </body>

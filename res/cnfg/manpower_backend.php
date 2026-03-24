@@ -1,6 +1,6 @@
 <?php
-// manpower_backend.php - FIXED VERSION
-// KEY CHANGE: Image IDs are now persistent when images are replaced
+// manpower_backend.php - FIXED VERSION WITH FILTERED DELETE SUPPORT
+// KEY CHANGES: Image IDs persistent + Delete filtered employees functionality
 
 require_once 'config.php';
 
@@ -281,6 +281,26 @@ class EmployeeManager
     }
   }
 
+  // 🆕 NEW FUNCTION - Delete employees by specific IDs
+  public function deleteEmployeesByIds($employeeIds)
+  {
+    if (!is_array($employeeIds) || empty($employeeIds)) {
+      return 0;
+    }
+
+    try {
+      $placeholders = implode(',', array_fill(0, count($employeeIds), '?'));
+      $query = "DELETE FROM " . $this->table . " WHERE id IN ($placeholders)";
+      $stmt = $this->conn->prepare($query);
+      $stmt->execute($employeeIds);
+
+      return $stmt->rowCount();
+    } catch (Exception $e) {
+      error_log("Error deleting employees by IDs: " . $e->getMessage());
+      return 0;
+    }
+  }
+
   public function getTableName()
   {
     return $this->table;
@@ -550,9 +570,73 @@ try {
         }
         break;
 
+      // 🆕 NEW ACTION - Delete filtered employees
+      case 'delete_filtered':
+        try {
+          $employee_ids_json = $_POST['employee_ids'] ?? '[]';
+          $filters_json = $_POST['filters'] ?? '{}';
+          
+          $employee_ids = json_decode($employee_ids_json, true) ?: [];
+          $filters = json_decode($filters_json, true) ?: [];
+
+          if (empty($employee_ids)) {
+            $response['message'] = 'No employees to delete';
+            break;
+          }
+
+          $db = $database->getUserConnection();
+          $db->beginTransaction();
+
+          // Get all employees before deletion for image cleanup
+          $all_employees_to_delete = [];
+          foreach ($employee_ids as $id) {
+            $emp = $employeeManager->getEmployee($id);
+            if ($emp) {
+              $all_employees_to_delete[] = $emp;
+            }
+          }
+
+          // Delete the employees
+          $deleted_count = $employeeManager->deleteEmployeesByIds($employee_ids);
+
+          if ($deleted_count > 0) {
+            // Delete associated images
+            $deleted_images = 0;
+            foreach ($all_employees_to_delete as $employee) {
+              if ($employee['image'] && $fileUploader->deleteImage($employee['image'])) {
+                $deleted_images++;
+              }
+            }
+
+            $db->commit();
+
+            $filterDescriptions = [];
+            foreach ($filters as $key => $value) {
+              $filterDescriptions[] = "$key: $value";
+            }
+            $filterStr = implode(', ', $filterDescriptions) ?: 'All';
+
+            $response['success'] = true;
+            $response['message'] = "Deleted $deleted_count employee(s) matching filters: $filterStr. Removed $deleted_images image(s).";
+            $response['deleted_count'] = $deleted_count;
+            $response['deleted_images'] = $deleted_images;
+
+            logSystemAction($database->getCurrentUserId(), 'FILTERED_EMPLOYEES_DELETED', "Deleted $deleted_count employees with filters: $filterStr");
+          } else {
+            $db->rollBack();
+            $response['message'] = 'Failed to delete employees';
+          }
+        } catch (Exception $e) {
+          if (isset($db)) {
+            $db->rollBack();
+          }
+          $response['message'] = 'Delete filtered error: ' . $e->getMessage();
+        }
+        break;
+
       case 'delete_all':
         try {
-          $all_employees = $employeeManager->getEmployees($employee_id);
+          $all_employees = $employeeManager->getEmployees([]);
 
           $db = $database->getUserConnection();
           $db->beginTransaction();
@@ -1072,14 +1156,15 @@ if (isset($_GET['serve_file'])) {
 function getAPIInfo()
 {
   return [
-    'version' => '2.1',
+    'version' => '2.2',
     'name' => 'Integrated Manpower Management System',
-    'description' => 'Multi-user employee management system with persistent image IDs',
+    'description' => 'Multi-user employee management system with persistent image IDs and filtered delete',
     'features' => [
       'Persistent Image IDs' => 'Image filenames preserved when images are replaced',
       'User-Specific Databases' => 'Each user has isolated employee data',
       'Transaction Support' => 'Database transactions for critical operations',
-      'Audit Logging' => 'Complete audit trail of all operations'
+      'Audit Logging' => 'Complete audit trail of all operations',
+      'Filtered Delete' => 'Delete employees based on active search filters'
     ]
   ];
 }

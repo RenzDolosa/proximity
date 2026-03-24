@@ -313,6 +313,33 @@ class EmployeeManager
     }
   }
 
+  // 🆕 NEW FUNCTION - Delete employees by specific IDs
+  public function deleteEmployeesByIds($employeeIds)
+  {
+    if (!is_array($employeeIds) || empty($employeeIds)) {
+      return 0;
+    }
+
+    try {
+      $placeholders = implode(',', array_fill(0, count($employeeIds), '?'));
+
+      // Delete from check_in_out (table2) first — dependent records
+      $query2 = "DELETE FROM " . $this->table2 . " WHERE id IN ($placeholders)";
+      $stmt2 = $this->conn->prepare($query2);
+      $stmt2->execute($employeeIds);
+
+      // Delete from employee_access_log (table)
+      $query = "DELETE FROM " . $this->table . " WHERE id IN ($placeholders)";
+      $stmt = $this->conn->prepare($query);
+      $stmt->execute($employeeIds);
+
+      return $stmt->rowCount();
+    } catch (Exception $e) {
+      error_log("Error deleting employees by IDs: " . $e->getMessage());
+      return 0;
+    }
+  }
+
   // Get table name (helper method for delete all functionality)
   public function getTableName()
   {
@@ -656,6 +683,70 @@ try {
           $response['message'] = 'Employee deleted successfully';
         } else {
           $response['message'] = 'Failed to delete employee';
+        }
+        break;
+
+      // 🆕 NEW ACTION - Delete filtered employees
+      case 'delete_filtered':
+        try {
+          $employee_ids_json = $_POST['employee_ids'] ?? '[]';
+          $filters_json = $_POST['filters'] ?? '{}';
+
+          $employee_ids = json_decode($employee_ids_json, true) ?: [];
+          $filters = json_decode($filters_json, true) ?: [];
+
+          if (empty($employee_ids)) {
+            $response['message'] = 'No employees to delete';
+            break;
+          }
+
+          $db = $database->getUserConnection();
+          $db->beginTransaction();
+
+          // Get all employees before deletion for image cleanup
+          $all_employees_to_delete = [];
+          foreach ($employee_ids as $id) {
+            $emp = $employeeManager->getEmployee($id);
+            if ($emp) {
+              $all_employees_to_delete[] = $emp;
+            }
+          }
+
+          // Delete the employees
+          $deleted_count = $employeeManager->deleteEmployeesByIds($employee_ids);
+
+          if ($deleted_count > 0) {
+            // Delete associated images
+            $deleted_images = 0;
+            foreach ($all_employees_to_delete as $employee) {
+              if ($employee['image'] && $fileUploader->deleteImage($employee['image'])) {
+                $deleted_images++;
+              }
+            }
+
+            $db->commit();
+
+            $filterDescriptions = [];
+            foreach ($filters as $key => $value) {
+              $filterDescriptions[] = "$key: $value";
+            }
+            $filterStr = implode(', ', $filterDescriptions) ?: 'All';
+
+            $response['success'] = true;
+            $response['message'] = "Deleted $deleted_count employee(s) matching filters: $filterStr. Removed $deleted_images image(s).";
+            $response['deleted_count'] = $deleted_count;
+            $response['deleted_images'] = $deleted_images;
+
+            logSystemAction($database->getCurrentUserId(), 'FILTERED_EMPLOYEES_DELETED', "Deleted $deleted_count employees with filters: $filterStr");
+          } else {
+            $db->rollBack();
+            $response['message'] = 'Failed to delete employees';
+          }
+        } catch (Exception $e) {
+          if (isset($db)) {
+            $db->rollBack();
+          }
+          $response['message'] = 'Delete filtered error: ' . $e->getMessage();
         }
         break;
 
@@ -1286,6 +1377,11 @@ function getAPIInfo()
     'version' => '2.0',
     'name' => 'Integrated Manpower Management System',
     'description' => 'Multi-user employee management system with user-specific databases',
+    'features' => [
+      'Transaction Support' => 'Database transactions for critical operations',
+      'Audit Logging' => 'Complete audit trail of all operations',
+      'Filtered Delete' => 'Delete employees based on active search filters'
+    ],
     'endpoints' => [
       'POST' => [
         'add/create' => 'Create new employee',
@@ -1343,5 +1439,3 @@ if (isset($_GET['health_check'])) {
   echo json_encode($health, JSON_PRETTY_PRINT);
   exit;
 }
-
-?>

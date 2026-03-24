@@ -91,6 +91,7 @@ body {
   padding: 1rem 2rem;
   z-index: 1;
   padding-bottom: 60px;
+  isolation: isolate;
 }
 
 .controls {
@@ -100,8 +101,9 @@ body {
   border-radius: 10px;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
   margin-bottom: 1rem;
-  animation: slideInUp 0.8s ease-out;
+  /* animation: slideInUp 0.8s ease-out; */
   transition: all 0.3s ease;
+  isolation: isolate;
 }
 
 /*Employee Recorder CSS !-->*/
@@ -109,7 +111,7 @@ body {
   background: transparent;
   border-radius: 10px;
   overflow: hidden;
-  animation: slideInUp 0.8s ease-out;
+  /* animation: slideInUp 0.8s ease-out; */
   transition: all 0.3s ease;
   padding-bottom: 85px;
 }

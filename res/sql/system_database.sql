@@ -18,6 +18,10 @@ CREATE TABLE
   `last_login` timestamp NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+INSERT INTO `users` (`id`, `username`, `email`, `password`, `first_name`, `last_name`, `phone`, `my_database`, `created_at`, `updated_at`, `last_login`) VALUES
+(1, 'RenzDolosa', 'renzeload@gmail.com', '$2y$10$/nqdViJv2DWyfjHhfS8ZDOPT.6QwxO3DWK1ocCwDFPUYvEE20Lkga', 'Renren', 'Dolosa', NULL, 'AdminServer', '2025-06-01 11:22:31', '2026-03-21 10:23:20', '2026-03-21 10:23:20'),
+(2, 'hrqrdata', 'hrassistant.inspi@gmail.com', '$2y$10$h1KCNltHY3HOQvlOBHyheeSPgA1h7e9mSK/P0p89ugzFpvt2o3xKW', 'Jennica Marie', 'Cruz', NULL, 'HRServer', '2025-06-05 05:51:53', '2026-03-09 08:57:17', '2026-03-09 08:57:17');
+
 CREATE TABLE
   IF NOT EXISTS `user_sessions` (
   `id` int(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -39,3 +43,9 @@ CREATE TABLE
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   CONSTRAINT `system_logs_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+INSERT INTO `system_logs` (`id`, `user_id`, `action`, `details`, `ip_address`, `user_agent`, `created_at`) VALUES
+(1, 1, 'USER_REGISTERED', 'User registered with database: AdminServer', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36', '2025-06-01 11:22:31'),
+(2, 1, 'USER_REGISTERED', 'User registered with database: if0_41430152_1', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36', '2025-06-01 11:22:31'),
+(3, 2, 'USER_REGISTERED', 'User registered with database: HRServer', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36', '2025-06-05 05:51:53'),
+(4, 2, 'USER_REGISTERED', 'User registered with database: if0_41430152_2', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36', '2025-06-05 05:51:53');
