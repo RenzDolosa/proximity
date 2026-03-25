@@ -95,7 +95,7 @@
   height: 160px;
   cursor: default;
   /* animation: slideInUp 0.8s ease-out; */
-  transition: all 0.3s ease;
+  /* transition: all 0.3s ease; */
 }
 
 .welcome-card:hover {
@@ -208,20 +208,20 @@
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
   text-align: center;
   cursor: default;
-  animation: slideInLeft 0.7s ease-out;
+  /* animation: slideInLeft 0.7s ease-out; */
   animation-fill-mode: both;
   transition: all 0.3s ease;
 }
 
 /* Staggered animation delays for menu cards */
-.menu-card:nth-child(odd) {
+/* .menu-card:nth-child(odd) {
   animation: slideInLeft 0.7s ease-out;
   animation-delay: 0.2s;
 }
 .menu-card:nth-child(even) {
   animation: slideInRight 0.7s ease-out;
   animation-delay: 0.4s;
-}
+} */
 
 .menu-card .favi {
   display: grid;

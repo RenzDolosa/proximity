@@ -960,18 +960,18 @@ async function loadEmployees(filters = {}, preservePage = false) {
   try {
     showLoading(true);
 
-    // 🆕 If no filters passed, check for active filters in form
     if (Object.keys(filters).length === 0 && hasActiveFilters()) {
       filters = getActiveFilters();
-      console.log("📋 Using active filters from form:", filters);
     }
 
-    // 🆕 Store the active filters
     activeFilters = filters;
 
+    // Strip 'remarks' before sending to backend — it's not a DB column
+    const { remarks: remarksFilter, ...backendFilters } = filters;
+
     const params = new URLSearchParams({
-      action: "get", // or 'list' - both work according to your backend
-      ...filters,
+      action: "get",
+      ...backendFilters,
     });
 
     const response = await fetch(
@@ -992,7 +992,21 @@ async function loadEmployees(filters = {}, preservePage = false) {
     if (data.success && Array.isArray(data.data)) {
       employees = data.data;
 
-      // Only reset to page 1 if not preserving page and not filtering
+      // Apply remarks filter client-side (computed field, not stored in DB)
+      if (remarksFilter) {
+        const systemQRCodes = await getSystemEmployeeQRCodes();
+        const normalizedSystemQRCodes = systemQRCodes.map((code) =>
+          String(code).trim().toLowerCase()
+        );
+        employees = employees.filter((emp) => {
+          const isOccupied = normalizedSystemQRCodes.includes(
+            String(emp.qr_code).trim().toLowerCase()
+          );
+          const displayRemarks = isOccupied ? "Occupied" : "Available";
+          return displayRemarks.toLowerCase() === remarksFilter.toLowerCase();
+        });
+      }
+
       if (!preservePage && Object.keys(filters).length === 0) {
         currentPage = 1;
       }
@@ -1000,24 +1014,15 @@ async function loadEmployees(filters = {}, preservePage = false) {
       await renderEmployeeTable();
       await updateTotalEmployees();
 
-      // 🆕 Show filter status if filters are active
       if (Object.keys(filters).length > 0) {
         displayFilterStatus();
       }
-
-      console.log(
-        `Loaded ${data.total || employees.length} employees`,
-        filters,
-      );
     } else {
       showAlert(data.message || "Error loading employees", "error");
     }
   } catch (error) {
     console.error("Error loading employees:", error);
-    showAlert(
-      "Failed to load employees. Please check your connection.",
-      "error",
-    );
+    showAlert("Failed to load employees. Please check your connection.", "error");
   } finally {
     showLoading(false);
   }

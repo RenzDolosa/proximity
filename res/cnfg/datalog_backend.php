@@ -127,9 +127,17 @@ class EmployeeManager
       $params[':position'] = '%' . $filters['position'] . '%';
     }
 
+    if (!empty($filters['position_none'])) {
+      $query .= " AND (position IS NULL OR TRIM(position) = '' OR LOWER(TRIM(position)) = 'none')";
+    }
+
     if (!empty($filters['brand'])) {
-      $query .= " AND brand = :brand";
-      $params[':brand'] = $filters['brand'];
+      $query .= " AND brand LIKE :brand";
+      $params[':brand'] = '%' . $filters['brand'] . '%';
+    }
+
+    if (!empty($filters['brand_none'])) {
+      $query .= " AND (brand IS NULL OR TRIM(brand) = '' OR LOWER(TRIM(brand)) = 'none')";
     }
 
     if (!empty($filters['status'])) {
@@ -140,6 +148,15 @@ class EmployeeManager
     if (!empty($filters['shift'])) {
       $query .= " AND shift = :shift";
       $params[':shift'] = $filters['shift'];
+    }
+
+    if (!empty($filters['violation'])) {
+      $query .= " AND violation LIKE :violation";
+      $params[':violation'] = '%' . $filters['violation'] . '%';
+    }
+
+    if (!empty($filters['violation_none'])) {
+      $query .= " AND (violation IS NULL OR TRIM(violation) = '' OR LOWER(TRIM(violation)) = 'none')";
     }
 
     if (!empty($filters['qr_code'])) {
@@ -1184,14 +1201,29 @@ try {
         if (!empty($_GET['position'])) {
           $filters['position'] = $_GET['position'];
         }
+        if (!empty($_GET['position_none'])) {
+          $filters['position_none'] = '1';
+        }
         if (!empty($_GET['brand'])) {
           $filters['brand'] = $_GET['brand'];
+        }
+        if (!empty($_GET['brand_none'])) {
+          $filters['brand_none'] = '1';
         }
         if (!empty($_GET['status'])) {
           $filters['status'] = $_GET['status'];
         }
         if (!empty($_GET['shift'])) {
           $filters['shift'] = $_GET['shift'];
+        }
+        if (!empty($_GET['violation'])) {
+          $filters['violation'] = $_GET['violation'];
+        }
+        if (!empty($_GET['violation_none'])) {
+          $filters['violation_none'] = '1';
+        }
+        if (!empty($_GET['check_status'])) {
+          $filters['check_status'] = $_GET['check_status'];
         }
         if (!empty($_GET['qr_code'])) {
           $filters['qr_code'] = $_GET['qr_code'];

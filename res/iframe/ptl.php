@@ -39,13 +39,13 @@ require_once '../cnfg/db.php';
     </section>
 
     <section class="stats-grid">
-      <div class="stat-card" onclick="navigateWithLoading('../stat/acct.php');">
+      <div class="stat-card" onclick="window.location.href='../stat/acct.php';">
         <div class="icon">👤</div>
         <h3>Account Info</h3>
         <p>Manage your account settings and personal information</p>
       </div>
 
-      <div class="stat-card" onclick="navigateWithLoading('../stat/emp-db.php');">
+      <div class="stat-card" onclick="window.location.href='../stat/emp-db.php';">
         <div class="icon">📊</div>
         <h3>Insights</h3>
         <p>View your activity statistics and insights</p>
@@ -57,7 +57,7 @@ require_once '../cnfg/db.php';
         <p>Check your proximity code status</p>
       </div>
 
-      <div class="stat-card" onclick="navigateWithLoading('../stat/settings.php');">
+      <div class="stat-card" onclick="window.location.href='../stat/settings.php';">
         <div class="icon">⚙️</div>
         <h3>Settings</h3>
         <p>Configure your application preferences</p>

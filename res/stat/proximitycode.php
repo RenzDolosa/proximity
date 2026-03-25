@@ -1,5 +1,5 @@
 <?php
-// system.php
+// proximitycode.php
 
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
@@ -81,6 +81,14 @@ if ($databaseConnected) {
       <h3 style="padding-bottom: 1rem; cursor: default;">Search & Filter</h3>
       <form id="searchForm">
         <div class="form-row">
+          <div class="form-group">
+            <label for="search_remarks">Remarks</label>
+            <select id="search_remarks" name="remarks">
+              <option value="">All Remarks</option>
+              <option value="Available">Available</option>
+              <option value="Occupied">Occupied</option>
+            </select>
+          </div>
           <div class="form-group">
             <label for="search_date">Date</label>
             <input type="text" id="search_date" name="created_at" placeholder="Search by date...">

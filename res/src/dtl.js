@@ -422,15 +422,28 @@ function debounce(func, wait) {
 function getActiveFilters() {
   const searchForm = document.getElementById("searchForm");
   const filters = {};
-
   if (!searchForm) return filters;
 
   const formData = new FormData(searchForm);
-
   for (let [key, value] of formData.entries()) {
     if (value && value.trim()) {
       filters[key] = value.trim();
     }
+  }
+
+  // Convert special none value so backend can match empty/null position
+  if (filters.position === "__none__") {
+    filters.position = "__none__"; // handled separately in loadEmployees
+  }
+
+  // Convert special none value so backend can match empty/null brand
+  if (filters.brand === "__none__") {
+    filters.brand = "__none__"; // handled separately in loadEmployees
+  }
+
+  // Convert special none value so backend can match empty/null violation
+  if (filters.violation === "__none__") {
+    filters.violation = "__none__"; // handled separately in loadEmployees
   }
 
   return filters;
@@ -1123,6 +1136,111 @@ async function deleteFilteredEmployees() {
   }
 }
 
+// Build position filter dropdown from actual employee data
+function populatePositionFilter(employeeList) {
+  const select = document.getElementById("search_position");
+  if (!select) return;
+
+  const current = select.value;
+
+  // Collect unique, non-empty position strings
+  const positionSrt = new Set();
+  for (const emp of employeeList) {
+    const raw = (emp.position || "").trim();
+    if (raw && raw.toLowerCase() !== "none") {
+      positionSrt.add(raw);
+    }
+  }
+
+  select.innerHTML = '<option value="">All</option>';
+  select.innerHTML += '<option value="__none__">No Position</option>';
+
+  if (positionSrt.size > 0) {
+    select.innerHTML += "<option disabled>──────────</option>";
+    [...positionSrt].sort().forEach((v) => {
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = v;
+      select.appendChild(opt);
+    });
+  }
+
+  if (current && [...select.options].some((o) => o.value === current)) {
+    select.value = current;
+  }
+}
+
+// Build brand filter dropdown from actual employee data
+function populateBrandFilter(employeeList) {
+  const select = document.getElementById("search_brand");
+  if (!select) return;
+
+  const current = select.value;
+
+  // Collect unique, non-empty brand strings
+  const brandSet = new Set();
+  for (const emp of employeeList) {
+    const raw = (emp.brand || "").trim();
+    if (raw && raw.toLowerCase() !== "none") {
+      brandSet.add(raw);
+    }
+  }
+
+  select.innerHTML = '<option value="">All</option>';
+  select.innerHTML += '<option value="__none__">No Brand</option>';
+
+  if (brandSet.size > 0) {
+    select.innerHTML += "<option disabled>──────────</option>";
+    [...brandSet].sort().forEach((v) => {
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = v;
+      select.appendChild(opt);
+    });
+  }
+
+  if (current && [...select.options].some((o) => o.value === current)) {
+    select.value = current;
+  }
+}
+
+// Build violation filter dropdown from actual employee data
+function populateViolationFilter(employeeList) {
+  const select = document.getElementById("search_violation");
+  if (!select) return;
+
+  // Preserve current selection
+  const current = select.value;
+
+  // Collect unique, non-empty violation strings
+  const violationSet = new Set();
+  for (const emp of employeeList) {
+    const raw = (emp.violation || "").trim();
+    if (raw && raw.toLowerCase() !== "none") {
+      violationSet.add(raw);
+    }
+  }
+
+  // Rebuild options
+  select.innerHTML = '<option value="">All</option>';
+  select.innerHTML += '<option value="__none__">No Violation</option>';
+
+  if (violationSet.size > 0) {
+    select.innerHTML += "<option disabled>──────────</option>";
+    [...violationSet].sort().forEach((v) => {
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = v;
+      select.appendChild(opt);
+    });
+  }
+
+  // Restore selection if still valid
+  if (current && [...select.options].some((o) => o.value === current)) {
+    select.value = current;
+  }
+}
+
 // Load employees with improved error handling
 async function loadEmployees(filters = {}, preservePage = false) {
   try {
@@ -1137,10 +1255,19 @@ async function loadEmployees(filters = {}, preservePage = false) {
     // 🆕 Store the active filters
     activeFilters = filters;
 
-    const params = new URLSearchParams({
-      action: "get", // or 'list' - both work according to your backend
-      ...filters,
-    });
+    const params = new URLSearchParams({ action: "get" });
+
+    for (const [key, value] of Object.entries(filters)) {
+      if (key === "position" && value === "__none__") {
+        params.append("position_none", "1");
+      } else if (key === "brand" && value === "__none__") {
+        params.append("brand_none", "1");
+      } else if (key === "violation" && value === "__none__") {
+        params.append("violation_none", "1");
+      } else {
+        params.append(key, value);
+      }
+    }
 
     const response = await fetch(
       `../cnfg/datalog_backend.php?${params.toString()}`,
@@ -1159,6 +1286,9 @@ async function loadEmployees(filters = {}, preservePage = false) {
 
     if (data.success && Array.isArray(data.data)) {
       employees = data.data;
+      populatePositionFilter(employees);
+      populateBrandFilter(employees);
+      populateViolationFilter(employees);
 
       // Only reset to page 1 if not preserving page and not filtering
       if (!preservePage && Object.keys(filters).length === 0) {

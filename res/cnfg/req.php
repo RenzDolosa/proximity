@@ -58,13 +58,13 @@ if (isset($_POST['portal_password'])) {
   $lastAttempt = $_SESSION[$rateLimitKey . '_time'] ?? 0;
 
   // Reset attempts if more than 5 minutes passed
-  if (time() - $lastAttempt > 300) {
+  if (time() - $lastAttempt > 10) {
     $attempts = 0;
   }
 
   // Check if too many attempts
-  if ($attempts >= 5) {
-    $timeRemaining = 300 - (time() - $lastAttempt);
+  if ($attempts >= 10) {
+    $timeRemaining = 10 - (time() - $lastAttempt);
     if ($timeRemaining > 0) {
       logSystemAction($userId, 'PORTAL_ACCESS_BLOCKED', 'Too many failed attempts');
       $error = "Too many failed attempts. Please try again in " . ceil($timeRemaining / 60) . " minutes.";
@@ -165,7 +165,6 @@ if (!$portalAccessGranted) {
             class="password-field"
             placeholder="Enter portal access password"
             autocomplete="current-password"
-            required
             autofocus
             <?= (isset($attempts) && $attempts >= 5) ? 'disabled' : '' ?>>
           <button type="button" class="password-toggle-btn" id="togglePassword" aria-label="Toggle password visibility">

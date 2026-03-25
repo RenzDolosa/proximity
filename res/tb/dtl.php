@@ -113,11 +113,15 @@ if ($databaseConnected) {
           </div>
           <div class="form-group">
             <label for="search_position">Position</label>
-            <input type="text" id="search_position" name="position" placeholder="Search by position...">
+            <select id="search_position" name="position">
+              <option value="">Default: ALL</option>
+            </select>
           </div>
           <div class="form-group">
             <label for="search_brand">Brand</label>
-            <input type="text" id="search_brand" name="brand" placeholder="Search by brand...">
+            <select id="search_brand" name="brand">
+              <option value="">Default: ALL</option>
+            </select>
           </div>
           <div class="form-group">
             <label for="search_status">Status</label>
@@ -134,6 +138,20 @@ if ($databaseConnected) {
               <option value="Day Shift">Day Shift</option>
               <option value="Night Shift">Night Shift</option>
               <option value="Graveyard Shift">Graveyard Shift</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="search_violation">Violations</label>
+            <select id="search_violation" name="violation">
+              <option value="">All Violations</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="search_in-out">Check Status</label>
+            <select id="search_in-out" name="check_status">
+              <option value="">All Check Status</option>
+              <option value="In">IN</option>
+              <option value="Out">OUT</option>
             </select>
           </div>
           <div class="form-group">

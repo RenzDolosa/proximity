@@ -713,15 +713,15 @@ try {
       case 'list':
         $filters = [];
 
-        // Parse filters from GET parameters
+        // Strip client-only fields that have no DB column
+        unset($filters['remarks']);
+
         if (!empty($_GET['qr_code'])) {
           $filters['qr_code'] = $_GET['qr_code'];
         }
-
         if (!empty($_GET['created_at'])) {
           $filters['created_at'] = $_GET['created_at'];
         }
-
         if (!empty($_GET['updated_at'])) {
           $filters['updated_at'] = $_GET['updated_at'];
         }

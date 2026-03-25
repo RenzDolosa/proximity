@@ -116,6 +116,35 @@ function displayPreview(data) {
     for (let i = 0; i < 6; i++) {
       previewHTML += `<td>${col[i] || ""}</td>`;
     }
+    const fullnameValue = col[1] || "";
+    const fullnameDisplay =
+      fullnameValue !== "" && fullnameValue !== "None"
+        ? fullnameValue
+        : '<em style="color: #6c757d;">None</em>';
+    previewHTML = previewHTML.replace(
+      `<td>${fullnameValue}</td>`,
+      `<td>${fullnameDisplay}</td>`,
+    );
+
+    const positionValue = col[1] || "";
+    const positionDisplay =
+      positionValue !== "" && positionValue !== "None"
+        ? positionValue
+        : '<em style="color: #6c757d;">None</em>';
+    previewHTML = previewHTML.replace(
+      `<td>${positionValue}</td>`,
+      `<td>${positionDisplay}</td>`,
+    );
+
+    const brandValue = col[2] || "";
+    const brandDisplay = brandValue
+      ? brandValue
+      : '<em style="color: #6c757d;">None</em>';
+    previewHTML = previewHTML.replace(
+      `<td>${brandValue}</td>`,
+      `<td>${brandDisplay}</td>`,
+    );
+
     const statusValue = col[3] || "";
     const statusDisplay = statusValue
       ? statusValue
@@ -232,6 +261,16 @@ async function handleImportSubmit(e) {
       // Validate required fields
       if (!row[0]) {
         errors.push(`Row ${rowNumber}: Missing required fields (fullname)`);
+        return;
+      }
+
+      if (!row[1]) {
+        errors.push(`Row ${rowNumber}: Missing required fields (position)`);
+        return;
+      }
+
+      if (!row[2]) {
+        errors.push(`Row ${rowNumber}: Missing required fields (brand)`);
         return;
       }
 
