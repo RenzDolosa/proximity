@@ -114,6 +114,7 @@ if (!$portalAccessGranted) {
     <title>Portal Access</title>
     <link rel="icon" href="res/icon/database-icon.png" type="image/png">
     <link rel="stylesheet" href="res/css/req.css">
+    <link rel="stylesheet" href="res/css/sbar.css">
     <link rel="stylesheet" href="res/css/loading.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
@@ -139,9 +140,23 @@ if (!$portalAccessGranted) {
       </div>
     </div>
 
-    <version_compare style="z-index: 1000;">
-      <p id="version"></p>
-    </version_compare>
+    <div class="side-bar" style="top: 0;">
+      <div onclick="window.location.href='proximity.php';" class="side-btn">
+        <div class="s-header">
+          <h1>Proximity</h1>
+        </div>
+        <div class="s-search-section">
+          <img src="res/icon/nfc-icon.png" alt="NFC Icon">
+          <div>
+            <h3>Live Search</h3>
+            <p>Web pass verifier application</p>
+          </div>
+        </div>
+      </div>
+      <version_compare style="z-index: 1000;">
+        <p id="version"></p>
+      </version_compare>
+    </div>
 
     <div class="access-container">
       <span class="security-icon">🔐</span>

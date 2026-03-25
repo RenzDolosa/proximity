@@ -49,7 +49,7 @@ class Database
   public function __construct($userId)
   {
     $this->userId = $userId;
-    $this->db_name = USER_DB_PREFIX . $userId;
+    $this->db_name = DB_NAME; // USER_DB_PREFIX . $userId;
     $this->host = USER_DB_HOST;
     $this->username = USER_DB_USER;
     $this->password = USER_DB_PASS;

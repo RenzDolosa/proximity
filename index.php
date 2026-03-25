@@ -17,7 +17,7 @@ $success = '';
 
 // Redirect if already logged in
 if (isset($_SESSION['user_id'])) {
-  header('Location: proximity.php');
+  header('Location: portal.php');
   exit;
 }
 
@@ -93,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($errors)) {
         );
 
         // Redirect to dashboard
-        header('Location: proximity.php');
+        header('Location: portal.php');
         exit;
       } else {
         $errors = $result['errors'] ?? ['Invalid username/email or password.'];

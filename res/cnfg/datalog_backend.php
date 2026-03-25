@@ -652,12 +652,10 @@ try {
         if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
           try {
             $new_image = $fileUploader->uploadImage($_FILES['image']);
-
-            // Delete old image if upload successful
-            if ($new_image && $current_employee['image']) {
-              $fileUploader->deleteImage($current_employee['image']);
-            }
-
+            // // Delete old image if upload successful
+            // if ($new_image && $current_employee['image']) {
+            //   $fileUploader->deleteImage($current_employee['image']);
+            // }
             $image_filename = $new_image;
           } catch (Exception $e) {
             $response['message'] = $e->getMessage();
@@ -691,10 +689,10 @@ try {
         $employee = $employeeManager->getEmployee($employee_id);
 
         if ($employee && $employeeManager->deleteEmployee($employee_id)) {
-          // Delete associated image
-          if ($employee['image']) {
-            $fileUploader->deleteImage($employee['image']);
-          }
+          // // Delete associated image
+          // if ($employee['image']) {
+          //   $fileUploader->deleteImage($employee['image']);
+          // }
 
           $response['success'] = true;
           $response['message'] = 'Employee deleted successfully';
@@ -733,13 +731,13 @@ try {
           $deleted_count = $employeeManager->deleteEmployeesByIds($employee_ids);
 
           if ($deleted_count > 0) {
-            // Delete associated images
-            $deleted_images = 0;
-            foreach ($all_employees_to_delete as $employee) {
-              if ($employee['image'] && $fileUploader->deleteImage($employee['image'])) {
-                $deleted_images++;
-              }
-            }
+            // // Delete associated images
+            // $deleted_images = 0;
+            // foreach ($all_employees_to_delete as $employee) {
+            //   if ($employee['image'] && $fileUploader->deleteImage($employee['image'])) {
+            //     $deleted_images++;
+            //   }
+            // }
 
             $db->commit();
 
@@ -750,9 +748,9 @@ try {
             $filterStr = implode(', ', $filterDescriptions) ?: 'All';
 
             $response['success'] = true;
-            $response['message'] = "Deleted $deleted_count employee(s) matching filters: $filterStr. Removed $deleted_images image(s).";
+            $response['message'] = "Deleted $deleted_count employee(s) matching filters: $filterStr";
             $response['deleted_count'] = $deleted_count;
-            $response['deleted_images'] = $deleted_images;
+            // $response['deleted_images'] = $deleted_images;
 
             logSystemAction($database->getCurrentUserId(), 'FILTERED_EMPLOYEES_DELETED', "Deleted $deleted_count employees with filters: $filterStr");
           } else {
