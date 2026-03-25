@@ -166,49 +166,51 @@ if ($databaseConnected) {
         <img src="../icon/nfc-icon.png" alt="Proximity" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
       </form>
       <div class="form-row-btn">
-        <div class="search-btn">
-          <button type="button" class="btn btn-primary" onclick="searchEmployees()"><i class="fas fa-search"></i> Search</button>
-        </div>
-        <div class="clear-btn">
-          <button type="button" class="btn btn-secondary" onclick="clearSearch()"><i class="fas fa-search-minus"></i> Clear</button>
-        </div>
-        <div class="dropdown">
-          <button class="btn add-dropdown" id="exportTrigger" onclick="toggleExportOptions()">
-            <i class="fas fa-file-excel"></i> Export Data
-            <span class="add-arrow">▼</span>
-          </button>
-          <div class="add-options-menu" id="exportOptionsMenu">
-            <button onclick="exportAllData(); hideExportOptions();"><i class="fas fa-download"></i> Export All Data</button>
-            <button onclick="exportFilteredData(); hideExportOptions();"><i class="fas fa-download"></i> Export Filtered Data</button>
-            <button onclick="exportWithImages(); hideExportOptions();"><i class="fas fa-download"></i> Export with Images</button>
-            <button onclick="hideExportOptions();"><i class="fas fa-times"></i> Cancel</button>
+        <div class="form-row">
+          <div class="search-btn">
+            <button type="button" class="btn btn-primary" onclick="searchEmployees()"><i class="fas fa-search"></i> Search</button>
           </div>
+          <div class="clear-btn">
+            <button type="button" class="btn btn-secondary" onclick="clearSearch()"><i class="fas fa-search-minus"></i> Clear</button>
+          </div>
+          <div class="dropdown">
+            <button class="btn add-dropdown" id="exportTrigger" onclick="toggleExportOptions()">
+              <i class="fas fa-file-excel"></i> Export Data
+              <span class="add-arrow">▼</span>
+            </button>
+            <div class="add-options-menu" id="exportOptionsMenu">
+              <button onclick="exportAllData(); hideExportOptions();"><i class="fas fa-download"></i> Export All Data</button>
+              <button onclick="exportFilteredData(); hideExportOptions();"><i class="fas fa-download"></i> Export Filtered Data</button>
+              <button onclick="exportWithImages(); hideExportOptions();"><i class="fas fa-download"></i> Export with Images</button>
+              <button onclick="hideExportOptions();"><i class="fas fa-times"></i> Cancel</button>
+            </div>
+          </div>
+          <div class="delete-all-btn">
+            <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All
+              Data
+            </button>
+          </div>
+          <!-- Auto-update controls -->
+          <div class="auto-update-controls">
+            <label style="margin: 0;">
+              <input type="checkbox" id="autoUpdateToggle" style="width: 20px; cursor: pointer;" checked> Auto-update
+              <span id="autoUpdateStatus" class="auto-update-status active">ON</span>
+              <button onclick="forceRefresh()" style="padding: 2px; border-radius: 5px; cursor: pointer;"><i class="fas fa-refresh"></i> Refresh Now</button>
+            </label>
+            <select id="updateInterval" style="width: 150px; height: 20px; padding: 0; cursor: pointer;">
+              <option value="1000" selected>Every Second</option>
+              <option value="10000">10 seconds</option>
+              <option value="30000">30 seconds</option>
+              <option value="60000">1 minute</option>
+              <option value="300000">5 minutes</option>
+            </select>
+          </div>
+          <div style="position: absolute; top: 0; right: 0; padding: 10px 50px 0px 0px; justify-content: end; pointer-events: none;">
+            <div id="lastUpdateTime"></div>
+            <div id="autoUpdateNotification"></div>
+          </div>
+          <div class="filter-status" id="filter-status"></div>
         </div>
-        <div class="delete-all-btn">
-          <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All
-            Data
-          </button>
-        </div>
-        <!-- Auto-update controls -->
-        <div class="auto-update-controls">
-          <label style="margin: 0;">
-            <input type="checkbox" id="autoUpdateToggle" style="width: 20px; cursor: pointer;" checked> Auto-update
-            <span id="autoUpdateStatus" class="auto-update-status active">ON</span>
-            <button onclick="forceRefresh()" style="padding: 2px; border-radius: 5px; cursor: pointer;"><i class="fas fa-refresh"></i> Refresh Now</button>
-          </label>
-          <select id="updateInterval" style="width: 150px; height: 20px; padding: 0; cursor: pointer;">
-            <option value="1000" selected>Every Second</option>
-            <option value="10000">10 seconds</option>
-            <option value="30000">30 seconds</option>
-            <option value="60000">1 minute</option>
-            <option value="300000">5 minutes</option>
-          </select>
-        </div>
-        <div style="position: absolute; top: 0; right: 0; padding: 10px 50px 0px 0px; justify-content: end; pointer-events: none;">
-          <div id="lastUpdateTime"></div>
-          <div id="autoUpdateNotification"></div>
-        </div>
-        <div class="filter-status" id="filter-status"></div>
       </div>
     </div>
 

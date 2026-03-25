@@ -101,40 +101,42 @@ if ($databaseConnected) {
         <img src="../icon/nfc-icon.png" alt="Proximity" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
       </form>
       <div class="form-row-btn">
-        <div class="search-btn">
-          <button type="button" class="btn btn-primary" onclick="searchEmployees()"><i class="fas fa-search"></i> Search</button>
-        </div>
-        <div class="clear-btn">
-          <button type="button" class="btn btn-secondary" onclick="clearSearch()"><i class="fas fa-search-minus"></i> Clear</button>
-        </div>
-        <div class="dropdown">
-          <button class="btn add-dropdown" id="addTrigger" onclick="toggleAddOptions();">
-            <i class="fas fa-ellipsis-v"></i> Add Proximity
-            <span class="add-arrow">▼</span>
-          </button>
-          <div class="add-options-menu" id="addOptionsMenu">
-            <button onclick="openModal('add'); hideAddOptions();"><i class="fas fa-plus"></i> Add Proximity Code</button>
-            <button onclick="openImportModal(); hideAddOptions();"><i class="fas fa-upload"></i> Import Proximity Code</button>
-            <button onclick="hideAddOptions();"><i class="fas fa-times"></i> Cancel</button>
+        <div class="form-row">
+          <div class="search-btn">
+            <button type="button" class="btn btn-primary" onclick="searchEmployees()"><i class="fas fa-search"></i> Search</button>
           </div>
-        </div>
-        <div class="dropdown">
-          <button class="btn add-dropdown" id="exportTrigger" onclick="toggleExportOptions()">
-            <i class="fas fa-file-excel"></i> Export Data
-            <span class="add-arrow">▼</span>
-          </button>
-          <div class="add-options-menu" id="exportOptionsMenu">
-            <button onclick="exportAllCodes(); hideExportOptions();"><i class="fas fa-download"></i> Export All Data</button>
-            <button onclick="exportFilteredCodes(); hideExportOptions();"><i class="fas fa-download"></i> Export Filtered Data</button>
-            <button onclick="exportWithImages(); hideExportOptions();"><i class="fas fa-download"></i> Export with Images</button>
-            <button onclick="hideExportOptions();"><i class="fas fa-times"></i> Cancel</button>
+          <div class="clear-btn">
+            <button type="button" class="btn btn-secondary" onclick="clearSearch()"><i class="fas fa-search-minus"></i> Clear</button>
           </div>
+          <div class="dropdown">
+            <button class="btn add-dropdown" id="addTrigger" onclick="toggleAddOptions();">
+              <i class="fas fa-ellipsis-v"></i> Add Proximity
+              <span class="add-arrow">▼</span>
+            </button>
+            <div class="add-options-menu" id="addOptionsMenu">
+              <button onclick="openModal('add'); hideAddOptions();"><i class="fas fa-plus"></i> Add Proximity Code</button>
+              <button onclick="openImportModal(); hideAddOptions();"><i class="fas fa-upload"></i> Import Proximity Code</button>
+              <button onclick="hideAddOptions();"><i class="fas fa-times"></i> Cancel</button>
+            </div>
+          </div>
+          <div class="dropdown">
+            <button class="btn add-dropdown" id="exportTrigger" onclick="toggleExportOptions()">
+              <i class="fas fa-file-excel"></i> Export Data
+              <span class="add-arrow">▼</span>
+            </button>
+            <div class="add-options-menu" id="exportOptionsMenu">
+              <button onclick="exportAllCodes(); hideExportOptions();"><i class="fas fa-download"></i> Export All Data</button>
+              <button onclick="exportFilteredCodes(); hideExportOptions();"><i class="fas fa-download"></i> Export Filtered Data</button>
+              <button onclick="exportWithImages(); hideExportOptions();"><i class="fas fa-download"></i> Export with Images</button>
+              <button onclick="hideExportOptions();"><i class="fas fa-times"></i> Cancel</button>
+            </div>
+          </div>
+          <div class="delete-all-btn">
+            <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All
+              Data</button>
+          </div>
+          <div class="filter-status" id="filter-status"></div>
         </div>
-        <div class="delete-all-btn">
-          <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All
-            Data</button>
-        </div>
-        <div class="filter-status" id="filter-status"></div>
       </div>
     </div>
 
