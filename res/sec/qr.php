@@ -32,6 +32,18 @@ $email = $_SESSION['email'] ?? '';
 <body>
 
   <div class="side-bar" style="top: 0;">
+    <div onclick="window.location.href='../../portal.php';" class="side-btn">
+      <div class="s-header">
+        <h1>Portal</h1>
+      </div>
+      <div class="s-search-section">
+        <img src="../icon/database-icon.png" alt="NFC Icon">
+        <div>
+          <h3>Proximity Database</h3>
+          <p>Employee Management Portal</p>
+        </div>
+      </div>
+    </div>
     <div onclick="window.location.href='qr.php';" class="side-btn">
       <div class="s-header">
         <h1>Proximity</h1>
