@@ -140,6 +140,7 @@ function displayFilterStatus() {
       font-size: 14px;
       color: #1565c0;
       display: inline-flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
     `;

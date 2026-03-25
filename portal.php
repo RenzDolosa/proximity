@@ -45,42 +45,44 @@ require_once 'res/cnfg/req.php';
 </head>
 
 <body>
-  <!-- Security indicator -->
-  <div class="security-badge"><i class="fas fa-shield-alt"></i> Secured</div>
+  <main>
+    <!-- Security indicator -->
+    <div class="security-badge"><i class="fas fa-shield-alt"></i> Secured</div>
 
-  <div class="side-bar" style="top: 64px;">
-    <div onclick="window.location.href='qr-pass.php';" class="side-btn">
-      <div class="s-header">
-        <h1>Proximity</h1>
-      </div>
-      <div class="s-search-section">
-        <img src="res/icon/nfc-icon.png" alt="NFC Icon">
-        <div>
-          <h3>Live Search</h3>
-          <p>Web pass verifier application</p>
+    <div class="side-bar" style="top: 64px;">
+      <div onclick="window.location.href='proximity.php';" class="side-btn">
+        <div class="s-header">
+          <h1>Proximity</h1>
+        </div>
+        <div class="s-search-section">
+          <img src="res/icon/nfc-icon.png" alt="NFC Icon">
+          <div>
+            <h3>Live Search</h3>
+            <p>Web pass verifier application</p>
+          </div>
         </div>
       </div>
+      <version_compare style="z-index: 1000;">
+        <p id="version"></p>
+      </version_compare>
     </div>
-    <version_compare style="z-index: 1000;">
-      <p id="version"></p>
-    </version_compare>
-  </div>
 
-  <header class="header">
-    <div class="myDatabase-logo">
-      <a href="portal.php" class="link">
-        <img src="res/logo/mysql.png" alt="MySql Logo" class="header-logo">
-        <h1 style="padding-left: 50px; margin: 0;"><?= htmlspecialchars($myDatabase ?? 'My Database'); ?></h1>
-      </a>
-    </div>
-    <div class="user-info">
-      <span>Welcome, <?= htmlspecialchars($username ?? 'User'); ?> <i class="fas fa-exclamation"></i></span>
-      <a href="?logout=1" class="logout-btn">Logout ▼</a>
-    </div>
-  </header>
+    <header class="header">
+      <div class="myDatabase-logo">
+        <a href="portal.php" class="link">
+          <img src="res/logo/mysql.png" alt="MySql Logo" class="header-logo">
+          <h1 style="padding-left: 50px; margin: 0;"><?= htmlspecialchars($myDatabase ?? 'My Database'); ?></h1>
+        </a>
+      </div>
+      <div class="user-info">
+        <span>Welcome, <?= htmlspecialchars($username ?? 'User'); ?> <i class="fas fa-exclamation"></i></span>
+        <a href="?logout=1" class="logout-btn">Logout ▼</a>
+      </div>
+    </header>
 
-  <main class="main-content">
-    <iframe src="res/iframe/ptl.php" class="frames" frameborder="0" allowfullscreen="allowfullscreen"></iframe>
+    <portal class="main-content">
+      <iframe src="res/iframe/ptl.php" class="frames" frameborder="0" allowfullscreen="allowfullscreen"></iframe>
+    </portal>
   </main>
 
   <script src="res/src/req.js"></script>

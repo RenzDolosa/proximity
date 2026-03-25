@@ -32,7 +32,7 @@ $email = $_SESSION['email'] ?? '';
 
 <body>
 
-  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close">
+  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.location='../iframe/ptl.php'">
     <i class="fas fa-times"></i>
   </div>
 
@@ -55,7 +55,6 @@ $email = $_SESSION['email'] ?? '';
   <audio id="inactiveSound" src="../sounds/inactive.mp3" preload="auto"></audio>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
   <script src="../src/st.js"></script>
-  <script src="../src/btn.js"></script>
   <script src="../src/req.js"></script>
   <script src="../src/loading.js"></script>
 </body>

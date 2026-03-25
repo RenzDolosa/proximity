@@ -109,13 +109,10 @@
 }
 
 .form-row-btn {
-  display: flex;
+  display: inline-flex;
   gap: 1rem;
   padding-bottom: 1rem;
   flex-wrap: wrap;
 }
 
-.form-row-btn .btn {
-  width: auto;
-}
 /*<--*/

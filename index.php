@@ -17,7 +17,7 @@ $success = '';
 
 // Redirect if already logged in
 if (isset($_SESSION['user_id'])) {
-  header('Location: qr-pass.php');
+  header('Location: proximity.php');
   exit;
 }
 
@@ -93,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($errors)) {
         );
 
         // Redirect to dashboard
-        header('Location: qr-pass.php');
+        header('Location: proximity.php');
         exit;
       } else {
         $errors = $result['errors'] ?? ['Invalid username/email or password.'];
