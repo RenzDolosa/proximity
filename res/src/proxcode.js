@@ -493,11 +493,11 @@ async function renderEmployeeTable() {
 
       if (matchedEmployeeData && matchedEmployeeData.image) {
         // Use image from manpower_backend if QR matches
-        imageUrl = `../../uploads/user_${userId}/${matchedEmployeeData.image}`;
+        imageUrl = `../../uploads/user/${matchedEmployeeData.image}`; // imageUrl = `../../uploads/user_${userId}/${matchedEmployeeData.image}`;
         displayName = matchedEmployeeData.fullname || employee.qr_code;
       } else if (employee.image) {
         // Fallback to proxcode's own image
-        imageUrl = `../../uploads/user_${userId}/${employee.image}`;
+        imageUrl = `../../uploads/user/${employee.image}`; // imageUrl = `../../uploads/user_${userId}/${employee.image}`;
       }
 
       // Generate initials for placeholder

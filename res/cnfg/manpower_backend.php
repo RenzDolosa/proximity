@@ -364,7 +364,7 @@ class FileUploader
   public function __construct($userId = null)
   {
     $this->userId = $userId ?? $_SESSION['user_id'] ?? 'default';
-    $this->upload_dir = '../../uploads/user_' . $this->userId . '/';
+    $this->upload_dir = '../../uploads/user/'; // _' . $this->userId . '/';
 
     if (!file_exists($this->upload_dir)) {
       mkdir($this->upload_dir, 0777, true);

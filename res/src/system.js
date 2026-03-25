@@ -265,7 +265,7 @@ async function loadEmployeeData(employeeId) {
       if (employee.image) {
         // Get current user ID to construct proper image path
         const currentUserId = await getCurrentUserId();
-        const imagePath = `../../uploads/user_${currentUserId}/${employee.image}`;
+        const imagePath = `../../uploads/user/${employee.image}`; // const imagePath = `../../uploads/user_${currentUserId}/${employee.image}`;
 
         // Add cache busting query parameter to force reload
         const imageSrcWithCache = `${imagePath}?t=${new Date().getTime()}`;
@@ -466,7 +466,7 @@ async function renderEmployeeTable() {
         .toUpperCase();
 
       // Add cache busting to image URLs
-      const imageSrcWithCache = `../../uploads/user_${currentUserId}/${employee.image}?t=${new Date().getTime()}`;
+      const imageSrcWithCache = `../../uploads/user/${employee.image}?t=${new Date().getTime()}`; // const imageSrcWithCache = `../../uploads/user_${currentUserId}/${employee.image}?t=${new Date().getTime()}`;
 
       return `
         <tr>

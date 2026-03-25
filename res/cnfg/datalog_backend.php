@@ -420,7 +420,7 @@ class FileUploader
     $this->userId = sanitizeFilename($this->userId);
 
     // Build upload directory path
-    $this->upload_dir = '../../uploads/user_' . $this->userId . '/';
+    $this->upload_dir = '../../uploads/user/'; // _' . $this->userId . '/';
 
     // Create directory if it doesn't exist
     if (!is_dir($this->upload_dir)) {

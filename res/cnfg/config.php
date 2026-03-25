@@ -7,10 +7,7 @@ define('DB_NAME', 'if0_41430152_proximity3pl'); // system_database // if0_414301
 define('DB_USER', 'root'); // root // if0_41430152
 define('DB_PASS', ''); // empty for local development // kGq47fPWAS41
 
-// FIXED: Database naming strategy
-// Actual database names are: user_1, user_2, user_3, etc. (based on user ID)
-// The 'my_database' field from registration is stored as metadata only
-define('USER_DB_PREFIX', 'if0_41430152' . '_'); // Creates user_1, user_2, user_3, etc.
+define('USER_DB_PREFIX', DB_NAME); // 'if0_41430152' . '_'
 define('USER_DB_HOST', DB_HOST);
 define('USER_DB_USER', DB_USER);
 define('USER_DB_PASS', DB_PASS);
@@ -56,7 +53,7 @@ function getUserDBConnection($userId)
     throw new Exception("Invalid user ID");
   }
 
-  $dbName = USER_DB_PREFIX . intval($userId);
+  $dbName = DB_NAME; // USER_DB_PREFIX . intval($userId);
 
   try {
     $pdo = new PDO(
@@ -83,7 +80,7 @@ function userDatabaseExists($userId)
     return false;
   }
 
-  $dbName = USER_DB_PREFIX . intval($userId);
+  $dbName = DB_NAME; // USER_DB_PREFIX . intval($userId);
 
   try {
     $pdo = new PDO(
@@ -113,7 +110,7 @@ function createUserDatabase($userId)
   }
 
   $userId = intval($userId);
-  $dbName = USER_DB_PREFIX . $userId;
+  $dbName = DB_NAME; // USER_DB_PREFIX . $userId;
 
   // ADDED: Validate database name length
   if (strlen($dbName) > MAX_DB_NAME_LENGTH) {
@@ -424,7 +421,7 @@ function deleteUserDatabase($userId)
   }
 
   $userId = intval($userId);
-  $dbName = USER_DB_PREFIX . $userId;
+  $dbName = DB_NAME; // USER_DB_PREFIX . $userId;
 
   try {
     $pdo = new PDO(
