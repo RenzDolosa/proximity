@@ -1,4 +1,5 @@
 -- Database Schema for 3PL Manpower Login System
+-- DROP DATABASE if0_41430152_proximity3pl;
 CREATE DATABASE IF NOT EXISTS `if0_41430152_proximity3pl`; -- system_database
 
 USE `if0_41430152_proximity3pl`; -- system_database

@@ -1136,7 +1136,7 @@ async function handleFormSubmit(e) {
     const employeeId = document.getElementById("employee_id").value;
 
     if (!fullname) {
-      showAlert("Full name is required", "error");
+      showAlert("Fullname is required", "error");
       return;
     }
 

@@ -95,7 +95,7 @@ if ($databaseConnected) {
       <form id="searchForm">
         <div class="form-row">
           <div class="form-group">
-            <label for="search_fullname">Full Name</label>
+            <label for="search_fullname">Fullname</label>
             <input type="text" id="search_fullname" name="fullname" placeholder="Search by name...">
           </div>
           <div class="form-group">
@@ -213,7 +213,7 @@ if ($databaseConnected) {
         <thead>
           <tr>
             <th>SN</th>
-            <th>Full Name</th>
+            <th>Fullname</th>
             <th>Position</th>
             <th>Brand</th>
             <th>Status</th>
@@ -254,7 +254,7 @@ if ($databaseConnected) {
         <input type="hidden" id="employee_id" name="id">
         <div class="form-row">
           <div class="form-group">
-            <label for="fullname">Full Name *</label>
+            <label for="fullname">Fullname *</label>
             <input type="text" id="fullname" name="fullname">
           </div>
           <div class="form-group">
@@ -415,7 +415,7 @@ if ($databaseConnected) {
         <h4>File Format Requirements:</h4>
         <p>Your file should have the following columns in this order:</p>
         <ul>
-          <li><strong>fullname</strong> - Employee's full name (required)</li>
+          <li><strong>fullname</strong> - Employee's fullname (required)</li>
           <li><strong>position</strong> - Job position</li>
           <li><strong>brand</strong> - Brand/Department</li>
           <li><strong>status</strong> - Active or Inactive (default: Active)</li>
