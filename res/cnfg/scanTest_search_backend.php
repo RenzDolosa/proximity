@@ -39,17 +39,17 @@ $currentUserId = $_SESSION['user_id'];
 // User Database configuration - connects to current user's database
 class Database
 {
-  private $host = 'localhost';
-  private $db_name = '';
-  private $username = 'root';
-  private $password = '';
+  private $host = DB_HOST;
+  private $db_name = USER_DB_PREFIX;
+  private $username = DB_USER;
+  private $password = DB_PASS;
   private $conn;
   private $userId;
 
   public function __construct($userId)
   {
     $this->userId = $userId;
-    $this->db_name = USER_DB_PREFIX . $userId;
+    $this->db_name = USER_DB_PREFIX; // USER_DB_PREFIX . $userId;
     $this->host = USER_DB_HOST;
     $this->username = USER_DB_USER;
     $this->password = USER_DB_PASS;

@@ -40,7 +40,7 @@ $currentUserId = $_SESSION['user_id'];
 class Database
 {
   private $host = DB_HOST;
-  private $db_name = DB_NAME;
+  private $db_name = USER_DB_PREFIX;
   private $username = DB_USER;
   private $password = DB_PASS;
   private $conn;
@@ -49,7 +49,7 @@ class Database
   public function __construct($userId)
   {
     $this->userId = $userId;
-    $this->db_name = DB_NAME; // USER_DB_PREFIX . $userId;
+    $this->db_name = USER_DB_PREFIX; // USER_DB_PREFIX . $userId;
     $this->host = USER_DB_HOST;
     $this->username = USER_DB_USER;
     $this->password = USER_DB_PASS;
