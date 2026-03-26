@@ -46,42 +46,32 @@ body {
 }
 
 .header h1 {
-  font-size: 1.8rem;
+  font-size: clamp(1.1rem, 3vw, 1.8rem);
   font-weight: 600;
-  /*gradiant text !-->*/
   background: linear-gradient(270deg, #ffffff, #4ecdc4, #45b7d1, #96ceb4);
   background-size: 400% 400%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   animation: gradientShift 4s ease infinite;
-  /*<--*/
 }
 
 .user-info {
   display: flex;
   align-items: center;
   gap: 1rem;
-  /*gradiant text !-->*/
   background: linear-gradient(270deg, #ffffff, #4ecdc4, #45b7d1, #96ceb4);
   background-size: 400% 400%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   animation: gradientShift 4s ease infinite;
-  /*<--*/
 }
 
 @keyframes gradientShift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 /*<--*/
 
@@ -89,21 +79,27 @@ body {
   position: relative;
   margin: 0 auto;
   padding: 1rem 2rem;
-  z-index: 1;
-  padding-bottom: 60px;
-  isolation: isolate;
+  padding-bottom: 80px;
+  /* space below the fixed close button if present */
 }
 
 .controls {
-  position: relative;
+  position: sticky;
+  top: 0;           /* sticks to very top when no header; adjust if a header exists */
+  z-index: 200;
   background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%);
-  padding: 1.5rem;
+  padding: 1rem 1.5rem;
   border-radius: 10px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.25);
   margin-bottom: 1rem;
+  transition: box-shadow 0.3s ease;
   /* animation: slideInUp 0.8s ease-out; */
-  transition: all 0.3s ease;
-  isolation: isolate;
+}
+
+.controls h3 {
+  padding-bottom: 0.75rem;
+  cursor: default;
+  font-size: clamp(0.9rem, 2vw, 1rem);
 }
 
 /*Employee Recorder CSS !-->*/

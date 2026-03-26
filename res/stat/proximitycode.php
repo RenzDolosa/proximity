@@ -312,6 +312,7 @@ if ($databaseConnected) {
   <!-- Add XLSX library for Excel file support -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="../src/proxcode.js"></script>
+  <script src="../src/btn.js"></script>
   <script src="../src/ipc.js"></script>
   <script src="../src/eas.js"></script>
   <script src="../src/opt-btn.js"></script>

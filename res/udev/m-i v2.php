@@ -403,7 +403,7 @@ $username = $username ?? 'Unknown User';
 
 <body>
 
-  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close">
+  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.location='../iframe/ptl.php'">
     <i class="fas fa-times"></i>
   </div>
 

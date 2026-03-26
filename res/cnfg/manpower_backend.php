@@ -1,6 +1,5 @@
 <?php
 // manpower_backend.php - FIXED VERSION WITH FILTERED DELETE SUPPORT
-// KEY CHANGES: Image IDs persistent + Delete filtered employees functionality
 
 require_once 'config.php';
 

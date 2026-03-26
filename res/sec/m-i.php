@@ -123,6 +123,7 @@ try {
   <audio id="noResultSound" src="../sounds/noResultsFound.mp3" preload="auto"></audio>
   <audio id="warningSound" src="../sounds/ohh-ow.mp3" preload="auto"></audio>
   <audio id="inactiveSound" src="../sounds/inactive.mp3" preload="auto"></audio>
+  <script src="../src/btn.js"></script>
   <script src="../src/req.js"></script>
   <script src="../src/ver.js"></script>
   <script>

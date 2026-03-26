@@ -310,6 +310,7 @@ if ($databaseConnected) {
   <!-- Add XLSX library for Excel file support -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="../src/dtl.js"></script>
+  <script src="../src/btn.js"></script>
   <script src="../src/i-dtl.js"></script>
   <script src="../src/ea-dtl.js"></script>
   <script src="../src/opt-btn.js"></script>

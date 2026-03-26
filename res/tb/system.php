@@ -472,6 +472,7 @@ if ($databaseConnected) {
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="../src/system.js"></script>
   <script src="../src/system-camera.js"></script>
+  <script src="../src/btn.js"></script>
   <script src="../src/is.js"></script>
   <script src="../src/eas.js"></script>
   <script src="../src/opt-btn.js"></script>

@@ -253,13 +253,16 @@ function createUserDatabase($userId)
 
         CREATE TABLE
           IF NOT EXISTS user_audio_settings (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            success_audio_path VARCHAR(255),
-            not_found_audio_path VARCHAR(255),
-            inactive_audio_path VARCHAR(255),
-            violations_audio_path VARCHAR(255),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            user_id INT UNSIGNED NOT NULL,
+            success_audio_path VARCHAR(512) DEFAULT NULL,
+            not_found_audio_path VARCHAR(512) DEFAULT NULL,
+            inactive_audio_path VARCHAR(512) DEFAULT NULL,
+            violations_audio_path VARCHAR(512) DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            PRIMARY KEY (id)
+            UNIQUE KEY uq_user_id (user_id)
           ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
     ";
 
@@ -394,13 +397,16 @@ function ensureUserTablesExist($userId)
 
         CREATE TABLE
           IF NOT EXISTS user_audio_settings (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            success_audio_path VARCHAR(255),
-            not_found_audio_path VARCHAR(255),
-            inactive_audio_path VARCHAR(255),
-            violations_audio_path VARCHAR(255),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            user_id INT UNSIGNED NOT NULL,
+            success_audio_path VARCHAR(512) DEFAULT NULL,
+            not_found_audio_path VARCHAR(512) DEFAULT NULL,
+            inactive_audio_path VARCHAR(512) DEFAULT NULL,
+            violations_audio_path VARCHAR(512) DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            PRIMARY KEY (id)
+            UNIQUE KEY uq_user_id (user_id)
           ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
     ";
 

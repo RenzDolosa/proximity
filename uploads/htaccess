@@ -1,0 +1,10 @@
+# Disable directory listing
+Options -Indexes
+
+# Block execution of server-side scripts
+Require all denied
+
+# Optional: Only allow safe file types (whitelist approach - more secure)
+<FilesMatch "(?i)\.(jpg|jpeg|png|gif|webp|pdf|txt|zip)$">
+  Require all granted
+</FilesMatch>

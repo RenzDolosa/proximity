@@ -308,6 +308,7 @@ try {
     </section>
   </main>
 
+  <script src="../src/btn.js"></script>
   <script src="../src/acct.js"></script>
   <script src="../src/req.js"></script>
 </body>

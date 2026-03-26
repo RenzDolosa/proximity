@@ -457,7 +457,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $databaseConnected) {
     <p id="version"></p>
   </version_compare>
 
-  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close">
+  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.location='../iframe/ptl.php'">
     <i class="fas fa-times"></i>
   </div>
 

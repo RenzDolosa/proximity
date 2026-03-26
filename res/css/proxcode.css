@@ -46,53 +46,41 @@ body {
 }
 
 .header h1 {
-  font-size: 1.8rem;
+  font-size: clamp(1.1rem, 3vw, 1.8rem);
   font-weight: 600;
-  /*gradiant text !-->*/
   background: linear-gradient(270deg, #ffffff, #4ecdc4, #45b7d1, #96ceb4);
   background-size: 400% 400%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   animation: gradientShift 4s ease infinite;
-  /*<--*/
 }
 
 .user-info {
   display: flex;
   align-items: center;
   gap: 1rem;
-  /*gradiant text !-->*/
   background: linear-gradient(270deg, #ffffff, #4ecdc4, #45b7d1, #96ceb4);
   background-size: 400% 400%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   animation: gradientShift 4s ease infinite;
-  /*<--*/
 }
 
 @keyframes gradientShift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 /*<--*/
 
 .container {
   position: relative;
   margin: 0 auto;
-  width: 1200px;
   padding: 1rem 2rem;
-  z-index: 1;
-  padding-bottom: 60px;
-  isolation: isolate;
+  padding-bottom: 80px;
+  /* space below the fixed close button if present */
 }
 
 .controls {

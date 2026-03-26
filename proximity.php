@@ -27,6 +27,9 @@ require_once 'res/cnfg/db.php';
     <iframe src="res/sec/qr.php" class="sec-frames" frameborder="0" allowfullscreen="allowfullscreen"></iframe>
   </main>
 
+  <div id="portalButton"></div>
+
+  <script src="res/src/btn.js"></script>
   <script src="res/src/req.js"></script>
 </body>
 
