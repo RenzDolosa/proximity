@@ -8,6 +8,38 @@ $user = getCurrentUser();
 $message = '';
 $messageType = '';
 
+try {
+  $userDb = getUserDBConnection($userId);
+  $databaseConnected = true;
+  $requiredTables = ['employees', 'code', 'employee_access_log', 'check_in_out'];
+  $missingTables = [];
+
+  if ($databaseConnected) {
+    try {
+      foreach ($requiredTables as $table) {
+        $stmt = $userDb->prepare("
+        SELECT COUNT(*) FROM information_schema.TABLES 
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+      ");
+        $stmt->execute([$table]);
+        if ((int)$stmt->fetchColumn() === 0) {
+          $missingTables[] = $table;
+        }
+      }
+
+      if (!empty($missingTables)) {
+        $databaseConnected = false;
+      }
+    } catch (PDOException $e) {
+      $databaseConnected = false;
+      $dbError = "Error checking tables: " . $e->getMessage();
+    }
+  }
+} catch (Exception $e) {
+  $databaseConnected = false;
+  $dbError = $e->getMessage();
+}
+
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   if (isset($_POST['update_profile'])) {
@@ -228,7 +260,15 @@ try {
         <div class="database-info">
           <img src="../icon/database-icon.png" alt="MySql Logo" class="database-logo">
           <p>Connected to your personal database:</p>
-          <div class="database-name"><?php echo htmlspecialchars($user['my_database']); ?></div>
+          <div class="database-name">
+            <?php if ($databaseConnected): ?>
+              <span style="color: #28a745;"><?php echo htmlspecialchars($myDatabase); ?></span>
+            <?php else: ?>
+              <span style="color: #dc3545;"><?php echo htmlspecialchars($myDatabase); ?></span>
+              <?php if (!empty($missingTables)): ?>
+              <?php endif; ?>
+            <?php endif; ?>
+          </div>
         </div>
 
         <div class="info-grid">
@@ -249,7 +289,7 @@ try {
           <div class="info-item">
             <div class="info-label">Last Login</div>
             <div class="info-value">
-              <?php echo $accountInfo['last_login'] ? date('F j, Y g:i A', strtotime($accountInfo['last_login'])) : 'N/A'; ?>
+              <?php echo $accountInfo['last_login'] ? date('F j, Y g:i A', strtotime($accountInfo['last_login'])) : 'Network error. Please try again.'; ?>
             </div>
           </div>
         </div>

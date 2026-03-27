@@ -96,7 +96,7 @@ function createDatabase()
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
       INSERT INTO `users` (`id`, `username`, `email`, `password`, `first_name`, `last_name`, `phone`, `my_database`, `created_at`, `updated_at`, `last_login`) VALUES
-      (1, 'Admin', 'administrator@gmail.com', '$2y$10$/nqdViJv2DWyfjHhfS8ZDOPT.6QwxO3DWK1ocCwDFPUYvEE20Lkga', 'Renz', 'Admin', 09196398247, 'AdminServer', NOW(), NOW(), NULL);
+      (1, 'Admin', 'administrator@gmail.com', '$2y$10$/nqdViJv2DWyfjHhfS8ZDOPT.6QwxO3DWK1ocCwDFPUYvEE20Lkga', 'Renz', 'Admin', '09196398247', 'AdminServer', NOW(), NOW(), NULL);
 
       ALTER TABLE `users`
         MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;

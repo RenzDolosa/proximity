@@ -25,6 +25,30 @@ $recentLogs = [];
 try {
   $userDb = getUserDBConnection($userId);
   $databaseConnected = true;
+  $requiredTables = ['employees', 'code', 'employee_access_log', 'check_in_out'];
+  $missingTables = [];
+
+  if ($databaseConnected) {
+    try {
+      foreach ($requiredTables as $table) {
+        $stmt = $userDb->prepare("
+        SELECT COUNT(*) FROM information_schema.TABLES 
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+      ");
+        $stmt->execute([$table]);
+        if ((int)$stmt->fetchColumn() === 0) {
+          $missingTables[] = $table;
+        }
+      }
+
+      if (!empty($missingTables)) {
+        $databaseConnected = false;
+      }
+    } catch (PDOException $e) {
+      $databaseConnected = false;
+      $dbError = "Error checking tables: " . $e->getMessage();
+    }
+  }
 } catch (Exception $e) {
   $databaseConnected = false;
   $dbError = $e->getMessage();
@@ -134,10 +158,21 @@ if ($databaseConnected && $employeeManager) {
     </section>
 
     <?php if (!$databaseConnected): ?>
-      <div class="alert alert-error">
+      <div class="alert alert-error" id="db-error-alert">
         <strong>Database Connection Error:</strong>
         <?php echo htmlspecialchars($dbError ?? 'Could not connect to user database'); ?>
       </div>
+
+      <script>
+        setTimeout(function() {
+          const alert = document.getElementById('db-error-alert');
+          if (alert) {
+            alert.style.transition = 'opacity 0.5s ease';
+            alert.style.opacity = '0';
+            setTimeout(() => alert.remove(), 500);
+          }
+        }, 3000);
+      </script>
     <?php endif; ?>
 
     <!-- Employee Statistics -->
@@ -204,7 +239,7 @@ if ($databaseConnected && $employeeManager) {
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #17a2b8, #6f42c1);">
-          <img src="../icon/nfc-icon.png" style="width: 32px; height: 32px; z-index: 1000; filter: invert(1);" >
+          <img src="../icon/nfc-icon.png" style="width: 32px; height: 32px; z-index: 1000; filter: invert(1);">
         </div>
         <div class="stat-number"><?php echo number_format($stats['today_attendance']); ?></div>
         <div class="stat-label">Scanned Today</div>
@@ -224,7 +259,15 @@ if ($databaseConnected && $employeeManager) {
         <div class="database-info">
           <img src="../icon/database-icon.png" alt="MySql Logo" class="database-logo">
           <p>Connected to your personal database:</p>
-          <div class="database-name"><?php echo htmlspecialchars($myDatabase); ?></div>
+          <div class="database-name">
+            <?php if ($databaseConnected): ?>
+              <span style="color: #28a745;"><?php echo htmlspecialchars($myDatabase); ?></span>
+            <?php else: ?>
+              <span style="color: #dc3545;"><?php echo htmlspecialchars($myDatabase); ?></span>
+              <?php if (!empty($missingTables)): ?>
+              <?php endif; ?>
+            <?php endif; ?>
+          </div>
         </div>
 
         <div class="info-grid">
@@ -235,6 +278,8 @@ if ($databaseConnected && $employeeManager) {
                 <span style="color: #28a745;">✓ Connected</span>
               <?php else: ?>
                 <span style="color: #dc3545;">✗ Disconnected</span>
+                <?php if (!empty($missingTables)): ?>
+                <?php endif; ?>
               <?php endif; ?>
             </div>
           </div>

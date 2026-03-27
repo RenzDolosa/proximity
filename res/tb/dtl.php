@@ -108,7 +108,7 @@ if ($databaseConnected) {
       <form id="searchForm">
         <div class="form-row">
           <div class="form-group">
-            <label for="search_fullname">Full Name</label>
+            <label for="search_fullname">Fullname</label>
             <input type="text" id="search_fullname" name="fullname" placeholder="Search by name...">
           </div>
           <div class="form-group">
@@ -243,9 +243,9 @@ if ($databaseConnected) {
             <h3 id="today_attendance"><?php echo $stats['today_attendance']; ?></h3>
           </div>
           <div style="display: flex; gap: 10px; align-items: center;"><i class="fas fa-calendar-day"></i>
-            <h3 id="today_in" class="check-in">IN : <?php echo $stats['today_in']; ?></h3>
+            <h3 id="today_in" class="check-in">IN : <?php echo $stats['today_in'] ?? 0; ?></h3>
             <p>&</p>
-            <h3 id="today_out" class="check-out">OUT : <?php echo $stats['today_out']; ?></h3>
+            <h3 id="today_out" class="check-out">OUT : <?php echo $stats['today_out'] ?? 0; ?></h3>
           </div>
         </div>
       </div>

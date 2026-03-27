@@ -11,6 +11,38 @@ if (!isLoggedIn()) {
 
 $user = getCurrentUser();
 
+try {
+  $userDb = getUserDBConnection($userId);
+  $databaseConnected = true;
+  $requiredTables = ['employees', 'code', 'employee_access_log', 'check_in_out'];
+  $missingTables = [];
+
+  if ($databaseConnected) {
+    try {
+      foreach ($requiredTables as $table) {
+        $stmt = $userDb->prepare("
+        SELECT COUNT(*) FROM information_schema.TABLES 
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+      ");
+        $stmt->execute([$table]);
+        if ((int)$stmt->fetchColumn() === 0) {
+          $missingTables[] = $table;
+        }
+      }
+
+      if (!empty($missingTables)) {
+        $databaseConnected = false;
+      }
+    } catch (PDOException $e) {
+      $databaseConnected = false;
+      $dbError = "Error checking tables: " . $e->getMessage();
+    }
+  }
+} catch (Exception $e) {
+  $databaseConnected = false;
+  $dbError = $e->getMessage();
+}
+
 // ── Generate / persist delete CSRF token ─────────────────────────────────────
 if (empty($_SESSION['delete_audio_token'])) {
   $_SESSION['delete_audio_token'] = bin2hex(random_bytes(32));
@@ -438,7 +470,15 @@ function audioCard(string $label, string $inputName, string $dbKey, array $curre
         <div class="database-info">
           <img src="../icon/database-icon.png" alt="MySQL Logo" class="database-logo">
           <p>Connected to your personal database:</p>
-          <div class="database-name"><?= htmlspecialchars($user['my_database'] ?? '—', ENT_QUOTES) ?></div>
+          <div class="database-name">
+            <?php if ($databaseConnected): ?>
+              <span style="color: #28a745;"><?php echo htmlspecialchars($myDatabase); ?></span>
+            <?php else: ?>
+              <span style="color: #dc3545;"><?php echo htmlspecialchars($myDatabase); ?></span>
+              <?php if (!empty($missingTables)): ?>
+              <?php endif; ?>
+            <?php endif; ?>
+          </div>
         </div>
         <div class="info-grid">
           <div class="info-item">
@@ -458,7 +498,7 @@ function audioCard(string $label, string $inputName, string $dbKey, array $curre
           <div class="info-item">
             <div class="info-label">Last Login</div>
             <div class="info-value">
-              <?= $accountInfo['last_login'] ? date('F j, Y g:i A', strtotime($accountInfo['last_login'])) : 'N/A' ?>
+              <?= $accountInfo['last_login'] ? date('F j, Y g:i A', strtotime($accountInfo['last_login'])) : 'Network error. Please try again.' ?>
             </div>
           </div>
         </div>

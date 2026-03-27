@@ -637,6 +637,23 @@ async function loadEmployeeData(employeeId) {
 
 async function renderEmployeeError(message = 'Failed to load employee data.') {
   const tbody = document.getElementById('employeeTableBody');
+  const paginationDiv = document.getElementById("pagination");
+  const noDataDiv = document.getElementById("no-data");
+
+  if (!tbody) {
+    console.error("Employee table body not found");
+    return;
+  }
+
+  if (!employees || employees.length === 0) {
+    tbody.innerHTML = "";
+    if (paginationDiv) paginationDiv.style.display = "none";
+    if (noDataDiv) noDataDiv.style.display = "block";
+    return;
+  }
+
+  if (noDataDiv) noDataDiv.style.display = "none";
+
   tbody.innerHTML = `
     <tr>
       <td colspan="13" style="text-align: center; padding: 20px; color: #c0392b;">
@@ -1361,7 +1378,7 @@ async function handleFormSubmit(e) {
     const shift = document.getElementById("shift")?.value;
 
     if (!fullname) {
-      showAlert("Full name is required", "error");
+      showAlert("Fullname is required", "error");
       return;
     }
 

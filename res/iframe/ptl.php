@@ -4,6 +4,38 @@
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
+try {
+  $userDb = getUserDBConnection($userId);
+  $databaseConnected = true;
+  $requiredTables = ['employees', 'code', 'employee_access_log', 'check_in_out'];
+  $missingTables = [];
+
+  if ($databaseConnected) {
+    try {
+      foreach ($requiredTables as $table) {
+        $stmt = $userDb->prepare("
+        SELECT COUNT(*) FROM information_schema.TABLES 
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+      ");
+        $stmt->execute([$table]);
+        if ((int)$stmt->fetchColumn() === 0) {
+          $missingTables[] = $table;
+        }
+      }
+
+      if (!empty($missingTables)) {
+        $databaseConnected = false;
+      }
+    } catch (PDOException $e) {
+      $databaseConnected = false;
+      $dbError = "Error checking tables: " . $e->getMessage();
+    }
+  }
+} catch (Exception $e) {
+  $databaseConnected = false;
+  $dbError = $e->getMessage();
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -34,7 +66,15 @@ require_once '../cnfg/db.php';
   <main class="db-cont">
     <section class="welcome-card" style="height: 160px;">
       <h1><i class="fas fa-server"></i> Management Panel</h1>
-      <p>Welcome to your portal, <?= htmlspecialchars($username ?? 'User'); ?> <i class="fas fa-exclamation"></i> You're successfully logged in.</p>
+      <p>Welcome to your portal, <?= htmlspecialchars($username ?? 'User'); ?> 
+        <?php if ($databaseConnected): ?>
+          <span style="color: #28a745;">You're successfully logged in.</span>
+        <?php else: ?>
+          <span style="color: #dc3545;"><i class="fas fa-exclamation"></i> Network connection error.</span>
+          <?php if (!empty($missingTables)): ?>
+          <?php endif; ?>
+        <?php endif; ?>
+      </p>
       <p><strong>Email:</strong> <?= htmlspecialchars($email ?? ''); ?></p>
     </section>
 

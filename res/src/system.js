@@ -1,4 +1,4 @@
-//system.js - Employee Management System WITH PERSISTENT FILTER CHECKING AND FILTERED DELETE ALL
+//system.js
 
 // Global variables
 let currentAction = "add";
@@ -295,14 +295,16 @@ async function updateActiveEmployees() {
 }
 
 // Add employee to access log
-async function addToLog(employeeId, checkStatus = "IN") {
+async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
   stopCurrentAudio();
+  const button = triggerElement;
+  const originalText = button ? button.innerHTML : "";
 
   try {
-    const button = event.target;
-    const originalText = button.innerHTML;
-    button.innerHTML = "⏳ Added...";
-    button.disabled = true;
+    if (button) {
+      button.innerHTML = "⏳ Adding...";
+      button.disabled = true;
+    }
 
     const employee = employees.find((emp) => emp.id === employeeId);
     if (!employee) throw new Error("Employee not found");
@@ -351,14 +353,33 @@ async function addToLog(employeeId, checkStatus = "IN") {
   } finally {
     setTimeout(() => {
       searchEmployees();
-      button.innerHTML = "⏳ Added...";
-      button.disabled = false;
+      if (button) {
+        button.innerHTML = originalText; // ← restored correctly
+        button.disabled = false;
+      }
     }, 1000);
   }
 }
 
-async function renderEmployeeError(message = 'Failed to load employee data.') {
-  const tbody = document.getElementById('employeeTableBody');
+async function renderEmployeeError(message = "Failed to load employee data.") {
+  const tbody = document.getElementById("employeeTableBody");
+  const paginationDiv = document.getElementById("pagination");
+  const noDataDiv = document.getElementById("no-data");
+
+  if (!tbody) {
+    console.error("Employee table body not found");
+    return;
+  }
+
+  if (!employees || employees.length === 0) {
+    tbody.innerHTML = "";
+    if (paginationDiv) paginationDiv.style.display = "none";
+    if (noDataDiv) noDataDiv.style.display = "block";
+    return;
+  }
+
+  if (noDataDiv) noDataDiv.style.display = "none";
+
   tbody.innerHTML = `
     <tr>
       <td colspan="13" style="text-align: center; padding: 20px; color: #c0392b;">
@@ -434,8 +455,8 @@ async function renderEmployeeTable() {
             <td>
               <div style="display: flex; gap: 0.5rem;">
                 <div style="display: grid; grid-template-row: 20px; gap: 0.2rem; flex: 0.5;">
-                  <button class="btn btn-success btn-sm2" onclick="addToLog(${employee.id}, 'IN')" title="Check: IN">🟢\nIN</button>
-                  <button class="btn btn-danger btn-sm2" onclick="addToLog(${employee.id}, 'OUT')" title="Check: OUT">🔴\nOUT</button>
+                  <button class="btn btn-success btn-sm2" onclick="addToLog(${employee.id}, 'IN', this)"  title="Check: IN">🟢\nIN</button>
+                  <button class="btn btn-danger btn-sm2"  onclick="addToLog(${employee.id}, 'OUT', this)" title="Check: OUT">🔴\nOUT</button>
                 </div>
                 <button class="btn btn-primary btn-sm" onclick="openModal('edit', ${employee.id})" title="EDIT"><i class="fas fa-edit"></i>\nEdit</button>
                 <button class="btn btn-danger btn-sm" onclick="openDeleteModal('${employee.id}', false)" title="DELETE"><i class="fas fa-trash-alt"></i>\nDelete</button>
@@ -573,10 +594,9 @@ async function openModal(action, employeeId = null) {
     return;
   }
 
-  // Reset form
+  // Reset form and critical hidden fields
   form.reset();
   document.getElementById("employee_id").value = "";
-  // FIX: Clear original_id too
   document.getElementById("original_id").value = "";
 
   const fileLabel = document.querySelector(".file-upload-label");
@@ -588,15 +608,18 @@ async function openModal(action, employeeId = null) {
   if (action === "add") {
     modalTitle.textContent = "Add Employee";
     document.getElementById("status").value = "Active";
+    modal.style.display = "block";
+    qrCodeInput.focus();
   } else if (action === "edit" && employeeId) {
     modalTitle.textContent = "Edit Employee";
+    modal.style.display = "block";
     await loadEmployeeData(employeeId);
-  }
-
-  modal.style.display = "block";
-
-  if (action === "add") {
-    qrCodeInput.focus();
+    // Focus the ID field so user can immediately change it
+    const idField = document.getElementById("employee_id");
+    if (idField) {
+      idField.focus();
+      idField.select();
+    }
   }
 }
 
@@ -928,12 +951,12 @@ async function loadEmployees(filters = {}, preservePage = false) {
         displayFilterStatus();
       }
     } else {
-      await renderEmployeeError('Network error. Please try again.');
+      await renderEmployeeError("Network error. Please try again.");
       showAlert(data.message || "Error loading employees", "error");
     }
   } catch (error) {
     console.error("Error loading employees:", error);
-    await renderEmployeeError('Network error. Please try again.');
+    await renderEmployeeError("Network error. Please try again.");
     showAlert(
       "Failed to load employees. Please check your connection.",
       "error",
@@ -978,6 +1001,7 @@ async function handleFormSubmit(e) {
     const shift = document.getElementById("shift").value;
     const originalId = document.getElementById("original_id").value.trim();
 
+    // --- Required field validation ---
     if (!empid) {
       showAlert("EMPID is required", "error");
       return;
@@ -999,14 +1023,23 @@ async function handleFormSubmit(e) {
       return;
     }
 
-    // Check for duplicate fullname (exclude current employee when editing)
+    // --- Client-side duplicate ID check (edit + ID changed) ---
+    if (currentAction === "edit" && empid !== originalId) {
+      const idTaken = employees.some((emp) => String(emp.id) === String(empid));
+      if (idTaken) {
+        showAlert(`Employee ID "${empid}" is already in use`, "error");
+        return;
+      }
+    }
+
+    // --- Duplicate fullname check (exclude the employee being edited) ---
     const isDuplicate = employees.some((emp) => {
       if (
         currentAction === "edit" &&
         originalId &&
         String(emp.id) === String(originalId)
       ) {
-        return false;
+        return false; // Skip the row we're editing
       }
       return (
         emp.fullname.toLowerCase().trim() === fullname.toLowerCase().trim()
@@ -1018,17 +1051,14 @@ async function handleFormSubmit(e) {
       return;
     }
 
-    // Validate image if selected
+    // --- Image validation ---
     const imageInput = document.getElementById("image");
     if (imageInput.files.length > 0) {
       const file = imageInput.files[0];
-      const maxSize = 5 * 1024 * 1024; // 5MB
-
-      if (file.size > maxSize) {
+      if (file.size > 5 * 1024 * 1024) {
         showAlert("Image file size must be less than 5MB", "error");
         return;
       }
-
       const allowedTypes = [
         "image/jpeg",
         "image/jpg",
@@ -1044,7 +1074,16 @@ async function handleFormSubmit(e) {
     showLoading(true);
 
     const formData = new FormData(e.target);
-    formData.append("action", currentAction);
+
+    // Explicitly set the fields the backend depends on, regardless of what
+    // name attributes the HTML happens to use.
+    formData.set("action", currentAction);
+    formData.set("id", empid);
+
+    // original_id is only meaningful (and must be present) for edits.
+    if (currentAction === "edit") {
+      formData.set("original_id", originalId);
+    }
 
     const response = await fetch("../cnfg/manpower_backend.php", {
       method: "POST",

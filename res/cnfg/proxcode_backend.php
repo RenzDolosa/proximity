@@ -732,7 +732,7 @@ try {
           $response['data'] = $employees;
           $response['total'] = count($employees);
         } catch (Exception $e) {
-          $response['message'] = 'Error retrieving proximity codes: ' . $e->getMessage();
+          $response['message'] = 'Error retrieving proximity codes.';
         }
         break;
 
