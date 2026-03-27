@@ -148,6 +148,17 @@ try {
           </div>
         </div>
       </div>
+
+      <!-- <div class="menu-card" onclick="navigateWithLoading('../stat/system-log.php');" style="background: linear-gradient(to right, rgb(183, 183, 183), rgb(147, 147, 147)); transform: scale(1);">
+        <a href="../stat/system-log.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../stat/system-log.php');">Coming Soon</a>
+        <div class="favi">
+          <img src="../logo/coming-soon.png" alt="Coming Soon" style="width: 125px; height: 100px;">
+          <div>
+            <h3>Under Development</h3>
+            <p>This area is reserved for future Development</p>
+          </div>
+        </div>
+      </div> -->
     </section>
   </main>
 

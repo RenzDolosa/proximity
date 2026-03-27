@@ -531,6 +531,37 @@ class FileUploader
   }
 }
 
+// QR Code Generator (simple implementation)
+class QRCodeGenerator
+{
+  const QR_CODE_LENGTH = 41; // Default length for QR codes
+
+  public static function generateQRCode($fullname, $userId = null, $length = self::QR_CODE_LENGTH)
+  {
+    $userId = $userId ?? $_SESSION['user_id'] ?? '0';
+    $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+
+    // Start with user ID prefix to ensure uniqueness across users
+    $result = '1' . $userId . '_';
+
+    // Add random alphanumeric characters
+    $remainingLength = $length - strlen($result) - 8;
+    for ($i = 0; $i < $remainingLength; $i++) {
+      $result .= $chars[rand(0, strlen($chars) - 1)];
+    }
+
+    // Add timestamp-based number to ensure uniqueness
+    $uniquePart = str_pad((time() % 100000000), 8, '0', STR_PAD_LEFT);
+    $result .= $uniquePart;
+
+    return $result;
+  }
+}
+
+// Example usage:
+// $qrCode = QRCodeGenerator::generateQRCode("John Doe");
+// echo $qrCode;
+
 // Main Application Handler
 try {
   // Check authentication
@@ -559,6 +590,117 @@ try {
     $action = $_POST['action'] ?? '';
 
     switch ($action) {
+      case 'add':
+      case 'create':
+        $image_filename = null;
+
+        // Handle image upload
+        if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+          try {
+            $image_filename = $fileUploader->uploadImage($_FILES['image']);
+          } catch (Exception $e) {
+            $response['message'] = $e->getMessage();
+            break;
+          }
+        }
+
+        // Generate QR code with user context
+        $qr_code = QRCodeGenerator::generateQRCode($_POST['fullname'] ?? '', $database->getCurrentUserId());
+
+        $employee_data = [
+          'fullname' => sanitizeInput($_POST['fullname'] ?? ''),
+          'position' => sanitizeInput($_POST['position'] ?? ''),
+          'brand' => sanitizeInput($_POST['brand'] ?? ''),
+          'status' => $_POST['status'] ?? 'Active',
+          'shift' => sanitizeInput($_POST['shift'] ?? ''),
+          'violation' => sanitizeInput($_POST['violation'] ?? ''),
+          'image' => $image_filename,
+          'qr_code' => $qr_code,
+          'check_status' => $_POST['check_status'] ?? '',
+        ];
+
+        // Validate required fields
+        if (empty($employee_data['fullname']) || empty($employee_data['position']) || empty($employee_data['shift'])) {
+          $response['message'] = 'Please fill in all required fields (Full Name, Position, Shift)';
+          break;
+        }
+
+        $employee_id = $employeeManager->createEmployee($employee_data);
+
+        if ($employee_id) {
+          $response['success'] = true;
+          $response['message'] = 'Employee created successfully';
+          $response['data'] = ['id' => $employee_id, 'qr_code' => $qr_code];
+        } else {
+          $response['message'] = 'Failed to create employee. Please check your input data.';
+        }
+        break;
+
+      case 'edit':
+      case 'update':
+        $employee_id = $_POST['id'] ?? 0;
+        $current_employee = $employeeManager->getEmployee($employee_id);
+
+        if (!$current_employee) {
+          $response['message'] = 'Employee not found';
+          break;
+        }
+
+        $image_filename = $current_employee['image'];
+
+        // Handle new image upload
+        if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+          try {
+            $new_image = $fileUploader->uploadImage($_FILES['image']);
+            // // Delete old image if upload successful
+            // if ($new_image && $current_employee['image']) {
+            //   $fileUploader->deleteImage($current_employee['image']);
+            // }
+            $image_filename = $new_image;
+          } catch (Exception $e) {
+            $response['message'] = $e->getMessage();
+            break;
+          }
+        }
+
+        $employee_data = [
+          'fullname' => sanitizeInput($_POST['fullname'] ?? $current_employee['fullname']),
+          'position' => sanitizeInput($_POST['position'] ?? $current_employee['position']),
+          'brand' => sanitizeInput($_POST['brand'] ?? $current_employee['brand']),
+          'status' => $_POST['status'] ?? $current_employee['status'],
+          'shift' => sanitizeInput($_POST['shift'] ?? $current_employee['shift']),
+          'violation' => sanitizeInput($_POST['violation'] ?? $current_employee['violation']),
+          'image' => $image_filename,
+          'qr_code' => $current_employee['qr_code'],
+          'check_status' => $_POST['check_status'] ?? $current_employee['check_status'],
+          'updated_at' => date('Y-m-d H:i:s'),  // Set current timestamp
+        ];
+
+        if ($employeeManager->updateEmployee($employee_id, $employee_data)) {
+          $response['success'] = true;
+          $response['message'] = 'Employee updated successfully';
+        } else {
+          $response['message'] = 'Failed to update employee';
+        }
+        break;
+
+      case 'delete':
+        $employee_id = $_POST['id'] ?? 0;
+        $employee = $employeeManager->getEmployee($employee_id);
+
+        if ($employee && $employeeManager->deleteEmployee($employee_id)) {
+          // // Delete associated image
+          // if ($employee['image']) {
+          //   $fileUploader->deleteImage($employee['image']);
+          // }
+
+          $response['success'] = true;
+          $response['message'] = 'Employee deleted successfully';
+        } else {
+          $response['message'] = 'Failed to delete employee';
+        }
+        break;
+
       // 🆕 NEW ACTION - Delete filtered employees
       case 'delete_filtered':
         try {
@@ -732,6 +874,96 @@ try {
           $response['success'] = true;
           $response['message'] = 'All employee data deleted successfully. ' . $employee_count . ' employees.';
           error_log("Delete all completed: $employee_count employees deleted");
+        }
+        break;
+
+      case 'import':
+        $employees_json = $_POST['employees'] ?? '';
+
+        if (empty($employees_json)) {
+          $response['message'] = 'No employee data provided';
+          break;
+        }
+
+        $employees_data = json_decode($employees_json, true);
+
+        if (!is_array($employees_data) || empty($employees_data)) {
+          $response['message'] = 'Invalid employee data format';
+          break;
+        }
+
+        $imported_count = 0;
+        $errors = [];
+
+        try {
+          // Start transaction
+          $db = $database->getUserConnection();
+          $db->beginTransaction();
+
+          foreach ($employees_data as $index => $employee_data) {
+            try {
+              // Generate or use provided QR code
+              $qr_code = '';
+              if (!empty($employee_data['qr']) && trim($employee_data['qr']) !== '') {
+                $qr_code = trim($employee_data['qr']);
+              } else {
+                $qr_code = QRCodeGenerator::generateQRCode($employee_data['fullname'], $database->getCurrentUserId());
+              }
+
+              // Prepare employee data with sanitization
+              $employee_record = [
+                'fullname' => sanitizeInput(trim($employee_data['fullname'])),
+                'position' => sanitizeInput(trim($employee_data['position'])),
+                'brand' => sanitizeInput(trim($employee_data['brand'] ?? '')),
+                'status' => in_array($employee_data['status'], ['Active', 'Inactive']) ? $employee_data['status'] : 'Active',
+                'shift' => sanitizeInput(trim($employee_data['shift'])),
+                'violation' => sanitizeInput(trim($employee_data['violation'] ?? '')),
+                'image' => null,
+                'qr_code' => $qr_code,
+                'check_status' => in_array($employee_data['check_status'], ['OUT', 'IN']) ? $employee_data['check_status'] : 'OUT',
+                'access_timestamp' => date('Y-m-d H:i:s'), // Set current timestamp
+              ];
+
+              // Validate required fields
+              if (empty($employee_record['fullname'])) {
+                $errors[] = "Row " . ($index + 1) . ": Missing required fields";
+                continue;
+              }
+
+              $employee_id = $employeeManager->createEmployee($employee_record);
+
+              if ($employee_id) {
+                $imported_count++;
+              } else {
+                $errors[] = "Row " . ($index + 1) . ": Failed to create employee record";
+              }
+            } catch (Exception $e) {
+              $errors[] = "Row " . ($index + 1) . ": " . $e->getMessage();
+            }
+          }
+
+          if ($imported_count > 0) {
+            $db->commit();
+            $response['success'] = true;
+            $response['message'] = "Import completed successfully. $imported_count employees imported.";
+            $response['imported_count'] = $imported_count;
+
+            if (!empty($errors)) {
+              $response['message'] .= " " . count($errors) . " records had errors.";
+              $response['errors'] = $errors;
+            }
+
+            logSystemAction($database->getCurrentUserId(), 'DATA_IMPORTED', "Imported $imported_count employees");
+          } else {
+            $db->rollBack();
+            $response['message'] = 'Import failed. No valid employee records were processed.';
+            $response['errors'] = $errors;
+          }
+        } catch (Exception $e) {
+          if (isset($db)) {
+            $db->rollBack();
+          }
+          $response['message'] = 'Import error: ' . $e->getMessage();
         }
         break;
 
@@ -1182,6 +1414,9 @@ function getAPIInfo()
     ],
     'endpoints' => [
       'POST' => [
+        'add/create' => 'Create new employee',
+        'edit/update' => 'Update existing employee',
+        'delete' => 'Delete employee',
         'delete_all' => 'Delete all employees',
         'import' => 'Import employees from JSON',
         'export' => 'Export employees to CSV/Excel',
