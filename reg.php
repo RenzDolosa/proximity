@@ -6,12 +6,6 @@ require_once 'res/cnfg/config.php';
 $errors = [];
 $success = '';
 
-// Check if user is already logged in
-if (isset($_SESSION['user_id'])) {
-  header('Location: portal.php'); // or wherever logged-in users should go
-  exit;
-}
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   // Get and sanitize input data
   $myDatabase = sanitizeInput($_POST['my_database'] ?? '');
@@ -99,7 +93,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $_SESSION['last_name'] = $last_name;
       header('Location: portal.php');
       exit;
-
     } else {
       $errors = $result['errors'];
       // Log failed registration attempt
@@ -123,6 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <title>Register</title>
   <link rel="icon" href="res/icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="res/css/r-l.css">
+  <link rel="stylesheet" href="res/css/btn.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
@@ -131,6 +125,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <version_compare style="z-index: 1000;">
     <p id="version"></p>
   </version_compare>
+
+  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close"
+    onclick="window.location='res/iframe/ptl.php'">
+    <i class="fas fa-times"></i>
+  </div>
 
   <div class="container">
     <div class="header">
@@ -221,11 +220,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </button>
     </form>
 
-    <div class="login-link">
+    <!-- <div class="login-link">
       Already have an account? <a href="index.php">Sign in here</a>
-    </div>
+    </div> -->
   </div>
 
+  <script>
+    const closeBtn = document.getElementById('closeButton')
+
+    document.addEventListener("keydown", function(e) {
+      if (e.key === "Escape" && closeBtn) {
+        window.location = "res/iframe/ptl.php";
+      }
+    });
+
+    const portalBtn = document.getElementById('portalButton');
+
+    document.addEventListener("keydown", function(e) {
+      if (e.ctrlKey && e.shiftKey && e.altKey && e.key === "P" && portalBtn) {
+        window.location.href = "portal.php";
+      }
+    });
+  </script>
   <script src="res/src/reg.js"></script>
   <script src="res/src/req.js"></script>
   <script src="res/src/ver.js"></script>

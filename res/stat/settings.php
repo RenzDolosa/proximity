@@ -502,6 +502,9 @@ function audioCard(string $label, string $inputName, string $dbKey, array $curre
             </div>
           </div>
         </div>
+        <button onclick="window.location='../../reg.php'" class="btn btn-primary" style="margin-top:20px;" id="regBtn">
+          <i class="fas fa-user-plus"></i> Register User
+        </button>
       </div>
 
       <!-- ── Audio Settings ──────────────────────────────────── -->
@@ -541,7 +544,6 @@ function audioCard(string $label, string $inputName, string $dbKey, array $curre
                             ], JSON_UNESCAPED_SLASHES) ?>;
   </script>
 
-  <script src="audio.js"></script>
   <script src="../src/btn.js"></script>
   <script src="../src/aud.js"></script>
   <script src="../src/req.js"></script>
