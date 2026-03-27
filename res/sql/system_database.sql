@@ -20,8 +20,8 @@ CREATE TABLE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 INSERT INTO `users` (`id`, `username`, `email`, `password`, `first_name`, `last_name`, `phone`, `my_database`, `created_at`, `updated_at`, `last_login`) VALUES
-(1, 'RenzDolosa', 'renzeload@gmail.com', '$2y$10$/nqdViJv2DWyfjHhfS8ZDOPT.6QwxO3DWK1ocCwDFPUYvEE20Lkga', 'Renren', 'Dolosa', NULL, 'AdminServer', '2025-06-01 11:22:31', '2026-03-21 10:23:20', '2026-03-21 10:23:20'),
-(2, 'hrqrdata', 'hrassistant.inspi@gmail.com', '$2y$10$h1KCNltHY3HOQvlOBHyheeSPgA1h7e9mSK/P0p89ugzFpvt2o3xKW', 'Jennica Marie', 'Cruz', NULL, 'HRServer', '2025-06-05 05:51:53', '2026-03-09 08:57:17', '2026-03-09 08:57:17');
+(1, 'RenzDolosa', 'renzeload@gmail.com', `$2y$10$/nqdViJv2DWyfjHhfS8ZDOPT.6QwxO3DWK1ocCwDFPUYvEE20Lkga`, 'Renren', 'Dolosa', NULL, 'AdminServer', '2025-06-01 11:22:31', '2026-03-21 10:23:20', '2026-03-21 10:23:20'),
+(2, 'hrqrdata', 'hrassistant.inspi@gmail.com', `$2y$10$h1KCNltHY3HOQvlOBHyheeSPgA1h7e9mSK/P0p89ugzFpvt2o3xKW`, 'Jennica Marie', 'Cruz', NULL, 'HRServer', '2025-06-05 05:51:53', '2026-03-09 08:57:17', '2026-03-09 08:57:17');
 
 CREATE TABLE
   IF NOT EXISTS `user_sessions` (

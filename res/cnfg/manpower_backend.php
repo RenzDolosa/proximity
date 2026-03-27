@@ -1,5 +1,5 @@
 <?php
-// manpower_backend.php - FIXED VERSION WITH FILTERED DELETE SUPPORT
+// manpower_backend.php - FIXED VERSION WITH FILTERED DELETE SUPPORT + EDITABLE EMPLOYEE ID
 
 require_once 'config.php';
 
@@ -73,11 +73,12 @@ class EmployeeManager
   public function createEmployee($data)
   {
     $query = "INSERT INTO " . $this->table . " 
-                      (fullname, position, brand, status, shift, violation, image, qr_code) 
-                      VALUES (:fullname, :position, :brand, :status, :shift, :violation, :image, :qr_code)";
+                      (id, fullname, position, brand, status, shift, violation, image, qr_code) 
+                      VALUES (:id, :fullname, :position, :brand, :status, :shift, :violation, :image, :qr_code)";
 
     $stmt = $this->conn->prepare($query);
 
+    $stmt->bindParam(':id', $data['id']);
     $stmt->bindParam(':fullname', $data['fullname']);
     $stmt->bindParam(':position', $data['position']);
     $stmt->bindParam(':brand', $data['brand']);
@@ -88,7 +89,7 @@ class EmployeeManager
     $stmt->bindParam(':qr_code', $data['qr_code']);
 
     if ($stmt->execute()) {
-      $employeeId = $this->conn->lastInsertId();
+      $employeeId = $data['id'];
 
       if ($this->userId) {
         logSystemAction($this->userId, 'EMPLOYEE_CREATED', "Created employee: " . $data['fullname']);
@@ -103,6 +104,11 @@ class EmployeeManager
   {
     $query = "SELECT * FROM " . $this->table . " WHERE 1=1";
     $params = [];
+
+    if (!empty($filters['id'])) {
+      $query .= " AND id LIKE :id";
+      $params[':id'] = '%' . $filters['id'] . '%';
+    }
 
     if (!empty($filters['fullname'])) {
       $query .= " AND fullname LIKE :fullname";
@@ -161,7 +167,7 @@ class EmployeeManager
       $params[':updated_at'] = '%' . $filters['updated_at'] . '%';
     }
 
-    $query .= " ORDER BY id DESC";
+    $query .= " ORDER BY created_at DESC";
 
     $stmt = $this->conn->prepare($query);
     foreach ($params as $key => $value) {
@@ -172,39 +178,103 @@ class EmployeeManager
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
   }
 
-  public function updateEmployee($id, $data)
+  /**
+   * FIX: updateEmployee now supports changing the employee ID.
+   *
+   * The original query used `:id` for both SET id = :id and WHERE id = :id.
+   * PDO does not allow the same named placeholder twice in one statement
+   * (behaviour varies by driver but is unreliable).  We now use separate
+   * placeholders: :new_id for the SET clause and :where_id for WHERE.
+   *
+   * If $new_id differs from $old_id we rename the row; otherwise it is a
+   * plain update.
+   */
+  public function updateEmployee($old_id, $data)
   {
-    $currentEmployee = $this->getEmployee($id);
+    $currentEmployee = $this->getEmployee($old_id);
+    $new_id = $data['id'];
 
-    $query = "UPDATE " . $this->table . " 
-                      SET fullname = :fullname, position = :position, brand = :brand, 
-                          status = :status, shift = :shift, violation = :violation, 
-                          image = :image, qr_code = :qr_code, updated_at = NOW()
-                      WHERE id = :id";
-
-    $stmt = $this->conn->prepare($query);
-
-    $stmt->bindParam(':id', $id);
-    $stmt->bindParam(':fullname', $data['fullname']);
-    $stmt->bindParam(':position', $data['position']);
-    $stmt->bindParam(':brand', $data['brand']);
-    $stmt->bindParam(':status', $data['status']);
-    $stmt->bindParam(':shift', $data['shift']);
-    $stmt->bindParam(':violation', $data['violation']);
-    $stmt->bindParam(':image', $data['image']);
-    $stmt->bindParam(':qr_code', $data['qr_code']);
-
-    $result = $stmt->execute();
-
-    if ($result && $this->userId) {
-      if ($currentEmployee && $currentEmployee['status'] !== $data['status']) {
-        $this->logStatusChange($id, $currentEmployee['status'], $data['status'], 'Status updated via edit');
+    // --- ID CHANGE: rename the row ---
+    if ((string)$new_id !== (string)$old_id) {
+      // Make sure the new ID doesn't already exist
+      $check = $this->getEmployee($new_id);
+      if ($check) {
+        throw new Exception("Employee ID '$new_id' is already in use.");
       }
 
-      logSystemAction($this->userId, 'EMPLOYEE_UPDATED', "Updated employee: " . $data['fullname']);
+      // Insert a new row with the new ID, then delete the old one.
+      // This avoids FK complications on the PK itself while keeping
+      // the operation atomic via a transaction.
+      $this->conn->beginTransaction();
+      try {
+        $insert = $this->conn->prepare(
+          "INSERT INTO " . $this->table . "
+           (id, fullname, position, brand, status, shift, violation, image, qr_code, created_at)
+           VALUES (:id, :fullname, :position, :brand, :status, :shift, :violation, :image, :qr_code,
+                   (SELECT created_at FROM " . $this->table . " AS src WHERE src.id = :old_id))"
+        );
+        $insert->execute([
+          ':id'        => $new_id,
+          ':fullname'  => $data['fullname'],
+          ':position'  => $data['position'],
+          ':brand'     => $data['brand'],
+          ':status'    => $data['status'],
+          ':shift'     => $data['shift'],
+          ':violation' => $data['violation'],
+          ':image'     => $data['image'],
+          ':qr_code'   => $data['qr_code'],
+          ':old_id'    => $old_id,
+        ]);
+
+        $delete = $this->conn->prepare(
+          "DELETE FROM " . $this->table . " WHERE id = :old_id"
+        );
+        $delete->execute([':old_id' => $old_id]);
+
+        $this->conn->commit();
+      } catch (Exception $e) {
+        $this->conn->rollBack();
+        throw $e;
+      }
+    } else {
+      // --- NORMAL UPDATE: same ID ---
+      // FIX: Use :where_id so PDO doesn't see the same placeholder twice.
+      $query = "UPDATE " . $this->table . "
+                SET fullname   = :fullname,
+                    position   = :position,
+                    brand      = :brand,
+                    status     = :status,
+                    shift      = :shift,
+                    violation  = :violation,
+                    image      = :image,
+                    qr_code    = :qr_code,
+                    updated_at = NOW()
+                WHERE id = :where_id";
+
+      $stmt = $this->conn->prepare($query);
+      $stmt->execute([
+        ':fullname'  => $data['fullname'],
+        ':position'  => $data['position'],
+        ':brand'     => $data['brand'],
+        ':status'    => $data['status'],
+        ':shift'     => $data['shift'],
+        ':violation' => $data['violation'],
+        ':image'     => $data['image'],
+        ':qr_code'   => $data['qr_code'],
+        ':where_id'  => $old_id,
+      ]);
     }
 
-    return $result;
+    // Log status change if applicable
+    if ($currentEmployee && $currentEmployee['status'] !== $data['status'] && $this->userId) {
+      $this->logStatusChange($new_id, $currentEmployee['status'], $data['status'], 'Status updated via edit');
+    }
+
+    if ($this->userId) {
+      logSystemAction($this->userId, 'EMPLOYEE_UPDATED', "Updated employee: " . $data['fullname'] . ($new_id !== $old_id ? " (ID changed from $old_id to $new_id)" : ""));
+    }
+
+    return true;
   }
 
   public function deleteEmployee($id)
@@ -244,15 +314,15 @@ class EmployeeManager
   public function logStatusChange($employeeId, $oldStatus, $newStatus, $reason = null)
   {
     try {
-      $query = "INSERT INTO status_history (id, old_status, new_status, changed_by, change_reason) 
-                      VALUES (:id, :old_status, :new_status, :changed_by, :change_reason)";
+      $query = "INSERT INTO status_history (employee_id, old_status, new_status, changed_by, change_reason) 
+                      VALUES (:employee_id, :old_status, :new_status, :changed_by, :change_reason)";
 
       $stmt = $this->conn->prepare($query);
       $stmt->execute([
-        ':id' => $employeeId,
-        ':old_status' => $oldStatus,
-        ':new_status' => $newStatus,
-        ':changed_by' => $_SESSION['username'] ?? 'System',
+        ':employee_id' => $employeeId,
+        ':old_status'  => $oldStatus,
+        ':new_status'  => $newStatus,
+        ':changed_by'  => $_SESSION['username'] ?? 'System',
         ':change_reason' => $reason
       ]);
     } catch (Exception $e) {
@@ -262,9 +332,9 @@ class EmployeeManager
 
   public function getEmployeeStatusHistory($employeeId)
   {
-    $query = "SELECT * FROM status_history WHERE id = :id ORDER BY created_at DESC";
+    $query = "SELECT * FROM status_history WHERE employee_id = :employee_id ORDER BY created_at DESC";
     $stmt = $this->conn->prepare($query);
-    $stmt->bindParam(':id', $employeeId);
+    $stmt->bindParam(':employee_id', $employeeId);
     $stmt->execute();
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
   }
@@ -282,9 +352,6 @@ class EmployeeManager
       $result = $stmt->execute();
 
       if ($result) {
-        $resetQuery = "ALTER TABLE " . $this->table . " AUTO_INCREMENT = 1";
-        $this->conn->prepare($resetQuery)->execute();
-
         if ($this->userId) {
           logSystemAction($this->userId, 'ALL_EMPLOYEES_DELETED', "Deleted all employees (total: $count)");
         }
@@ -297,7 +364,7 @@ class EmployeeManager
     }
   }
 
-  // 🆕 NEW FUNCTION - Delete employees by specific IDs
+  // Delete employees by specific IDs
   public function deleteEmployeesByIds($employeeIds)
   {
     if (!is_array($employeeIds) || empty($employeeIds)) {
@@ -363,7 +430,7 @@ class FileUploader
   public function __construct($userId = null)
   {
     $this->userId = $userId ?? $_SESSION['user_id'] ?? 'default';
-    $this->upload_dir = '../../uploads/user/'; // _' . $this->userId . '/';
+    $this->upload_dir = '../../uploads/user/';
 
     if (!file_exists($this->upload_dir)) {
       mkdir($this->upload_dir, 0777, true);
@@ -372,11 +439,7 @@ class FileUploader
 
   /**
    * Upload image with optional preservation of existing filename
-   * ✨ KEY FEATURE: Pass $existingFilename to preserve image ID
-   * 
-   * @param array $file - $_FILES array
-   * @param string|null $existingFilename - If provided, reuses this filename instead of creating new
-   * @return string|false - Returns filename on success, false on failure
+   * Pass $existingFilename to preserve image ID
    */
   public function uploadImage($file, $existingFilename = null)
   {
@@ -394,18 +457,14 @@ class FileUploader
       throw new Exception("File too large. Maximum size is 5MB.");
     }
 
-    // ✨ PERSISTENT IMAGE ID LOGIC
     if ($existingFilename && !empty($existingFilename)) {
-      // Preserve the existing image ID by reusing the filename
       $filename = $existingFilename;
       $filepath = $this->upload_dir . $filename;
 
-      // Delete old file if it exists before uploading new one
       if (file_exists($filepath)) {
         @unlink($filepath);
       }
     } else {
-      // Generate new unique filename only for new images
       $filename = uniqid() . '.' . $file_extension;
       $filepath = $this->upload_dir . $filename;
     }
@@ -455,7 +514,9 @@ class QRCodeGenerator
   }
 }
 
+// ============================================================================
 // Main Application Handler
+// ============================================================================
 try {
   if (!isset($_SESSION['user_id'])) {
     $response = ['success' => false, 'message' => 'Authentication required. Please log in.'];
@@ -496,27 +557,39 @@ try {
         $qr_code = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
 
         $employee_data = [
-          'fullname' => sanitizeInput($_POST['fullname'] ?? ''),
-          'position' => sanitizeInput($_POST['position'] ?? ''),
-          'brand' => sanitizeInput($_POST['brand'] ?? ''),
-          'status' => $_POST['status'] ?? 'Active',
-          'shift' => sanitizeInput($_POST['shift'] ?? ''),
+          'id'        => sanitizeInput($_POST['id'] ?? ''),
+          'fullname'  => sanitizeInput($_POST['fullname'] ?? ''),
+          'position'  => sanitizeInput($_POST['position'] ?? ''),
+          'brand'     => sanitizeInput($_POST['brand'] ?? ''),
+          'status'    => $_POST['status'] ?? 'Active',
+          'shift'     => sanitizeInput($_POST['shift'] ?? ''),
           'violation' => sanitizeInput($_POST['violation'] ?? ''),
-          'image' => $image_filename,
-          'qr_code' => sanitizeInput(!empty($_POST['qr_code']) ? $_POST['qr_code'] : $qr_code)
+          'image'     => $image_filename,
+          'qr_code'   => sanitizeInput(!empty($_POST['qr_code']) ? $_POST['qr_code'] : $qr_code)
         ];
+
+        if (empty($employee_data['id'])) {
+          $response['message'] = 'Employee ID is required';
+          break;
+        }
 
         if (empty($employee_data['fullname']) || empty($employee_data['position']) || empty($employee_data['shift'])) {
           $response['message'] = 'Please fill in all required fields (Full Name, Position, Shift)';
           break;
         }
 
+        // Check if ID already exists
+        if ($employeeManager->getEmployee($employee_data['id'])) {
+          $response['message'] = "Employee ID '{$employee_data['id']}' is already in use.";
+          break;
+        }
+
         $employee_id = $employeeManager->createEmployee($employee_data);
 
-        if ($employee_id) {
+        if ($employee_id !== false) {
           $response['success'] = true;
           $response['message'] = 'Employee created successfully';
-          $response['data'] = ['id' => $employee_id, 'qr_code' => $qr_code];
+          $response['data'] = ['id' => $employee_id, 'qr_code' => $employee_data['qr_code']];
         } else {
           $response['message'] = 'Failed to create employee. Please check your input data.';
         }
@@ -524,8 +597,10 @@ try {
 
       case 'edit':
       case 'update':
-        $employee_id = $_POST['id'] ?? 0;
-        $current_employee = $employeeManager->getEmployee($employee_id);
+        // FIX: $_POST['original_id'] holds the old PK so we can detect ID changes.
+        // The form now sends both 'original_id' (hidden, old value) and 'id' (new value).
+        $old_id = $_POST['original_id'] ?? $_POST['id'] ?? 0;
+        $current_employee = $employeeManager->getEmployee($old_id);
 
         if (!$current_employee) {
           $response['message'] = 'Employee not found';
@@ -534,12 +609,9 @@ try {
 
         $image_filename = $current_employee['image'];
 
-        // ✨ PERSISTENT IMAGE ID: Pass existing filename to preserve ID
         if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
           try {
-            // KEY CHANGE: Pass $current_employee['image'] as second parameter
             $new_image = $fileUploader->uploadImage($_FILES['image'], $current_employee['image']);
-
             if ($new_image) {
               $image_filename = $new_image;
             }
@@ -552,21 +624,23 @@ try {
         $qr_code = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
 
         $employee_data = [
-          'fullname' => sanitizeInput($_POST['fullname'] ?? $current_employee['fullname']),
-          'position' => sanitizeInput($_POST['position'] ?? $current_employee['position']),
-          'brand' => sanitizeInput($_POST['brand'] ?? $current_employee['brand']),
-          'status' => sanitizeInput($_POST['status'] ?? $current_employee['status']),
-          'shift' => sanitizeInput($_POST['shift'] ?? $current_employee['shift']),
+          'id'        => sanitizeInput($_POST['id'] ?? $current_employee['id']),
+          'fullname'  => sanitizeInput($_POST['fullname'] ?? $current_employee['fullname']),
+          'position'  => sanitizeInput($_POST['position'] ?? $current_employee['position']),
+          'brand'     => sanitizeInput($_POST['brand'] ?? $current_employee['brand']),
+          'status'    => sanitizeInput($_POST['status'] ?? $current_employee['status']),
+          'shift'     => sanitizeInput($_POST['shift'] ?? $current_employee['shift']),
           'violation' => sanitizeInput($_POST['violation'] ?? $current_employee['violation']),
-          'image' => sanitizeInput($image_filename),
-          'qr_code' => sanitizeInput(!empty($_POST['qr_code']) ? $_POST['qr_code'] : $qr_code ?? $current_employee['qr_code']),
+          'image'     => sanitizeInput($image_filename),
+          'qr_code'   => sanitizeInput(!empty($_POST['qr_code']) ? $_POST['qr_code'] : $current_employee['qr_code']),
         ];
 
-        if ($employeeManager->updateEmployee($employee_id, $employee_data)) {
+        try {
+          $employeeManager->updateEmployee($old_id, $employee_data);
           $response['success'] = true;
           $response['message'] = 'Employee updated successfully';
-        } else {
-          $response['message'] = 'Failed to update employee';
+        } catch (Exception $e) {
+          $response['message'] = $e->getMessage();
         }
         break;
 
@@ -586,14 +660,14 @@ try {
         }
         break;
 
-      // 🆕 NEW ACTION - Delete filtered employees
+      // Delete filtered employees
       case 'delete_filtered':
         try {
           $employee_ids_json = $_POST['employee_ids'] ?? '[]';
-          $filters_json = $_POST['filters'] ?? '{}';
+          $filters_json      = $_POST['filters'] ?? '{}';
 
           $employee_ids = json_decode($employee_ids_json, true) ?: [];
-          $filters = json_decode($filters_json, true) ?: [];
+          $filters      = json_decode($filters_json, true) ?: [];
 
           if (empty($employee_ids)) {
             $response['message'] = 'No employees to delete';
@@ -603,7 +677,6 @@ try {
           $db = $database->getUserConnection();
           $db->beginTransaction();
 
-          // Get all employees before deletion for image cleanup
           $all_employees_to_delete = [];
           foreach ($employee_ids as $id) {
             $emp = $employeeManager->getEmployee($id);
@@ -612,11 +685,9 @@ try {
             }
           }
 
-          // Delete the employees
           $deleted_count = $employeeManager->deleteEmployeesByIds($employee_ids);
 
           if ($deleted_count > 0) {
-            // Delete associated images
             $deleted_images = 0;
             foreach ($all_employees_to_delete as $employee) {
               if ($employee['image'] && $fileUploader->deleteImage($employee['image'])) {
@@ -632,9 +703,9 @@ try {
             }
             $filterStr = implode(', ', $filterDescriptions) ?: 'All';
 
-            $response['success'] = true;
-            $response['message'] = "Deleted $deleted_count employee(s) matching filters: $filterStr. Removed $deleted_images image(s).";
-            $response['deleted_count'] = $deleted_count;
+            $response['success']        = true;
+            $response['message']        = "Deleted $deleted_count employee(s) matching filters: $filterStr. Removed $deleted_images image(s).";
+            $response['deleted_count']  = $deleted_count;
             $response['deleted_images'] = $deleted_images;
 
             logSystemAction($database->getCurrentUserId(), 'FILTERED_EMPLOYEES_DELETED', "Deleted $deleted_count employees with filters: $filterStr");
@@ -678,7 +749,7 @@ try {
             $db->rollBack();
           }
           $response['success'] = true;
-          $response['message'] = 'All employee data deleted successfully. ' . count($all_employees) . ' employees and ' . $deleted_images . ' images removed.';
+          $response['message'] = 'All employee data deleted successfully.';
         }
         break;
 
@@ -714,14 +785,15 @@ try {
               }
 
               $employee_record = [
-                'fullname' => sanitizeInput(trim($employee_data['fullname'])),
-                'position' => sanitizeInput(trim($employee_data['position'])),
-                'brand' => sanitizeInput(trim($employee_data['brand'] ?? '')),
-                'status' => in_array($employee_data['status'], ['Active', 'Inactive']) ? $employee_data['status'] : 'Active',
-                'shift' => in_array($employee_data['shift'], ['Day Shift', 'Night Shift']) ? $employee_data['shift'] : 'Day Shift',
-                'violation' => (($employee_violation = sanitizeInput(trim($employee_data['violation'] ?? ''))) === '' || $employee_violation === 'None') ? '' : $employee_violation,
-                'image' => null,
-                'qr_code' => sanitizeInput(trim($employee_data['qr_code'] ?? $qr_code))
+                'id'        => sanitizeInput(trim($employee_data['id'])),
+                'fullname'  => sanitizeInput(trim($employee_data['fullname'])),
+                'position'  => sanitizeInput(trim($employee_data['position'])),
+                'brand'     => sanitizeInput(trim($employee_data['brand'] ?? '')),
+                'status'    => in_array($employee_data['status'], ['Active', 'Inactive']) ? $employee_data['status'] : 'Active',
+                'shift'     => in_array($employee_data['shift'], ['Day Shift', 'Night Shift', 'Graveyard Shift']) ? $employee_data['shift'] : 'Day Shift',
+                'violation' => (($v = sanitizeInput(trim($employee_data['violation'] ?? ''))) === '' || $v === 'None') ? '' : $v,
+                'image'     => null,
+                'qr_code'   => sanitizeInput(trim($employee_data['qr_code'] ?? $qr_code))
               ];
 
               if (empty($employee_record['fullname'])) {
@@ -731,7 +803,7 @@ try {
 
               $employee_id = $employeeManager->createEmployee($employee_record);
 
-              if ($employee_id) {
+              if ($employee_id !== false) {
                 $imported_count++;
               } else {
                 $errors[] = "Row " . ($index + 1) . ": Failed to create employee record";
@@ -794,8 +866,8 @@ try {
 
       case 'bulk_status_update':
         $employee_ids = $_POST['employee_ids'] ?? [];
-        $new_status = $_POST['new_status'] ?? '';
-        $reason = $_POST['reason'] ?? 'Bulk status update';
+        $new_status   = $_POST['new_status'] ?? '';
+        $reason       = $_POST['reason'] ?? 'Bulk status update';
 
         if (empty($employee_ids) || empty($new_status)) {
           $response['message'] = 'Employee IDs and new status are required';
@@ -821,11 +893,12 @@ try {
               $old_status = $employee_data['status'];
               $employee_data['status'] = $new_status;
 
-              if ($employeeManager->updateEmployee($employee_id, $employee_data)) {
+              try {
+                $employeeManager->updateEmployee($employee_id, $employee_data);
                 $employeeManager->logStatusChange($employee_id, $old_status, $new_status, $reason);
                 $updated_count++;
-              } else {
-                $errors[] = "Failed to update employee ID: $employee_id";
+              } catch (Exception $e) {
+                $errors[] = "Failed to update employee ID: $employee_id - " . $e->getMessage();
               }
             } else {
               $errors[] = "Employee not found: ID $employee_id";
@@ -880,14 +953,14 @@ try {
       case 'backup_data':
         try {
           $employees = $employeeManager->getEmployees();
-          $stats = $employeeManager->getEmployeeStats();
+          $stats     = $employeeManager->getEmployeeStats();
 
           $backup_data = [
-            'timestamp' => date('Y-m-d H:i:s'),
-            'user_id' => $database->getCurrentUserId(),
-            'total_employees' => count($employees),
-            'employees' => $employees,
-            'statistics' => $stats
+            'timestamp'        => date('Y-m-d H:i:s'),
+            'user_id'          => $database->getCurrentUserId(),
+            'total_employees'  => count($employees),
+            'employees'        => $employees,
+            'statistics'       => $stats
           ];
 
           $filename = 'Backup_User' . $database->getCurrentUserId() . '_' . date('Y-m-d_H-i-s') . '.json';
@@ -906,7 +979,7 @@ try {
         break;
 
       case 'restore_data':
-        $backup_json = $_POST['backup_data'] ?? '';
+        $backup_json  = $_POST['backup_data'] ?? '';
         $restore_mode = $_POST['restore_mode'] ?? 'replace';
 
         if (empty($backup_json)) {
@@ -934,7 +1007,6 @@ try {
 
           foreach ($backup_data['employees'] as $employee_data) {
             try {
-              unset($employee_data['id']);
               unset($employee_data['created_at']);
               unset($employee_data['updated_at']);
 
@@ -944,7 +1016,7 @@ try {
 
               $employee_id = $employeeManager->createEmployee($employee_data);
 
-              if ($employee_id) {
+              if ($employee_id !== false) {
                 $restored_count++;
               } else {
                 $errors[] = "Failed to restore employee: " . ($employee_data['fullname'] ?? 'Unknown');
@@ -986,44 +1058,25 @@ try {
       case 'list':
         $filters = [];
 
-        if (!empty($_GET['fullname'])) {
-          $filters['fullname'] = $_GET['fullname'];
-        }
-        if (!empty($_GET['position'])) {
-          $filters['position'] = $_GET['position'];
-        }
-        if (!empty($_GET['position_none'])) {
-          $filters['position_none'] = '1';
-        }
-        if (!empty($_GET['brand'])) {
-          $filters['brand'] = $_GET['brand'];
-        }
-        if (!empty($_GET['brand_none'])) {
-          $filters['brand_none'] = '1';
-        }
-        if (!empty($_GET['status'])) {
-          $filters['status'] = $_GET['status'];
-        }
-        if (!empty($_GET['shift'])) {
-          $filters['shift'] = $_GET['shift'];
-        }
-        if (!empty($_GET['violation'])) {
-          $filters['violation'] = $_GET['violation'];
-        }
-        if (!empty($_GET['violation_none'])) {
-          $filters['violation_none'] = '1';
-        }
-        if (!empty($_GET['qr_code'])) {
-          $filters['qr_code'] = $_GET['qr_code'];
-        }
+        if (!empty($_GET['id']))             $filters['id']             = $_GET['id'];
+        if (!empty($_GET['fullname']))        $filters['fullname']       = $_GET['fullname'];
+        if (!empty($_GET['position']))        $filters['position']       = $_GET['position'];
+        if (!empty($_GET['position_none']))   $filters['position_none']  = '1';
+        if (!empty($_GET['brand']))           $filters['brand']          = $_GET['brand'];
+        if (!empty($_GET['brand_none']))      $filters['brand_none']     = '1';
+        if (!empty($_GET['status']))          $filters['status']         = $_GET['status'];
+        if (!empty($_GET['shift']))           $filters['shift']          = $_GET['shift'];
+        if (!empty($_GET['violation']))       $filters['violation']      = $_GET['violation'];
+        if (!empty($_GET['violation_none']))  $filters['violation_none'] = '1';
+        if (!empty($_GET['qr_code']))         $filters['qr_code']        = $_GET['qr_code'];
 
         try {
           $employees = $employeeManager->getEmployees($filters);
           $response['success'] = true;
-          $response['data'] = $employees;
-          $response['total'] = count($employees);
+          $response['data']    = $employees;
+          $response['total']   = count($employees);
         } catch (Exception $e) {
-          $response['message'] = 'Error retrieving employees: ' . $e->getMessage();
+          $response['message'] = 'Error retrieving employees. ';
         }
         break;
 
@@ -1036,7 +1089,7 @@ try {
 
             if ($employee) {
               $response['success'] = true;
-              $response['data'] = $employee;
+              $response['data']    = $employee;
             } else {
               $response['message'] = 'Employee not found';
             }
@@ -1057,11 +1110,11 @@ try {
 
             if ($employee) {
               $response['success'] = true;
-              $response['data'] = $employee;
-              $response['exists'] = true;
+              $response['data']    = $employee;
+              $response['exists']  = true;
             } else {
               $response['success'] = true;
-              $response['exists'] = false;
+              $response['exists']  = false;
               $response['message'] = 'Proximity code available';
             }
           } catch (Exception $e) {
@@ -1076,7 +1129,7 @@ try {
         try {
           $stats = $employeeManager->getEmployeeStats();
           $response['success'] = true;
-          $response['data'] = $stats;
+          $response['data']    = $stats;
         } catch (Exception $e) {
           $response['message'] = 'Error getting statistics: ' . $e->getMessage();
         }
@@ -1085,11 +1138,11 @@ try {
       case 'user_info':
         $response['success'] = true;
         $response['data'] = [
-          'user_id' => $database->getCurrentUserId(),
-          'username' => $_SESSION['username'] ?? 'Unknown',
-          'email' => $_SESSION['email'] ?? '',
+          'user_id'    => $database->getCurrentUserId(),
+          'username'   => $_SESSION['username'] ?? 'Unknown',
+          'email'      => $_SESSION['email'] ?? '',
           'first_name' => $_SESSION['first_name'] ?? '',
-          'last_name' => $_SESSION['last_name'] ?? ''
+          'last_name'  => $_SESSION['last_name'] ?? ''
         ];
         break;
 
@@ -1131,6 +1184,10 @@ try {
   $_SESSION['error_message'] = $error_response['message'];
 }
 
+// ============================================================================
+// Utility helpers
+// ============================================================================
+
 function serveFile($filepath, $filename = null)
 {
   if (!file_exists($filepath)) {
@@ -1139,17 +1196,17 @@ function serveFile($filepath, $filename = null)
     return;
   }
 
-  $filename = $filename ?: basename($filepath);
+  $filename       = $filename ?: basename($filepath);
   $file_extension = strtolower(pathinfo($filepath, PATHINFO_EXTENSION));
 
   $content_types = [
-    'jpg' => 'image/jpeg',
+    'jpg'  => 'image/jpeg',
     'jpeg' => 'image/jpeg',
-    'png' => 'image/png',
-    'gif' => 'image/gif',
-    'pdf' => 'application/pdf',
-    'csv' => 'text/csv',
-    'xls' => 'application/vnd.ms-excel',
+    'png'  => 'image/png',
+    'gif'  => 'image/gif',
+    'pdf'  => 'application/pdf',
+    'csv'  => 'text/csv',
+    'xls'  => 'application/vnd.ms-excel',
     'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   ];
 
@@ -1175,40 +1232,36 @@ if (isset($_GET['serve_file'])) {
   }
 
   $fileUploader = new FileUploader($userId);
-  $filename = basename($_GET['serve_file']);
-  $filepath = $fileUploader->getImagePath($filename);
+  $filename     = basename($_GET['serve_file']);
+  $filepath     = $fileUploader->getImagePath($filename);
 
   serveFile($filepath, $filename);
 }
 
-function getAPIInfo()
-{
-  return [
-    'version' => '2.2',
-    'name' => 'Integrated Manpower Management System',
-    'description' => 'Multi-user employee management system with persistent image IDs and filtered delete',
-    'features' => [
-      'Persistent Image IDs' => 'Image filenames preserved when images are replaced',
-      'User-Specific Databases' => 'Each user has isolated employee data',
-      'Transaction Support' => 'Database transactions for critical operations',
-      'Audit Logging' => 'Complete audit trail of all operations',
-      'Filtered Delete' => 'Delete employees based on active search filters'
-    ]
-  ];
-}
-
 if (isset($_GET['api_info'])) {
   header('Content-Type: application/json');
-  echo json_encode(getAPIInfo(), JSON_PRETTY_PRINT);
+  echo json_encode([
+    'version'     => '2.3',
+    'name'        => 'Integrated Manpower Management System',
+    'description' => 'Multi-user employee management with editable IDs, persistent images, filtered delete',
+    'features'    => [
+      'Editable Employee ID'    => 'Employee primary key can be changed safely via insert+delete',
+      'Persistent Image IDs'   => 'Image filenames preserved when images are replaced',
+      'User-Specific Databases' => 'Each user has isolated employee data',
+      'Transaction Support'     => 'Database transactions for critical operations',
+      'Audit Logging'           => 'Complete audit trail of all operations',
+      'Filtered Delete'         => 'Delete employees based on active search filters'
+    ]
+  ], JSON_PRETTY_PRINT);
   exit;
 }
 
 if (isset($_GET['health_check'])) {
   $health = [
-    'status' => 'OK',
-    'timestamp' => date('Y-m-d H:i:s'),
+    'status'           => 'OK',
+    'timestamp'        => date('Y-m-d H:i:s'),
     'user_authenticated' => isset($_SESSION['user_id']),
-    'user_id' => $_SESSION['user_id'] ?? null,
+    'user_id'          => $_SESSION['user_id'] ?? null,
     'database_connection' => 'OK'
   ];
 
@@ -1218,7 +1271,7 @@ if (isset($_GET['health_check'])) {
     $database->getUserConnection();
     $health['user_database'] = 'OK';
   } catch (Exception $e) {
-    $health['status'] = 'ERROR';
+    $health['status']        = 'ERROR';
     $health['user_database'] = 'ERROR: ' . $e->getMessage();
   }
 

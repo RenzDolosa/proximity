@@ -28,6 +28,7 @@ async function fetchAllEmployeesForExport() {
 // Function to apply current search filters to employee data
 function applyCurrentFilters(employees) {
   const filters = {
+    id: document.getElementById("search_id")?.value?.toLowerCase() || "",
     fullname:
       document.getElementById("search_fullname")?.value?.toLowerCase() || "",
     position:
@@ -40,6 +41,11 @@ function applyCurrentFilters(employees) {
   };
 
   return employees.filter((employee) => {
+    // Apply id filter
+    if (filters.id && !employee.id?.toLowerCase().includes(filters.id)) {
+      return false;
+    }
+
     // Apply fullname filter
     if (
       filters.fullname &&
@@ -118,8 +124,15 @@ function exportAllData() {
   }
 }
 
+function toProperCase(str) {
+  if (!str) return "";
+  return str
+    .toLowerCase()
+    .replace(/(^|[\s-,])(\w)/g, (char) => char.toUpperCase());
+}
+
 // Updated helper function to export employee data array
-function exportEmployeeData(employees, type = "Data") {
+async function exportEmployeeData(employees, type = "Data") {
   try {
     if (!employees || employees.length === 0) {
       showAlert("No employee data to export!", "warning");
@@ -132,7 +145,8 @@ function exportEmployeeData(employees, type = "Data") {
     // Add headers
     const headers = [
       "SN",
-      "Full Name",
+      "EMPID",
+      "Fullname",
       "Position",
       "Brand",
       "Status",
@@ -147,10 +161,11 @@ function exportEmployeeData(employees, type = "Data") {
     // Add employee data
     employees.forEach((employee, index) => {
       const rowData = [
-        index + 1, // SN
-        employee.fullname || "",
-        employee.position || "",
-        employee.brand || "",
+        String(index + 1), // SN
+        String(employee.id) || "",
+        toProperCase(employee.fullname) || "",
+        toProperCase(employee.position) || "",
+        toProperCase(employee.brand) || "",
         employee.status || "",
         employee.shift || "",
         employee.violation || "None",
@@ -168,7 +183,8 @@ function exportEmployeeData(employees, type = "Data") {
     // Set column widths
     const colWidths = [
       { wch: 5 }, // SN
-      { wch: 25 }, // Full Name
+      { wch: 10 }, // EMPID
+      { wch: 25 }, // Fullname
       { wch: 20 }, // Position
       { wch: 15 }, // Brand
       { wch: 12 }, // Status
@@ -275,7 +291,9 @@ function formatDate(dateString) {
       " " +
       String(date.getHours()).padStart(2, "0") +
       ":" +
-      String(date.getMinutes()).padStart(2, "0")
+      String(date.getMinutes()).padStart(2, "0") +
+      ":" +
+      String(date.getSeconds()).padStart(2, "0")
     );
   } catch (error) {
     console.error("Date formatting error:", error);
@@ -302,15 +320,16 @@ function exportToExcel(type = "Filtered") {
     // Add headers
     const headers = [
       "SN",
-      "Full Name",
+      "EMPID",
+      "Fullname",
       "Position",
       "Brand",
       "Status",
       "Shift",
       "Violation",
       "Proximity Code", // Image column is skipped
-      "Register",
-      "Update",
+      "Register Date",
+      "Last Update",
     ];
     data.push(headers);
 
@@ -322,15 +341,20 @@ function exportToExcel(type = "Filtered") {
         if (cells.length > 0) {
           const rowData = [
             cells[0]?.textContent?.trim() || "", // SN
-            cells[1]?.textContent?.trim() || "", // Full Name
-            cells[2]?.textContent?.trim() || "", // Position
-            cells[3]?.textContent?.trim() || "", // Brand
-            cells[4]?.textContent?.trim() || "", // Status
-            cells[5]?.textContent?.trim() || "", // Shift
-            cells[6]?.textContent?.trim() || "", // Violation
-            cells[8]?.textContent?.trim() || "", // Proximity Code (skip Image column)
-            cells[9]?.textContent?.trim() || "",
+            cells[1]?.textContent?.trim() || "", // EMPID
+            cells[2]?.textContent?.trim() || "", // Fullname
+            cells[3]?.textContent?.trim() || "", // Position
+            cells[4]?.textContent?.trim() || "", // Brand
+            cells[5]?.textContent?.trim() || "", // Status
+            cells[6]?.textContent?.trim() || "", // Shift
+            cells[7]?.textContent?.trim() || "", // Violation
+            (() => {
+              const onclick = cells[9]?.getAttribute("onclick") || "";
+              const match = onclick.match(/copyQRCode\('(.+?)'\)/);
+              return match ? match[1] : "";
+            })(), // Proximity Code (skip Image column)
             cells[10]?.textContent?.trim() || "",
+            cells[11]?.textContent?.trim() || "",
           ];
           data.push(rowData);
         }
@@ -349,7 +373,8 @@ function exportToExcel(type = "Filtered") {
     // Set column widths
     const colWidths = [
       { wch: 5 }, // SN
-      { wch: 25 }, // Full Name
+      { wch: 10 }, // EMPID
+      { wch: 25 }, // Fullname
       { wch: 20 }, // Position
       { wch: 15 }, // Brand
       { wch: 12 }, // Status
@@ -450,6 +475,7 @@ function exportFilteredData() {
   try {
     // Get current filter values
     const filters = {
+      id: document.getElementById("search_id").value.toLowerCase(),
       fullname: document.getElementById("search_fullname").value.toLowerCase(),
       position: document.getElementById("search_position").value.toLowerCase(),
       brand: document.getElementById("search_brand").value.toLowerCase(),
@@ -506,7 +532,8 @@ function excelTemplate(type = "Template") {
 
     // Add headers
     const headers = [
-      "Full Name",
+      "EMPID",
+      "Fullname",
       "Position",
       "Brand",
       "Status",
@@ -522,7 +549,8 @@ function excelTemplate(type = "Template") {
 
     // Set column widths
     const colWidths = [
-      { wch: 25 }, // Full Name
+      { wch: 10 }, // EMPID
+      { wch: 25 }, // Fullname
       { wch: 20 }, // Position
       { wch: 15 }, // Brand
       { wch: 12 }, // Status
@@ -687,6 +715,7 @@ async function exportProximityCodes(proxcodes, type = "Data") {
     // Add headers
     const headers = [
       "SN",
+      "EMPID",
       "Proximity Code",
       "Remarks",
       "Register Date",
@@ -695,6 +724,8 @@ async function exportProximityCodes(proxcodes, type = "Data") {
     data.push(headers);
 
     const systemQRCodes = await getSystemEmployeeQRCodes();
+
+    const qrImageMap = await buildQRToImageMap();
 
     // Add proximity code
     proxcodes.forEach((proxcode, index) => {
@@ -705,8 +736,17 @@ async function exportProximityCodes(proxcodes, type = "Data") {
 
       // 🆕 Update proximity remarks dynamically (without backend change)
       const displayRemarks = isOccupied ? "Occupied" : "Available";
+
+      const matchedEmployeeData =
+        qrImageMap[proxcode.qr_code.trim().toLowerCase()];
+      
+      const empid = matchedEmployeeData
+        ? `${matchedEmployeeData.id}`
+        : "";
+
       const rowData = [
-        index + 1, // SN
+        String(index + 1), // SN
+        empid || "", // Image column is skipped
         proxcode.qr_code || "",
         displayRemarks || "",
         formatDate(proxcode.created_at) || "",
@@ -722,6 +762,7 @@ async function exportProximityCodes(proxcodes, type = "Data") {
     // Set column widths
     const colWidths = [
       { wch: 5 }, // SN
+      { wch: 10 }, // EMPID
       { wch: 15 }, // Proximity Code
       { wch: 15 }, // Remarks
       { wch: 18 }, // Register Date
@@ -826,10 +867,11 @@ function exportCodesToExcel(type = "Filtered") {
     // Add headers
     const headers = [
       "SN",
-      "Proximity Code", // Image column is skipped
+      "EMPID", // Image column is skipped
+      "Proximity Code", 
       "Remarks",
-      "Register",
-      "Update",
+      "Register Date",
+      "Last Update",
     ];
     data.push(headers);
 
@@ -841,10 +883,15 @@ function exportCodesToExcel(type = "Filtered") {
         if (cells.length > 0) {
           const rowData = [
             cells[0]?.textContent?.trim() || "", // SN
-            cells[2]?.textContent?.trim() || "", // Proximity Code (skip Image column)
-            cells[3]?.textContent?.trim() || "", // Remarks
-            cells[4]?.textContent?.trim() || "", // Register
-            cells[5]?.textContent?.trim() || "", // Update
+            cells[2]?.textContent?.trim() || "", // SN
+            (() => {
+              const onclick = cells[3]?.getAttribute("onclick") || "";
+              const match = onclick.match(/copyQRCode\('(.+?)'\)/);
+              return match ? match[1] : "";
+            })(), // Proximity Code (skip Image column)
+            cells[4]?.textContent?.trim() || "", // Remarks
+            cells[5]?.textContent?.trim() || "", // Register
+            cells[6]?.textContent?.trim() || "", // Update
           ];
           data.push(rowData);
         }
@@ -863,8 +910,9 @@ function exportCodesToExcel(type = "Filtered") {
     // Set column widths
     const colWidths = [
       { wch: 5 }, // SN
+      { wch: 10 }, // EMPID
       { wch: 15 }, // Proximity Code
-      { wch: 15 }, // Status
+      { wch: 15 }, // Remarks
       { wch: 18 }, // Register Date
       { wch: 18 }, // Last Update
     ];

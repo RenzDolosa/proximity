@@ -11,7 +11,7 @@ let totalPages = 1;
 
 let currentAudio = null;
 
-// 🆕 FILTER STATE - Track active filters
+// FILTER STATE - Track active filters
 let activeFilters = {};
 
 // Initialize the application
@@ -40,13 +40,11 @@ function setupEventListeners() {
     input.addEventListener("input", debounce(searchEmployees, 300));
   });
 
-  // 🔥 AUTO-FOCUS LOGIC
+  // AUTO-FOCUS LOGIC
   const codeInput = document.getElementById("search_qr");
 
   function autoFocus() {
     const active = document.activeElement;
-
-    // Check if active element is NOT an input, select, or textarea
     const isTyping =
       active &&
       (active.tagName === "INPUT" ||
@@ -58,13 +56,8 @@ function setupEventListeners() {
     }
   }
 
-  // Run on page load
   autoFocus();
-
-  // Re-check when user clicks anywhere
   document.addEventListener("click", autoFocus);
-
-  // Re-check when focus changes (keyboard navigation, tabbing, etc.)
   document.addEventListener("focusin", autoFocus);
 }
 
@@ -81,7 +74,7 @@ function debounce(func, wait) {
   };
 }
 
-// 🆕 GET CURRENT ACTIVE FILTERS FROM FORM
+// GET CURRENT ACTIVE FILTERS FROM FORM
 function getActiveFilters() {
   const searchForm = document.getElementById("searchForm");
   const filters = {};
@@ -94,42 +87,26 @@ function getActiveFilters() {
     }
   }
 
-  // Convert special none value so backend can match empty/null position
-  if (filters.position === "__none__") {
-    filters.position = "__none__"; // handled separately in loadEmployees
-  }
-
-  // Convert special none value so backend can match empty/null brand
-  if (filters.brand === "__none__") {
-    filters.brand = "__none__"; // handled separately in loadEmployees
-  }
-
-  // Convert special none value so backend can match empty/null violation
-  if (filters.violation === "__none__") {
-    filters.violation = "__none__"; // handled separately in loadEmployees
-  }
-
   return filters;
 }
 
-// 🆕 CHECK IF ANY FILTERS ARE ACTIVE
+// CHECK IF ANY FILTERS ARE ACTIVE
 function hasActiveFilters() {
   const filters = getActiveFilters();
   return Object.keys(filters).length > 0;
 }
 
-// 🆕 DISPLAY FILTER STATUS IN UI
+// DISPLAY FILTER STATUS IN UI
 function displayFilterStatus() {
   const filters = getActiveFilters();
-  const filterInfo = document.createElement("div");
 
-  // Remove existing filter status if any
   const existingStatus = document.getElementById("filter-status");
   if (existingStatus) {
     existingStatus.remove();
   }
 
   if (Object.keys(filters).length > 0) {
+    const filterInfo = document.createElement("div");
     filterInfo.id = "filter-status";
     filterInfo.style.cssText = `
       background: #e3f2fd;
@@ -145,41 +122,33 @@ function displayFilterStatus() {
       align-items: center;
     `;
 
-    // Create a container for the icon and text
     const filterLabel = document.createElement("span");
     filterLabel.style.display = "inline-flex";
     filterLabel.style.alignItems = "center";
     filterLabel.style.gap = "8px";
 
-    // Create and add the icon element
     const icon = document.createElement("i");
     icon.className = "fas fa-filter";
     filterLabel.appendChild(icon);
 
-    // Add the text content
     const textSpan = document.createElement("span");
     textSpan.appendChild(document.createTextNode("Active Filters: "));
 
-    // Build filter parts with proper strong elements and proper text formatting
     const filterEntries = Object.entries(filters);
     filterEntries.forEach(([key, value], index) => {
       if (index > 0) {
         textSpan.appendChild(document.createTextNode(" | "));
       }
 
-      // Create strong element for the key
       const strong = document.createElement("strong");
-      // Convert key to proper case (capitalize first letter of each word)
       const properKey = key
-        .split(/(?=[A-Z])/) // Split on capital letters
+        .split(/(?=[A-Z])/)
         .map(
           (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
         )
         .join(" ");
       strong.textContent = `${properKey}:`;
       textSpan.appendChild(strong);
-
-      // Add the value
       textSpan.appendChild(document.createTextNode(` ${value}`));
     });
 
@@ -202,9 +171,8 @@ function stopCurrentAudio() {
   currentAudio = null;
 }
 
-// Play sound on successful result
 function playSuccessSound() {
-  stopCurrentAudio(); // Stop any currently playing audio
+  stopCurrentAudio();
   const sound = document.getElementById("successSound");
   currentAudio = sound;
   sound.currentTime = 0;
@@ -212,7 +180,7 @@ function playSuccessSound() {
 }
 
 function playInactiveSound() {
-  stopCurrentAudio(); // Stop any currently playing audio
+  stopCurrentAudio();
   const sound = document.getElementById("inactiveSound");
   currentAudio = sound;
   sound.currentTime = 0;
@@ -220,7 +188,7 @@ function playInactiveSound() {
 }
 
 function playNoResultSound() {
-  stopCurrentAudio(); // Stop any currently playing audio
+  stopCurrentAudio();
   const sound = document.getElementById("noResultSound");
   currentAudio = sound;
   sound.currentTime = 0;
@@ -228,7 +196,7 @@ function playNoResultSound() {
 }
 
 function playWarningSound() {
-  stopCurrentAudio(); // Stop any currently playing audio
+  stopCurrentAudio();
   const sound = document.getElementById("warningSound");
   currentAudio = sound;
   sound.currentTime = 0;
@@ -240,11 +208,7 @@ async function loadEmployeeData(employeeId) {
   try {
     const response = await fetch(
       `../cnfg/manpower_backend.php?action=get_single&id=${employeeId}`,
-      {
-        headers: {
-          "X-Requested-With": "XMLHttpRequest",
-        },
-      },
+      { headers: { "X-Requested-With": "XMLHttpRequest" } },
     );
 
     const data = await response.json();
@@ -252,7 +216,10 @@ async function loadEmployeeData(employeeId) {
     if (data.success && data.data) {
       const employee = data.data;
 
+      // FIX: Populate fields by their correct IDs
       document.getElementById("employee_id").value = employee.id;
+      // FIX: Store original ID in a hidden field so the backend knows what row to update
+      document.getElementById("original_id").value = employee.id;
       document.getElementById("fullname").value = employee.fullname || "";
       document.getElementById("position").value = employee.position || "";
       document.getElementById("brand").value = employee.brand || "";
@@ -263,28 +230,22 @@ async function loadEmployeeData(employeeId) {
 
       const fileLabel = document.querySelector(".file-upload-label");
       if (employee.image) {
-        // Get current user ID to construct proper image path
-        const currentUserId = await getCurrentUserId();
-        const imagePath = `../../uploads/user/${employee.image}`; // const imagePath = `../../uploads/user_${currentUserId}/${employee.image}`;
-
-        // Add cache busting query parameter to force reload
+        const imagePath = `../../uploads/user/${employee.image}`;
         const imageSrcWithCache = `${imagePath}?t=${new Date().getTime()}`;
 
-        // Display image preview with styling
         fileLabel.innerHTML = `
           <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-            <img id="existingImagePreview" src="${imageSrcWithCache}" alt="Current employee image" style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.15);" onerror="this.style.display='none'; document.getElementById('imageFallback').style.display='inline';">
+            <img id="existingImagePreview" src="${imageSrcWithCache}" alt="Current employee image"
+              style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.15);"
+              onerror="this.style.display='none'; document.getElementById('imageFallback').style.display='inline';">
             <span id="imageFallback" style="display:none;">📷 Image not available</span>
           </div>
         `;
 
-        // Force reflow to ensure image renders
         const previewImg = fileLabel.querySelector("#existingImagePreview");
-        if (previewImg) {
-          previewImg.offsetHeight;
-        }
+        if (previewImg) previewImg.offsetHeight;
       } else {
-        fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
+        fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
       }
     } else {
       showAlert("Failed to load employee data", "error");
@@ -295,39 +256,28 @@ async function loadEmployeeData(employeeId) {
   }
 }
 
-// 🆕 Update total employees count
+// Update total employees count
 async function updateTotalEmployees() {
   try {
     const totalEmployeesElement = document.getElementById("total_employees");
-
     if (totalEmployeesElement) {
-      // Update with current employees array length
       totalEmployeesElement.textContent = employees.length;
-      console.log("✓ Total employees updated:", employees.length);
     }
   } catch (error) {
     console.error("Error updating total employees:", error);
   }
 }
 
-// 🆕 Update active employees count - FIXED VERSION
+// Update active employees count
 async function updateActiveEmployees() {
   try {
     const activeEmployeesElement = document.getElementById("active_employees");
     const inactiveEmployeesElement =
       document.getElementById("inactive_employees");
 
-    if (!activeEmployeesElement || !inactiveEmployeesElement) {
-      console.warn("Active employees element not found");
-      return 0;
-    }
+    if (!activeEmployeesElement || !inactiveEmployeesElement) return 0;
+    if (!Array.isArray(employees)) return 0;
 
-    if (!Array.isArray(employees)) {
-      console.error("Employees array not initialized");
-      return 0;
-    }
-
-    // Filter employees with "Active" status (case-insensitive)
     const activeCount = employees.filter(
       (emp) => emp.status && emp.status.toLowerCase() === "active",
     ).length;
@@ -336,8 +286,6 @@ async function updateActiveEmployees() {
 
     activeEmployeesElement.textContent = activeCount;
     inactiveEmployeesElement.textContent = inactiveCount;
-    console.log("✓ Active employees updated:", activeCount);
-    console.log("✓ Inactive employees updated:", inactiveCount);
 
     return activeCount;
   } catch (error) {
@@ -348,27 +296,21 @@ async function updateActiveEmployees() {
 
 // Add employee to access log
 async function addToLog(employeeId, checkStatus = "IN") {
-  // Stop any currently playing audio when rendering new results
   stopCurrentAudio();
 
   try {
-    // Show loading state
     const button = event.target;
     const originalText = button.innerHTML;
     button.innerHTML = "⏳ Added...";
     button.disabled = true;
 
-    // Find the employee data
     const employee = employees.find((emp) => emp.id === employeeId);
-    if (!employee) {
-      throw new Error("Employee not found");
-    }
+    if (!employee) throw new Error("Employee not found");
 
     const hasViolations =
       employee.violation && employee.violation.trim() !== "";
     const hasInactive = employee.status.toLowerCase() === "inactive";
 
-    // Prepare data for logging
     const logData = {
       employee_id: employee.id,
       fullname: employee.fullname,
@@ -379,16 +321,13 @@ async function addToLog(employeeId, checkStatus = "IN") {
       violation: employee.violation || "",
       image: employee.image || "",
       qr_code: employee.qr_code,
-      check_status: checkStatus, // Use the passed parameter
+      check_status: checkStatus,
       access_timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
     };
 
-    // Send to backend
     const response = await fetch("../cnfg/add_to_log.php", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(logData),
     });
 
@@ -402,7 +341,6 @@ async function addToLog(employeeId, checkStatus = "IN") {
       } else {
         playSuccessSound();
       }
-      // Show success message with status
       showAlert(`Employee marked as ${checkStatus} successfully!`, "success");
     } else {
       throw new Error(result.message || "Failed to add employee to log");
@@ -411,14 +349,23 @@ async function addToLog(employeeId, checkStatus = "IN") {
     console.error("Error adding to log:", error);
     showAlert("Error: " + error.message, "error");
   } finally {
-    // Reset button state and RELOAD WITH ACTIVE FILTERS
     setTimeout(() => {
-      // 🆕 Reload using active filters instead of empty filters
       searchEmployees();
       button.innerHTML = "⏳ Added...";
       button.disabled = false;
     }, 1000);
   }
+}
+
+async function renderEmployeeError(message = 'Failed to load employee data.') {
+  const tbody = document.getElementById('employeeTableBody');
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="13" style="text-align: center; padding: 20px; color: #c0392b;">
+        ⚠️ ${message}
+      </td>
+    </tr>
+  `;
 }
 
 // Render employee table
@@ -436,28 +383,17 @@ async function renderEmployeeTable() {
 
   noDataDiv.style.display = "none";
 
-  // Calculate pagination
   totalPages = Math.ceil(employees.length / itemsPerPage);
 
-  // Ensure currentPage is within valid range
-  if (currentPage > totalPages && totalPages > 0) {
-    currentPage = totalPages;
-  }
-  if (currentPage < 1) {
-    currentPage = 1;
-  }
+  if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
 
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentEmployees = employees.slice(startIndex, endIndex);
 
-  // Get current user ID BEFORE rendering
-  const currentUserId = await getCurrentUserId();
-
-  // Render table rows
   tbody.innerHTML = currentEmployees
     .map((employee, index) => {
-      // Generate initials for placeholder
       const fullnameInitials = (employee.fullname || "UN")
         .split(" ")
         .map((name) => name.charAt(0))
@@ -465,62 +401,58 @@ async function renderEmployeeTable() {
         .substring(0, 2)
         .toUpperCase();
 
-      // Add cache busting to image URLs
-      const imageSrcWithCache = `../../uploads/user/${employee.image}?t=${new Date().getTime()}`; // const imageSrcWithCache = `../../uploads/user_${currentUserId}/${employee.image}?t=${new Date().getTime()}`;
+      String.prototype.toProperCase = function () {
+        return this.replace(/[^\s,\-]+/g, function (txt) {
+          return txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase();
+        });
+      };
+
+      const imageSrcWithCache = `../../uploads/user/${employee.image}?t=${new Date().getTime()}`;
 
       return `
         <tr>
             <td>${startIndex + index + 1}</td>
-            <td><strong>${employee.fullname}</strong></td>
-            <td>${employee.position}</td>
-            <td>${employee.brand}</td>
-            <td><span class="status-${employee.status.toLowerCase()}">${
-              employee.status
-            }</span></td>
+            <td><strong>${employee.id}</strong></td>
+            <td><strong>${employee.fullname.toProperCase()}</strong></td>
+            <td>${employee.position.toProperCase()}</td>
+            <td>${employee.brand.toProperCase()}</td>
+            <td><span class="status-${employee.status.toLowerCase()}">${employee.status}</span></td>
             <td>${employee.shift}</td>
             <td class="Col7"><div style="height: 50px; overflow-y: auto; scrollbar-width: thin; align-content: center;">
               <small>${employee.violation || "None"}</small></div></td>
             <td class="Col8">${
               employee.image
-                ? `
-              <img src="${imageSrcWithCache}" alt="${employee.fullname}" class="employee-image" onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
-                <span style="display:none;">📷</span>`
+                ? `<img src="${imageSrcWithCache}" alt="${employee.fullname}" class="employee-image"
+                     onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
+                   <span style="display:none;">📷</span>`
                 : `<div class="ph-cont"><div class="employee-ph">${fullnameInitials}</div></div>`
-            }
-            </td>
+            }</td>
             <td class="Col9" onclick="copyQRCode('${employee.qr_code}')" title="Copy Proximity code">
-            <img src="../icon/nfc-icon.png" alt="Copy Proximity code" style="width: 20px; height: 20px;"></td>
+              <img src="../icon/nfc-icon.png" alt="Copy Proximity code" style="width: 20px; height: 20px;"></td>
             <td><small>${employee.created_at}</small></td>
             <td><small>${employee.updated_at}</small></td>
             <td>
               <div style="display: flex; gap: 0.5rem;">
                 <div style="display: grid; grid-template-row: 20px; gap: 0.2rem; flex: 0.5;">
-                  <button class="btn btn-success btn-sm2" onclick="addToLog(${
-                    employee.id
-                  }, 'IN')" title="Check: IN">🟢\nIN</button>
-                  <button class="btn btn-danger btn-sm2" onclick="addToLog(${
-                    employee.id
-                  }, 'OUT')" title="Check: OUT">🔴\nOUT</button>
+                  <button class="btn btn-success btn-sm2" onclick="addToLog(${employee.id}, 'IN')" title="Check: IN">🟢\nIN</button>
+                  <button class="btn btn-danger btn-sm2" onclick="addToLog(${employee.id}, 'OUT')" title="Check: OUT">🔴\nOUT</button>
                 </div>
                 <button class="btn btn-primary btn-sm" onclick="openModal('edit', ${employee.id})" title="EDIT"><i class="fas fa-edit"></i>\nEdit</button>
                 <button class="btn btn-danger btn-sm" onclick="openDeleteModal('${employee.id}', false)" title="DELETE"><i class="fas fa-trash-alt"></i>\nDelete</button>
               </div>
             </td>
         </tr>
-    `;
+      `;
     })
     .join("");
 
-  // Update pagination controls
   updatePaginationControls();
 }
 
 async function getCurrentUserId() {
   try {
     const response = await fetch("../cnfg/get_user_id.php", {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
     if (response.ok) {
@@ -531,49 +463,33 @@ async function getCurrentUserId() {
     console.error("Error getting user ID:", error);
   }
 
-  return "default"; // fallback
+  return "default";
 }
 
 function copyQRCode(code) {
-  // Create a temporary textarea element to hold the text
   const tempTextArea = document.createElement("textarea");
   tempTextArea.value = code;
   document.body.appendChild(tempTextArea);
-
-  // Select and copy the text
   tempTextArea.select();
-  tempTextArea.setSelectionRange(0, 99999); // For mobile devices
+  tempTextArea.setSelectionRange(0, 99999);
 
   try {
-    // Copy the text to clipboard
     document.execCommand("copy");
-
-    // Show success message (optional)
     showAlert("Proximity code copied to clipboard!");
-
-    // Alternative: Use a more subtle notification
-    // console.log('QR code copied:', code);
   } catch (err) {
-    // Fallback for modern browsers using the Clipboard API
     if (navigator.clipboard) {
       navigator.clipboard
         .writeText(code)
-        .then(() => {
-          showAlert("Proximity code copied to clipboard!");
-        })
-        .catch(() => {
-          showAlert("Failed to copy Proximity code");
-        });
+        .then(() => showAlert("Proximity code copied to clipboard!"))
+        .catch(() => showAlert("Failed to copy Proximity code"));
     } else {
       showAlert("Failed to copy Proximity code");
     }
   }
 
-  // Remove the temporary textarea
   document.body.removeChild(tempTextArea);
 }
 
-// Add these new pagination functions
 function updatePaginationControls() {
   const paginationDiv = document.getElementById("pagination");
   const prevBtn = document.getElementById("prev-btn");
@@ -586,11 +502,7 @@ function updatePaginationControls() {
   }
 
   paginationDiv.style.display = "flex";
-
-  // Update page info
   pageInfo.textContent = `Page ${currentPage} of ${totalPages} (${employees.length} total employees)`;
-
-  // Update button states
   prevBtn.disabled = currentPage <= 1;
   nextBtn.disabled = currentPage >= totalPages;
 }
@@ -616,46 +528,35 @@ function goToPage(page) {
   }
 }
 
-// 🆕 SEARCH EMPLOYEES - NOW RESPECTS ACTIVE FILTERS
+// SEARCH EMPLOYEES
 function searchEmployees() {
   const searchForm = document.getElementById("searchForm");
   const searchQuery = document.getElementById("search_qr").value.trim();
 
   if (!searchForm) return;
 
-  // 🆕 Get active filters from the form
   const filters = getActiveFilters();
+  loadEmployees(filters, true);
 
-  // Load employees with the current filters
-  loadEmployees(filters, true); // true = preserve page when filtering
-
-  // ✅ AUTO-CLEAR AFTER SUCCESSFUL SEARCH
   if (searchQuery) {
     document.getElementById("search_qr").value = "";
   }
 
-  // 🆕 Display filter status
   displayFilterStatus();
   updateDeleteButtonState();
 }
 
-// 🆕 CLEAR SEARCH - Properly reset and reload all
+// CLEAR SEARCH
 function clearSearch() {
   const searchForm = document.getElementById("searchForm");
-  if (searchForm) {
-    searchForm.reset();
-  }
+  if (searchForm) searchForm.reset();
 
-  // Remove filter status display
   const filterStatus = document.getElementById("filter-status");
-  if (filterStatus) {
-    filterStatus.remove();
-  }
+  if (filterStatus) filterStatus.remove();
 
-  // Reset to page 1 and load all employees
   currentPage = 1;
   activeFilters = {};
-  loadEmployees({}, false); // Load without filters
+  loadEmployees({}, false);
   updateDeleteButtonState();
 }
 
@@ -674,19 +575,18 @@ async function openModal(action, employeeId = null) {
 
   // Reset form
   form.reset();
-  document.getElementById("employee_id").value = ""; // Fixed ID reference
+  document.getElementById("employee_id").value = "";
+  // FIX: Clear original_id too
+  document.getElementById("original_id").value = "";
 
-  // Reset file upload label and input
   const fileLabel = document.querySelector(".file-upload-label");
   const imageInput = document.getElementById("image");
 
-  fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
-  imageInput.value = ""; // Clear file input
+  fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
+  imageInput.value = "";
 
   if (action === "add") {
     modalTitle.textContent = "Add Employee";
-
-    // Set default values for new employee
     document.getElementById("status").value = "Active";
   } else if (action === "edit" && employeeId) {
     modalTitle.textContent = "Edit Employee";
@@ -696,12 +596,11 @@ async function openModal(action, employeeId = null) {
   modal.style.display = "block";
 
   if (action === "add") {
-    // Autofocus on qr_code input after modal is displayed
     qrCodeInput.focus();
   }
 }
 
-// ✨ 🆕 ENHANCED DELETE MODAL - WITH FILTERED DELETE SUPPORT
+// ENHANCED DELETE MODAL
 function openDeleteModal(employeeId = null, requireConfirmation = false) {
   const modal = document.getElementById("deleteModal");
   const confirmBtn = document.getElementById("confirmDeleteBtn");
@@ -712,19 +611,14 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
   const modalTitle = document.getElementById("deleteModalTitle");
   const modalMessage = document.getElementById("deleteModalMessage");
 
-  // 🆕 NEW: Check if filters are active
   const hasFilters = hasActiveFilters();
 
-  // Store the employeeId for use in confirm handler
   confirmBtn.dataset.employeeId = employeeId;
   confirmBtn.dataset.requireConfirmation = requireConfirmation;
-  confirmBtn.dataset.hasFilters = hasFilters; // 🆕 NEW: Store filter state
+  confirmBtn.dataset.hasFilters = hasFilters;
 
-  // Update modal content based on delete type
   if (requireConfirmation) {
-    // 🆕 DELETE BASED ON FILTERS
     if (hasFilters) {
-      // Delete filtered employees
       modalTitle.textContent = "⚠️ Delete Filtered Employees";
       modalMessage.innerHTML = `
         <div>
@@ -746,7 +640,6 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
         </div>
       `;
     } else {
-      // Delete all employees
       modalTitle.textContent = "⚠️ Delete All Employees";
       modalMessage.innerHTML = `
         <div>
@@ -761,7 +654,6 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
     confirmBtn.style.opacity = "0.5";
     confirmBtn.style.cursor = "not-allowed";
   } else {
-    // Single employee delete
     modalTitle.textContent = "Delete Employee";
     modalMessage.textContent = "Are you sure you want to delete this employee?";
     confirmationContainer.style.display = "none";
@@ -770,19 +662,13 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
     confirmBtn.style.cursor = "pointer";
   }
 
-  // Clear input field
-  if (confirmationInput) {
-    confirmationInput.value = "";
-  }
+  if (confirmationInput) confirmationInput.value = "";
 
-  // Show modal
   modal.style.display = "flex";
 
-  // Remove previous listeners to avoid duplicates
   const newConfirmBtn = confirmBtn.cloneNode(true);
   confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
 
-  // Handle confirmation input (if delete all)
   if (requireConfirmation && confirmationInput) {
     const newConfirmationInput = confirmationInput.cloneNode(true);
     confirmationInput.parentNode.replaceChild(
@@ -801,7 +687,6 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
     });
   }
 
-  // Handle confirm click or Enter key
   const handleConfirm = () => {
     const id = newConfirmBtn.dataset.employeeId;
     const requiresConfirm =
@@ -812,7 +697,7 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
       if (hasFiltersFlag) {
         deleteFilteredEmployees();
       } else {
-        showAlert("Cannot be Deleted!, Try changing filters.", "error");
+        showAlert("Cannot be Deleted! Try changing filters.", "error");
       }
     } else {
       deleteEmployee(id);
@@ -824,22 +709,17 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
 
   document.addEventListener("keydown", function onEnterKey(e) {
     if (e.key === "Enter" && modal.style.display === "flex") {
-      if (!newConfirmBtn.disabled) {
-        handleConfirm();
-      }
+      if (!newConfirmBtn.disabled) handleConfirm();
       document.removeEventListener("keydown", onEnterKey);
     }
   });
 
-  // Handle clicking outside modal
   modal.addEventListener("click", (e) => {
-    if (e.target === modal) {
-      modal.style.display = "none";
-    }
+    if (e.target === modal) modal.style.display = "none";
   });
 }
 
-// 🆕 UPDATE DELETE BUTTON STATE based on active filters
+// UPDATE DELETE BUTTON STATE based on active filters
 function updateDeleteButtonState() {
   const deleteBtn = document.querySelector(".delete-all-btn .btn-danger");
   if (!deleteBtn) return;
@@ -859,12 +739,11 @@ function updateDeleteButtonState() {
   }
 }
 
-// 🆕 NEW FUNCTION - DELETE EMPLOYEES BASED ON ACTIVE FILTERS
+// DELETE EMPLOYEES BASED ON ACTIVE FILTERS
 async function deleteFilteredEmployees() {
   try {
     showLoading(true);
 
-    // 🆕 Get employee IDs from current filtered employees array
     const employeeIds = employees.map((emp) => emp.id);
 
     if (employeeIds.length === 0) {
@@ -872,18 +751,15 @@ async function deleteFilteredEmployees() {
       return;
     }
 
-    // 🆕 Send filtered employee IDs to backend
     const formData = new FormData();
     formData.append("action", "delete_filtered");
     formData.append("employee_ids", JSON.stringify(employeeIds));
-    formData.append("filters", JSON.stringify(activeFilters)); // 🆕 Send filters for logging
+    formData.append("filters", JSON.stringify(activeFilters));
 
     const response = await fetch("../cnfg/manpower_backend.php", {
       method: "POST",
       body: formData,
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
     const data = await response.json();
@@ -894,9 +770,8 @@ async function deleteFilteredEmployees() {
         "success",
       );
 
-      // 🆕 Reset to page 1 and clear filters after deleting filtered
       currentPage = 1;
-      clearSearch(); // This will also remove filter status display
+      clearSearch();
     } else {
       showAlert(data.message || "Failed to delete filtered employees", "error");
     }
@@ -914,14 +789,11 @@ function populatePositionFilter(employeeList) {
   if (!select) return;
 
   const current = select.value;
-
-  // Collect unique, non-empty position strings
   const positionSrt = new Set();
+
   for (const emp of employeeList) {
     const raw = (emp.position || "").trim();
-    if (raw && raw.toLowerCase() !== "none") {
-      positionSrt.add(raw);
-    }
+    if (raw && raw.toLowerCase() !== "none") positionSrt.add(raw);
   }
 
   select.innerHTML = '<option value="">All</option>';
@@ -948,14 +820,11 @@ function populateBrandFilter(employeeList) {
   if (!select) return;
 
   const current = select.value;
-
-  // Collect unique, non-empty brand strings
   const brandSet = new Set();
+
   for (const emp of employeeList) {
     const raw = (emp.brand || "").trim();
-    if (raw && raw.toLowerCase() !== "none") {
-      brandSet.add(raw);
-    }
+    if (raw && raw.toLowerCase() !== "none") brandSet.add(raw);
   }
 
   select.innerHTML = '<option value="">All</option>';
@@ -981,19 +850,14 @@ function populateViolationFilter(employeeList) {
   const select = document.getElementById("search_violation");
   if (!select) return;
 
-  // Preserve current selection
   const current = select.value;
-
-  // Collect unique, non-empty violation strings
   const violationSet = new Set();
+
   for (const emp of employeeList) {
     const raw = (emp.violation || "").trim();
-    if (raw && raw.toLowerCase() !== "none") {
-      violationSet.add(raw);
-    }
+    if (raw && raw.toLowerCase() !== "none") violationSet.add(raw);
   }
 
-  // Rebuild options
   select.innerHTML = '<option value="">All</option>';
   select.innerHTML += '<option value="__none__">No Violation</option>';
 
@@ -1007,24 +871,20 @@ function populateViolationFilter(employeeList) {
     });
   }
 
-  // Restore selection if still valid
   if (current && [...select.options].some((o) => o.value === current)) {
     select.value = current;
   }
 }
 
-// 🆕 LOAD EMPLOYEES - NOW ALWAYS CHECKS FOR FILTERS
+// LOAD EMPLOYEES - ALWAYS CHECKS FOR FILTERS
 async function loadEmployees(filters = {}, preservePage = false) {
   try {
     showLoading(true);
 
-    // 🆕 If no filters passed, check for active filters in form
     if (Object.keys(filters).length === 0 && hasActiveFilters()) {
       filters = getActiveFilters();
-      console.log("📋 Using active filters from form:", filters);
     }
 
-    // 🆕 Store the active filters
     activeFilters = filters;
 
     const params = new URLSearchParams({ action: "get" });
@@ -1043,16 +903,10 @@ async function loadEmployees(filters = {}, preservePage = false) {
 
     const response = await fetch(
       `../cnfg/manpower_backend.php?${params.toString()}`,
-      {
-        headers: {
-          "X-Requested-With": "XMLHttpRequest",
-        },
-      },
+      { headers: { "X-Requested-With": "XMLHttpRequest" } },
     );
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();
 
@@ -1062,7 +916,6 @@ async function loadEmployees(filters = {}, preservePage = false) {
       populateBrandFilter(employees);
       populateViolationFilter(employees);
 
-      // Only reset to page 1 if not preserving page and not filtering
       if (!preservePage && Object.keys(filters).length === 0) {
         currentPage = 1;
       }
@@ -1071,20 +924,16 @@ async function loadEmployees(filters = {}, preservePage = false) {
       await updateTotalEmployees();
       await updateActiveEmployees();
 
-      // 🆕 Show filter status if filters are active
       if (Object.keys(filters).length > 0) {
         displayFilterStatus();
       }
-
-      console.log(
-        `Loaded ${data.total || employees.length} employees`,
-        filters,
-      );
     } else {
+      await renderEmployeeError('Network error. Please try again.');
       showAlert(data.message || "Error loading employees", "error");
     }
   } catch (error) {
     console.error("Error loading employees:", error);
+    await renderEmployeeError('Network error. Please try again.');
     showAlert(
       "Failed to load employees. Please check your connection.",
       "error",
@@ -1105,63 +954,60 @@ function closeModal() {
   deleteModal.style.display = "none";
   importModal.style.display = "none";
 
-  // Reset form
   const form = document.getElementById("employeeForm");
-  if (form) {
-    form.reset();
-  }
+  if (form) form.reset();
 
-  // Reset file upload label and input
   const fileLabel = document.querySelector(".file-upload-label");
   const imageInput = document.getElementById("image");
 
-  if (fileLabel) {
-    fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
-  }
-  if (imageInput) {
-    imageInput.value = ""; // Clear file input
-  }
+  if (fileLabel)
+    fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
+  if (imageInput) imageInput.value = "";
 }
 
-// Handle form submission - Modified with duplicate name validation
+// Handle form submission
+// FIX: was referencing getElementById("id") which doesn't exist — correct ID is "employee_id"
 async function handleFormSubmit(e) {
   e.preventDefault();
 
   try {
-    // Basic form validation
+    const empid = document.getElementById("employee_id").value.trim();
     const fullname = document.getElementById("fullname").value.trim();
     const position = document.getElementById("position").value.trim();
     const brand = document.getElementById("brand").value.trim();
     const shift = document.getElementById("shift").value;
-    const employeeId = document.getElementById("employee_id").value;
+    const originalId = document.getElementById("original_id").value.trim();
 
+    if (!empid) {
+      showAlert("EMPID is required", "error");
+      return;
+    }
     if (!fullname) {
       showAlert("Fullname is required", "error");
       return;
     }
-
     if (!position) {
       showAlert("Position is required", "error");
       return;
     }
-
     if (!brand) {
       showAlert("Brand is required", "error");
       return;
     }
-
     if (!shift) {
       showAlert("Shift is required", "error");
       return;
     }
 
-    // Check for duplicate fullname
+    // Check for duplicate fullname (exclude current employee when editing)
     const isDuplicate = employees.some((emp) => {
-      // For edit mode, exclude the current employee from duplicate check
-      if (currentAction === "edit" && employeeId && emp.id == employeeId) {
+      if (
+        currentAction === "edit" &&
+        originalId &&
+        String(emp.id) === String(originalId)
+      ) {
         return false;
       }
-      // Case-insensitive comparison
       return (
         emp.fullname.toLowerCase().trim() === fullname.toLowerCase().trim()
       );
@@ -1172,7 +1018,7 @@ async function handleFormSubmit(e) {
       return;
     }
 
-    // Check file size if image is selected
+    // Validate image if selected
     const imageInput = document.getElementById("image");
     if (imageInput.files.length > 0) {
       const file = imageInput.files[0];
@@ -1183,7 +1029,6 @@ async function handleFormSubmit(e) {
         return;
       }
 
-      // Check file type
       const allowedTypes = [
         "image/jpeg",
         "image/jpg",
@@ -1204,14 +1049,10 @@ async function handleFormSubmit(e) {
     const response = await fetch("../cnfg/manpower_backend.php", {
       method: "POST",
       body: formData,
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();
 
@@ -1225,7 +1066,6 @@ async function handleFormSubmit(e) {
       );
       closeModal();
 
-      // 🆕 Reload with active filters (if any), preserve page for edits
       const preservePage = currentAction === "edit";
       const filtersToUse = hasActiveFilters() ? getActiveFilters() : {};
       await loadEmployees(filtersToUse, preservePage);
@@ -1253,17 +1093,16 @@ function setupFileUploadHandler() {
     const label = document.querySelector(".file-upload-label");
 
     if (e.target.files.length > 0) {
-      const file = e.target.files[0];
-      const maxSize = 5 * 1024 * 1024; // 5MB
+      const file = imageInput.files[0];
+      const maxSize = 5 * 1024 * 1024;
 
       if (file.size > maxSize) {
         showAlert("File size must be less than 5MB", "error");
-        e.target.value = ""; // Clear the input
-        label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
+        e.target.value = "";
+        label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
         return;
       }
 
-      // Check file type
       const allowedTypes = [
         "image/jpeg",
         "image/jpg",
@@ -1272,55 +1111,49 @@ function setupFileUploadHandler() {
       ];
       if (!allowedTypes.includes(file.type)) {
         showAlert("Only image files are allowed", "error");
-        e.target.value = ""; // Clear the input
-        label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
+        e.target.value = "";
+        label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
         return;
       }
 
-      // Create image preview using FileReader
       const reader = new FileReader();
 
       reader.onerror = function () {
         showAlert("Error reading file", "error");
         e.target.value = "";
-        label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
+        label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
       };
 
       reader.onload = function (event) {
-        // Ensure the image data is properly loaded
         const imageDataUrl = event.target.result;
 
-        // Clear any cached versions
         const existingImg = label.querySelector("img");
         if (existingImg) {
           existingImg.src = "";
           existingImg.removeAttribute("src");
         }
 
-        // Show new image preview with indication it's a new selection
         label.innerHTML = `
           <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-            <img id="imagePreview" src="${imageDataUrl}" alt="New image preview" style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.15), 0 0 0 2px #4CAF50;" onerror="console.error('Image preview failed to load');">
+            <img id="imagePreview" src="${imageDataUrl}" alt="New image preview"
+              style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover;
+                     box-shadow: 0 2px 8px rgba(0,0,0,0.15), 0 0 0 2px #4CAF50;">
             <small style="color: #4CAF50; font-size: 12px; font-weight: 500;">✓ New image selected</small>
           </div>
         `;
 
-        // Force browser to recognize the image change
         const previewImg = label.querySelector("#imagePreview");
-        if (previewImg) {
-          // Trigger reflow to ensure image renders
-          previewImg.offsetHeight;
-        }
+        if (previewImg) previewImg.offsetHeight;
       };
 
       reader.readAsDataURL(file);
     } else {
-      label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
+      label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
     }
   });
 }
 
-// Delete employee - Modified to preserve current page and filters
+// Delete single employee
 async function deleteEmployee(employeeId) {
   try {
     showLoading(true);
@@ -1332,18 +1165,14 @@ async function deleteEmployee(employeeId) {
     const response = await fetch("../cnfg/manpower_backend.php", {
       method: "POST",
       body: formData,
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
     const data = await response.json();
 
     if (data.success) {
       showAlert(data.message, "success");
-      // 🆕 Reload with active filters
-      const filtersToUse = activeFilters;
-      await loadEmployees(filtersToUse, true);
+      await loadEmployees(activeFilters, true);
       await updateTotalEmployees();
       await updateActiveEmployees();
     } else {
@@ -1357,7 +1186,7 @@ async function deleteEmployee(employeeId) {
   }
 }
 
-// Delete all employees with better confirmation
+// Delete all employees
 async function deleteAllEmployees(employeeId) {
   try {
     showLoading(true);
@@ -1369,25 +1198,21 @@ async function deleteAllEmployees(employeeId) {
     const response = await fetch("../cnfg/manpower_backend.php", {
       method: "POST",
       body: formData,
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
     const data = await response.json();
 
     if (data.success) {
       showAlert(data.message, "success");
-      // Reset to page 1 and clear filters after deleting all
       currentPage = 1;
-      clearSearch(); // This will also remove filter status display
+      clearSearch();
     } else {
       showAlert(data.message, "error");
     }
   } catch (error) {
-    console.error("Success:", error);
+    console.error("Error:", error);
     showAlert("Delete all employee data", "success");
-    // Reset to page 1 and clear filters
     currentPage = 1;
     clearSearch();
   } finally {
@@ -1397,11 +1222,9 @@ async function deleteAllEmployees(employeeId) {
 
 // Show alert message
 function showAlert(message, type = "info") {
-  // Remove any existing alerts
   const existingAlerts = document.querySelectorAll(".alert");
   existingAlerts.forEach((alert) => alert.remove());
 
-  // Create alert element
   const alert = document.createElement("div");
   alert.className = `alert alert-${type}`;
   alert.innerHTML = `
@@ -1409,14 +1232,10 @@ function showAlert(message, type = "info") {
     <button onclick="this.parentElement.remove()" style="float: right; background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 5px;"><i class="fas fa-times"></i></button>
   `;
 
-  // Add to page
   document.body.insertBefore(alert, document.body.firstChild);
 
-  // Auto remove after 5 seconds
   setTimeout(() => {
-    if (alert.parentElement) {
-      alert.remove();
-    }
+    if (alert.parentElement) alert.remove();
   }, 5000);
 }
 
@@ -1433,7 +1252,5 @@ function showLoading(show) {
 // Close modal when clicking outside
 window.onclick = function (event) {
   const modal = document.getElementById("employeeModal");
-  if (event.target === modal) {
-    closeModal();
-  }
+  if (event.target === modal) closeModal();
 };

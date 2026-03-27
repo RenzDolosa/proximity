@@ -567,6 +567,7 @@ async function buildQRToImageMap() {
     if (emp.qr_code) {
       qrImageMap[emp.qr_code.trim().toLowerCase()] = {
         image: emp.image,
+        id: emp.id,
         fullname: emp.fullname,
         position: emp.position,
         brand: emp.brand,
@@ -632,6 +633,17 @@ async function loadEmployeeData(employeeId) {
     console.error("Error loading employee data:", error);
     showAlert("Failed to load employee data", "error");
   }
+}
+
+async function renderEmployeeError(message = 'Failed to load employee data.') {
+  const tbody = document.getElementById('employeeTableBody');
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="13" style="text-align: center; padding: 20px; color: #c0392b;">
+        ⚠️ ${message}
+      </td>
+    </tr>
+  `;
 }
 
 // 🆕 ENHANCED Render employee table with QR matching logic AND employee image display
@@ -706,9 +718,14 @@ async function renderEmployeeTable() {
         .substring(0, 2)
         .toUpperCase();
 
+      const empId = matchedEmployeeData
+        ? `${matchedEmployeeData.id}`
+        : "";
+
       return `
           <tr>
               <td>${startIndex + index + 1}</td>
+              <td><strong>${empId}</strong></td>
               <td><strong>${displayName}</strong></td>
               <td>${matchedEmployeeData ? matchedEmployeeData.position : employee.position || "N/A"}</td>
               <td>${matchedEmployeeData ? matchedEmployeeData.brand : employee.brand || "N/A"}</td>
@@ -1309,10 +1326,12 @@ async function loadEmployees(filters = {}, preservePage = false) {
 
       console.log(`Loaded ${data.total || employees.length} employees`);
     } else {
+      await renderEmployeeError('Network error. Please try again.');
       showAlert(data.message || "Error loading employees", "error");
     }
   } catch (error) {
     console.error("Error loading employees:", error);
+    await renderEmployeeError('Network error. Please try again.');
     showAlert(
       "Failed to load employees. Please check your connection.",
       "error",

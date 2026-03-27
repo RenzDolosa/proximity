@@ -107,15 +107,26 @@ async function parseExcelFile(file) {
 function displayPreview(data) {
   let previewHTML = '<table class="preview-table"><thead><tr>';
   previewHTML +=
-    "<th>SN</th><th>Full Name</th><th>Position</th><th>Brand</th><th>Status</th><th>Shift</th><th>Violation</th><th>Proximity Code</th>";
+    "<th>SN</th><th>EMPID</th><th>Fullname</th><th>Position</th><th>Brand</th><th>Status</th><th>Shift</th><th>Violation</th><th>Proximity Code</th>";
   previewHTML += "</tr></thead><tbody>";
 
   data.forEach((col, index) => {
     previewHTML += "<tr>";
     previewHTML += `<td>${index + 1}</td>`;
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 7; i++) {
       previewHTML += `<td>${col[i] || ""}</td>`;
     }
+
+    const idValue = col[0] || "";
+    const idDisplay =
+      idValue !== "" && idValue !== "No EMPID"
+        ? idValue
+        : '<em style="color: #6c757d;">Required</em>';
+    previewHTML = previewHTML.replace(
+      `<td>${idValue}</td>`,
+      `<td>${idDisplay}</td>`,
+    );
+
     const fullnameValue = col[1] || "";
     const fullnameDisplay =
       fullnameValue !== "" && fullnameValue !== "None"
@@ -126,7 +137,7 @@ function displayPreview(data) {
       `<td>${fullnameDisplay}</td>`,
     );
 
-    const positionValue = col[1] || "";
+    const positionValue = col[2] || "";
     const positionDisplay =
       positionValue !== "" && positionValue !== "None"
         ? positionValue
@@ -136,7 +147,7 @@ function displayPreview(data) {
       `<td>${positionDisplay}</td>`,
     );
 
-    const brandValue = col[2] || "";
+    const brandValue = col[3] || "";
     const brandDisplay = brandValue
       ? brandValue
       : '<em style="color: #6c757d;">None</em>';
@@ -145,7 +156,7 @@ function displayPreview(data) {
       `<td>${brandDisplay}</td>`,
     );
 
-    const statusValue = col[3] || "";
+    const statusValue = col[4] || "";
     const statusDisplay = statusValue
       ? statusValue
       : '<em style="color: #6c757d;">Default (Active)</em>';
@@ -154,7 +165,7 @@ function displayPreview(data) {
       `<td>${statusDisplay}</td>`,
     );
 
-    const shiftValue = col[4] || "";
+    const shiftValue = col[5] || "";
     const shiftDisplay = shiftValue
       ? shiftValue
       : '<em style="color: #6c757d;">Default (Day Shift)</em>';
@@ -163,7 +174,7 @@ function displayPreview(data) {
       `<td>${shiftDisplay}</td>`,
     );
 
-    const violationValue = col[5] || "";
+    const violationValue = col[6] || "";
     const violationDisplay =
       violationValue !== "" && violationValue !== "None"
         ? violationValue
@@ -174,7 +185,7 @@ function displayPreview(data) {
     );
 
     // Show QR code column with indication if it will be auto-generated
-    const qrValue = col[6] || "";
+    const qrValue = col[7] || "";
     const qrDisplay = qrValue
       ? qrValue
       : '<em style="color: #6c757d;">Auto-generate</em>';
@@ -260,16 +271,21 @@ async function handleImportSubmit(e) {
 
       // Validate required fields
       if (!row[0]) {
-        errors.push(`Row ${rowNumber}: Missing required fields (fullname)`);
+        errors.push(`Row ${rowNumber}: Missing required fields (empid)`);
         return;
       }
 
       if (!row[1]) {
-        errors.push(`Row ${rowNumber}: Missing required fields (position)`);
+        errors.push(`Row ${rowNumber}: Missing required fields (fullname)`);
         return;
       }
 
       if (!row[2]) {
+        errors.push(`Row ${rowNumber}: Missing required fields (position)`);
+        return;
+      }
+
+      if (!row[3]) {
         errors.push(`Row ${rowNumber}: Missing required fields (brand)`);
         return;
       }
@@ -282,13 +298,14 @@ async function handleImportSubmit(e) {
       // }
 
       employees.push({
-        fullname: row[0] || "",
-        position: row[1] || "",
-        brand: row[2] || "",
-        status: row[3] || "Active",
-        shift: row[4] || "",
-        violation: row[5] || "",
-        qr: row[6] || "",
+        id: row[0] || "",
+        fullname: row[1] || "",
+        position: row[2] || "",
+        brand: row[3] || "",
+        status: row[4] || "Active",
+        shift: row[5] || "",
+        violation: row[6] || "",
+        qr: row[7] || "",
       });
     });
 

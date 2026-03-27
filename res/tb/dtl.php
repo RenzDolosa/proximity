@@ -253,7 +253,8 @@ if ($databaseConnected) {
         <thead>
           <tr>
             <th>SN</th>
-            <th>Full Name</th>
+            <th>EMPID</th>
+            <th>Fullname</th>
             <th>Position</th>
             <th>Brand</th>
             <th>Status</th>

@@ -80,11 +80,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $success = "Registration successful! Your personal database has been created. You can now login.";
 
       // Log the successful registration using config.php function
-      logSystemAction(
-        $result['user_id'],
-        'USER_REGISTERED',
-        'User registered with database: ' . USER_DB_PREFIX . $result['user_id']
-      );
+      // logSystemAction(
+      //   $result['user_id'],
+      //   'USER_REGISTERED',
+      //   'User registered with database: ' . USER_DB_PREFIX . $result['user_id']
+      // );
 
       // Clear form data on success
       $username = $email = $first_name = $last_name = $myDatabase = $phone = '';
@@ -92,13 +92,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       // // Optional: Auto-login the user after registration
       // // Uncomment the following lines if you want auto-login:
 
-      // $_SESSION['user_id'] = $result['user_id'];
-      // $_SESSION['username'] = $username;
-      // $_SESSION['email'] = $email;
-      // $_SESSION['first_name'] = $first_name;
-      // $_SESSION['last_name'] = $last_name;
-      // header('Location: portal.php');
-      // exit;
+      $_SESSION['user_id'] = $result['user_id'];
+      $_SESSION['username'] = $username;
+      $_SESSION['email'] = $email;
+      $_SESSION['first_name'] = $first_name;
+      $_SESSION['last_name'] = $last_name;
+      header('Location: portal.php');
+      exit;
 
     } else {
       $errors = $result['errors'];

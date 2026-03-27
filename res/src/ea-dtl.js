@@ -28,6 +28,7 @@ async function fetchAllEmployeesForExport() {
 // Function to apply current search filters to employee data
 function applyCurrentFilters(employees) {
   const filters = {
+    employee_id: document.getElementById("search_employee_id")?.value?.toLowerCase() || "",
     fullname: document.getElementById("search_fullname")?.value?.toLowerCase() || "",
     position: document.getElementById("search_position")?.value?.toLowerCase() || "",
     brand: document.getElementById("search_brand")?.value?.toLowerCase() || "",
@@ -38,6 +39,14 @@ function applyCurrentFilters(employees) {
   };
 
   return employees.filter((employee) => {
+    // Apply employee_id filter
+    if (
+      filters.employee_id &&
+      !employee.employee_id?.toLowerCase().includes(filters.employee_id)
+    ) {
+      return false;
+    }
+
     // Apply fullname filter
     if (
       filters.fullname &&
@@ -117,7 +126,7 @@ function exportAllData() {
 }
 
 // Updated helper function to export employee data array
-function exportEmployeeData(employees, type = "Data") {
+async function exportEmployeeData(employees, type = "Data") {
   try {
     if (!employees || employees.length === 0) {
       showAlert("No employee data to export!", "warning");
@@ -130,7 +139,8 @@ function exportEmployeeData(employees, type = "Data") {
     // Add headers
     const headers = [
       "SN",
-      "Full Name",
+      "EMPID",
+      "Fullname",
       "Position",
       "Brand",
       "Status",
@@ -144,15 +154,17 @@ function exportEmployeeData(employees, type = "Data") {
 
     // Add employee data
     employees.forEach((employee, index) => {
+
       const rowData = [
-        index + 1, // SN
+        String(index + 1), // SN
+        String(employee.employee_id) || "", 
         employee.fullname || "",
         employee.position || "",
         employee.brand || "",
         employee.status || "",
         employee.shift || "",
         employee.violation || "None",
-        employee.qr_code || "",
+        employee.qr_code || "", // Image column is skipped
         formatDate(employee.access_timestamp) || "",
         employee.check_status || "",
       ];
@@ -166,7 +178,8 @@ function exportEmployeeData(employees, type = "Data") {
     // Set column widths
     const colWidths = [
       { wch: 5 }, // SN
-      { wch: 25 }, // Full Name
+      { wch: 10 }, // SN
+      { wch: 25 }, // Fullname
       { wch: 20 }, // Position
       { wch: 15 }, // Brand
       { wch: 10 }, // Status
@@ -273,7 +286,9 @@ function formatDate(dateString) {
       " " +
       String(date.getHours()).padStart(2, "0") +
       ":" +
-      String(date.getMinutes()).padStart(2, "0")
+      String(date.getMinutes()).padStart(2, "0") +
+      ":" +
+      String(date.getSeconds()).padStart(2, "0")
     );
   } catch (error) {
     console.error("Date formatting error:", error);
@@ -300,7 +315,8 @@ function exportToExcelDTL(type = "Filtered") {
     // Add headers
     const headers = [
       "SN",
-      "Full Name",
+      "EMPID",
+      "Fullname",
       "Position",
       "Brand",
       "Status",
@@ -320,15 +336,20 @@ function exportToExcelDTL(type = "Filtered") {
         if (cells.length > 0) {
           const rowData = [
             cells[0]?.textContent?.trim() || "", // SN
-            cells[1]?.textContent?.trim() || "", // Full Name
-            cells[2]?.textContent?.trim() || "", // Position
-            cells[3]?.textContent?.trim() || "", // Brand
-            cells[4]?.textContent?.trim() || "", // Status
-            cells[5]?.textContent?.trim() || "", // Shift
-            cells[6]?.textContent?.trim() || "", // Violation
-            cells[8]?.textContent?.trim() || "", // Proximity Code (skip Image column)
-            cells[9]?.textContent?.trim() || "", // Timestamp
-            cells[10]?.textContent?.trim() || "", // Check Status
+            cells[1]?.textContent?.trim() || "", // EMPID
+            cells[2]?.textContent?.trim() || "", // Fullname
+            cells[3]?.textContent?.trim() || "", // Position
+            cells[4]?.textContent?.trim() || "", // Brand
+            cells[5]?.textContent?.trim() || "", // Status
+            cells[6]?.textContent?.trim() || "", // Shift
+            cells[7]?.textContent?.trim() || "", // Violation
+            (() => {
+              const onclick = cells[9]?.getAttribute("onclick") || "";
+              const match = onclick.match(/copyQRCode\('(.+?)'\)/);
+              return match ? match[1] : "";
+            })(), // Proximity Code (skip Image column)
+            cells[10]?.textContent?.trim() || "", // Timestamp
+            cells[11]?.textContent?.trim() || "", // Check Status
           ];
           data.push(rowData);
         }
@@ -347,7 +368,8 @@ function exportToExcelDTL(type = "Filtered") {
     // Set column widths
     const colWidths = [
       { wch: 5 }, // SN
-      { wch: 25 }, // Full Name
+      { wch: 10 }, // EMPID
+      { wch: 25 }, // Fullname
       { wch: 20 }, // Position
       { wch: 15 }, // Brand
       { wch: 10 }, // Status

@@ -27,7 +27,7 @@ try {
 
   if ($isExportRequest) {
     // For export, get all employees without pagination
-    $sql = "SELECT id, fullname, position, brand, status, shift, violation, qr_code, 
+    $sql = "SELECT id, employee_id, fullname, position, brand, status, shift, violation, qr_code, 
                        image, access_timestamp, check_status
                 FROM employee_access_log
                 ORDER BY access_timestamp DESC";
@@ -52,6 +52,11 @@ try {
   // Build search conditions
   $searchConditions = [];
   $searchParams = [];
+
+  if (!empty($_GET['employee_id'])) {
+    $searchConditions[] = "employee_id LIKE :employee_id";
+    $searchParams[':employee_id'] = '%' . $_GET['employee_id'] . '%';
+  }
 
   if (!empty($_GET['fullname'])) {
     $searchConditions[] = "fullname LIKE :fullname";
@@ -104,7 +109,7 @@ try {
   $totalRecords = $countStmt->fetchColumn();
 
   // Get paginated results
-  $sql = "SELECT id, fullname, position, brand, status, shift, violation, qr_code, 
+  $sql = "SELECT id, employee_id, fullname, position, brand, status, shift, violation, qr_code, 
                    image, access_timestamp, check_status
             FROM employee_access_log
             $whereClause 

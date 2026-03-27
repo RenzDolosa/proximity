@@ -53,6 +53,11 @@ try {
   $searchConditions = [];
   $searchParams = [];
 
+  if (!empty($_GET['id'])) {
+    $searchConditions[] = "id LIKE :id";
+    $searchParams[':id'] = '%' . $_GET['id'] . '%';
+  }
+
   if (!empty($_GET['fullname'])) {
     $searchConditions[] = "fullname LIKE :fullname";
     $searchParams[':fullname'] = '%' . $_GET['fullname'] . '%';

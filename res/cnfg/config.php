@@ -7,13 +7,114 @@ define('DB_NAME', 'if0_41430152_proximity3pl'); // system_database // if0_414301
 define('DB_USER', 'root'); // root // if0_41430152
 define('DB_PASS', ''); // empty for local development // kGq47fPWAS41
 
-define('USER_DB_PREFIX', 'User'); // 'if0_41430152' . '_'
+define('USER_DB_PREFIX', DB_NAME); // 'if0_41430152' . '_'
 define('USER_DB_HOST', DB_HOST);
 define('USER_DB_USER', DB_USER);
 define('USER_DB_PASS', DB_PASS);
 
 // ADDED: Maximum database name length for MySQL
 define('MAX_DB_NAME_LENGTH', 64);
+
+// Create main database
+function createDatabase()
+{
+  $dbName = DB_NAME;
+
+  if (strlen($dbName) > MAX_DB_NAME_LENGTH) {
+    $errorMsg = "Database name exceeds maximum length of " . MAX_DB_NAME_LENGTH . " characters. Generated name: '$dbName' (" . strlen($dbName) . " chars)";
+    error_log($errorMsg);
+    return ['success' => false, 'error' => $errorMsg];
+  }
+
+  try {
+    // Connect WITHOUT specifying a database
+    $pdo = new PDO(
+      "mysql:host=" . DB_HOST . ";charset=utf8mb4",
+      DB_USER,
+      DB_PASS,
+      [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+    );
+
+    // Check if database already exists
+    $stmt = $pdo->prepare("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?");
+    $stmt->execute([$dbName]);
+
+    if ($stmt->rowCount() > 0) {
+      error_log("Database already exists: $dbName — skipping creation.");
+      // Still connect and ensure tables exist
+    } else {
+      // Create the database
+      $escapedDbName = str_replace("`", "``", $dbName);
+      $pdo->exec("CREATE DATABASE `{$escapedDbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+      error_log("Database created successfully: $dbName");
+    }
+
+    // Connect to the (new or existing) database
+    $dbPdo = new PDO(
+      "mysql:host=" . DB_HOST . ";dbname=" . $dbName . ";charset=utf8mb4",
+      DB_USER,
+      DB_PASS,
+      [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+    );
+
+    // FIXED: Removed invalid "ON users(...)" index syntax from CREATE TABLE
+    $sql = "
+      CREATE TABLE
+        IF NOT EXISTS `users` (
+        `id` int(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        `username` varchar(50) NOT NULL,
+        `email` varchar(100) NOT NULL,
+        `password` varchar(255) NOT NULL,
+        `first_name` varchar(50) NOT NULL,
+        `last_name` varchar(50) NOT NULL,
+        `phone` varchar(20) DEFAULT NULL,
+        `my_database` varchar(50) NOT NULL,
+        `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+        `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+        `last_login` timestamp NULL DEFAULT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+      CREATE TABLE
+        IF NOT EXISTS `user_sessions` (
+        `id` int(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        `user_id` int(11) NOT NULL,
+        `session_token` varchar(255) NOT NULL,
+        `expires_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+        `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+        CONSTRAINT `user_sessions_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+      CREATE TABLE
+        IF NOT EXISTS `system_logs` (
+        `id` int(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        `user_id` int(11) DEFAULT NULL,
+        `action` varchar(100) NOT NULL,
+        `details` text DEFAULT NULL,
+        `ip_address` varchar(45) DEFAULT NULL,
+        `user_agent` text DEFAULT NULL,
+        `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+      INSERT INTO `users` (`id`, `username`, `email`, `password`, `first_name`, `last_name`, `phone`, `my_database`, `created_at`, `updated_at`, `last_login`) VALUES
+      (1, 'Admin', 'administrator@gmail.com', '$2y$10$/nqdViJv2DWyfjHhfS8ZDOPT.6QwxO3DWK1ocCwDFPUYvEE20Lkga', 'Renz', 'Admin', 09196398247, 'AdminServer', NOW(), NOW(), NULL);
+
+      ALTER TABLE `users`
+        MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+    ";
+
+    error_log("Creating/verifying tables in database: $dbName");
+    $dbPdo->exec($sql);
+    error_log("Tables ready in database: $dbName");
+
+    return ['success' => true, 'database_name' => $dbName];
+  } catch (PDOException $e) {
+    $errorMsg = "Error in createDatabase(): " . $e->getMessage();
+    error_log($errorMsg);
+    return ['success' => false, 'error' => $errorMsg];
+  }
+}
+
+createDatabase();
 
 // ============================================================================
 // DATABASE CONNECTION FUNCTIONS
@@ -53,7 +154,7 @@ function getUserDBConnection($userId)
     throw new Exception("Invalid user ID");
   }
 
-  $dbName = USER_DB_PREFIX; // USER_DB_PREFIX . intval($userId);
+  $dbName = DB_NAME; // USER_DB_PREFIX . intval($userId);
 
   try {
     $pdo = new PDO(
@@ -80,7 +181,7 @@ function userDatabaseExists($userId)
     return false;
   }
 
-  $dbName = USER_DB_PREFIX; // USER_DB_PREFIX . intval($userId);
+  $dbName = DB_NAME; // USER_DB_PREFIX . intval($userId);
 
   try {
     $pdo = new PDO(
@@ -110,7 +211,7 @@ function createUserDatabase($userId)
   }
 
   $userId = intval($userId);
-  $dbName = USER_DB_PREFIX; // USER_DB_PREFIX . $userId;
+  $dbName = DB_NAME; // USER_DB_PREFIX . $userId;
 
   // ADDED: Validate database name length
   if (strlen($dbName) > MAX_DB_NAME_LENGTH) {
@@ -149,7 +250,7 @@ function createUserDatabase($userId)
     $sql = "
         CREATE TABLE
           IF NOT EXISTS employees (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id INT NOT NULL,
             fullname VARCHAR(100) NOT NULL,
             position VARCHAR(50) NOT NULL,
             brand VARCHAR(50) NOT NULL,
@@ -157,7 +258,7 @@ function createUserDatabase($userId)
             shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') NOT NULL,
             violation TEXT,
             image VARCHAR(255),
-            qr_code VARCHAR(100) UNIQUE,
+            qr_code VARCHAR(100) UNIQUE PRIMARY KEY,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_qr_code (qr_code)
@@ -260,8 +361,8 @@ function createUserDatabase($userId)
             inactive_audio_path VARCHAR(512) DEFAULT NULL,
             violations_audio_path VARCHAR(512) DEFAULT NULL,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            PRIMARY KEY (id)
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
             UNIQUE KEY uq_user_id (user_id)
           ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
     ";
@@ -293,7 +394,7 @@ function ensureUserTablesExist($userId)
     $sql = "
         CREATE TABLE
           IF NOT EXISTS employees (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id INT PRIMARY KEY,
             fullname VARCHAR(100) NOT NULL,
             position VARCHAR(50) NOT NULL,
             brand VARCHAR(50) NOT NULL,
@@ -397,15 +498,14 @@ function ensureUserTablesExist($userId)
 
         CREATE TABLE
           IF NOT EXISTS user_audio_settings (
-            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             user_id INT UNSIGNED NOT NULL,
             success_audio_path VARCHAR(512) DEFAULT NULL,
             not_found_audio_path VARCHAR(512) DEFAULT NULL,
             inactive_audio_path VARCHAR(512) DEFAULT NULL,
             violations_audio_path VARCHAR(512) DEFAULT NULL,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            PRIMARY KEY (id)
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             UNIQUE KEY uq_user_id (user_id)
           ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
     ";
@@ -427,7 +527,7 @@ function deleteUserDatabase($userId)
   }
 
   $userId = intval($userId);
-  $dbName = USER_DB_PREFIX; // USER_DB_PREFIX . $userId;
+  $dbName = DB_NAME; // USER_DB_PREFIX . $userId;
 
   try {
     $pdo = new PDO(
@@ -498,11 +598,11 @@ function customDatabaseExists($dbName)
 }
 
 // ============================================================================
-// REGISTRATION AND LOGIN FUNCTIONS (FIXED VERSION)
+// REGISTRATION AND LOGIN FUNCTIONS
 // ============================================================================
 
 /**
- * FIXED: Enhanced User Registration Function
+ * Enhanced User Registration Function
  * 
  * DATABASE NAMING STRATEGY:
  * - Actual database created: user_{$userId} (e.g., user_1, user_2, user_3)
@@ -666,9 +766,6 @@ function loginUser($username, $password)
       // Update last login
       $updateStmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
       $updateStmt->execute([$user['id']]);
-
-      // Log successful login
-      logSystemAction($user['id'], 'USER_LOGIN', 'User logged in successfully');
 
       return ['success' => true, 'user' => $user, 'database_ready' => true];
     } else {

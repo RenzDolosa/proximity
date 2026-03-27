@@ -88,6 +88,7 @@ async function buildQRToImageMap() {
     if (emp.qr_code) {
       qrImageMap[emp.qr_code.trim().toLowerCase()] = {
         image: emp.image,
+        id: emp.id,
         fullname: emp.fullname,
         position: emp.position,
         brand: emp.brand,
@@ -428,6 +429,17 @@ async function loadEmployeeData(employeeId) {
   }
 }
 
+async function renderEmployeeError(message = 'Failed to load employee data.') {
+  const tbody = document.getElementById('employeeTableBody');
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="13" style="text-align: center; padding: 20px; color: #c0392b;">
+        ⚠️ ${message}
+      </td>
+    </tr>
+  `;
+}
+
 // 🆕 ENHANCED Render proximity code table with QR matching logic AND employee image display
 async function renderEmployeeTable() {
   const tbody = document.getElementById("employeeTableBody");
@@ -513,6 +525,10 @@ async function renderEmployeeTable() {
         ? `${matchedEmployeeData.fullname}\n${matchedEmployeeData.position}\n${matchedEmployeeData.brand}`
         : "No matched employee";
 
+      const empid = matchedEmployeeData
+        ? `${matchedEmployeeData.id}`
+        : "";
+      
       return `
         <tr>
             <td>${startIndex + index + 1}</td>
@@ -526,6 +542,7 @@ async function renderEmployeeTable() {
                   : `<div class="ph-cont" title="${tooltipText}"><div class="employee-ph">${displayInitials}</div></div>`
               }
             </td>
+            <td><strong>${empid}</strong></td>
             <td class="Col9" onclick="copyQRCode('${escapeHtml(employee.qr_code)}')" title="Copy Proximity code" style="cursor: pointer;">
               <img src="../icon/nfc-icon.png" alt="Copy Proximity code" style="width: 20px; height: 20px;">
             </td>
@@ -1019,10 +1036,12 @@ async function loadEmployees(filters = {}, preservePage = false) {
         displayFilterStatus();
       }
     } else {
+      await renderEmployeeError('Network error. Please try again.');
       showAlert(data.message || "Error loading employees", "error");
     }
   } catch (error) {
     console.error("Error loading employees:", error);
+    await renderEmployeeError('Network error. Please try again.');
     showAlert("Failed to load employees. Please check your connection.", "error");
   } finally {
     showLoading(false);

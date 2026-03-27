@@ -215,7 +215,7 @@ class EmployeeLogManager
       // Commit transaction if both inserts succeeded
       $this->conn->commit();
 
-      logSystemAction($this->userId, 'check_in_out', json_encode([
+      logSystemAction($this->userId, 'manual', json_encode([
         'employee_id' => $logId,
         'fullname' => $logData['fullname'],
         'qr_code' => $logData['qr_code'],

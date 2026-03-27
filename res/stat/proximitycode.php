@@ -174,6 +174,7 @@ if ($databaseConnected) {
           <tr>
             <th>SN</th>
             <th class="Col8">Image</th>
+            <th>EMPID</th>
             <th class="Col9">Proximity Code</th>
             <th>Remarks</th>
             <th>Register</th>

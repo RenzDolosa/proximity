@@ -16,36 +16,17 @@ $settings = [];
 
 if ($databaseConnected) {
   try {
-    // Get total employees
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employees");
     $stmt->execute();
     $stats['total_employees'] = $stmt->fetchColumn();
 
-    // Get active employees (note: status values are 'Active', not 'active')
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employees WHERE status = 'Active'");
     $stmt->execute();
     $stats['active_employees'] = $stmt->fetchColumn();
 
-    // Get inactive count
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employees WHERE status = 'Inactive'");
     $stmt->execute();
     $stats['inactive_employees'] = $stmt->fetchColumn();
-
-    // Get recent employee logs (fixed column references)
-    $stmt = $userDb->prepare("
-            SELECT el.*, e.fullname 
-            FROM employee_logs el
-            JOIN employees e ON el.employee_id = e.id
-            ORDER BY el.timestamp DESC 
-            LIMIT 10
-        ");
-    $stmt->execute();
-    $recentLogs = $stmt->fetchAll();
-
-    // Get company settings
-    $stmt = $userDb->prepare("SELECT setting_key, setting_value FROM user_settings");
-    $stmt->execute();
-    $settings = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
   } catch (PDOException $e) {
     $dbError = "Error fetching dashboard data: " . $e->getMessage();
     error_log($dbError);
@@ -91,7 +72,7 @@ if ($databaseConnected) {
   <div class="container">
     <!-- Search and Filter Controls -->
     <div class="controls">
-      <h3 style="padding-bottom: 1rem; cursor: default;">Search & Filter</h3>
+      <h3 style="padding-bottom: 1rem; cursor: default;">Search &amp; Filter</h3>
       <form id="searchForm">
         <div class="form-row">
           <div class="form-group">
@@ -176,8 +157,7 @@ if ($databaseConnected) {
             </div>
           </div>
           <div class="delete-all-btn">
-            <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All
-              Data</button>
+            <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All Data</button>
           </div>
           <div class="filter-status" id="filter-status"></div>
         </div>
@@ -213,6 +193,7 @@ if ($databaseConnected) {
         <thead>
           <tr>
             <th>SN</th>
+            <th>EMPID</th>
             <th>Fullname</th>
             <th>Position</th>
             <th>Brand</th>
@@ -251,38 +232,42 @@ if ($databaseConnected) {
       <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
       <h2 id="modalTitle">Add Employee</h2>
       <form id="employeeForm" enctype="multipart/form-data">
-        <input type="hidden" id="employee_id" name="id">
+        <input type="hidden" id="original_id" name="original_id" value="">
         <div class="form-row">
           <div class="form-group">
-            <label for="fullname">Fullname *</label>
-            <input type="text" id="fullname" name="fullname">
+            <label for="employee_id">EMPID <span style="color:#e74c3c">*</span></label>
+            <input type="text" id="employee_id" name="id" placeholder="Enter employee ID">
           </div>
           <div class="form-group">
-            <label for="position">Position *</label>
-            <input type="text" id="position" name="position">
+            <label for="fullname">Fullname <span style="color:#e74c3c">*</span></label>
+            <input type="text" id="fullname" name="fullname" placeholder="Enter fullname">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label for="brand">Brand *</label>
-            <input type="text" id="brand" name="brand">
+            <label for="position">Position <span style="color:#e74c3c">*</span></label>
+            <input type="text" id="position" name="position" placeholder="Enter position">
+          </div>
+          <div class="form-group">
+            <label for="brand">Brand <span style="color:#e74c3c">*</span></label>
+            <input type="text" id="brand" name="brand" placeholder="Enter brand">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="shift">Shift <span style="color:#e74c3c">*</span></label>
+            <select id="shift" name="shift">
+              <option value="">Select Shift</option>
+              <option value="Day Shift">Day Shift</option>
+              <option value="Night Shift">Night Shift</option>
+              <option value="Graveyard Shift">Graveyard Shift</option>
+            </select>
           </div>
           <div class="form-group">
             <label for="status">Status</label>
             <select id="status" name="status">
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="shift">Shift *</label>
-            <select id="shift" name="shift">
-              <option value="">Select Shift</option>
-              <option value="Day Shift">Day Shift</option>
-              <option value="Night Shift">Night Shift</option>
-              <option value="Graveyard Shift">Graveyard Shift</option>
             </select>
           </div>
         </div>
@@ -333,7 +318,6 @@ if ($databaseConnected) {
       </div>
       <div class="camera-modal-body">
         <div class="camera-selextor-grid">
-          <!-- CAMERA SELECTOR (NEW FEATURE) -->
           <div class="camera-selector-container">
             <label for="cameraSelector">
               <i class="fas fa-video"></i> Select Camera:
@@ -342,18 +326,14 @@ if ($databaseConnected) {
               <option value="">Loading cameras...</option>
             </select>
           </div>
-          <!-- STATUS MESSAGE -->
           <div class="camera-status" id="cameraStatus">
             Initializing camera...
           </div>
         </div>
-        <!-- CAMERA PREVIEW AREA -->
         <div class="camera-container">
           <video id="cameraStream" playsinline autoplay></video>
           <canvas id="cameraPreview" style="display: none;"></canvas>
         </div>
-
-        <!-- BUTTONS -->
         <div class="camera-controls">
           <button type="button" class="camera-btn capture" id="captureBtn" onclick="capturePhoto()">
             <i class="fas fa-circle"></i> Capture
@@ -379,17 +359,13 @@ if ($databaseConnected) {
       <div class="modal-header">
         <h2 id="deleteModalTitle">Delete Employee</h2>
       </div>
-
       <div class="modal-body">
         <p id="deleteModalMessage">Are you sure you want to delete this employee?</p>
-
-        <!-- Confirmation input for delete all -->
         <div id="confirmationContainer" style="display: none; margin-top: 20px;">
           <label for="confirmationInput" style="display: block; margin-bottom: 10px; font-weight: bold;">Type "DELETE ALL" to confirm:</label>
           <input type="text" id="confirmationInput" placeholder="Type DELETE ALL" style="margin-bottom: 10px;" />
         </div>
       </div>
-
       <button type="button" id="confirmDeleteBtn" class="btn btn-danger">Delete</button>
       <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
     </div>
@@ -411,10 +387,10 @@ if ($databaseConnected) {
       <div class="import-instructions">
         <h4>Supported File Formats:</h4>
         <p><strong>&#128196; CSV (.csv)</strong> | <strong>&#128202; Excel (.xlsx, .xls)</strong></p>
-
         <h4>File Format Requirements:</h4>
         <p>Your file should have the following columns in this order:</p>
         <ul>
+          <li><strong>empid</strong> - Employee's ID (required)</li>
           <li><strong>fullname</strong> - Employee's fullname (required)</li>
           <li><strong>position</strong> - Job position</li>
           <li><strong>brand</strong> - Brand/Department</li>
@@ -423,7 +399,7 @@ if ($databaseConnected) {
           <li><strong>violation</strong> - Any violations (optional)</li>
           <li><strong>proximity code</strong> - If have Proximity Code (optional)</li>
         </ul>
-        <p><em>Note: If blank Proximity Codes will be automatically generated for each employee.</em></p>
+        <p><em>Note: If blank, Proximity Codes will be automatically generated for each employee.</em></p>
       </div>
 
       <form id="importForm" enctype="multipart/form-data">
@@ -443,18 +419,15 @@ if ($databaseConnected) {
             </label>
           </div>
         </div>
-
         <div class="form-group">
           <label style="display: grid; grid-template-columns: 300px 20px">
             Skip first row (if it contains headers)
             <input type="checkbox" id="skipHeader" name="skipHeader" checked>
           </label>
         </div>
-
         <div id="importPreview" style="display: none;">
           <h4>Preview (First 5 rows):</h4>
         </div>
-
         <div class="form-row" style="margin-top: 2rem;">
           <button type="button" class="btn btn-primary" onclick="previewFile()"><i class="fas fa-list-ul"></i> Preview</button>
           <button type="submit" class="btn btn-import"><i class="fas fa-upload"></i> Import</button>
@@ -468,7 +441,7 @@ if ($databaseConnected) {
   <audio id="noResultSound" src="../sounds/noResultsFound.mp3" preload="auto"></audio>
   <audio id="warningSound" src="../sounds/ohh-ow.mp3" preload="auto"></audio>
   <audio id="inactiveSound" src="../sounds/inactive.mp3" preload="auto"></audio>
-  <!-- Add XLSX library for Excel file support -->
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="../src/system.js"></script>
   <script src="../src/system-camera.js"></script>
