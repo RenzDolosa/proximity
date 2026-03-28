@@ -193,12 +193,12 @@ class QueryLogger
         ':user_agent'  => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
       ]);
 
-      logSystemAction($this->userId, 'check_in_out', json_encode([
-        'employee_id' => $employeeId,
-        'fullname'    => $fullname,
-        'qr_code'     => $qrCode,
-        'check_type'  => $checkType,
-      ]));
+      // logSystemAction($this->userId, 'check_in_out', json_encode([
+      //   'employee_id' => $employeeId,
+      //   'fullname'    => $fullname,
+      //   'qr_code'     => $qrCode,
+      //   'check_type'  => $checkType,
+      // ]));
 
       return true;
     } catch (PDOException $e) {
@@ -265,11 +265,11 @@ class QueryLogger
         ':user_agent'  => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
       ]);
 
-      logSystemAction($this->userId, 'employee_access', json_encode([
-        'employee_id' => $employeeData['id'] ?? null,
-        'fullname'    => $employeeData['fullname'] ?? null,
-        'access_type' => $accessType,
-      ]));
+      // logSystemAction($this->userId, 'employee_access', json_encode([
+      //   'employee_id' => $employeeData['id'] ?? null,
+      //   'fullname'    => $employeeData['fullname'] ?? null,
+      //   'access_type' => $accessType,
+      // ]));
 
       return true;
     } catch (PDOException $e) {
