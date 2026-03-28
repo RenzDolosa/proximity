@@ -97,7 +97,7 @@ try {
         <p>Check your proximity code status</p>
       </div>
 
-      <div class="stat-card" onclick="window.location.href='../stat/settings.php';">
+      <div class="stat-card" onclick="window.location.href='../stat/admin-panel.php';">
         <div class="icon">⚙️</div>
         <h3>Settings</h3>
         <p>Configure your application preferences</p>

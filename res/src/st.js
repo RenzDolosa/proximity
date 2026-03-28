@@ -335,7 +335,7 @@ function renderResults(results, query) {
                     <p>${position}</p>
                         ${
                           image
-                            ? `<img src="../../uploads/user_${currentUserId}/${image}" alt="${fullname}" class="employee-image">`
+                            ? `<img src="../../uploads/user/${image}" alt="${fullname}" class="employee-image">`
                             : `<div class="ph-container"><div class="employee-placeholder">${fullnameInitials}</div></div>`
                         }
                 </div>

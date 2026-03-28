@@ -9,8 +9,9 @@ if (isset($_GET['action'])) {
   try {
     $pdo = getMainDBConnection();
 
+    // ── Administrator guard – applies to ALL mutating actions ─────────────────
     if (($_SESSION['user_group'] ?? '') !== 'Administrator') {
-      echo json_encode(['success' => false, 'message' => 'Access denied.']);
+      echo json_encode(['success' => false, 'message' => 'Access denied. Administrators only.']);
       exit;
     }
 
@@ -32,19 +33,18 @@ if (isset($_GET['action'])) {
       $stmt = $pdo->prepare("
         SELECT id, username, email, first_name, last_name,
                phone, my_database, user_group, created_at, last_login
-        FROM users
+        FROM   users
         $where
-        ORDER BY id ASC
+        ORDER  BY id ASC
       ");
       $stmt->execute($params);
       $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      // Stats
       $stats = $pdo->query("
         SELECT
-          COUNT(*)                                        AS total,
-          SUM(last_login IS NOT NULL)                     AS logged_in,
-          SUM(last_login IS NULL)                         AS never_logged
+          COUNT(*)                    AS total,
+          SUM(last_login IS NOT NULL) AS logged_in,
+          SUM(last_login IS NULL)     AS never_logged
         FROM users
       ")->fetch(PDO::FETCH_ASSOC);
 
@@ -56,29 +56,30 @@ if (isset($_GET['action'])) {
     if ($_GET['action'] === 'add') {
       $data = json_decode(file_get_contents('php://input'), true);
 
-      $username   = sanitizeInput($data['username']   ?? '');
-      $email      = sanitizeInput($data['email']      ?? '');
+      $username   = sanitizeInput($data['username']    ?? '');
+      $email      = sanitizeInput($data['email']       ?? '');
       $password   = $data['password'] ?? '';
-      $first_name = sanitizeInput($data['first_name'] ?? '');
-      $last_name  = sanitizeInput($data['last_name']  ?? '');
-      $phone      = sanitizeInput($data['phone']      ?? '');
+      $first_name = sanitizeInput($data['first_name']  ?? '');
+      $last_name  = sanitizeInput($data['last_name']   ?? '');
+      $phone      = sanitizeInput($data['phone']       ?? '');
       $my_db      = sanitizeInput($data['my_database'] ?? '');
-      $user_group = sanitizeInput($data['user_group'] ?? '');
+      $user_group = sanitizeInput($data['user_group']  ?? '');
 
-      // Validate
+      $allowedGroups = ['Administrator', 'Employee', 'HR'];
+
       $errors = [];
-      if (strlen($username) < 3)         $errors[] = 'Username must be at least 3 characters.';
-      if (!isValidEmail($email))         $errors[] = 'Invalid email address.';
-      if (!isValidPassword($password))   $errors[] = 'Password: 8+ chars, uppercase, lowercase, number.';
-      if (!$first_name || !$last_name)   $errors[] = 'First and last name are required.';
-      if (!$my_db)                       $errors[] = 'My database name is required.';
+      if (strlen($username) < 3)                        $errors[] = 'Username must be at least 3 characters.';
+      if (!isValidEmail($email))                        $errors[] = 'Invalid email address.';
+      if (!isValidPassword($password))                  $errors[] = 'Password: 8+ chars, uppercase, lowercase, number.';
+      if (!$first_name || !$last_name)                  $errors[] = 'First and last name are required.';
+      if (!$my_db)                                      $errors[] = 'My database name is required.';
+      if (!in_array($user_group, $allowedGroups, true)) $errors[] = 'Invalid user group selected.';
 
       if ($errors) {
         echo json_encode(['success' => false, 'errors' => $errors]);
         exit;
       }
 
-      // Duplicate check
       $chk = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ? OR email = ?");
       $chk->execute([$username, $email]);
       if ($chk->fetchColumn() > 0) {
@@ -88,7 +89,6 @@ if (isset($_GET['action'])) {
 
       $hashed = password_hash($password, PASSWORD_DEFAULT);
 
-      // FIX Bug 1: Added 8th placeholder for user_group, and added $user_group to execute()
       $stmt = $pdo->prepare("
         INSERT INTO users (username, email, password, first_name, last_name, phone, my_database, user_group, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
@@ -96,9 +96,7 @@ if (isset($_GET['action'])) {
       $stmt->execute([$username, $email, $hashed, $first_name, $last_name, $phone ?: null, $my_db, $user_group]);
       $newId = $pdo->lastInsertId();
 
-      // Create user database (uses registerUser logic from config)
       createUserDatabase($newId);
-
       logSystemAction($_SESSION['user_id'] ?? null, 'USER_REGISTERED', "Admin created user: $username (ID: $newId)");
       echo json_encode(['success' => true, 'message' => 'User added successfully.', 'id' => $newId]);
       exit;
@@ -109,56 +107,55 @@ if (isset($_GET['action'])) {
       $id   = (int) $_GET['id'];
       $stmt = $pdo->prepare("
         SELECT id, username, email, first_name, last_name, phone, my_database, user_group
-        FROM users WHERE id = ?
+        FROM   users WHERE id = ?
       ");
       $stmt->execute([$id]);
       $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      if ($user) {
-        echo json_encode(['success' => true, 'user' => $user]);
-      } else {
-        echo json_encode(['success' => false, 'message' => 'User not found.']);
-      }
+      echo $user
+        ? json_encode(['success' => true, 'user' => $user])
+        : json_encode(['success' => false, 'message' => 'User not found.']);
       exit;
     }
 
     // ── Update user ───────────────────────────────────────────────────────────
     if ($_GET['action'] === 'update' && isset($_GET['id'])) {
       $id   = (int) $_GET['id'];
-      $chkGroup = $pdo->prepare("SELECT user_group FROM users WHERE id = ?");
-      $chkGroup->execute([$id]);
-      $targetGroup = $chkGroup->fetchColumn();
-      if ($targetGroup === 'Administrator' && $id !== (int)($_SESSION['user_id'] ?? -1)) {
-        echo json_encode(['success' => false, 'message' => 'Administrator accounts cannot be edited.']);
-        exit;
-      }
+      $self = (int) ($_SESSION['user_id'] ?? 0);
 
       $data = json_decode(file_get_contents('php://input'), true);
 
-      $username   = sanitizeInput($data['username']   ?? '');
-      $email      = sanitizeInput($data['email']      ?? '');
+      $username   = sanitizeInput($data['username']    ?? '');
+      $email      = sanitizeInput($data['email']       ?? '');
       $password   = $data['password'] ?? '';
-      $first_name = sanitizeInput($data['first_name'] ?? '');
-      $last_name  = sanitizeInput($data['last_name']  ?? '');
-      $phone      = sanitizeInput($data['phone']      ?? '');
+      $first_name = sanitizeInput($data['first_name']  ?? '');
+      $last_name  = sanitizeInput($data['last_name']   ?? '');
+      $phone      = sanitizeInput($data['phone']       ?? '');
       $my_db      = sanitizeInput($data['my_database'] ?? '');
-      $user_group = sanitizeInput($data['user_group'] ?? '');
+      $user_group = sanitizeInput($data['user_group']  ?? '');
 
-      // Validate
+      $allowedGroups = ['Administrator', 'Employee', 'HR'];
+
       $errors = [];
-      if (strlen($username) < 3)      $errors[] = 'Username must be at least 3 characters.';
-      if (!isValidEmail($email))       $errors[] = 'Invalid email address.';
-      if ($password && !isValidPassword($password))
-        $errors[] = 'Password: 8+ chars, uppercase, lowercase, number.';
-      if (!$first_name || !$last_name) $errors[] = 'First and last name are required.';
-      if (!$my_db)                     $errors[] = 'My database name is required.';
+      if (strlen($username) < 3)                        $errors[] = 'Username must be at least 3 characters.';
+      if (!isValidEmail($email))                        $errors[] = 'Invalid email address.';
+      if ($password && !isValidPassword($password))     $errors[] = 'Password: 8+ chars, uppercase, lowercase, number.';
+      if (!$first_name || !$last_name)                  $errors[] = 'First and last name are required.';
+      if (!$my_db)                                      $errors[] = 'My database name is required.';
+      if (!in_array($user_group, $allowedGroups, true)) $errors[] = 'Invalid user group selected.';
 
       if ($errors) {
         echo json_encode(['success' => false, 'errors' => $errors]);
         exit;
       }
 
-      // Duplicate check excluding current user
+      // Prevent an admin from stripping their own Administrator role
+      if ($id === $self && $user_group !== 'Administrator') {
+        echo json_encode(['success' => false, 'errors' => ['You cannot remove your own Administrator role.']]);
+        exit;
+      }
+
+      // Duplicate check (exclude the user being updated)
       $chk = $pdo->prepare("SELECT COUNT(*) FROM users WHERE (username = ? OR email = ?) AND id != ?");
       $chk->execute([$username, $email, $id]);
       if ($chk->fetchColumn() > 0) {
@@ -169,19 +166,39 @@ if (isset($_GET['action'])) {
       if ($password) {
         $hashed = password_hash($password, PASSWORD_DEFAULT);
         $stmt   = $pdo->prepare("
-          UPDATE users SET username=?, email=?, password=?, first_name=?, last_name=?,
-                           phone=?, my_database=?, user_group=?, updated_at=NOW()
-          WHERE id=?
+          UPDATE users
+          SET    username=?, email=?, password=?, first_name=?, last_name=?,
+                 phone=?, my_database=?, user_group=?, updated_at=NOW()
+          WHERE  id=?
         ");
-        $stmt->execute([$username, $email, $hashed, $first_name, $last_name, $phone ?: null, $my_db, $user_group, $id]);
+        $stmt->execute([
+          $username,
+          $email,
+          $hashed,
+          $first_name,
+          $last_name,
+          $phone ?: null,
+          $my_db,
+          $user_group,
+          $id
+        ]);
       } else {
-        // FIX Bug 2: Changed `user_group` to `user_group=?` and added $user_group to execute()
         $stmt = $pdo->prepare("
-          UPDATE users SET username=?, email=?, first_name=?, last_name=?,
-                           phone=?, my_database=?, user_group=?, updated_at=NOW()
-          WHERE id=?
+          UPDATE users
+          SET    username=?, email=?, first_name=?, last_name=?,
+                 phone=?, my_database=?, user_group=?, updated_at=NOW()
+          WHERE  id=?
         ");
-        $stmt->execute([$username, $email, $first_name, $last_name, $phone ?: null, $my_db, $user_group, $id]);
+        $stmt->execute([
+          $username,
+          $email,
+          $first_name,
+          $last_name,
+          $phone ?: null,
+          $my_db,
+          $user_group,
+          $id
+        ]);
       }
 
       logSystemAction($_SESSION['user_id'] ?? null, 'USER_UPDATED', "Updated user ID: $id ($username)");
@@ -194,7 +211,7 @@ if (isset($_GET['action'])) {
       $id = (int) $_GET['id'];
 
       // Prevent self-deletion
-      if (isset($_SESSION['user_id']) && $_SESSION['user_id'] == $id) {
+      if ((int) ($_SESSION['user_id'] ?? 0) === $id) {
         echo json_encode(['success' => false, 'message' => 'You cannot delete your own account.']);
         exit;
       }
@@ -208,16 +225,20 @@ if (isset($_GET['action'])) {
         exit;
       }
 
-      // FIX Bug 3: Changed truthy check to strict equality against 'Administrator'
-      if ($id == 1 && $user['user_group'] === 'Administrator') {
-        echo json_encode(['success' => false, 'message' => 'The root Admin account cannot be deleted.']);
+      // Protect the root admin account (id=1, Administrator)
+      if ($id === 1 && $user['user_group'] === 'Administrator') {
+        echo json_encode(['success' => false, 'message' => 'The root Administrator account cannot be deleted.']);
         exit;
       }
 
       $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
       $stmt->execute([$id]);
 
-      logSystemAction($_SESSION['user_id'] ?? null, 'USER_DELETED', "Deleted user: {$user['username']} (ID: $id)");
+      logSystemAction(
+        $_SESSION['user_id'] ?? null,
+        'USER_DELETED',
+        "Deleted user: {$user['username']} (ID: $id)"
+      );
       echo json_encode(['success' => true, 'message' => 'User deleted successfully.']);
       exit;
     }
@@ -235,6 +256,9 @@ if (!isLoggedIn()) {
   header('Location: ../../portal.php');
   exit;
 }
+
+$isAdmin      = ($_SESSION['user_group'] ?? '') === 'Administrator';
+$sessionUserId = (int) ($_SESSION['user_id'] ?? 0);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -385,6 +409,12 @@ if (!isLoggedIn()) {
       flex-shrink: 0;
     }
 
+    .pulse-dot.paused {
+      background: #9ca3af;
+      box-shadow: none;
+      animation: none;
+    }
+
     @keyframes pulse-ring {
       0% {
         box-shadow: 0 0 0 0 rgba(74, 222, 128, .7);
@@ -399,7 +429,6 @@ if (!isLoggedIn()) {
       }
     }
 
-    /* Thin countdown bar just below the stats strip */
     .countdown-bar-wrap {
       height: 3px;
       background: rgba(255, 255, 255, .15);
@@ -462,7 +491,6 @@ if (!isLoggedIn()) {
       white-space: nowrap;
     }
 
-    /* ── Avatar ── */
     .avatar {
       width: 32px;
       height: 32px;
@@ -500,6 +528,12 @@ if (!isLoggedIn()) {
       filter: brightness(.88);
     }
 
+    .action-btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+      filter: none;
+    }
+
     .btn-edit-row {
       background: #6d28d9;
       color: #fff;
@@ -508,6 +542,32 @@ if (!isLoggedIn()) {
     .btn-del-row {
       background: #ef4444;
       color: #fff;
+    }
+
+    /* Tooltip wrapper for locked buttons */
+    .lock-wrap {
+      position: relative;
+      display: inline-block;
+    }
+
+    .lock-wrap .tip {
+      display: none;
+      position: absolute;
+      bottom: 110%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1f2937;
+      color: #fff;
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    .lock-wrap:hover .tip {
+      display: block;
     }
 
     /* ── Pagination ── */
@@ -546,7 +606,7 @@ if (!isLoggedIn()) {
       background: #f0f0f0;
     }
 
-    /* ── Empty / Spinner ── */
+    /* Empty / Spinner */
     .empty-row td {
       text-align: center;
       padding: 36px;
@@ -591,7 +651,7 @@ if (!isLoggedIn()) {
       background: #fff;
       border-radius: 10px;
       padding: 24px 24px 18px;
-      width: 460px;
+      width: 480px;
       max-width: 96vw;
       box-shadow: 0 10px 40px rgba(0, 0, 0, .2);
       animation: pop .2s ease;
@@ -659,11 +719,13 @@ if (!isLoggedIn()) {
       border-radius: 5px;
       outline: none;
       transition: border-color .15s;
+      background: #fff;
     }
 
     .form-row input:focus,
     .form-row select:focus {
       border-color: #7c3aed;
+      box-shadow: 0 0 0 3px rgba(124, 58, 237, .1);
     }
 
     .form-hint {
@@ -755,11 +817,9 @@ if (!isLoggedIn()) {
 
 <body>
 
-  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.history.back();">
-    <i class="fas fa-times"></i>
-  </div>
+  <div id="closeButton"></div>
 
-  <!-- ── Toolbar ────────────────────────────────────────────────────────────── -->
+  <!-- ── Toolbar ── -->
   <div class="toolbar">
     <button class="btn btn-search" onclick="loadUsers()">
       <i class="fas fa-search"></i> Search
@@ -767,40 +827,35 @@ if (!isLoggedIn()) {
     <button class="btn btn-clear" onclick="clearSearch()">
       <i class="fas fa-times"></i> Clear
     </button>
-    <input id="searchUser" type="text" placeholder="Filter by username..."
-      style="width:180px;" autocomplete="off"
+
+    <input id="searchUser" type="text" placeholder="Filter by username…"
+      oninput="debounceLoad()" style="width:180px;" autocomplete="off"
       readonly onfocus="this.removeAttribute('readonly')">
+
     <input id="searchEmail" type="text" placeholder="Filter by email…"
       oninput="debounceLoad()" style="width:200px;" autocomplete="off">
-    <button class="btn btn-add" onclick="openAdd()">
-      <i class="fas fa-user-plus"></i> Add User
-    </button>
+
+    <?php if ($isAdmin): ?>
+      <button class="btn btn-add" onclick="openAdd()">
+        <i class="fas fa-user-plus"></i> Add User
+      </button>
+    <?php endif; ?>
   </div>
 
-  <!-- ── Panel ─────────────────────────────────────────────────────────────── -->
+  <!-- ── Panel ── -->
   <div class="panel">
 
     <!-- Stats header -->
     <div class="stats-header">
       <span class="stats-title">Users</span>
-      <span class="stat-item">
-        <i class="fas fa-users"></i>
-        Total <strong id="statTotal">—</strong>
-      </span>
-      <span class="stat-item">
-        <i class="fas fa-sign-in-alt"></i>
-        Logged in <strong id="statLoggedIn">—</strong>
-      </span>
-      <span class="stat-item">
-        <i class="fas fa-user-clock"></i>
-        Never logged <strong id="statNever">—</strong>
-      </span>
+      <span class="stat-item"><i class="fas fa-users"></i> Total <strong id="statTotal">—</strong></span>
+      <span class="stat-item"><i class="fas fa-sign-in-alt"></i> Logged in <strong id="statLoggedIn">—</strong></span>
+      <span class="stat-item"><i class="fas fa-user-clock"></i> Never logged <strong id="statNever">—</strong></span>
       <span class="refresh-indicator">
-        <span class="pulse-dot"></span> Live
+        <span class="pulse-dot" id="pulseDot"></span> Live
       </span>
     </div>
 
-    <!-- Thin countdown progress bar -->
     <div class="countdown-bar-wrap">
       <div class="countdown-bar" id="countdownBar"></div>
     </div>
@@ -812,19 +867,19 @@ if (!isLoggedIn()) {
           <col style="width:46px">
           <col style="width:190px">
           <col style="width:190px">
-          <col style="width:100px">
+          <col style="width:110px">
+          <col style="width:110px">
           <col style="width:120px">
-          <col style="width:120px">
+          <col style="width:145px">
+          <col style="width:145px">
           <col style="width:155px">
-          <col style="width:155px">
-          <col style="width:130px">
         </colgroup>
         <thead>
           <tr>
             <th>SN</th>
             <th>User</th>
             <th>Email</th>
-            <th>Usergroup</th>
+            <th>User Group</th>
             <th>Phone</th>
             <th>Database</th>
             <th>Created At</th>
@@ -834,58 +889,70 @@ if (!isLoggedIn()) {
         </thead>
         <tbody id="userTableBody">
           <tr class="empty-row">
-            <td colspan="8"><span class="spinner"></span> Loading users…</td>
+            <td colspan="9"><span class="spinner"></span> Loading users…</td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <!-- Pagination -->
     <div class="pagination" id="paginationWrap"></div>
   </div>
 
-  <!-- ── Add / Edit Modal ───────────────────────────────────────────────────── -->
+  <!-- ── Add / Edit Modal ── -->
   <div class="modal-overlay" id="formModal">
     <div class="modal-box">
-      <h3 id="formModalTitle"><i class="fas fa-user-plus" style="color:#7c3aed"></i> Add New User</h3>
+      <h3 id="formModalTitle">
+        <i class="fas fa-user-plus" style="color:#7c3aed"></i> Add New User
+      </h3>
 
       <div class="err-box" id="formErr"></div>
 
       <div class="form-grid">
         <div class="form-row">
-          <label>First name</label>
+          <label>First name <span style="color:#ef4444">*</span></label>
           <input type="text" id="fFirstName" placeholder="Firstname">
         </div>
         <div class="form-row">
-          <label>Last name</label>
+          <label>Last name <span style="color:#ef4444">*</span></label>
           <input type="text" id="fLastName" placeholder="Lastname">
         </div>
       </div>
       <div class="form-grid">
         <div class="form-row">
-          <label>Username</label>
+          <label>Username <span style="color:#ef4444">*</span></label>
           <input type="text" id="fUsername" placeholder="Minimum 3 characters">
         </div>
         <div class="form-row">
-          <label>Email</label>
+          <label>Email <span style="color:#ef4444">*</span></label>
           <input type="email" id="fEmail" placeholder="user@example.com">
         </div>
       </div>
       <div class="form-row">
-        <label>User group</label>
-        <input type="text" id="fUsergroup" placeholder="User group">
+        <label>User Group <span style="color:#ef4444">*</span></label>
+        <select id="fUsergroup">
+          <option value="">— Select group —</option>
+          <option value="Administrator">Administrator</option>
+          <option value="Employee">Employee</option>
+          <option value="HR">HR</option>
+        </select>
       </div>
+
       <div class="form-row">
-        <label>Password <span id="pwHint" style="font-weight:400;color:#9ca3af">(min 8 chars, upper, lower, number)</span></label>
+        <label>Password
+          <span id="pwHint" style="font-weight:400;color:#9ca3af">
+            (min 8 chars, upper, lower, number)
+          </span>
+        </label>
         <input type="password" id="fPassword" placeholder="Password">
       </div>
+
       <div class="form-grid">
         <div class="form-row">
           <label>Phone</label>
           <input type="text" id="fPhone" placeholder="09XXXXXXXXX">
         </div>
         <div class="form-row">
-          <label>My database</label>
+          <label>My database <span style="color:#ef4444">*</span></label>
           <input type="text" id="fDatabase" placeholder="e.g. AdminServer">
         </div>
       </div>
@@ -899,13 +966,16 @@ if (!isLoggedIn()) {
     </div>
   </div>
 
-  <!-- ── Delete Confirm Modal ───────────────────────────────────────────────── -->
+  <!-- ── Delete Confirm Modal ── -->
   <div class="modal-overlay" id="deleteModal">
     <div class="modal-box confirm">
-      <div style="width:50px;height:50px;border-radius:50%;background:#fee2e2;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;">
+      <div style="width:50px;height:50px;border-radius:50%;background:#fee2e2;
+                  display:flex;align-items:center;justify-content:center;margin:0 auto 14px;">
         <i class="fas fa-trash" style="color:#ef4444;font-size:20px"></i>
       </div>
-      <h3 style="justify-content:center"><i class="fas fa-exclamation-triangle"></i> Delete User?</h3>
+      <h3 style="justify-content:center">
+        <i class="fas fa-exclamation-triangle"></i> Delete User?
+      </h3>
       <p id="deleteConfirmMsg">Are you sure? This action cannot be undone.</p>
       <div class="modal-actions" style="justify-content:center">
         <button class="btn-cancel" onclick="closeModal('deleteModal')">Cancel</button>
@@ -916,7 +986,7 @@ if (!isLoggedIn()) {
     </div>
   </div>
 
-  <!-- ── Toast ──────────────────────────────────────────────────────────────── -->
+  <!-- ── Toast ── -->
   <div class="toast" id="toast">
     <i class="fas fa-check-circle" id="toastIcon"></i>
     <span id="toastMsg">Done</span>
@@ -924,10 +994,11 @@ if (!isLoggedIn()) {
 
   <script src="../src/btn.js"></script>
   <script>
-    /* ── Config ── */
-    const AUTO_REFRESH_INTERVAL = 1; // seconds
+    /* ── Server-provided constants ── */
+    const IS_ADMIN = <?= $isAdmin ? 'true' : 'false' ?>;
+    const SESSION_UID = <?= $sessionUserId ?>;
+    const AUTO_REFRESH_INTERVAL = 30; // seconds
 
-    /* ── Avatar color palette (matches config.php user IDs cycling) ── */
     const COLORS = ['#7F77DD', '#1D9E75', '#D85A30', '#D4537E', '#378ADD', '#639922', '#BA7517'];
 
     /* ── State ── */
@@ -939,29 +1010,25 @@ if (!isLoggedIn()) {
     let debounceTimer = null;
     let modalOpen = false;
 
-    /* ── Auto-refresh countdown ── */
+    /* ── Countdown ── */
     let countdownLeft = AUTO_REFRESH_INTERVAL;
-    let countdownTick = null; // 1-second ticker
-    let autoRefreshTimer = null; // fires the actual fetch
+    let countdownTick = null;
+    let autoRefreshTimer = null;
 
     function startCountdown() {
       stopCountdown();
       countdownLeft = AUTO_REFRESH_INTERVAL;
       updateCountdownUI();
 
-      // Tick every second to update the bar + number
       countdownTick = setInterval(() => {
-        if (modalOpen) return; // freeze while a modal is open
+        if (modalOpen) return;
         countdownLeft = Math.max(0, countdownLeft - 1);
         updateCountdownUI();
       }, 1000);
 
-      // Fire the actual refresh after the full interval
       autoRefreshTimer = setTimeout(async () => {
-        if (!modalOpen) {
-          await loadLogs(true); // silent=true → no spinner
-        }
-        startCountdown(); // restart cycle
+        if (!modalOpen) await loadUsers(true);
+        startCountdown();
       }, AUTO_REFRESH_INTERVAL * 1000);
     }
 
@@ -973,17 +1040,13 @@ if (!isLoggedIn()) {
     function updateCountdownUI() {
       const pct = (countdownLeft / AUTO_REFRESH_INTERVAL) * 100;
       document.getElementById('countdownBar').style.width = pct + '%';
-      // document.getElementById('countdownNum').textContent = countdownLeft;
-
-      const dot = document.getElementById('pulseDot');
-      dot.classList.toggle('paused', modalOpen);
+      document.getElementById('pulseDot').classList.toggle('paused', modalOpen);
     }
 
-    /* ── Load users ─────────────────────────────────────────────────────────── */
+    /* ── Load users ── */
     async function loadUsers(silent = false) {
       const su = document.getElementById('searchUser').value.trim();
       const se = document.getElementById('searchEmail').value.trim();
-
       const params = new URLSearchParams({
         action: 'fetch'
       });
@@ -992,14 +1055,13 @@ if (!isLoggedIn()) {
 
       if (!silent) {
         document.getElementById('userTableBody').innerHTML =
-          `<tr class="empty-row"><td colspan="8"><span class="spinner"></span> Loading…</td></tr>`;
+          `<tr class="empty-row"><td colspan="9"><span class="spinner"></span> Loading…</td></tr>`;
       }
 
       try {
         const res = await fetch('?' + params.toString());
         const data = await res.json();
         if (!data.success) throw new Error(data.message || 'Fetch failed');
-
         allUsers = data.users;
         renderTable();
         updateStats(data.stats);
@@ -1007,15 +1069,15 @@ if (!isLoggedIn()) {
         if (!silent) {
           showToast('Failed to load users: ' + err.message, true);
           document.getElementById('userTableBody').innerHTML =
-            `<tr class="empty-row"><td colspan="8">
-            <i class="fas fa-exclamation-circle" style="color:#ef4444"></i>
-            ${escHtml(err.message)}
-          </td></tr>`;
+            `<tr class="empty-row"><td colspan="9">
+              <i class="fas fa-exclamation-circle" style="color:#ef4444"></i>
+              ${escHtml(err.message)}
+            </td></tr>`;
         }
       }
     }
 
-    /* ── Render table with pagination ───────────────────────────────────────── */
+    /* ── Render table ── */
     function renderTable() {
       const tbody = document.getElementById('userTableBody');
       const total = allUsers.length;
@@ -1025,10 +1087,10 @@ if (!isLoggedIn()) {
       const slice = allUsers.slice((currentPage - 1) * PER_PAGE, currentPage * PER_PAGE);
 
       if (!slice.length) {
-        tbody.innerHTML = `<tr class="empty-row"><td colspan="8">
-        <i class="fas fa-users" style="font-size:24px;display:block;margin-bottom:6px;opacity:.4"></i>
-        No users found.
-      </td></tr>`;
+        tbody.innerHTML = `<tr class="empty-row"><td colspan="9">
+          <i class="fas fa-users" style="font-size:24px;display:block;margin-bottom:6px;opacity:.4"></i>
+          No users found.
+        </td></tr>`;
         document.getElementById('paginationWrap').innerHTML = '';
         return;
       }
@@ -1036,7 +1098,55 @@ if (!isLoggedIn()) {
       tbody.innerHTML = slice.map((u, i) => {
         const idx = (currentPage - 1) * PER_PAGE + i;
         const color = COLORS[(u.id - 1) % COLORS.length];
-        const initial = (u.first_name[0] || '?').toUpperCase();
+        const initial = ((u.first_name || u.username)[0] || '?').toUpperCase();
+        const isSelf = +u.id === SESSION_UID;
+        const isRoot = +u.id === 1 && u.user_group === 'Administrator';
+
+        /* ── Edit button ── */
+        let editBtn;
+        if (!IS_ADMIN) {
+          editBtn = `<div class="lock-wrap">
+            <button class="action-btn btn-edit-row" disabled>
+              <i class="fas fa-lock" style="opacity:.5"></i> Edit
+            </button>
+            <span class="tip">Administrators only</span>
+          </div>`;
+        } else {
+          editBtn = `<button class="action-btn btn-edit-row" onclick="openEdit(${u.id})">
+            <i class="fas fa-edit"></i> Edit
+          </button>`;
+        }
+
+        /* ── Delete button ── */
+        let delBtn;
+        if (!IS_ADMIN) {
+          delBtn = `<div class="lock-wrap">
+            <button class="action-btn btn-del-row" disabled>
+              <i class="fas fa-lock" style="opacity:.5"></i> Delete
+            </button>
+            <span class="tip">Administrators only</span>
+          </div>`;
+        } else if (isSelf) {
+          delBtn = `<div class="lock-wrap">
+            <button class="action-btn btn-del-row" disabled>
+              <i class="fas fa-trash"></i> Delete
+            </button>
+            <span class="tip">Cannot delete your own account</span>
+          </div>`;
+        } else if (isRoot) {
+          delBtn = `<div class="lock-wrap">
+            <button class="action-btn btn-del-row" disabled>
+              <i class="fas fa-trash"></i> Delete
+            </button>
+            <span class="tip">Root Administrator cannot be deleted</span>
+          </div>`;
+        } else {
+          delBtn = `<button class="action-btn btn-del-row"
+              onclick="openDelete(${u.id}, '${escHtml(u.username)}')">
+              <i class="fas fa-trash"></i> Delete
+            </button>`;
+        }
+
         return `
         <tr>
           <td style="color:#aaa">${idx + 1}</td>
@@ -1044,23 +1154,17 @@ if (!isLoggedIn()) {
             <div class="user-cell">
               <div class="avatar" style="background:${color}">${initial}</div>
               <div>
-                <div style="font-weight:600;color:#1f2937">${escHtml(u.username)}</div>
-                <div style="font-size:11px;color:#9ca3af">${escHtml(u.first_name)} ${escHtml(u.last_name)}</div>
+                <div style="font-weight:600;color:#1f2937">
+                  ${escHtml(u.username)}${isSelf ? ' <em style="font-size:11px;color:#9ca3af">(you)</em>' : ''}
+                </div>
+                <div style="font-size:11px;color:#9ca3af">
+                  ${escHtml(u.first_name)} ${escHtml(u.last_name)}
+                </div>
               </div>
             </div>
           </td>
-          <td title="${escHtml(u.email)}">${u.user_group === 'Administrator'
-            ? `<span disabled title="Administrator accounts cannot be edited" style="opacity:.4;cursor:not-allowed;">
-              ${escHtml(u.email)}</span>`
-            : `${escHtml(u.email)}`
-          }
-          </td>
-          <td title="${escHtml(u.user_group)}">${u.user_group === 'Administrator'
-            ? `<span disabled title="Administrator accounts cannot be edited" style="opacity:.4;cursor:not-allowed;">
-              ${escHtml(u.user_group)}</span>`
-            : `${escHtml(u.user_group)}`
-          }
-          </td>
+          <td title="${escHtml(u.email)}">${escHtml(u.email || '—')}</td>
+          <td>${escHtml(u.user_group || '—')}</td>
           <td>${escHtml(u.phone || '—')}</td>
           <td>${escHtml(u.my_database || '—')}</td>
           <td>${escHtml(u.created_at ? u.created_at.slice(0,16) : '—')}</td>
@@ -1068,32 +1172,22 @@ if (!isLoggedIn()) {
                 ? escHtml(u.last_login.slice(0,16))
                 : '<span style="color:#d1d5db">—</span>'}</td>
           <td>
-            <div style="display:flex;gap:6px">
-              <button class="action-btn btn-edit-row" onclick="openEdit(${u.id})">
-                <i class="fas fa-edit"></i>\nEdit
-              </button>
-              ${(u.id == 1 && u.user_group === 'Administrator')
-                ? `<button class="action-btn btn-del-row" disabled title="This account cannot be deleted"
-                    style="opacity:.4;cursor:not-allowed;">
-                    <i class="fas fa-trash"></i>\nDelete
-                  </button>`
-                : `<button class="action-btn btn-del-row" onclick="openDelete(${u.id}, '${escHtml(u.username)}')">
-                    <i class="fas fa-trash"></i>\nDelete
-                  </button>`
-              }
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              ${editBtn}
+              ${delBtn}
             </div>
           </td>
         </tr>`;
       }).join('');
 
-      /* Pagination buttons */
       const pgWrap = document.getElementById('paginationWrap');
-      pgWrap.innerHTML = `<span>${total} record${total !== 1 ? 's' : ''}</span>` +
+      pgWrap.innerHTML =
+        `<span>${total} record${total !== 1 ? 's' : ''}</span>` +
         Array.from({
             length: pages
           }, (_, i) =>
-          `<button class="page-btn${currentPage === i + 1 ? ' active' : ''}"
-                 onclick="goPage(${i + 1})">${i + 1}</button>`
+          `<button class="page-btn${currentPage === i+1 ? ' active' : ''}"
+                   onclick="goPage(${i+1})">${i+1}</button>`
         ).join('');
     }
 
@@ -1102,15 +1196,19 @@ if (!isLoggedIn()) {
       renderTable();
     }
 
-    /* ── Stats ──────────────────────────────────────────────────────────────── */
-    function updateStats(stats) {
-      document.getElementById('statTotal').textContent = stats.total ?? 0;
-      document.getElementById('statLoggedIn').textContent = stats.logged_in ?? 0;
-      document.getElementById('statNever').textContent = stats.never_logged ?? 0;
+    /* ── Stats ── */
+    function updateStats(s) {
+      document.getElementById('statTotal').textContent = s.total ?? 0;
+      document.getElementById('statLoggedIn').textContent = s.logged_in ?? 0;
+      document.getElementById('statNever').textContent = s.never_logged ?? 0;
     }
 
-    /* ── Add modal ──────────────────────────────────────────────────────────── */
+    /* ── Add modal ── */
     function openAdd() {
+      if (!IS_ADMIN) {
+        showToast('Access denied. Administrators only.', true);
+        return;
+      }
       editingId = null;
       clearForm();
       document.getElementById('formModalTitle').innerHTML =
@@ -1121,12 +1219,16 @@ if (!isLoggedIn()) {
       openModal('formModal');
     }
 
-    /* ── Edit modal ─────────────────────────────────────────────────────────── */
+    /* ── Edit modal ── */
     async function openEdit(id) {
+      if (!IS_ADMIN) {
+        showToast('Access denied. Administrators only.', true);
+        return;
+      }
       editingId = id;
       clearForm();
       document.getElementById('formModalTitle').innerHTML =
-        '<i class="fas fa-edit"></i>\nEdit User';
+        '<i class="fas fa-edit" style="color:#7c3aed"></i> Edit User';
       document.getElementById('pwHint').textContent = '(leave blank to keep current)';
       document.getElementById('btnFormSubmit').innerHTML = '<i class="fas fa-save"></i> Save Changes';
       document.getElementById('fPassword').placeholder = 'Leave blank to keep current password';
@@ -1137,47 +1239,49 @@ if (!isLoggedIn()) {
         const data = await res.json();
         if (!data.success) throw new Error(data.message);
         const u = data.user;
-        document.getElementById('fFirstName').value = u.first_name;
-        document.getElementById('fLastName').value = u.last_name;
-        document.getElementById('fUsername').value = u.username;
-        document.getElementById('fEmail').value = u.email;
-        document.getElementById('fEmail').setAttribute('data-original', u.email);
+        document.getElementById('fFirstName').value = u.first_name || '';
+        document.getElementById('fLastName').value = u.last_name || '';
+        document.getElementById('fUsername').value = u.username || '';
+        document.getElementById('fEmail').value = u.email || '';
+        document.getElementById('fEmail').setAttribute('data-original', u.email || '');
         document.getElementById('fEmail').disabled = u.user_group === 'Administrator';
-        document.getElementById('fUsergroup').value = u.user_group;
-        document.getElementById('fUsergroup').setAttribute('data-original', u.user_group);
-        document.getElementById('fUsergroup').disabled = u.user_group === 'Administrator';
         document.getElementById('fPhone').value = u.phone || '';
         document.getElementById('fDatabase').value = u.my_database || '';
+        document.getElementById('fUsergroup').value = u.user_group || '';
+        document.getElementById('fUsergroup').setAttribute('data-original', u.user_group || '');
+        document.getElementById('fUsergroup').disabled = u.user_group === 'Administrator';
       } catch (err) {
         showToast('Failed to load user: ' + err.message, true);
         closeModal('formModal');
       }
     }
 
-    /* ── Submit add/edit ────────────────────────────────────────────────────── */
+    /* ── Submit add/edit ── */
     async function submitForm() {
+      if (!IS_ADMIN) {
+        showToast('Access denied.', true);
+        return;
+      }
+
       const payload = {
         first_name: document.getElementById('fFirstName').value.trim(),
         last_name: document.getElementById('fLastName').value.trim(),
         username: document.getElementById('fUsername').value.trim(),
-        email: document.getElementById('fEmail').value.trim() ||
-          document.getElementById('fEmail').getAttribute('data-original') ||
-          '',
-        user_group: document.getElementById('fUsergroup').value.trim() ||
-          document.getElementById('fUsergroup').getAttribute('data-original') ||
-          '',
+        email: document.getElementById('fEmail').value.trim(),
+        user_group: document.getElementById('fUsergroup').value,
         password: document.getElementById('fPassword').value,
         phone: document.getElementById('fPhone').value.trim(),
         my_database: document.getElementById('fDatabase').value.trim(),
       };
 
+      const errBox = document.getElementById('formErr');
+      errBox.style.display = 'none';
+
       const btn = document.getElementById('btnFormSubmit');
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span> Saving…';
 
-      const url = editingId ?
-        `?action=update&id=${editingId}` :
-        `?action=add`;
+      const url = editingId ? `?action=update&id=${editingId}` : `?action=add`;
 
       try {
         const res = await fetch(url, {
@@ -1190,7 +1294,6 @@ if (!isLoggedIn()) {
         const data = await res.json();
 
         if (!data.success) {
-          const errBox = document.getElementById('formErr');
           errBox.style.display = 'block';
           errBox.innerHTML = (data.errors || [data.message]).join('<br>');
           return;
@@ -1199,7 +1302,9 @@ if (!isLoggedIn()) {
         closeModal('formModal');
         showToast(data.message);
         currentPage = 1;
+        stopCountdown();
         await loadUsers();
+        startCountdown();
       } catch (err) {
         showToast('Error: ' + err.message, true);
       } finally {
@@ -1210,16 +1315,20 @@ if (!isLoggedIn()) {
       }
     }
 
-    /* ── Delete ─────────────────────────────────────────────────────────────── */
+    /* ── Delete ── */
     function openDelete(id, username) {
+      if (!IS_ADMIN) {
+        showToast('Access denied. Administrators only.', true);
+        return;
+      }
       pendingDelId = id;
       document.getElementById('deleteConfirmMsg').innerHTML =
-        `Are you sure you want to delete <strong>${escHtml(username)}</strong>? This cannot be undone.`;
+        `Delete <strong>${escHtml(username)}</strong>? This cannot be undone.`;
       openModal('deleteModal');
     }
 
     async function confirmDelete() {
-      if (!pendingDelId) return;
+      if (!IS_ADMIN || !pendingDelId) return;
       const btn = document.getElementById('btnConfirmDelete');
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span> Deleting…';
@@ -1228,7 +1337,6 @@ if (!isLoggedIn()) {
         const res = await fetch(`?action=delete&id=${pendingDelId}`);
         const data = await res.json();
         if (!data.success) throw new Error(data.message);
-
         pendingDelId = null;
         closeModal('deleteModal');
         showToast(data.message);
@@ -1239,17 +1347,17 @@ if (!isLoggedIn()) {
         showToast('Error: ' + err.message, true);
       } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-trash"></i>\nDelete';
+        btn.innerHTML = '<i class="fas fa-trash"></i> Delete';
       }
     }
 
-    /* ── Debounced search ───────────────────────────────────────────────────── */
+    /* ── Debounce ── */
     function debounceLoad() {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         currentPage = 1;
-        stopCountdown(); // reset cycle on manual search
-        loadUsers();
+        stopCountdown();
+        loadUsers().then(startCountdown);
       }, 380);
     }
 
@@ -1258,40 +1366,41 @@ if (!isLoggedIn()) {
       document.getElementById('searchEmail').value = '';
       currentPage = 1;
       stopCountdown();
-      loadUsers();
+      loadUsers().then(startCountdown);
     }
 
-    /* ── Form helpers ───────────────────────────────────────────────────────── */
+    /* ── Form helpers ── */
     function clearForm() {
-      ['fFirstName', 'fLastName', 'fUsername', 'fEmail', 'fUsergroup', 'fPassword', 'fPhone', 'fDatabase']
-      .forEach(id => document.getElementById(id).value = '');
-      document.getElementById('fEmail').disabled = false;
-      document.getElementById('fUsergroup').disabled = false;
+      ['fFirstName', 'fLastName', 'fUsername', 'fEmail', 'fPassword', 'fPhone', 'fDatabase']
+      .forEach(id => {
+        document.getElementById(id).value = '';
+      });
+      document.getElementById('fUsergroup').value = '';
       const e = document.getElementById('formErr');
       e.style.display = 'none';
       e.innerHTML = '';
     }
 
-    /* ── Modal helpers ──────────────────────────────────────────────────────── */
+    /* ── Modal helpers ── */
     function openModal(id) {
       modalOpen = true;
       document.getElementById(id).classList.add('show');
-      updateCountdownUI(); // dim pulse dot immediately
+      updateCountdownUI();
     }
 
     function closeModal(id) {
       document.getElementById(id).classList.remove('show');
       modalOpen = false;
-      updateCountdownUI(); // restore pulse dot
+      updateCountdownUI();
     }
 
     document.querySelectorAll('.modal-overlay').forEach(el => {
       el.addEventListener('click', e => {
-        if (e.target === el) closeModal();
+        if (e.target === el) closeModal(el.id);
       });
     });
 
-    /* ── Toast ──────────────────────────────────────────────────────────────── */
+    /* ── Toast ── */
     let toastTimer = null;
 
     function showToast(msg, isError = false) {
@@ -1305,7 +1414,7 @@ if (!isLoggedIn()) {
       toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
     }
 
-    /* ── Escape HTML ────────────────────────────────────────────────────────── */
+    /* ── Escape HTML ── */
     function escHtml(str) {
       return String(str)
         .replace(/&/g, '&amp;')
@@ -1314,13 +1423,9 @@ if (!isLoggedIn()) {
         .replace(/"/g, '&quot;');
     }
 
-    /* ── Auto-refresh every 30s (silent, matches system-log pattern) ─────────── */
-    setInterval(() => loadUsers(true), 30000);
-
     /* ── Init ── */
-    loadUsers();
+    loadUsers().then(startCountdown);
   </script>
-
 </body>
 
 </html>

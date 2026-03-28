@@ -1,34 +1,46 @@
 <?php
 // qr_search_backend.php
 
-session_start();
+// ── Buffer output so stray warnings never corrupt JSON ──────
+ob_start();
 
+// ── Session before anything else ───────────────────────────
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// ── Suppress display_errors — log to file, never to output ─
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);   // NEVER echo errors into the JSON stream
+ini_set('log_errors', 1);
 
-// QR Pass Live Search Backend with Query Logging and IN/OUT Tracking
+// ── Headers ─────────────────────────────────────────────────
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, X-Requested-With, Authorization');
 header('Access-Control-Max-Age: 86400');
 
+// ── Config (already guards session_start internally) ────────
 require_once 'config.php';
 
+// ── Discard any stray output before we echo JSON ────────────
+ob_clean();
+
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-  http_response_code(200);
-  exit();
+    http_response_code(200);
+    exit();
 }
 
 if (!isset($_SESSION['user_id'])) {
-  http_response_code(401);
-  echo json_encode([
-    'success' => false,
-    'message' => 'Authentication required. Please log in to access this service.',
-    'error_code' => 'AUTH_REQUIRED',
-    'data' => []
-  ]);
-  exit();
+    http_response_code(401);
+    echo json_encode([
+        'success'    => false,
+        'message'    => 'Authentication required. Please log in to access this service.',
+        'error_code' => 'AUTH_REQUIRED',
+        'data'       => []
+    ]);
+    exit();
 }
 
 $currentUserId = $_SESSION['user_id'];

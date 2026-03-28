@@ -20,7 +20,7 @@ function setupEventListeners() {
   searchInput.addEventListener("input", function (e) {
     clearTimeout(searchTimeout);
     const query = e.target.value.trim();
-
+ 
     // Auto-clear the input 300 ms after the user stops typing
     if (query !== "") {
       clearTimeout(searchInput.autoClearTimeout);
@@ -29,14 +29,14 @@ function setupEventListeners() {
         searchInput.focus();
       }, 300);
     }
-
+ 
     if (query === "") return;
-
+ 
     searchTimeout = setTimeout(() => {
       searchEmployees(query);
-    }, 300);
+    }, 300); // 300 ms debounce
   });
-
+ 
   // Handle Enter key
   searchInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter") {
@@ -46,14 +46,14 @@ function setupEventListeners() {
       searchEmployees(query);
     }
   });
-
-  // Re-focus on any click outside interactive elements
+ 
+  // Re-focus the hidden input on any click outside interactive elements
   document.addEventListener("click", function (e) {
     if (!e.target.matches("input, button, select, textarea, a")) {
       searchInput.focus();
     }
   });
-
+ 
   // Re-focus on any keydown when the input is not already active
   document.addEventListener("keydown", function (e) {
     if (
@@ -64,7 +64,7 @@ function setupEventListeners() {
       searchInput.focus();
     }
   });
-
+ 
   // Initial focus
   setTimeout(() => {
     searchInput.value = "";
@@ -90,7 +90,7 @@ function stopCurrentAudio() {
   }
   currentAudio = null;
 }
-
+ 
 function playSound(id) {
   stopCurrentAudio();
   const sound = document.getElementById(id);
@@ -100,10 +100,10 @@ function playSound(id) {
   sound.play().catch((e) => console.log("Audio play error:", e));
 }
 
-const playSuccessSound = () => playSound("successSound");
+const playSuccessSound  = () => playSound("successSound");
 const playInactiveSound = () => playSound("inactiveSound");
 const playNoResultSound = () => playSound("noResultSound");
-const playWarningSound = () => playSound("warningSound");
+const playWarningSound  = () => playSound("warningSound");
 
 // ─────────────────────────────────────────────────────────────────
 //  Input-block helper (prevents double-scans)
@@ -113,7 +113,7 @@ function blockSearchInput(durationMs = 1000) {
   searchInput.style.opacity = "0.7";
   searchInput.style.pointerEvents = "none";
   body.classList.add("input-blocked-alt");
-
+ 
   setTimeout(() => {
     searchInput.disabled = false;
     searchInput.style.opacity = "1";
@@ -125,119 +125,90 @@ function blockSearchInput(durationMs = 1000) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  QR code detection
+//  Core search function
 // ─────────────────────────────────────────────────────────────────
+ 
+/**
+ * Determines whether a query string looks like a QR/proximity code.
+ *
+ * Rules (adjust the pattern to match your actual QR format):
+ *   - 6+ alphanumeric chars (with optional - or _)
+ *   - OR the literal string "QR" appears anywhere
+ */
 function looksLikeQRCode(query) {
   return /^[A-Z0-9\-_]{6,}$/i.test(query) || query.toUpperCase().includes("QR");
 }
 
-// ─────────────────────────────────────────────────────────────────
-//  Fetch last log entry for an employee from datalog_backend.php
-//  Uses the QR code (most specific) or fullname as fallback.
-// ─────────────────────────────────────────────────────────────────
-async function fetchLastLog(qrCode, fullname) {
-  try {
-    // Prefer QR code lookup — most specific
-    const params = qrCode
-      ? new URLSearchParams({ action: "get", qr_code: qrCode })
-      : new URLSearchParams({ action: "get", fullname: fullname });
-
-    const response = await fetch(
-      `../cnfg/datalog_backend.php?${params.toString()}`,
-      { headers: { "X-Requested-With": "XMLHttpRequest" } },
-    );
-
-    if (!response.ok) return null;
-
-    const data = await response.json();
-
-    if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-      // getLogs() returns rows ORDER BY id DESC — first row is the most recent
-      return data.data[0];
-    }
-  } catch (e) {
-    console.warn("fetchLastLog error:", e);
-  }
-  return null;
-}
-
-// ─────────────────────────────────────────────────────────────────
-//  Core search function
-// ─────────────────────────────────────────────────────────────────
 async function searchEmployees(query) {
-  const messageEl = document.getElementById("message");
+  const messageEl    = document.getElementById("message");
   const resultsTable = document.getElementById("resultsTable");
-  const resultsBody = document.getElementById("resultsBody");
-
+  const resultsBody  = document.getElementById("resultsBody");
+ 
   try {
+    // ── Loading state ──────────────────────────────────────────
     resultsTable.style.display = "none";
     messageEl.innerHTML = '<div class="loading">Searching employees…</div>';
-
+ 
     let url, method, fetchBody;
-
+ 
     if (looksLikeQRCode(query)) {
-      url = "../cnfg/qr_search_backend.php";
+      // ── QR / proximity scan → POST get_by_qr (auto-toggles IN/OUT) ──
+      url    = "../cnfg/qr_search_backend.php";
       method = "POST";
       fetchBody = JSON.stringify({ action: "get_by_qr", qr_code: query });
     } else {
+      // ── Free-text search → GET with a single `q` param ──────────
+      //
+      //  The backend checks the FIRST non-empty allowed param it finds.
+      //  Sending all params with the same value means only `fullname`
+      //  is ever used, which hides matches by qr_code / brand / etc.
+      //
+      //  FIX: send a single generic param and let the backend fan it
+      //  out to all LIKE columns (the backend already does this via
+      //  the `$searchTerm` path when any searchable field is set).
+      //
+      //  We use `fullname` here because the backend loops through
+      //  ['qr_code','fullname','position','brand','shift','status']
+      //  and picks the first non-empty value as the free-text term,
+      //  then does a LIKE search across ALL columns — so one param
+      //  is enough.
+      // ─────────────────────────────────────────────────────────
       const params = new URLSearchParams({ fullname: query });
-      url = `../cnfg/qr_search_backend.php?${params.toString()}`;
+      url    = `../cnfg/qr_search_backend.php?${params.toString()}`;
       method = "GET";
     }
-
+ 
     const fetchOptions = {
       method,
       headers: { "X-Requested-With": "XMLHttpRequest" },
     };
-
+ 
     if (method === "POST") {
       fetchOptions.headers["Content-Type"] = "application/json";
       fetchOptions.body = fetchBody;
     }
-
-    // ── Fire QR scan + last-log fetch simultaneously ──────────────
-    const [response] = await Promise.all([
-      fetch(url, fetchOptions),
-      // The last-log fetch is handled per-employee after we know who was found
-    ]);
-
-    if (response.status === 401) {
-      messageEl.innerHTML =
-        '<p class="no-results-message">Session expired. Please log in again.</p>';
-      playNoResultSound();
-      blockSearchInput();
-      return;
-    }
+ 
+    const response = await fetch(url, fetchOptions);
+ 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-
+ 
     const data = await response.json();
     console.log("Backend response:", data);
-
+ 
     if (data.success) {
-      const rawResults = Array.isArray(data.data) ? data.data : [data.data];
-
-      if (rawResults.length === 0) {
+      // Backend returns a single object for QR scans, array for searches
+      currentResults = Array.isArray(data.data) ? data.data : [data.data];
+ 
+      if (currentResults.length === 0) {
         messageEl.innerHTML =
           '<p class="no-results-message">No results found. 🔍</p>';
         playNoResultSound();
         blockSearchInput();
         return;
       }
-
-      // ── Enrich every employee with their last log — all in parallel ──
-      const enriched = await Promise.all(
-        rawResults.map(async (employee) => {
-          const lastLog = await fetchLastLog(
-            employee.qr_code || null,
-            employee.fullname || null,
-          );
-          return { ...employee, lastLog };
-        }),
-      );
-
-      currentResults = enriched;
+ 
       renderResults(currentResults);
     } else {
       console.warn("Backend error:", data.message);
@@ -254,82 +225,90 @@ async function searchEmployees(query) {
   }
 }
 
+// Filter results based on current filter
+function filterResults(results) {
+  if (currentFilter === "all") return results;
+}
+
 // ─────────────────────────────────────────────────────────────────
 //  Render results
 // ─────────────────────────────────────────────────────────────────
 function renderResults(results) {
   stopCurrentAudio();
-
-  const messageEl = document.getElementById("message");
+ 
+  const messageEl    = document.getElementById("message");
   const resultsTable = document.getElementById("resultsTable");
-  const resultsBody = document.getElementById("resultsBody");
-
+  const resultsBody  = document.getElementById("resultsBody");
+ 
+  // Clear any pending auto-hide timer
   if (displayTimeout) {
     clearTimeout(displayTimeout);
     displayTimeout = null;
   }
-
-  messageEl.innerHTML = "";
+ 
+  messageEl.innerHTML        = "";
   resultsTable.style.display = "block";
-
+ 
+  // Decide which sound to play
   const hasViolations = results.some(
-    (e) => e.violation && e.violation.trim() !== "",
+    (e) => e.violation && e.violation.trim() !== ""
   );
   const hasInactive = results.some(
-    (e) => (e.status || "").toLowerCase() === "inactive",
+    (e) => (e.status || "").toLowerCase() === "inactive"
   );
-
-  resultsBody.innerHTML = results
-    .map((employee) => buildCard(employee))
-    .join("");
-
+ 
+  resultsBody.innerHTML = results.map((employee) => buildCard(employee)).join("");
+ 
   // Auto-hide after 10 s
   displayTimeout = setTimeout(() => {
     resultsTable.style.display = "none";
-    resultsBody.innerHTML = "";
+    resultsBody.innerHTML      = "";
     background();
   }, 10000);
-
-  if (hasViolations) playWarningSound();
+ 
+  // Sound priority: violation > inactive > success
+  if (hasViolations)    playWarningSound();
   else if (hasInactive) playInactiveSound();
-  else playSuccessSound();
-
+  else                  playSuccessSound();
+ 
   blockSearchInput();
-}
-
-// ─────────────────────────────────────────────────────────────────
-//  Format helpers
-// ─────────────────────────────────────────────────────────────────
-function formatTimestamp(ts) {
-  if (!ts) return "—";
-  const d = new Date(ts);
-  if (isNaN(d)) return ts; // pass through if already a string
-  return d.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
 }
 
 // ─────────────────────────────────────────────────────────────────
 //  Card builder
 // ─────────────────────────────────────────────────────────────────
+ 
+/**
+ * Builds the HTML card for a single employee record.
+ *
+ * check_status FIX
+ * ────────────────
+ * The backend stores the CURRENT state of the employee (IN or OUT).
+ * The old code displayed the OPPOSITE value (what the next scan would
+ * produce), which was misleading.
+ *
+ *   employee.check_status = "IN"  → show "IN"  (they are currently inside)
+ *   employee.check_status = "OUT" → show "OUT" (they are currently outside)
+ *
+ * The CSS class is keyed on the current status so colours are correct too.
+ */
 function buildCard(employee) {
-  const fullname = escapeHtml(employee.fullname || "Unknown");
-  const position = escapeHtml(employee.position || "Unknown");
-  const brand = escapeHtml(employee.brand || "N/A");
-  const status = escapeHtml(employee.status || "unknown");
-  const shift = escapeHtml(employee.shift || "N/A");
-  const violation = employee.violation ? escapeHtml(employee.violation) : null;
-  const image = employee.image ? escapeHtml(employee.image) : null;
-
-  const checkStatus = escapeHtml(
-    (employee.check_status || "OUT").toUpperCase(),
-  );
-
+  const fullname   = escapeHtml(employee.fullname   || "Unknown");
+  const position   = escapeHtml(employee.position   || "Unknown");
+  const brand      = escapeHtml(employee.brand      || "N/A");
+  const status     = escapeHtml(employee.status     || "unknown");
+  const shift      = escapeHtml(employee.shift      || "N/A");
+  const violation  = employee.violation ? escapeHtml(employee.violation) : null;
+  const image      = employee.image     ? escapeHtml(employee.image)     : null;
+ 
+  // ── check_status: use the value as-is from the backend ──────────
+  //
+  //  The backend returns the CURRENT check state ("IN" or "OUT").
+  //  Previous code did `const checkStatus = check_status === "OUT" ? "IN" : "OUT"`
+  //  which showed the NEXT scan result instead of the current state.
+  // ─────────────────────────────────────────────────────────────────
+  const checkStatus = escapeHtml((employee.check_status || "OUT").toUpperCase());
+ 
   // Initials placeholder
   const initials = (employee.fullname || "UN")
     .split(" ")
@@ -337,37 +316,11 @@ function buildCard(employee) {
     .join("")
     .substring(0, 2)
     .toUpperCase();
-
+ 
   const imageHtml = image
     ? `<img src="../../uploads/user/${image}" alt="${fullname}" class="employee-image">`
     : `<div class="ph-container"><div class="employee-placeholder">${initials}</div></div>`;
-
-  // ── Last log panel ────────────────────────────────────────────────
-  // const log = employee.lastLog;
-  // let lastLogHtml = "";
-
-  // if (log) {
-  //   const logCheckStatus = escapeHtml((log.check_status || "—").toUpperCase());
-  //   const logAccessType = escapeHtml(log.access_type || "—");
-  //   const logTimestamp = escapeHtml(formatTimestamp(log.access_timestamp));
-  //   const logIP = escapeHtml(log.ip_address || "—");
-
-  //   lastLogHtml = `
-  //     <div class="last-log-panel">
-  //       <p class="last-log-title">Last Log Entry</p>
-  //       <p>Access Type : ${logAccessType}</p>
-  //       <p>Check Status: <span class="check-status-${logCheckStatus.toLowerCase()}">${logCheckStatus}</span></p>
-  //       <p>Timestamp   : ${logTimestamp}</p>
-  //       <p>IP Address  : ${logIP}</p>
-  //     </div>`;
-  // } else {
-  //   lastLogHtml = `
-  //     <div class="last-log-panel last-log-empty">
-  //       <p class="last-log-title">Last Log Entry</p>
-  //       <p>No previous log found.</p>
-  //     </div>`;
-  // }
-
+ 
   return `
     <div class="${violation ? "div-with-violation" : "div-container"}">
       <div class="div-position">

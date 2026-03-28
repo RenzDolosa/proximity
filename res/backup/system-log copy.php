@@ -638,9 +638,7 @@ if (!isLoggedIn()) {
 
 <body>
 
-  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.history.back();">
-    <i class="fas fa-times"></i>
-  </div>
+  <div id="closeButton"></div>
 
   <!-- ── Toolbar ────────────────────────────────────────────────────────────── -->
   <div class="toolbar">
@@ -861,6 +859,15 @@ if (!isLoggedIn()) {
       return 'badge-default';
     }
 
+    /* ── Stable string hash (djb2) for consistent avatar colors ── */
+    function hashStr(str) {
+      let hash = 5381;
+      for (let i = 0; i < str.length; i++) {
+        hash = (hash * 33) ^ str.charCodeAt(i);
+      }
+      return hash >>> 0; // unsigned 32-bit
+    }
+
     /* ── Render table ── */
     function renderTable() {
       const tbody = document.getElementById('logTableBody');
@@ -879,12 +886,11 @@ if (!isLoggedIn()) {
         return;
       }
 
-      // FIX: Corrected user-cell markup — avatar and username are siblings, not nested.
-      // FIX: Removed broken user_group check (not in fetched data); both View and Delete
-      //      buttons are shown for every row so admins can inspect or remove any entry.
+      // buttons are shown for every row so admins can inspect or remove any entry.
       tbody.innerHTML = slice.map((log, i) => {
         const idx = (currentPage - 1) * PER_PAGE + i;
-        const color = COLORS[(log.id - 1) % COLORS.length];
+        const colorKey = log.user_id ? log.user_id : log.username;
+        const color = COLORS[Math.abs(hashStr(String(colorKey))) % COLORS.length];
         const initial = (log.username[0] || '?').toUpperCase();
         return `
         <tr>

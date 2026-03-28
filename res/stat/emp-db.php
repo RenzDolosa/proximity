@@ -261,7 +261,7 @@ if ($databaseConnected && $employeeManager) {
           <p>Connected to your personal database:</p>
           <div class="database-name">
             <?php if ($databaseConnected): ?>
-              <span style="color: #28a745;"><?php echo htmlspecialchars($myDatabase); ?></span>
+              <span><?php echo htmlspecialchars($myDatabase); ?></span>
             <?php else: ?>
               <span style="color: #dc3545;"><?php echo htmlspecialchars($myDatabase); ?></span>
               <?php if (!empty($missingTables)): ?>

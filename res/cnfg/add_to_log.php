@@ -1,18 +1,31 @@
 <?php
 // add_to_log.php - Employee Access Log Integration with QR Search Backend
-session_start();
 
+// ── Buffer output so stray warnings never corrupt JSON ──────
+ob_start();
+
+// ── Session before anything else ───────────────────────────
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// ── Suppress display_errors — log to file, never to output ─
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);   // NEVER echo errors into the JSON stream
+ini_set('log_errors', 1);
 
-// Include config.php for database functions
-require_once 'config.php';
-
+// ── Headers ─────────────────────────────────────────────────
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, X-Requested-With, Authorization');
 header('Access-Control-Max-Age: 86400');
+
+// ── Config (already guards session_start internally) ────────
+require_once 'config.php';
+
+// ── Discard any stray output before we echo JSON ────────────
+ob_clean();
 
 // Handle OPTIONS request for CORS preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
