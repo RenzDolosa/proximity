@@ -41,7 +41,7 @@ try {
 <body>
 
   <div class="side-bar" style="top: 0;">
-    <div onclick="window.location.href='qr.php';" class="side-btn">
+    <div onclick="window.history.back();" class="side-btn">
       <div class="s-header">
         <h1>Proximity</h1>
       </div>

@@ -4,6 +4,12 @@
 require_once 'config.php';
 require_once 'req.php';
 
+// ── Auth guard ────────────────────────────────────────────────────────────────
+if (($_SESSION['user_group'] ?? '') !== 'Administrator') {
+  echo '<script>history.back();</script>';
+  exit;
+}
+
 // Get dashboard statistics if database is connected
 $stats = [
   'total_employees' => 0,
@@ -457,7 +463,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $databaseConnected) {
     <p id="version"></p>
   </version_compare>
 
-  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.location='../iframe/ptl.php'">
+  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.history.back();">
     <i class="fas fa-times"></i>
   </div>
 

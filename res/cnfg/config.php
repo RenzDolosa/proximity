@@ -57,7 +57,8 @@ function createDatabase()
       [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
 
-    // FIXED: Removed invalid "ON users(...)" index syntax from CREATE TABLE
+    // INDEX definitions inside CREATE TABLE use: INDEX idx_name (column)
+    // The "ON table(...)" form is only valid for standalone CREATE INDEX statements.
     $sql = "
       CREATE TABLE
         IF NOT EXISTS `users` (
@@ -69,9 +70,14 @@ function createDatabase()
         `last_name` varchar(50) NOT NULL,
         `phone` varchar(20) DEFAULT NULL,
         `my_database` varchar(50) NOT NULL,
+        `user_group` varchar(50) NOT NULL,
         `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
         `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-        `last_login` timestamp NULL DEFAULT NULL
+        `last_login` timestamp NULL DEFAULT NULL,
+        `session_token` varchar(255) DEFAULT NULL,
+        INDEX idx_username (username),
+        INDEX idx_email (email),
+        INDEX idx_session_token (session_token)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
       CREATE TABLE
@@ -95,15 +101,61 @@ function createDatabase()
         `created_at` timestamp NOT NULL DEFAULT current_timestamp()
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-      INSERT INTO `users` (`id`, `username`, `email`, `password`, `first_name`, `last_name`, `phone`, `my_database`, `created_at`, `updated_at`, `last_login`) VALUES
-      (1, 'Admin', 'administrator@gmail.com', '$2y$10$/nqdViJv2DWyfjHhfS8ZDOPT.6QwxO3DWK1ocCwDFPUYvEE20Lkga', 'Renz', 'Admin', '09196398247', 'AdminServer', NOW(), NOW(), NULL);
+      CREATE TABLE
+        IF NOT EXISTS `user_groups` (
+          `id` INT (11) NOT NULL AUTO_INCREMENT,
+          `group_number` VARCHAR(64) NOT NULL UNIQUE COMMENT 'Auto-generated unique group number',
+          `group_name` VARCHAR(100) NOT NULL UNIQUE COMMENT 'Human-readable name e.g. Administrator',
+          `description` VARCHAR(255) DEFAULT NULL,
+          `is_enabled` TINYINT (1) NOT NULL DEFAULT 1 COMMENT '1 = enabled, 0 = disabled',
+          `permissions` JSON DEFAULT NULL COMMENT 'JSON object: { order: true, social: false, ... }',
+          `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          `updated_at` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`)
+        ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
+      INSERT INTO `users` (`id`, `username`, `email`, `password`, `first_name`, `last_name`, `phone`, `my_database`, `user_group`, `created_at`, `updated_at`, `last_login`) VALUES
+      (1, 'Admin', 'administrator@gmail.com', '\$2y\$10\$/nqdViJv2DWyfjHhfS8ZDOPT.6QwxO3DWK1ocCwDFPUYvEE20Lkga', 'Renz', 'Admin', '09196398247', 'AdminServer', 'Administrator', NOW(), NOW(), NULL)
+      ON DUPLICATE KEY UPDATE id=id;
+
+      INSERT IGNORE INTO `user_groups` (
+          `group_number`,
+          `group_name`,
+          `description`,
+          `is_enabled`,
+          `permissions`,
+          `created_at`
+        )
+        VALUES
+          (
+            '1',
+            'Administrator',
+            'Full access to all system features',
+            1,
+            JSON_OBJECT (
+              'system', true,
+              'datalog', true,
+              'proxcode', true,
+              'manual_input', true,
+              'live_sreach', true,
+              'account', true,
+              'employee_db', true,
+              'settings', true,
+              'system-log', true,
+              'user-management', true,
+              'scantest', true
+            ),
+            NOW()
+          );
+          
       ALTER TABLE `users`
         MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
     ";
 
     error_log("Creating/verifying tables in database: $dbName");
     $dbPdo->exec($sql);
+
+    $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `user_group` VARCHAR(50)");
     error_log("Tables ready in database: $dbName");
 
     return ['success' => true, 'database_name' => $dbName];
@@ -619,7 +671,7 @@ function customDatabaseExists($dbName)
  * 
  * @return array - ['success' => bool, 'user_id' => int, 'database_created' => bool, 'database_name' => string, 'message' => string, 'errors' => array]
  */
-function registerUser($username, $email, $password, $firstName, $lastName, $myDatabase = null, $phoneNum = null)
+function registerUser($username, $email, $password, $firstName, $lastName, $myDatabase = null, $phoneNum = null, $user_group)
 {
   $errors = [];
 
@@ -665,8 +717,8 @@ function registerUser($username, $email, $password, $firstName, $lastName, $myDa
 
     // Insert new user with my_database as metadata
     $stmt = $pdo->prepare("
-        INSERT INTO users (username, email, password, first_name, last_name, my_database, phone, created_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+        INSERT INTO users (username, email, password, first_name, last_name, my_database, phone, user_group, created_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ");
 
     $stmt->execute([
@@ -675,8 +727,9 @@ function registerUser($username, $email, $password, $firstName, $lastName, $myDa
       $hashedPassword,
       sanitizeInput($firstName),
       sanitizeInput($lastName),
-      sanitizeInput($myDatabase ?? ''), // STORED AS METADATA ONLY
-      $phoneNum ? sanitizeInput($phoneNum) : null
+      sanitizeInput($myDatabase ?? ''),
+      $phoneNum ? sanitizeInput($phoneNum) : null,
+      sanitizeInput($user_group)
     ]);
 
     $userId = $pdo->lastInsertId();
@@ -738,7 +791,7 @@ function loginUser($username, $password)
   try {
     $pdo = getMainDBConnection();
 
-    $stmt = $pdo->prepare("SELECT id, username, email, password, first_name, last_name, my_database FROM users WHERE username = ? OR email = ?");
+    $stmt = $pdo->prepare("SELECT id, username, email, password, first_name, last_name, my_database, user_group FROM users WHERE username = ? OR email = ?");
     $stmt->execute([$username, $username]);
     $user = $stmt->fetch();
 
@@ -761,7 +814,8 @@ function loginUser($username, $password)
       $_SESSION['email'] = $user['email'];
       $_SESSION['first_name'] = $user['first_name'];
       $_SESSION['last_name'] = $user['last_name'];
-      $_SESSION['my_database'] = $user['my_database']; // Store custom name in session
+      $_SESSION['my_database'] = $user['my_database'];
+      $_SESSION['user_group'] = $user['user_group'];
 
       // Update last login
       $updateStmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
@@ -783,6 +837,8 @@ function createMainTables()
   try {
     $pdo = getMainDBConnection();
 
+    // FIX Bug 5: Removed invalid "ON users(...)" index syntax from CREATE TABLE.
+    // Also merged session_token column and its index directly into the CREATE TABLE definition.
     $sql = "
         CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -792,15 +848,16 @@ function createMainTables()
             first_name VARCHAR(50) NOT NULL,
             last_name VARCHAR(50) NOT NULL,
             phone VARCHAR(20),
-            my_database VARCHAR(100), -- CUSTOM DATABASE NAME (METADATA ONLY)
+            my_database VARCHAR(100),
+            user_group VARCHAR(50),
+            session_token VARCHAR(255) DEFAULT NULL,
+            session_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             last_login TIMESTAMP NULL,
-            session_token VARCHAR(255) DEFAULT NULL,
-            session_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_username (username),
             INDEX idx_email (email),
-            INDEX idx_users_session_token ON users(session_token)
+            INDEX idx_session_token (session_token)
         );
 
         CREATE TABLE IF NOT EXISTS user_sessions (
@@ -831,9 +888,25 @@ function createMainTables()
             INDEX idx_action (action),
             INDEX idx_created_at (created_at)
         );
+
+        CREATE TABLE
+          IF NOT EXISTS `user_groups` (
+            `id` INT (11) NOT NULL AUTO_INCREMENT,
+            `group_number` VARCHAR(64) NOT NULL UNIQUE COMMENT 'Auto-generated unique group number',
+            `group_name` VARCHAR(100) NOT NULL UNIQUE COMMENT 'Human-readable name e.g. Administrator',
+            `description` VARCHAR(255) DEFAULT NULL,
+            `is_enabled` TINYINT (1) NOT NULL DEFAULT 1 COMMENT '1 = enabled, 0 = disabled',
+            `permissions` JSON DEFAULT NULL COMMENT 'JSON object: { order: true, social: false, ... }',
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`)
+          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
     ";
 
     $pdo->exec($sql);
+
+    $pdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `user_group` VARCHAR(50)");
+
     error_log("Main system tables created successfully");
     return true;
   } catch (PDOException $e) {
@@ -886,7 +959,8 @@ function getCurrentUser()
     'email' => $_SESSION['email'],
     'first_name' => $_SESSION['first_name'],
     'last_name' => $_SESSION['last_name'],
-    'my_database' => $_SESSION['my_database'] // Custom name from metadata
+    'my_database' => $_SESSION['my_database'],
+    'user_group' => $_SESSION['user_group']
   ];
 }
 

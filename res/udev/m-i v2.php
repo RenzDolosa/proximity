@@ -1,131 +1,87 @@
 <?php
-// dtl.php
+// m-i v2.php
 
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
-// Handle AJAX requests first
-if (isset($_GET['ajax']) && $_GET['ajax'] === 'update') {
-  header('Content-Type: application/json');
-
-  if ($databaseConnected) {
-    $dashboardData = getDashboardData($userDb);
-    echo json_encode($dashboardData);
-  } else {
-    echo json_encode(['error' => 'Database not connected']);
-  }
+// ── Auth guard ────────────────────────────────────────────────────────────────
+if (($_SESSION['user_group'] ?? '') !== 'Administrator') {
+  echo '<script>history.back();</script>';
   exit;
 }
 
-// Get dashboard statistics if database is connected
-$stats = [
-  'total_scanned' => 0,
-  'active_employees' => 0,
-  'inactive_employees' => 0,
-  'today_attendance' => 0,
-  'today_in' => 0,
-  'today_out' => 0,
-];
-
-$recentLogs = [];
-$settings = [];
-$dbError = '';
-
-if ($databaseConnected) {
-  $dashboardData = getDashboardData($userDb);
-  $stats = $dashboardData['stats'];
-  $recentLogs = $dashboardData['recentLogs'];
-  $settings = $dashboardData['settings'];
-  if (isset($dashboardData['error'])) {
-    $dbError = $dashboardData['error'];
-  }
-} else {
-  $dbError = 'Database connection not established';
-}
-
-// Function to get dashboard data (for both regular load and AJAX updates)
+// FIX: Move ALL function definitions to the top before any calls
 function getDashboardData($userDb)
 {
   $stats = [
-    'total_scanned' => 0,
-    'active_employees' => 0,
+    'total_scanned'      => 0,
+    'active_employees'   => 0,
     'inactive_employees' => 0,
-    'today_attendance' => 0,
-    'today_in' => 0,
-    'today_out' => 0,
+    'today_attendance'   => 0,
+    'today_in'           => 0,
+    'today_out'          => 0,
   ];
-
   $recentLogs = [];
-  $settings = [];
+  $settings   = [];
 
   try {
-    // Check if tables exist before querying
     $tablesExist = checkTablesExist($userDb);
 
     if (!$tablesExist['employee_access_log']) {
       throw new Exception("Table 'employee_access_log' does not exist");
     }
 
-    // Get total scanned records from employee_access_log
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log");
     $stmt->execute();
     $stats['total_scanned'] = (int)$stmt->fetchColumn();
 
-    // Get active employees (case-insensitive check)
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE LOWER(status) = 'active'");
     $stmt->execute();
     $stats['active_employees'] = (int)$stmt->fetchColumn();
 
-    // Get inactive employees
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE LOWER(status) = 'inactive'");
     $stmt->execute();
     $stats['inactive_employees'] = (int)$stmt->fetchColumn();
 
-    // Get today's attendance
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE DATE(access_timestamp) = CURDATE()");
     $stmt->execute();
     $stats['today_attendance'] = (int)$stmt->fetchColumn();
 
-    // Get today's check-ins
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'IN' AND DATE(access_timestamp) = CURDATE()");
     $stmt->execute();
     $stats['today_in'] = (int)$stmt->fetchColumn();
 
-    // Get today's check-outs
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'OUT' AND DATE(access_timestamp) = CURDATE()");
     $stmt->execute();
     $stats['today_out'] = (int)$stmt->fetchColumn();
 
-    // Get recent employee logs - with better error handling
     if ($tablesExist['employee_logs'] && $tablesExist['employees']) {
       $stmt = $userDb->prepare("
-                SELECT el.*, e.fullname 
-                FROM employee_logs el
-                LEFT JOIN employees e ON el.employee_id = e.id
-                ORDER BY el.timestamp DESC 
-                LIMIT 10
-            ");
+        SELECT el.*, e.fullname
+        FROM employee_logs el
+        LEFT JOIN employees e ON el.employee_id = e.id
+        ORDER BY el.timestamp DESC
+        LIMIT 10
+      ");
       $stmt->execute();
       $recentLogs = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } else {
-      // Fallback: get recent logs from employee_access_log
       $stmt = $userDb->prepare("
-                SELECT 
-                    employee_id,
-                    fullname,
-                    access_timestamp as timestamp,
-                    check_status,
-                    status,
-                    'Access Log' as action
-                FROM employee_access_log 
-                ORDER BY access_timestamp DESC 
-                LIMIT 10
-            ");
+        SELECT
+          employee_id,
+          fullname,
+          access_timestamp AS timestamp,
+          check_status,
+          status,
+          'Access Log' AS action
+        FROM employee_access_log
+        ORDER BY access_timestamp DESC
+        LIMIT 10
+      ");
       $stmt->execute();
       $recentLogs = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    // Get company settings - with error handling
     if ($tablesExist['user_settings']) {
       $stmt = $userDb->prepare("SELECT setting_key, setting_value FROM user_settings");
       $stmt->execute();
@@ -133,38 +89,26 @@ function getDashboardData($userDb)
     }
 
     return [
-      'stats' => $stats,
+      'stats'      => $stats,
       'recentLogs' => $recentLogs,
-      'settings' => $settings,
-      'lastUpdate' => date('Y-m-d H:i:s')
+      'settings'   => $settings,
+      'lastUpdate' => date('Y-m-d H:i:s'),
     ];
   } catch (PDOException $e) {
     $error = "Database error: " . $e->getMessage();
     error_log($error);
-    return [
-      'stats' => $stats,
-      'recentLogs' => $recentLogs,
-      'settings' => $settings,
-      'error' => $error
-    ];
+    return ['stats' => $stats, 'recentLogs' => $recentLogs, 'settings' => $settings, 'error' => $error];
   } catch (Exception $e) {
     $error = "Error: " . $e->getMessage();
     error_log($error);
-    return [
-      'stats' => $stats,
-      'recentLogs' => $recentLogs,
-      'settings' => $settings,
-      'error' => $error
-    ];
+    return ['stats' => $stats, 'recentLogs' => $recentLogs, 'settings' => $settings, 'error' => $error];
   }
 }
 
-// Helper function to check if tables exist
 function checkTablesExist($userDb)
 {
   $tables = ['employee_access_log', 'employee_logs', 'employees', 'user_settings'];
   $exists = [];
-
   try {
     foreach ($tables as $table) {
       $stmt = $userDb->prepare("SHOW TABLES LIKE ?");
@@ -172,18 +116,65 @@ function checkTablesExist($userDb)
       $exists[$table] = $stmt->rowCount() > 0;
     }
   } catch (PDOException $e) {
-    // If we can't check, assume tables don't exist
     foreach ($tables as $table) {
       $exists[$table] = false;
     }
   }
-
   return $exists;
 }
 
-// Ensure required variables are set
+// ── Handle AJAX requests ──────────────────────────────────────────────────────
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'update') {
+  header('Content-Type: application/json');
+
+  if (($_SESSION['user_group'] ?? '') !== 'Administrator') {
+    echo json_encode(['success' => false, 'message' => 'Access denied.']);
+    exit;
+  }
+
+  // FIX: Guard against undefined $databaseConnected / $userDb from db.php
+  if (!isset($databaseConnected) || !$databaseConnected || !isset($userDb)) {
+    echo json_encode(['error' => 'Database not connected']);
+    exit;
+  }
+
+  echo json_encode(getDashboardData($userDb));
+  exit;
+}
+
+// ── Page load data ────────────────────────────────────────────────────────────
+$stats = [
+  'total_scanned'      => 0,
+  'active_employees'   => 0,
+  'inactive_employees' => 0,
+  'today_attendance'   => 0,
+  'today_in'           => 0,
+  'today_out'          => 0,
+];
+$recentLogs = [];
+$settings   = [];
+$dbError    = '';
+
+// FIX: Safely check variables that db.php is supposed to provide
+if (!isset($databaseConnected)) {
+  $dbError = 'db.php did not set $databaseConnected — check your db.php file.';
+  $databaseConnected = false;
+}
+
+if ($databaseConnected && isset($userDb)) {
+  $dashboardData = getDashboardData($userDb);
+  $stats         = $dashboardData['stats'];
+  $recentLogs    = $dashboardData['recentLogs'];
+  $settings      = $dashboardData['settings'];
+  if (isset($dashboardData['error'])) {
+    $dbError = $dashboardData['error'];
+  }
+} elseif (empty($dbError)) {
+  $dbError = 'Database connection not established';
+}
+
 $myDatabase = $myDatabase ?? 'Unknown Database';
-$username = $username ?? 'Unknown User';
+$username   = $username   ?? 'Unknown User';
 ?>
 
 <!DOCTYPE html>
@@ -403,7 +394,7 @@ $username = $username ?? 'Unknown User';
 
 <body>
 
-  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.location='../iframe/ptl.php'">
+  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.history.back();">
     <i class="fas fa-times"></i>
   </div>
 

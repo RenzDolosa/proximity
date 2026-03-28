@@ -6,6 +6,12 @@ require_once 'res/cnfg/config.php';
 $errors = [];
 $success = '';
 
+// ── Auth guard ────────────────────────────────────────────────────────────────
+if (($_SESSION['user_group'] ?? '') !== 'Administrator') {
+  echo '<script>history.back();</script>';
+  exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   // Get and sanitize input data
   $myDatabase = sanitizeInput($_POST['my_database'] ?? '');
@@ -68,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   // If no errors, create user with database using config.php function
   if (empty($errors)) {
-    $result = registerUser($username, $email, $password, $first_name, $last_name, $myDatabase, $phone);
+    $result = registerUser($username, $email, $password, $first_name, $last_name, $myDatabase, $phone, $user_group);
 
     if ($result['success']) {
       $success = "Registration successful! Your personal database has been created. You can now login.";
@@ -81,17 +87,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       // );
 
       // Clear form data on success
-      $username = $email = $first_name = $last_name = $myDatabase = $phone = '';
+      $username = $email = $first_name = $last_name = $myDatabase = $phone = $user_group = '';
 
       // // Optional: Auto-login the user after registration
       // // Uncomment the following lines if you want auto-login:
 
-      $_SESSION['user_id'] = $result['user_id'];
-      $_SESSION['username'] = $username;
-      $_SESSION['email'] = $email;
-      $_SESSION['first_name'] = $first_name;
-      $_SESSION['last_name'] = $last_name;
-      header('Location: portal.php');
+      // $_SESSION['user_id'] = $result['user_id'];
+      // $_SESSION['username'] = $username;
+      // $_SESSION['email'] = $email;
+      // $_SESSION['first_name'] = $first_name;
+      // $_SESSION['last_name'] = $last_name;
+      // header('Location: portal.php');
       exit;
     } else {
       $errors = $result['errors'];

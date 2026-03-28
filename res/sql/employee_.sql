@@ -122,3 +122,33 @@ CREATE TABLE
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_user_id` (`user_id`)
   ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+
+INSERT IGNORE INTO `user_groups` (
+  `group_number`,
+  `group_name`,
+  `description`,
+  `is_enabled`,
+  `permissions`,
+  `created_at`
+)
+VALUES
+  (
+    '164316000000000001',
+    'Administrator',
+    'Full access to all system features',
+    1,
+    JSON_OBJECT (
+      'system', true,
+      'datalog', true,
+      'proxcode', true,
+      'manual_input', true,
+      'live_sreach', true,
+      'account', true,
+      'employee_db', true,
+      'settings', true,
+      'system-log', true,
+      'user-management', true,
+      'scantest', true
+    ),
+    NOW ()
+  );

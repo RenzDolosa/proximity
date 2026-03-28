@@ -210,7 +210,7 @@ try {
 
 <body>
 
-  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.location='../iframe/ptl.php'">
+  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.history.back();">
     <i class="fas fa-times"></i>
   </div>
 

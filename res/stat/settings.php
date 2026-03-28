@@ -421,8 +421,7 @@ function audioCard(string $label, string $inputName, string $dbKey, array $curre
 
 <body>
 
-  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close"
-    onclick="window.location='../iframe/ptl.php'">
+  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.history.back();">
     <i class="fas fa-times"></i>
   </div>
 
@@ -502,9 +501,14 @@ function audioCard(string $label, string $inputName, string $dbKey, array $curre
             </div>
           </div>
         </div>
-        <button onclick="window.location='../../reg.php'" class="btn btn-primary" style="margin-top:20px;" id="regBtn">
-          <i class="fas fa-user-plus"></i> Register User
-        </button>
+        <?php if (($user['user_group'] ?? '') === 'Administrator'): ?>
+          <button onclick="window.location='users-management.php'" class="btn btn-primary" style="margin-top:20px;" id="regBtn">
+            <i class="fas fa-user-plus"></i> Register User
+          </button>
+          <button onclick="window.location='system-log.php'" class="btn btn-primary" style="margin-top:20px;" id="regBtn">
+            <i class="fas fa-file-alt"></i> System Log
+          </button>
+        <?php endif; ?>
       </div>
 
       <!-- ── Audio Settings ──────────────────────────────────── -->
