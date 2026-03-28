@@ -72,7 +72,7 @@ try {
 
   <div class="container">
     <div class="header">
-      <h1>Employee Management System</h1>
+      <h1>Employee Manual Access</h1>
       <div class="stats-bar">
         <div class="stat-item">
           <span class="stat-number" id="totalEmployees">0</span>
@@ -92,12 +92,10 @@ try {
     <div class="search-section">
       <form class="search-form" id="searchForm">
         <div class="form-group">
-          <label for="fullname">Fullname</label>
-          <input type="text" id="fullname" name="fullname" placeholder="Search by fullname...">
+          <input type="text" id="fullname" name="fullname" placeholder="Fullname">
         </div>
         <div class="form-group" style="position: fixed; left: 1%; top: 1%; opacity: 0;">
-          <label for="search_qr">Proximity Code</label>
-          <input type="text" id="search_qr" name="qr_code" placeholder="Search by proximity code..." style="cursor: default;" autocomplete="off">
+          <input type="text" id="search_qr" name="qr_code" placeholder="Proximity Code" style="cursor: default;" autocomplete="off">
         </div>
         <img src="../icon/nfc-icon.png" alt="Proximity" style="position: absolute; left: 24px; top: 10%; width: 100px; height: 100px; filter: invert(1);">
       </form>
@@ -170,58 +168,39 @@ try {
       currentAudio = null;
     }
 
-    // Play sound on successful result
-    function playSuccessSound() {
-      stopCurrentAudio(); // Stop any currently playing audio
-      const sound = document.getElementById("successSound");
+    function playSound(id) {
+      stopCurrentAudio();
+      const sound = document.getElementById(id);
+      if (!sound) return;
       currentAudio = sound;
       sound.currentTime = 0;
       sound.play().catch((e) => console.log("Audio play error:", e));
     }
 
-    function playInactiveSound() {
-      stopCurrentAudio(); // Stop any currently playing audio
-      const sound = document.getElementById("inactiveSound");
-      currentAudio = sound;
-      sound.currentTime = 0;
-      sound.play().catch((e) => console.log("Audio play error:", e));
-    }
-
-    function playNoResultSound() {
-      stopCurrentAudio(); // Stop any currently playing audio
-      const sound = document.getElementById("noResultSound");
-      currentAudio = sound;
-      sound.currentTime = 0;
-      sound.play().catch((e) => console.log("Audio play error:", e));
-    }
-
-    function playWarningSound() {
-      stopCurrentAudio(); // Stop any currently playing audio
-      const sound = document.getElementById("warningSound");
-      currentAudio = sound;
-      sound.currentTime = 0;
-      sound.play().catch((e) => console.log("Audio play error:", e));
-    }
+    const playSuccessSound = () => playSound("successSound");
+    const playInactiveSound = () => playSound("inactiveSound");
+    const playNoResultSound = () => playSound("noResultSound");
+    const playWarningSound = () => playSound("warningSound");
 
     // Add employee to access log
-    async function addToLog(employeeId, checkStatus = "IN") {
-      try {
-        // Show loading state
-        const button = event.target;
-        const originalText = button.innerHTML;
-        button.innerHTML = "⏳ Added...";
-        button.disabled = true;
+    async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
+      stopCurrentAudio();
+      const button = triggerElement;
+      const originalText = button ? button.innerHTML : "";
 
-        // Find the employee data
-        const employee = employees.find((emp) => emp.id === employeeId);
-        if (!employee) {
-          throw new Error("Employee not found");
+      try {
+        if (button) {
+          button.innerHTML = "⏳ Adding...";
+          button.disabled = true;
         }
 
-        const hasViolations = employee.violation && employee.violation.trim() !== "";
+        const employee = employees.find((emp) => emp.id === employeeId);
+        if (!employee) throw new Error("Employee not found");
+
+        const hasViolations =
+          employee.violation && employee.violation.trim() !== "";
         const hasInactive = employee.status.toLowerCase() === "inactive";
 
-        // Prepare data for logging
         const logData = {
           employee_id: employee.id,
           fullname: employee.fullname,
@@ -232,15 +211,14 @@ try {
           violation: employee.violation || "",
           image: employee.image || "",
           qr_code: employee.qr_code,
-          check_status: checkStatus, // Use the passed parameter
+          check_status: checkStatus,
           access_timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
         };
 
-        // Send to backend
         const response = await fetch("../cnfg/add_to_log.php", {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type": "application/json"
           },
           body: JSON.stringify(logData),
         });
@@ -248,14 +226,10 @@ try {
         const result = await response.json();
 
         if (result.success) {
-          if (hasViolations) {
-            playWarningSound();
-          } else if (hasInactive) {
-            playInactiveSound();
-          } else {
-            playSuccessSound();
-          }
-          // Show success message with status
+          if (hasViolations) playWarningSound();
+          else if (hasInactive) playInactiveSound();
+          else playSuccessSound();
+
           showAlert(`Employee marked as ${checkStatus} successfully!`, "success");
         } else {
           throw new Error(result.message || "Failed to add employee to log");
@@ -264,11 +238,12 @@ try {
         console.error("Error adding to log:", error);
         showAlert("Error: " + error.message, "error");
       } finally {
-        // Reset button state
         setTimeout(() => {
           searchEmployees();
-          button.innerHTML = "⏳ Added...";
-          button.disabled = false;
+          if (button) {
+            button.innerHTML = originalText; // ← restored correctly
+            button.disabled = false;
+          }
         }, 1000);
       }
     }

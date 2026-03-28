@@ -78,24 +78,20 @@ if ($databaseConnected) {
   <div class="container">
     <!-- Search and Filter Controls -->
     <div class="controls">
-      <h3 style="padding-bottom: 1rem; cursor: default;">Search & Filter</h3>
       <form id="searchForm">
         <div class="form-row">
           <div class="form-group">
-            <label for="search_remarks">Remarks</label>
             <select id="search_remarks" name="remarks">
-              <option value="">All Remarks</option>
+              <option value="">Default: ALL</option>
               <option value="Available">Available</option>
               <option value="Occupied">Occupied</option>
             </select>
           </div>
           <div class="form-group">
-            <label for="search_date">Date</label>
-            <input type="text" id="search_date" name="created_at" placeholder="Search by date...">
+            <input type="text" id="search_date" name="created_at" placeholder="Date">
           </div>
           <div class="form-group" style="position: fixed; left: 1%; top: 1%; opacity: 0;">
-            <label for="search_qr">Proximity Code</label>
-            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Search by proximity code..." style="cursor: default;" autocomplete="off">
+            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="cursor: default;" autocomplete="off">
           </div>
         </div>
         <img src="../icon/nfc-icon.png" alt="Proximity" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">

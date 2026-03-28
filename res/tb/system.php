@@ -72,55 +72,48 @@ if ($databaseConnected) {
   <div class="container">
     <!-- Search and Filter Controls -->
     <div class="controls">
-      <h3 style="padding-bottom: 1rem; cursor: default;">Search &amp; Filter</h3>
       <form id="searchForm">
         <div class="form-row">
           <div class="form-group">
-            <label for="search_fullname">Fullname</label>
-            <input type="text" id="search_fullname" name="fullname" placeholder="Search by name...">
+            <input type="text" id="search_fullname" name="fullname" placeholder="Fullname">
           </div>
           <div class="form-group">
-            <label for="search_position">Position</label>
             <select id="search_position" name="position">
               <option value="">Default: ALL</option>
             </select>
           </div>
           <div class="form-group">
-            <label for="search_brand">Brand</label>
             <select id="search_brand" name="brand">
               <option value="">Default: ALL</option>
             </select>
           </div>
           <div class="form-group">
-            <label for="search_status">Status</label>
             <select id="search_status" name="status">
-              <option value="">All Status</option>
+              <option value="" selected>Status</option>
+              <option value="" disabled>──────────</option>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
             </select>
           </div>
           <div class="form-group">
-            <label for="search_shift">Shift</label>
             <select id="search_shift" name="shift">
-              <option value="">All Shifts</option>
+              <option value="" selected>Shifts</option>
+              <option value="" disabled>──────────</option>
               <option value="Day Shift">Day Shift</option>
               <option value="Night Shift">Night Shift</option>
               <option value="Graveyard Shift">Graveyard Shift</option>
             </select>
           </div>
           <div class="form-group">
-            <label for="search_violation">Violations</label>
             <select id="search_violation" name="violation">
               <option value="">Default: ALL</option>
             </select>
           </div>
           <div class="form-group">
-            <label for="search_date">Date</label>
-            <input type="text" id="search_date" name="created_at" placeholder="Search by date...">
+            <input type="text" id="search_date" name="created_at" placeholder="Date">
           </div>
           <div class="form-group" style="position: fixed; left: 1%; top: 1%; opacity: 0;">
-            <label for="search_qr">Proximity Code</label>
-            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Search by proximity code..." style="cursor: default;" autocomplete="off">
+            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="cursor: default;" autocomplete="off">
           </div>
         </div>
         <img src="../icon/nfc-icon.png" alt="Proximity" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
@@ -450,7 +443,7 @@ if ($databaseConnected) {
   <script src="../src/eas.js"></script>
   <script src="../src/opt-btn.js"></script>
   <script src="../src/loading.js"></script>
-  <script src="../src/req.js"></script>
+  <!-- <script src="../src/req.js"></script> -->
 </body>
 
 </html>

@@ -338,56 +338,6 @@ function displayFilterStatus() {
   }
 }
 
-// Function to stop any currently playing audio
-function stopCurrentAudio() {
-  if (currentAudio && !currentAudio.paused) {
-    currentAudio.pause();
-    currentAudio.currentTime = 0;
-  }
-  currentAudio = null;
-}
-
-// Play sound on successful result
-function playSuccessSound() {
-  stopCurrentAudio();
-  const sound = document.getElementById("successSound");
-  if (sound) {
-    currentAudio = sound;
-    sound.currentTime = 0;
-    sound.play().catch((e) => console.log("Audio play error:", e));
-  }
-}
-
-function playInactiveSound() {
-  stopCurrentAudio();
-  const sound = document.getElementById("inactiveSound");
-  if (sound) {
-    currentAudio = sound;
-    sound.currentTime = 0;
-    sound.play().catch((e) => console.log("Audio play error:", e));
-  }
-}
-
-function playNoResultSound() {
-  stopCurrentAudio();
-  const sound = document.getElementById("noResultSound");
-  if (sound) {
-    currentAudio = sound;
-    sound.currentTime = 0;
-    sound.play().catch((e) => console.log("Audio play error:", e));
-  }
-}
-
-function playWarningSound() {
-  stopCurrentAudio();
-  const sound = document.getElementById("warningSound");
-  if (sound) {
-    currentAudio = sound;
-    sound.currentTime = 0;
-    sound.play().catch((e) => console.log("Audio play error:", e));
-  }
-}
-
 // Load proximity code for editing
 async function loadEmployeeData(employeeId) {
   try {
@@ -400,9 +350,7 @@ async function loadEmployeeData(employeeId) {
       },
     );
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();
 
@@ -764,9 +712,9 @@ async function openModal(action, employeeId = null) {
   }
 
   if (action === "add") {
-    modalTitle.textContent = "Add Proximity Code";
+    modalTitle.innerHTML = "Add Proximity Code";
   } else if (action === "edit" && employeeId) {
-    modalTitle.textContent = "Edit Proximity Code";
+    modalTitle.innerHTML = `<i class="fas fa-edit" style="color:#7c3aed"></i> Edit Proximity`;
     await loadEmployeeData(employeeId);
   }
 
@@ -990,6 +938,67 @@ async function deleteFilteredEmployees() {
   }
 }
 
+function updateSelectColor(select) {
+  if (!select) return;
+  const isPlaceholder = select.selectedIndex === 0;
+  select.style.color = isPlaceholder ? "#999" : "#000";
+  [...select.options].forEach((opt) => {
+    opt.style.color = "#000";
+  });
+}
+
+function updateColor() {
+  const selects = [
+    document.getElementById("search_remarks"),
+  ];
+
+  selects.forEach(updateSelectColor);
+}
+
+async function populateFilter(employeeList) {
+  const remarks = document.getElementById("search_remarks");
+  if (!remarks) return;
+
+  // ✅ Compute live remarks using QR matching (same logic as renderEmployeeTable)
+  const systemQRCodes = await getSystemEmployeeQRCodes();
+  const normalizedSystemQRCodes = systemQRCodes.map((code) =>
+    String(code).trim().toLowerCase()
+  );
+
+  const remarksSet = new Set();
+  for (const emp of employeeList) {
+    const isOccupied = normalizedSystemQRCodes.includes(
+      String(emp.qr_code).trim().toLowerCase()
+    );
+    remarksSet.add(isOccupied ? "Occupied" : "Available");
+  }
+
+  function buildSelect(select, placeholder, noneLabel, values) {
+    const current = select.value;
+    select.innerHTML =
+      `<option value="" disabled selected hidden>${placeholder}</option>` +
+      `<option value="">Default: ALL</option>` +
+      `<option value="__none__">${noneLabel}</option>`;
+
+    if (values.size > 0) {
+      select.innerHTML += "<option disabled>──────────</option>";
+      [...values].sort().forEach((v) => {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        select.appendChild(opt);
+      });
+    }
+
+    if (current && [...select.options].some((o) => o.value === current)) {
+      select.value = current;
+    }
+  }
+
+  buildSelect(remarks, "Remarks", "No Remarks", remarksSet);
+  updateColor();
+}
+
 // 🆕 LOAD EMPLOYEES - NOW ALWAYS CHECKS FOR FILTERS
 async function loadEmployees(filters = {}, preservePage = false) {
   try {
@@ -1018,14 +1027,13 @@ async function loadEmployees(filters = {}, preservePage = false) {
       },
     );
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();
 
     if (data.success && Array.isArray(data.data)) {
       employees = data.data;
+      populateFilter(employees);
 
       // Apply remarks filter client-side (computed field, not stored in DB)
       if (remarksFilter) {

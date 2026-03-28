@@ -1071,10 +1071,10 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
       <button class="btn btn-clear" onclick="clearUsersSearch()">
         <i class="fas fa-times"></i> Clear
       </button>
-      <input id="searchUser" type="text" placeholder="Filter by username…"
+      <input id="searchUser" type="text" placeholder="Username"
         oninput="debounceUsers()" style="width:180px;" autocomplete="off"
         readonly onfocus="this.removeAttribute('readonly')">
-      <input id="searchEmail" type="text" placeholder="Filter by email…"
+      <input id="searchEmail" type="text" placeholder="Email"
         oninput="debounceUsers()" style="width:200px;" autocomplete="off">
       <?php if ($isAdmin): ?>
         <button class="btn btn-add" onclick="openAddUser()">
@@ -1119,7 +1119,7 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
           <thead>
             <tr>
               <th>SN</th>
-              <th>User</th>
+              <th>Username</th>
               <th>Email</th>
               <th>User Group</th>
               <th>Phone</th>
@@ -1203,7 +1203,7 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
           <thead>
             <tr>
               <th>SN</th>
-              <th>User</th>
+              <th>Username</th>
               <th>Action</th>
               <th>Details</th>
               <th>IP Address</th>

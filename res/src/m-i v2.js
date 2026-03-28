@@ -10,7 +10,7 @@ let allEmployees = []; // Store all employees from PHP
 document.addEventListener("DOMContentLoaded", function () {
   initializeTabs();
   setupEventListeners();
-  
+
   // Load employees from PHP data if available
   if (window.phpEmployees) {
     allEmployees = window.phpEmployees;
@@ -100,7 +100,7 @@ function setupEventListeners() {
         } else if (this.value.length === 0) {
           loadAllEmployees();
         }
-      }, 500)
+      }, 500),
     );
   }
 }
@@ -186,26 +186,44 @@ function searchEmployeesLocal() {
   let filteredEmployees = [...allEmployees];
 
   if (activeTab === "search") {
-    const searchAll = document.getElementById("search-all").value.trim().toLowerCase();
-    const fullname = document.getElementById("fullname").value.trim().toLowerCase();
-    const position = document.getElementById("position").value.trim().toLowerCase();
-    const qr_code = document.getElementById("qr_code").value.trim().toLowerCase();
+    const searchAll = document
+      .getElementById("search-all")
+      .value.trim()
+      .toLowerCase();
+    const fullname = document
+      .getElementById("fullname")
+      .value.trim()
+      .toLowerCase();
+    const position = document
+      .getElementById("position")
+      .value.trim()
+      .toLowerCase();
+    const qr_code = document
+      .getElementById("qr_code")
+      .value.trim()
+      .toLowerCase();
 
-    filteredEmployees = allEmployees.filter(employee => {
+    filteredEmployees = allEmployees.filter((employee) => {
       if (searchAll) {
         return (
-          (employee.fullname || '').toLowerCase().includes(searchAll) ||
-          (employee.position || '').toLowerCase().includes(searchAll) ||
-          (employee.qr_code || '').toLowerCase().includes(searchAll) ||
-          (employee.brand || '').toLowerCase().includes(searchAll)
+          (employee.fullname || "").toLowerCase().includes(searchAll) ||
+          (employee.position || "").toLowerCase().includes(searchAll) ||
+          (employee.qr_code || "").toLowerCase().includes(searchAll) ||
+          (employee.brand || "").toLowerCase().includes(searchAll)
         );
       }
 
       let matches = true;
-      if (fullname) matches = matches && (employee.fullname || '').toLowerCase().includes(fullname);
-      if (position) matches = matches && (employee.position || '').toLowerCase().includes(position);
-      if (qr_code) matches = matches && (employee.qr_code || '').toLowerCase().includes(qr_code);
-      
+      if (fullname)
+        matches =
+          matches && (employee.fullname || "").toLowerCase().includes(fullname);
+      if (position)
+        matches =
+          matches && (employee.position || "").toLowerCase().includes(position);
+      if (qr_code)
+        matches =
+          matches && (employee.qr_code || "").toLowerCase().includes(qr_code);
+
       return matches;
     });
   } else if (activeTab === "filters") {
@@ -214,13 +232,14 @@ function searchEmployeesLocal() {
     const shift = document.getElementById("shift").value;
     const check_status = document.getElementById("check_status").value;
 
-    filteredEmployees = allEmployees.filter(employee => {
+    filteredEmployees = allEmployees.filter((employee) => {
       let matches = true;
       if (brand) matches = matches && employee.brand === brand;
       if (status) matches = matches && employee.status === status;
       if (shift) matches = matches && employee.shift === shift;
-      if (check_status) matches = matches && (employee.check_status || 'OUT') === check_status;
-      
+      if (check_status)
+        matches = matches && (employee.check_status || "OUT") === check_status;
+
       return matches;
     });
   }
@@ -275,7 +294,7 @@ async function lookupByQR() {
 
   // Try local search first
   if (allEmployees.length > 0) {
-    const employee = allEmployees.find(emp => emp.qr_code === qrCode);
+    const employee = allEmployees.find((emp) => emp.qr_code === qrCode);
     if (employee) {
       displayEmployees([employee]);
       showMessage("Employee found", "success");
@@ -318,7 +337,11 @@ async function lookupByQR() {
 // Get initials helper function
 function getInitials(name) {
   if (!name) return "N/A";
-  return name.split(' ').map(n => n[0]).join('').toUpperCase();
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase();
 }
 
 // Display employees - Updated with enhanced UI
@@ -346,17 +369,9 @@ function displayEmployees(employees) {
           <div class="checkbox-container">
             <input type="checkbox" 
                    id="select-${employee.id}" 
-                   ${
-                     selectedEmployees.has(employee.id)
-                       ? "checked"
-                       : ""
-                   }
-                   onchange="toggleEmployeeSelection(${
-                     employee.id
-                   })">
-            <label for="select-${
-              employee.id
-            }">Select</label>
+                   ${selectedEmployees.has(employee.id) ? "checked" : ""}
+                   onchange="toggleEmployeeSelection(${employee.id})">
+            <label for="select-${employee.id}">Select</label>
           </div>
           
           <div class="employee-header">
@@ -366,7 +381,7 @@ function displayEmployees(employees) {
               <div class="position">${employee.position || "N/A"}</div>
               <div class="id">ID: ${employee.id}</div>
             </div>
-            <div class="status-badge ${(employee.check_status ||'OUT').toLowerCase()}">${employee.check_status || 'OUT'}</div>
+            <div class="status-badge ${(employee.check_status || "OUT").toLowerCase()}">${employee.check_status || "OUT"}</div>
           </div>
           
           <div class="employee-details">
@@ -376,7 +391,7 @@ function displayEmployees(employees) {
             </div>
             <div class="detail-row">
               <span class="label">Status:</span>
-              <span class="value status-${(employee.status || 'inactive').toLowerCase()}">${employee.status || "Inactive"}</span>
+              <span class="value status-${(employee.status || "inactive").toLowerCase()}">${employee.status || "Inactive"}</span>
             </div>
             <div class="detail-row">
               <span class="label">Shift:</span>
@@ -386,24 +401,28 @@ function displayEmployees(employees) {
               <span class="label">QR Code:</span>
               <span class="value qr-code">${employee.qr_code || "N/A"}</span>
             </div>
-            ${employee.last_scan_time ? `
+            ${
+              employee.last_scan_time
+                ? `
             <div class="detail-row">
               <span class="label">Last Scan:</span>
               <span class="value">${formatDateTime(employee.last_scan_time)}</span>
             </div>
-            ` : ''}
+            `
+                : ""
+            }
           </div>
           
           <div class="employee-actions">
             <button class="btn btn-sm btn-outline" onclick="viewEmployeeDetails(${employee.id})">
               View Details
             </button>
-            <button class="btn btn-sm btn-primary" onclick="updateCheckStatus(${employee.id}, '${employee.check_status === 'IN' ? 'OUT' : 'IN'}')">
-              Mark ${employee.check_status === 'IN' ? 'OUT' : 'IN'}
+            <button class="btn btn-sm btn-primary" onclick="updateCheckStatus(${employee.id}, '${employee.check_status === "IN" ? "OUT" : "IN"}')">
+              Mark ${employee.check_status === "IN" ? "OUT" : "IN"}
             </button>
           </div>
         </div>
-      `
+      `,
     )
     .join("");
 
@@ -453,39 +472,41 @@ function updateBulkActionsUI() {
 // Clear selection
 function clearSelection() {
   selectedEmployees.clear();
-  document.querySelectorAll('.employee-card').forEach(card => {
-    card.classList.remove('selected');
+  document.querySelectorAll(".employee-card").forEach((card) => {
+    card.classList.remove("selected");
   });
-  document.querySelectorAll('input[type="checkbox"][id^="select-"]').forEach(checkbox => {
-    checkbox.checked = false;
-  });
+  document
+    .querySelectorAll('input[type="checkbox"][id^="select-"]')
+    .forEach((checkbox) => {
+      checkbox.checked = false;
+    });
   updateBulkActionsUI();
 }
 
 // Bulk check in
 async function bulkCheckIn() {
   if (selectedEmployees.size === 0) return;
-  
+
   const confirmMsg = `Are you sure you want to check IN ${selectedEmployees.size} employee(s)?`;
   if (!confirm(confirmMsg)) return;
 
-  await bulkUpdateCheckStatus([...selectedEmployees], 'IN');
+  await bulkUpdateCheckStatus([...selectedEmployees], "IN");
 }
 
 // Bulk check out
 async function bulkCheckOut() {
   if (selectedEmployees.size === 0) return;
-  
+
   const confirmMsg = `Are you sure you want to check OUT ${selectedEmployees.size} employee(s)?`;
   if (!confirm(confirmMsg)) return;
 
-  await bulkUpdateCheckStatus([...selectedEmployees], 'OUT');
+  await bulkUpdateCheckStatus([...selectedEmployees], "OUT");
 }
 
 // Bulk update check status
 async function bulkUpdateCheckStatus(employeeIds, status) {
   showLoading();
-  
+
   try {
     const response = await fetch(API_BASE_URL, {
       method: "POST",
@@ -495,7 +516,7 @@ async function bulkUpdateCheckStatus(employeeIds, status) {
       body: JSON.stringify({
         action: "bulk_update_status",
         employee_ids: employeeIds,
-        check_status: status
+        check_status: status,
       }),
     });
 
@@ -503,11 +524,14 @@ async function bulkUpdateCheckStatus(employeeIds, status) {
     hideLoading();
 
     if (data.success) {
-      showMessage(`Successfully updated ${employeeIds.length} employee(s) to ${status}`, "success");
-      
+      showMessage(
+        `Successfully updated ${employeeIds.length} employee(s) to ${status}`,
+        "success",
+      );
+
       // Update local data if available
       if (allEmployees.length > 0) {
-        allEmployees.forEach(emp => {
+        allEmployees.forEach((emp) => {
           if (employeeIds.includes(emp.id)) {
             emp.check_status = status;
             emp.last_scan_time = new Date().toISOString();
@@ -518,7 +542,7 @@ async function bulkUpdateCheckStatus(employeeIds, status) {
         // Reload data from server
         loadAllEmployees();
       }
-      
+
       clearSelection();
     } else {
       showMessage(data.message || "Bulk update failed", "error");
@@ -532,9 +556,9 @@ async function bulkUpdateCheckStatus(employeeIds, status) {
 
 // Update individual check status
 async function updateCheckStatus(employeeId, newStatus) {
-  const employee = currentEmployees.find(emp => emp.id == employeeId);
+  const employee = currentEmployees.find((emp) => emp.id == employeeId);
   const employeName = employee ? employee.fullname : `Employee ${employeeId}`;
-  
+
   const confirmMsg = `Are you sure you want to mark ${employeName} as ${newStatus}?`;
   if (!confirm(confirmMsg)) return;
 
@@ -549,7 +573,7 @@ async function updateCheckStatus(employeeId, newStatus) {
       body: JSON.stringify({
         action: "update_check_status",
         employee_id: employeeId,
-        check_status: newStatus
+        check_status: newStatus,
       }),
     });
 
@@ -558,21 +582,24 @@ async function updateCheckStatus(employeeId, newStatus) {
 
     if (data.success) {
       showMessage(`${employeName} marked as ${newStatus}`, "success");
-      
+
       // Update local data if available
       if (allEmployees.length > 0) {
-        const empIndex = allEmployees.findIndex(emp => emp.id == employeeId);
+        const empIndex = allEmployees.findIndex((emp) => emp.id == employeeId);
         if (empIndex !== -1) {
           allEmployees[empIndex].check_status = newStatus;
           allEmployees[empIndex].last_scan_time = new Date().toISOString();
         }
-        
-        const currentIndex = currentEmployees.findIndex(emp => emp.id == employeeId);
+
+        const currentIndex = currentEmployees.findIndex(
+          (emp) => emp.id == employeeId,
+        );
         if (currentIndex !== -1) {
           currentEmployees[currentIndex].check_status = newStatus;
-          currentEmployees[currentIndex].last_scan_time = new Date().toISOString();
+          currentEmployees[currentIndex].last_scan_time =
+            new Date().toISOString();
         }
-        
+
         displayEmployees(currentEmployees);
       } else {
         // Reload data from server
@@ -590,15 +617,15 @@ async function updateCheckStatus(employeeId, newStatus) {
 
 // View employee details
 function viewEmployeeDetails(employeeId) {
-  const employee = currentEmployees.find(emp => emp.id == employeeId);
-  
+  const employee = currentEmployees.find((emp) => emp.id == employeeId);
+
   if (!employee) {
     showMessage("Employee not found", "error");
     return;
   }
 
-  const modal = document.createElement('div');
-  modal.className = 'modal-overlay';
+  const modal = document.createElement("div");
+  modal.className = "modal-overlay";
   modal.innerHTML = `
     <div class="modal-content">
       <div class="modal-header">
@@ -609,7 +636,7 @@ function viewEmployeeDetails(employeeId) {
         <div class="employee-detail-grid">
           <div class="detail-item">
             <label>Full Name:</label>
-            <span>${employee.fullname || 'N/A'}</span>
+            <span>${employee.fullname || "N/A"}</span>
           </div>
           <div class="detail-item">
             <label>Employee ID:</label>
@@ -617,40 +644,44 @@ function viewEmployeeDetails(employeeId) {
           </div>
           <div class="detail-item">
             <label>Position:</label>
-            <span>${employee.position || 'N/A'}</span>
+            <span>${employee.position || "N/A"}</span>
           </div>
           <div class="detail-item">
             <label>Brand:</label>
-            <span>${employee.brand || 'N/A'}</span>
+            <span>${employee.brand || "N/A"}</span>
           </div>
           <div class="detail-item">
             <label>Status:</label>
-            <span class="status-${(employee.status || 'inactive').toLowerCase()}">${employee.status || 'Inactive'}</span>
+            <span class="status-${(employee.status || "inactive").toLowerCase()}">${employee.status || "Inactive"}</span>
           </div>
           <div class="detail-item">
             <label>Check Status:</label>
-            <span class="status-badge ${(employee.check_status || 'out').toLowerCase()}">${employee.check_status || 'OUT'}</span>
+            <span class="status-badge ${(employee.check_status || "out").toLowerCase()}">${employee.check_status || "OUT"}</span>
           </div>
           <div class="detail-item">
             <label>Shift:</label>
-            <span>${employee.shift || 'N/A'}</span>
+            <span>${employee.shift || "N/A"}</span>
           </div>
           <div class="detail-item">
             <label>QR Code:</label>
-            <span class="qr-code">${employee.qr_code || 'N/A'}</span>
+            <span class="qr-code">${employee.qr_code || "N/A"}</span>
           </div>
-          ${employee.last_scan_time ? `
+          ${
+            employee.last_scan_time
+              ? `
           <div class="detail-item">
             <label>Last Scan:</label>
             <span>${formatDateTime(employee.last_scan_time)}</span>
           </div>
-          ` : ''}
+          `
+              : ""
+          }
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="this.closest('.modal-overlay').remove()">Close</button>
-        <button class="btn btn-primary" onclick="updateCheckStatus(${employee.id}, '${employee.check_status === 'IN' ? 'OUT' : 'IN'}'); this.closest('.modal-overlay').remove();">
-          Mark ${employee.check_status === 'IN' ? 'OUT' : 'IN'}
+        <button class="btn btn-primary" onclick="updateCheckStatus(${employee.id}, '${employee.check_status === "IN" ? "OUT" : "IN"}'); this.closest('.modal-overlay').remove();">
+          Mark ${employee.check_status === "IN" ? "OUT" : "IN"}
         </button>
       </div>
     </div>
@@ -663,48 +694,63 @@ function viewEmployeeDetails(employeeId) {
 function bulkExport() {
   if (selectedEmployees.size === 0) return;
 
-  const selectedData = currentEmployees.filter(emp => selectedEmployees.has(emp.id));
+  const selectedData = currentEmployees.filter((emp) =>
+    selectedEmployees.has(emp.id),
+  );
   const csvContent = convertToCSV(selectedData);
-  downloadCSV(csvContent, `selected_employees_${formatDateForFilename(new Date())}.csv`);
-  
+  downloadCSV(
+    csvContent,
+    `selected_employees_${formatDateForFilename(new Date())}.csv`,
+  );
+
   showMessage(`Exported ${selectedData.length} employee(s)`, "success");
 }
 
 // Convert to CSV
 function convertToCSV(data) {
-  if (!data || data.length === 0) return '';
+  if (!data || data.length === 0) return "";
 
-  const headers = ['ID', 'Full Name', 'Position', 'Brand', 'Status', 'Check Status', 'Shift', 'QR Code', 'Last Scan'];
-  const csvRows = [headers.join(',')];
+  const headers = [
+    "ID",
+    "Full Name",
+    "Position",
+    "Brand",
+    "Status",
+    "Check Status",
+    "Shift",
+    "QR Code",
+    "Last Scan",
+  ];
+  const csvRows = [headers.join(",")];
 
-  data.forEach(emp => {
+  data.forEach((emp) => {
     const row = [
-      emp.id || '',
-      `"${(emp.fullname || '').replace(/"/g, '""')}"`,
-      `"${(emp.position || '').replace(/"/g, '""')}"`,
-      `"${(emp.brand || '').replace(/"/g, '""')}"`,
-      `"${(emp.status || '').replace(/"/g, '""')}"`,
-      `"${(emp.check_status || 'OUT').replace(/"/g, '""')}"`,
-      `"${(emp.shift || '').replace(/"/g, '""')}"`,
-      `"${(emp.qr_code || '').replace(/"/g, '""')}"`,
-      `"${emp.last_scan_time ? formatDateTime(emp.last_scan_time) : ''}"`
+      emp.id || "",
+      `"${(emp.fullname || "").replace(/"/g, '""')}"`,
+      `"${(emp.position || "").replace(/"/g, '""')}"`,
+      `"${(emp.brand || "").replace(/"/g, '""')}"`,
+      `"${(emp.status || "").replace(/"/g, '""')}"`,
+      `"${(emp.check_status || "OUT").replace(/"/g, '""')}"`,
+      `"${(emp.shift || "").replace(/"/g, '""')}"`,
+      `"${(emp.qr_code || "").replace(/"/g, '""')}"`,
+      `"${emp.last_scan_time ? formatDateTime(emp.last_scan_time) : ""}"`,
     ];
-    csvRows.push(row.join(','));
+    csvRows.push(row.join(","));
   });
 
-  return csvRows.join('\n');
+  return csvRows.join("\n");
 }
 
 // Download CSV
 function downloadCSV(csvContent, filename) {
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+
   if (link.download !== undefined) {
     const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', filename);
-    link.style.visibility = 'hidden';
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = "hidden";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -712,27 +758,23 @@ function downloadCSV(csvContent, filename) {
 }
 
 // Format date and time
-function formatDateTime(dateString) {
-  if (!dateString) return 'N/A';
-  
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  } catch (error) {
-    return dateString;
-  }
+function formatDateTime(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  if (isNaN(d)) return ts; // pass through if already a string
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 // Format date for filename
 function formatDateForFilename(date) {
-  return date.toISOString().split('T')[0].replace(/-/g, '');
+  return date.toISOString().split("T")[0].replace(/-/g, "");
 }
 
 // Update results count
@@ -766,7 +808,7 @@ function showMessage(message, type = "info") {
     messageDiv.textContent = message;
     messageDiv.className = `message ${type}`;
     messageDiv.style.display = "block";
-    
+
     // Auto-hide success messages after 3 seconds
     if (type === "success") {
       setTimeout(() => {
@@ -789,14 +831,14 @@ function clearMessage() {
 function clearForm() {
   // Clear search inputs
   const inputs = ["search-all", "fullname", "position", "qr_code", "qr-lookup"];
-  inputs.forEach(id => {
+  inputs.forEach((id) => {
     const element = document.getElementById(id);
     if (element) element.value = "";
   });
 
   // Reset filters
   const filters = ["brand", "status", "shift", "check_status"];
-  filters.forEach(id => {
+  filters.forEach((id) => {
     const element = document.getElementById(id);
     if (element) element.selectedIndex = 0;
   });
@@ -809,18 +851,20 @@ function clearForm() {
 
 // Select all visible employees
 function selectAllVisible() {
-  currentEmployees.forEach(emp => {
+  currentEmployees.forEach((emp) => {
     selectedEmployees.add(emp.id);
   });
-  
+
   // Update UI
-  document.querySelectorAll('.employee-card').forEach(card => {
-    card.classList.add('selected');
+  document.querySelectorAll(".employee-card").forEach((card) => {
+    card.classList.add("selected");
   });
-  document.querySelectorAll('input[type="checkbox"][id^="select-"]').forEach(checkbox => {
-    checkbox.checked = true;
-  });
-  
+  document
+    .querySelectorAll('input[type="checkbox"][id^="select-"]')
+    .forEach((checkbox) => {
+      checkbox.checked = true;
+    });
+
   updateBulkActionsUI();
 }
 
@@ -832,7 +876,10 @@ function exportAllVisible() {
   }
 
   const csvContent = convertToCSV(currentEmployees);
-  downloadCSV(csvContent, `all_employees_${formatDateForFilename(new Date())}.csv`);
-  
+  downloadCSV(
+    csvContent,
+    `all_employees_${formatDateForFilename(new Date())}.csv`,
+  );
+
   showMessage(`Exported ${currentEmployees.length} employee(s)`, "success");
 }

@@ -102,6 +102,12 @@
   flex-wrap: wrap;
 }
 
+.form-row-btn {
+  display: inline-flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
 .form-group {
   flex: 1;
   min-width: 200px;
