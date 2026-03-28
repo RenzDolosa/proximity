@@ -128,7 +128,7 @@ try {
       </div>
 
       <div class="menu-card" onclick="navigateWithLoading('../sec/scanTest.php');">
-        <a href="../sec/scanTest.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../sec/scanTest.php');">Test QR Code</a>
+        <a href="../sec/scanTest.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../sec/scanTest.php');">Test QR or Proximity Code</a>
         <div class="favi">
           <img src="../icon/nfc-icon.png" alt="NFC Icon" style="width: 100px; height: 100px;">
           <div>
