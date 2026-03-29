@@ -353,6 +353,25 @@ function updateImportStatus(message) {
   document.getElementById("importStatus").textContent = message;
 }
 
+// Show alert message
+function showAlert(message, type = "info") {
+  const existingAlerts = document.querySelectorAll(".alert");
+  existingAlerts.forEach((alert) => alert.remove());
+
+  const alert = document.createElement("div");
+  alert.className = `alert alert-${type}`;
+  alert.innerHTML = `
+    <span>${message}</span>
+    <button onclick="this.parentElement.remove()" style="float: right; background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 5px;"><i class="fas fa-times"></i></button>
+  `;
+
+  document.body.insertBefore(alert, document.body.firstChild);
+
+  setTimeout(() => {
+    if (alert.parentElement) alert.remove();
+  }, 5000);
+}
+
 // Update the window click handler to include import modal
 window.onclick = function (event) {
   const employeeModal = document.getElementById("employeeModal");

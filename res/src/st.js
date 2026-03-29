@@ -11,7 +11,7 @@ let displayTimeout;
 let currentFilter = "all";
 let currentAudio = null;
 
-document.getElementById("message").innerHTML = '<img src="../icon/nfc-icon.png" alt="Proximity Code" style="width: 100%; height: 90vh;">';
+document.getElementById("message").innerHTML = '<img src="../logo/proximity-logo.png" alt="Proximity Code" style="width: 100%; height: 90vh;">';
 
 // Setup event listeners
 function setupEventListeners() {
@@ -82,16 +82,7 @@ function setupEventListeners() {
 }
 
 function background() {
-  new QRCode(document.getElementById("message"), {
-    text: "",
-    width: Math.min(window.innerWidth, window.innerHeight) - 50,
-    height: Math.min(window.innerWidth, window.innerHeight) - 50,
-    colorDark: "#000000",
-    colorLight: "transparent",
-    correctLevel: QRCode.CorrectLevel.H,
-  });
-
-  document.getElementById("message").innerHTML = '<img src="../icon/nfc-icon.png" alt="Proximity Code" style="width: 100%; height: 90vh;">';
+  document.getElementById("message").innerHTML = '<img src="../logo/proximity-logo.png" alt="Proximity Code" style="width: 100%; height: 90vh;">';
 }
 
 // Function to stop any currently playing audio
@@ -103,72 +94,37 @@ function stopCurrentAudio() {
   currentAudio = null;
 }
 
-// Play sound on successful result
-function playSuccessSound() {
-  stopCurrentAudio(); // Stop any currently playing audio
-  const sound = document.getElementById("successSound");
+function playSound(id) {
+  stopCurrentAudio();
+  const sound = document.getElementById(id);
+  if (!sound) return;
   currentAudio = sound;
   sound.currentTime = 0;
   sound.play().catch((e) => console.log("Audio play error:", e));
 }
 
-function playInactiveSound() {
-  stopCurrentAudio(); // Stop any currently playing audio
-  const sound = document.getElementById("inactiveSound");
-  currentAudio = sound;
-  sound.currentTime = 0;
-  sound.play().catch((e) => console.log("Audio play error:", e));
-}
+const playSuccessSound = () => playSound("successSound");
+const playInactiveSound = () => playSound("inactiveSound");
+const playNoResultSound = () => playSound("noResultSound");
+const playWarningSound = () => playSound("warningSound");
 
-function playNoResultSound() {
-  stopCurrentAudio(); // Stop any currently playing audio
-  const sound = document.getElementById("noResultSound");
-  currentAudio = sound;
-  sound.currentTime = 0;
-  sound.play().catch((e) => console.log("Audio play error:", e));
-}
-
-function playWarningSound() {
-  stopCurrentAudio(); // Stop any currently playing audio
-  const sound = document.getElementById("warningSound");
-  currentAudio = sound;
-  sound.currentTime = 0;
-  sound.play().catch((e) => console.log("Audio play error:", e));
-}
-
-// Function to temporarily block search input
-function blockSearchInput() {
-  const originalBgColor = body.style.backgroundColor || "transparent";
-  const originalBorderColor = body.style.borderColor || "";
-
-  // Apply disabled state with visual feedback
+// ─────────────────────────────────────────────────────────────────
+//  Input-block helper (prevents double-scans)
+// ─────────────────────────────────────────────────────────────────
+function blockSearchInput(durationMs = 1000) {
   searchInput.disabled = true;
   searchInput.style.opacity = "0.7";
   searchInput.style.pointerEvents = "none";
-  body.style.backgroundColor = "transparent"; // Light gray background
-  body.style.borderColor = "#ff6b6b"; // Red border to indicate blocked state
-  body.style.transition = "all 0.3s ease"; // Smooth transition
-
   body.classList.add("input-blocked-alt");
 
   setTimeout(() => {
-    // Restore input functionality
     searchInput.disabled = false;
     searchInput.style.opacity = "1";
     searchInput.style.pointerEvents = "auto";
-    body.style.backgroundColor = "#edffed"; // Light green for success
-    body.style.borderColor = "#4caf50"; // Green border
-
     body.classList.remove("input-blocked-alt");
-
-    // Focus and clear the input
+    searchInput.value = "";
     searchInput.focus();
-
-    setTimeout(() => {
-      body.style.backgroundColor = originalBgColor;
-      body.style.borderColor = originalBorderColor;
-    }, 300);
-  }, 1000); // 3 second block
+  }, durationMs);
 }
 
 // Search employees function with QR code priority

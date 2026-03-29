@@ -192,11 +192,9 @@ function autoHideAlerts() {
 
 // Show alert message
 function showAlert(message, type = "info") {
-  // Remove any existing alerts
   const existingAlerts = document.querySelectorAll(".alert");
   existingAlerts.forEach((alert) => alert.remove());
 
-  // Create alert element
   const alert = document.createElement("div");
   alert.className = `alert alert-${type}`;
   alert.innerHTML = `
@@ -204,13 +202,9 @@ function showAlert(message, type = "info") {
     <button onclick="this.parentElement.remove()" style="float: right; background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 5px;"><i class="fas fa-times"></i></button>
   `;
 
-  // Add to page
   document.body.insertBefore(alert, document.body.firstChild);
 
-  // Auto remove after 5 seconds
   setTimeout(() => {
-    if (alert.parentElement) {
-      alert.remove();
-    }
+    if (alert.parentElement) alert.remove();
   }, 5000);
 }

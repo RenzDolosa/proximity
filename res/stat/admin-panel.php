@@ -211,9 +211,16 @@ if (isset($_GET['action'])) {
 
     // ── SYSTEM LOG ACTIONS ───────────────────────────────────────────────────
 
-    if (in_array($_GET['action'], ['fetch_logs', 'delete_log', 'delete_all_logs'], true)) {
+    if (in_array($_GET['action'], ['fetch_logs', 'fetch_log_actions', 'delete_log', 'delete_all_logs'], true)) {
       if (!$isAdminSession) {
         echo json_encode(['success' => false, 'message' => 'Access denied.']);
+        exit;
+      }
+
+      if ($_GET['action'] === 'fetch_log_actions') {
+        $stmt = $pdo->query("SELECT DISTINCT action FROM system_logs ORDER BY action ASC");
+        $actions = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        echo json_encode(['success' => true, 'actions' => $actions]);
         exit;
       }
 
@@ -1051,6 +1058,11 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
       Users Management
       <span class="tab-badge" id="tabBadgeUsers">—</span>
     </button>
+    <button class="tab-btn" id="tabBtnGroup" onclick="switchTab('group')">
+      <i class="fas fa-list-alt"></i>
+      Users Group
+      <span class="tab-badge" id="tabBadgeGroup">—</span>
+    </button>
     <button class="tab-btn" id="tabBtnLogs" onclick="switchTab('logs')">
       <i class="fas fa-list-alt"></i>
       System Logs
@@ -1141,6 +1153,12 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
   </div><!-- /panelUsers -->
 
   <!-- ══════════════════════════════════════════
+       TAB: USERS GROUP
+  ══════════════════════════════════════════ -->
+
+
+
+  <!-- ══════════════════════════════════════════
        TAB: SYSTEM LOGS
   ══════════════════════════════════════════ -->
   <div class="tab-panel" id="panelLogs">
@@ -1160,17 +1178,6 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
       <select id="logActionFilter" onchange="loadLogs()"
         style="padding:6px 10px;border:1px solid #ccc;border-radius:5px;font-size:13px;">
         <option value="">All Actions</option>
-        <option value="LOGIN">LOGIN</option>
-        <option value="USER_LOGIN">USER_LOGIN</option>
-        <option value="LOGOUT">LOGOUT</option>
-        <option value="USER_LOGOUT">USER_LOGOUT</option>
-        <option value="USER_REGISTERED">USER_REGISTERED</option>
-        <option value="EMPLOYEE_CREATED">EMPLOYEE_CREATED</option>
-        <option value="EMPLOYEE_UPDATED">EMPLOYEE_UPDATED</option>
-        <option value="EMPLOYEE_DELETED">EMPLOYEE_DELETED</option>
-        <option value="ALL_EMPLOYEES_DELETED">ALL_EMPLOYEES_DELETED</option>
-        <option value="SYSTEM_LOG_DELETED">SYSTEM_LOG_DELETED</option>
-        <option value="ALL_SYSTEM_LOGS_DELETED">ALL_SYSTEM_LOGS_DELETED</option>
       </select>
       <button class="btn btn-delete-all" onclick="confirmDeleteAllLogs()">
         <i class="fas fa-trash"></i> Delete All Data
@@ -1304,7 +1311,10 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
     </div>
   </div>
 
-  <!-- MODAL — View Log -->
+  <!-- ══════════════════════════════════════════
+       MODALS — SYSTEM LOG 
+  ══════════════════════════════════════════ -->
+
   <div class="modal-overlay" id="viewLogModal">
     <div class="modal-box">
       <h3><i class="fas fa-info-circle" style="color:#6d28d9"></i> Log Details</h3>
@@ -1376,8 +1386,9 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
         document.getElementById('tabBtn' + cap(t)).classList.toggle('active', t === tab);
         document.getElementById('panel' + cap(t)).classList.toggle('active', t === tab);
       });
-      // Lazy-load logs on first switch
+      
       if (tab === 'logs' && allLogs.length === 0) {
+        loadLogActionOptions();
         loadLogs().then(startLogsCountdown);
       }
     }
@@ -1405,10 +1416,37 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
       updateLogsCountdownUI();
     }
 
+    /* ── Event Listener ── */
     document.querySelectorAll('.modal-overlay').forEach(el => {
       el.addEventListener('click', e => {
         if (e.target === el) closeModal(el.id);
       });
+    });
+
+    document.addEventListener("keydown", function(e) {
+      if (e.key === "Enter") {
+        const openModal = document.querySelector(".modal-overlay.show");
+        if (!openModal) return;
+
+        if (openModal.id === "userFormModal") {
+          submitUserForm();
+        } else if (openModal.id === "deleteUserModal") {
+          confirmDeleteUser();
+        } else if (openModal.id === "deleteSingleLogModal") {
+          deleteSingleLog();
+        } else if (openModal.id === "deleteAllLogsModal") {
+          deleteAllLogs();
+        }
+      }
+    });
+
+    document.addEventListener("keydown", function(e) {
+      if (e.key === "Escape") {
+        const openModal = document.querySelector(".modal-overlay.show");
+        if (openModal) {
+          closeModal(openModal.id);
+        }
+      }
     });
 
     function escHtml(str) {
@@ -1630,7 +1668,6 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
       const e = document.getElementById('userFormErr');
       e.style.display = 'none';
       e.innerHTML = '';
-      // Always re-enable on clear — critical so previous disabled state doesn't bleed over
       ['fFirstName', 'fLastName', 'fUsername', 'fEmail', 'fPhone', 'fDatabase', 'fUsergroup', 'fPassword']
       .forEach(id => document.getElementById(id).disabled = false);
     }
@@ -1682,9 +1719,6 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
         document.getElementById('fDatabase').value = u.my_database || '';
         document.getElementById('fUsergroup').value = u.user_group || '';
 
-        // FIX: Only lock group field if editing yourself (prevent self-demotion),
-        // not for all Admins — this allows editing other Admins' details freely.
-        // Email is always editable.
         if (+id === SESSION_UID) {
           document.getElementById('fEmail').disabled = true;
           document.getElementById('fUsergroup').disabled = true;
@@ -1701,33 +1735,36 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
 
     async function submitUserForm() {
       if (!IS_ADMIN) {
-        showToast('Access denied.', true);
+        showToast("Access denied.", true);
         return;
       }
 
-      // Use .value directly — works for disabled elements in JS (unlike form POST)
       const payload = {
-        first_name: document.getElementById('fFirstName').value.trim(),
-        last_name: document.getElementById('fLastName').value.trim(),
-        username: document.getElementById('fUsername').value.trim(),
-        email: document.getElementById('fEmail').value.trim(),
-        user_group: document.getElementById('fUsergroup').value,
-        password: document.getElementById('fPassword').value,
-        phone: document.getElementById('fPhone').value.trim(),
-        my_database: document.getElementById('fDatabase').value.trim(),
+        first_name: document.getElementById("fFirstName").value.trim(),
+        last_name: document.getElementById("fLastName").value.trim(),
+        username: document.getElementById("fUsername").value.trim(),
+        email: document.getElementById("fEmail").value.trim(),
+        user_group: document.getElementById("fUsergroup").value,
+        password: document.getElementById("fPassword").value,
+        phone: document.getElementById("fPhone").value.trim(),
+        my_database: document.getElementById("fDatabase").value.trim(),
       };
 
-      // Client-side guard: user_group must not be empty
+      const errBox = document.getElementById("userFormErr");
+
+      const showError = (msg) => {
+        errBox.style.display = "block";
+        errBox.textContent = msg;
+      };
+
       if (!payload.user_group) {
-        const errBox = document.getElementById('userFormErr');
-        errBox.style.display = 'block';
-        errBox.innerHTML = 'Please select a User Group.';
+        showError("Please select a User Group.");
         return;
       }
 
-      const errBox = document.getElementById('userFormErr');
-      errBox.style.display = 'none';
-      const btn = document.getElementById('btnUserFormSubmit');
+      errBox.style.display = "none";
+
+      const btn = document.getElementById("btnUserFormSubmit");
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span> Saving…';
 
@@ -1737,26 +1774,28 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
 
       try {
         const res = await fetch(url, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json'
+            "Content-Type": "application/json"
           },
           body: JSON.stringify(payload),
         });
+
         const data = await res.json();
+
         if (!data.success) {
-          errBox.style.display = 'block';
-          errBox.innerHTML = (data.errors || [data.message]).join('<br>');
+          showError((data.errors || [data.message]).join("\n"));
           return;
         }
-        closeModal('userFormModal');
+
+        closeModal("userFormModal");
         showToast(data.message);
         uPage = 1;
         stopUsersCountdown();
         await loadUsers();
         startUsersCountdown();
       } catch (err) {
-        showToast('Error: ' + err.message, true);
+        showToast("Error: " + err.message, true);
       } finally {
         btn.disabled = false;
         btn.innerHTML = editingUserId ?
@@ -1988,6 +2027,7 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
         showToast('Log entry deleted successfully.');
         stopLogsCountdown();
         await loadLogs();
+        loadLogActionOptions();
         startLogsCountdown();
       } catch (err) {
         showToast('Error: ' + err.message, true);
@@ -2013,6 +2053,7 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
         showToast(`All log records deleted (${data.deleted} total).`);
         stopLogsCountdown();
         await loadLogs();
+        loadLogActionOptions();
         startLogsCountdown();
       } catch (err) {
         showToast('Error: ' + err.message, true);
@@ -2025,6 +2066,25 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
     /* ══════════════════════════════════════════════════════════════════
        INIT
     ══════════════════════════════════════════════════════════════════ */
+    async function loadLogActionOptions() {
+      try {
+        const res = await fetch('?action=fetch_log_actions');
+        const data = await res.json();
+        if (!data.success) return;
+        const sel = document.getElementById('logActionFilter');
+        // Keep only the "All Actions" default option
+        sel.innerHTML = '<option value="">All Actions</option>';
+        data.actions.forEach(action => {
+          const opt = document.createElement('option');
+          opt.value = action;
+          opt.textContent = action;
+          sel.appendChild(opt);
+        });
+      } catch (err) {
+        console.warn('Could not load log action options:', err);
+      }
+    }
+
     loadUsers().then(startUsersCountdown);
     // Logs load lazily when tab is first opened
   </script>

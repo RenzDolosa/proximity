@@ -739,13 +739,19 @@ async function renderEmployeeTable() {
         ? `${matchedEmployeeData.id}`
         : "";
 
+      String.prototype.toProperCase = function () {
+        return this.replace(/[^\s,\-]+/g, function (txt) {
+          return txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase();
+        });
+      };
+
       return `
           <tr>
               <td>${startIndex + index + 1}</td>
               <td><strong>${empId}</strong></td>
-              <td><strong>${displayName}</strong></td>
-              <td>${matchedEmployeeData ? matchedEmployeeData.position : employee.position || "N/A"}</td>
-              <td>${matchedEmployeeData ? matchedEmployeeData.brand : employee.brand || "N/A"}</td>
+              <td><strong>${displayName.toProperCase()}</strong></td>
+              <td>${matchedEmployeeData ? matchedEmployeeData.position.toProperCase() : employee.position.toProperCase() || "N/A"}</td>
+              <td>${matchedEmployeeData ? matchedEmployeeData.brand.toProperCase() : employee.brand.toProperCase() || "N/A"}</td>
               <td><span class="status-${(employee.status || "").toLowerCase()}">${
                 employee.status || "N/A"
               }</span></td>
@@ -1564,11 +1570,9 @@ async function deleteAllEmployees() {
 
 // Show alert message
 function showAlert(message, type = "info") {
-  // Remove any existing alerts
   const existingAlerts = document.querySelectorAll(".alert");
   existingAlerts.forEach((alert) => alert.remove());
 
-  // Create alert element
   const alert = document.createElement("div");
   alert.className = `alert alert-${type}`;
   alert.innerHTML = `
@@ -1576,14 +1580,10 @@ function showAlert(message, type = "info") {
     <button onclick="this.parentElement.remove()" style="float: right; background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 5px;"><i class="fas fa-times"></i></button>
   `;
 
-  // Add to page
   document.body.insertBefore(alert, document.body.firstChild);
 
-  // Auto remove after 5 seconds
   setTimeout(() => {
-    if (alert.parentElement) {
-      alert.remove();
-    }
+    if (alert.parentElement) alert.remove();
   }, 5000);
 }
 

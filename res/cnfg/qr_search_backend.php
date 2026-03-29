@@ -309,7 +309,7 @@ class QueryLogger
         ':error_message'    => $errorMessage,
       ]);
 
-      logSystemAction($this->userId, 'search_query', json_encode([
+      logSystemAction($this->userId, 'SEARCH_QUERY', json_encode([
         'query_type'    => $queryType,
         'search_term'   => $searchTerm,
         'results_count' => $resultsCount,
