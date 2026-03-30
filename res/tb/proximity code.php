@@ -310,7 +310,7 @@ if ($databaseConnected) {
   <script src="../src/eas.js"></script>
   <script src="../src/opt-btn.js"></script>
   <script src="../src/loading.js"></script>
-  <!-- <script src="../src/req.js"></script> -->
+  <script src="../src/req.js"></script>
 </body>
 
 </html>

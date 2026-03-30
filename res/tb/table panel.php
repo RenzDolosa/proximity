@@ -115,6 +115,8 @@ require_once '../cnfg/db.php';
   <iframe id="frame-scanned" class="tab-frame" src=""></iframe>
   <iframe id="frame-proximity" class="tab-frame" src=""></iframe>
 
+  <script src="res/src/req.js"></script>
+  <script src="res/src/ver.js"></script>
   <script>
     const srcs = {
       employees: 'system.php',

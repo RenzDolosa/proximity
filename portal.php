@@ -126,8 +126,6 @@ try {
 
   <script src="res/src/req.js"></script>
   <script src="res/src/ver.js"></script>
-  <script src="res/src/req.js"></script>
-  <script src="res/src/ver.js"></script>
   <script>
     // Guard: if the main iframe navigates to login, redirect the whole top window
     const mainFrame = document.querySelector('.frames');
