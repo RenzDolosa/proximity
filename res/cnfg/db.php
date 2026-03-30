@@ -1,4 +1,6 @@
 <?php
+//db.php - handles database connection for user sessions and portal access
+
 require_once 'config.php';
 
 // ── Auth guard FIRST (before anything else) ───────────────────────────────────

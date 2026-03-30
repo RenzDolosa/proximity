@@ -7,7 +7,9 @@ require_once '../cnfg/db.php';
 // AJAX HANDLERS
 // ════════════════════════════════════════════════════════════════════════════
 if (isset($_GET['action'])) {
-  header('Content-Type: application/json');
+  if ($_GET['action'] !== 'export_db') {
+    header('Content-Type: application/json');
+  }
 
   try {
     $pdo = getMainDBConnection();
@@ -279,6 +281,65 @@ if (isset($_GET['action'])) {
         echo json_encode(['success' => true, 'deleted' => $count]);
         exit;
       }
+    }
+
+    // ── PHP MYADMIN — EXPORT SQL ─────────────────────────────────────────────
+    if ($_GET['action'] === 'export_db') {
+      if (!$isAdminSession) {
+        echo json_encode(['success' => false, 'message' => 'Access denied. Administrators only.']);
+        exit;
+      }
+
+      $mode = $_GET['mode'] ?? 'full'; // structure | data | full
+      $dbName = $pdo->query("SELECT DATABASE()")->fetchColumn();
+
+      // Remove JSON header — we'll stream SQL
+      header('Content-Type: application/octet-stream');
+      header('Content-Disposition: attachment; filename="' . $dbName . '_' . date('Ymd_His') . '.sql"');
+      header('Cache-Control: no-cache');
+
+      $out = fopen('php://output', 'w');
+
+      fwrite($out, "-- ============================================================\n");
+      fwrite($out, "-- Database: `$dbName`\n");
+      fwrite($out, "-- Exported: " . date('Y-m-d H:i:s') . "\n");
+      fwrite($out, "-- Mode: $mode\n");
+      fwrite($out, "-- ============================================================\n\n");
+      fwrite($out, "SET FOREIGN_KEY_CHECKS=0;\n\n");
+
+      $tables = $pdo->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
+
+      foreach ($tables as $table) {
+        fwrite($out, "-- -----------------------------------------------------------\n");
+        fwrite($out, "-- Table: `$table`\n");
+        fwrite($out, "-- -----------------------------------------------------------\n\n");
+
+        // Structure
+        if ($mode === 'structure' || $mode === 'full') {
+          fwrite($out, "DROP TABLE IF EXISTS `$table`;\n");
+          $create = $pdo->query("SHOW CREATE TABLE `$table`")->fetch(PDO::FETCH_ASSOC);
+          fwrite($out, $create['Create Table'] . ";\n\n");
+        }
+
+        // Data
+        if ($mode === 'data' || $mode === 'full') {
+          $rows = $pdo->query("SELECT * FROM `$table`")->fetchAll(PDO::FETCH_ASSOC);
+          if ($rows) {
+            $cols = '`' . implode('`, `', array_keys($rows[0])) . '`';
+            foreach ($rows as $row) {
+              $vals = array_map(function ($v) use ($pdo) {
+                return $v === null ? 'NULL' : $pdo->quote($v);
+              }, array_values($row));
+              fwrite($out, "INSERT INTO `$table` ($cols) VALUES (" . implode(', ', $vals) . ");\n");
+            }
+            fwrite($out, "\n");
+          }
+        }
+      }
+
+      fwrite($out, "SET FOREIGN_KEY_CHECKS=1;\n");
+      fclose($out);
+      exit;
     }
 
     echo json_encode(['success' => false, 'message' => 'Unknown action.']);
@@ -1043,20 +1104,27 @@ if (isset($_GET['action'])) {
   ══════════════════════════════════════════ -->
   <div class="tab-nav">
     <button class="tab-btn active" id="tabBtnUsers" onclick="switchTab('users')">
-      <i class="fas fa-users"></i>
+      <i class="fas fa-users-cog"></i>
       Users Management
       <span class="tab-badge" id="tabBadgeUsers">—</span>
     </button>
     <button class="tab-btn" id="tabBtnGroup" onclick="switchTab('group')">
-      <i class="fas fa-list-alt"></i>
+      <i class="fas fa-layer-group"></i>
       Users Group
       <span class="tab-badge" id="tabBadgeGroup">—</span>
     </button>
     <button class="tab-btn" id="tabBtnLogs" onclick="switchTab('logs')">
-      <i class="fas fa-list-alt"></i>
+      <i class="fas fa-history"></i>
       System Logs
       <span class="tab-badge" id="tabBadgeLogs">—</span>
     </button>
+    <?php if ($isAdmin): ?>
+      <button class="tab-btn" id="tabBtnMyAdmin" onclick="switchTab('myadmin')">
+        <i class="fas fa-database"></i>
+        PHP MyAdmin
+        <span class="tab-badge" id="tabBadgeMyAdmin">—</span>
+      </button>
+    <?php endif; ?>
   </div>
 
   <!-- ══════════════════════════════════════════
@@ -1226,9 +1294,11 @@ if (isset($_GET['action'])) {
         style="padding:6px 10px;border:1px solid #ccc;border-radius:5px;font-size:13px;">
         <option value="">All Actions</option>
       </select>
-      <button class="btn btn-delete-all" onclick="confirmDeleteAllLogs()">
-        <i class="fas fa-trash"></i> Delete All Data
-      </button>
+      <?php if ($isAdmin): ?>
+        <button class="btn btn-delete-all" onclick="confirmDeleteAllLogs()">
+          <i class="fas fa-trash"></i> Delete All Data
+        </button>
+      <?php endif; ?>
     </div>
 
     <!-- Panel -->
@@ -1276,6 +1346,57 @@ if (isset($_GET['action'])) {
       <div class="pagination" id="lPaginationWrap"></div>
     </div>
   </div><!-- /panelLogs -->
+
+  <!-- ══════════════════════════════════════════
+     TAB: PHP MYADMIN
+  ══════════════════════════════════════════ -->
+  <div class="tab-panel" id="panelMyadmin">
+    <div class="toolbar" style="border-radius:0 8px 0 0;">
+      <span style="font-size:13px;font-weight:600;color:#374151;">
+        <i class="fas fa-database" style="color:#7c3aed;margin-right:6px;"></i>
+        Database Export
+      </span>
+    </div>
+    <div class="panel" style="padding:28px 28px 24px;">
+      <div style="max-width:520px;">
+
+        <h3 style="font-size:15px;color:#1f2937;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
+          <i class="fas fa-file-export" style="color:#7c3aed;"></i> Export SQL Dump
+        </h3>
+        <p style="font-size:13px;color:#6b7280;margin-bottom:20px;">
+          Export the current database as a <code>.sql</code> file. Choose what to include below.
+        </p>
+
+        <div style="margin-bottom:18px;">
+          <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:8px;">
+            Export Mode
+          </label>
+          <div style="display:flex;flex-direction:column;gap:9px;">
+            <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;">
+              <input type="radio" name="exportMode" value="full" checked style="accent-color:#7c3aed;">
+              <span><strong>Structure + Data</strong> — Full export (recommended)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;">
+              <input type="radio" name="exportMode" value="structure" style="accent-color:#7c3aed;">
+              <span><strong>Structure only</strong> — CREATE TABLE statements, no rows</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;">
+              <input type="radio" name="exportMode" value="data" style="accent-color:#7c3aed;">
+              <span><strong>Data only</strong> — INSERT statements, no schema</span>
+            </label>
+          </div>
+        </div>
+
+        <button class="btn btn-add" style="margin-left:0;" onclick="exportDatabase()">
+          <i class="fas fa-download"></i> Download SQL
+        </button>
+
+        <div id="exportStatus" style="display:none;margin-top:14px;font-size:13px;color:#6b7280;">
+          <span class="spinner"></span> Preparing export…
+        </div>
+      </div>
+    </div>
+  </div><!-- /panelMyadmin -->
 
   <!-- ══════════════════════════════════════════
        MODALS — USER FORM (Add / Edit)
@@ -1429,7 +1550,7 @@ if (isset($_GET['action'])) {
 
     function switchTab(tab) {
       activeTab = tab;
-      ['users', 'group', 'logs'].forEach(t => {
+      ['users', 'group', 'logs', 'myadmin'].forEach(t => {
         document.getElementById('tabBtn' + cap(t)).classList.toggle('active', t === tab);
         document.getElementById('panel' + cap(t)).classList.toggle('active', t === tab);
       });
@@ -1440,8 +1561,35 @@ if (isset($_GET['action'])) {
       }
     }
 
-    function cap(s) {
-      return s.charAt(0).toUpperCase() + s.slice(1);
+    const TAB_IDS = {
+      users: {
+        btn: 'tabBtnUsers',
+        panel: 'panelUsers'
+      },
+      group: {
+        btn: 'tabBtnGroup',
+        panel: 'panelGroup'
+      },
+      logs: {
+        btn: 'tabBtnLogs',
+        panel: 'panelLogs'
+      },
+      myadmin: {
+        btn: 'tabBtnMyAdmin',
+        panel: 'panelMyadmin'
+      },
+    };
+
+    function switchTab(tab) {
+      activeTab = tab;
+      Object.entries(TAB_IDS).forEach(([t, ids]) => {
+        document.getElementById(ids.btn).classList.toggle('active', t === tab);
+        document.getElementById(ids.panel).classList.toggle('active', t === tab);
+      });
+      if (tab === 'logs' && allLogs.length === 0) {
+        loadLogActionOptions();
+        loadLogs().then(startLogsCountdown);
+      }
     }
 
     /* ══════════════════════════════════════════════════════════════════
@@ -2108,6 +2256,27 @@ if (isset($_GET['action'])) {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-trash"></i> Yes, Delete All';
       }
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       EXPORT DATABASE
+    ══════════════════════════════════════════════════════════════════ */
+
+    function exportDatabase() {
+      const mode = document.querySelector('input[name="exportMode"]:checked')?.value || 'full';
+      const status = document.getElementById('exportStatus');
+      status.style.display = 'flex';
+      status.style.alignItems = 'center';
+      status.style.gap = '8px';
+
+      // Trigger file download via hidden link
+      const link = document.createElement('a');
+      link.href = `?action=export_db&mode=${mode}`;
+      link.click();
+
+      setTimeout(() => {
+        status.style.display = 'none';
+      }, 3000);
     }
 
     /* ══════════════════════════════════════════════════════════════════

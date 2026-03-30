@@ -1,13 +1,13 @@
 <?php
 // index.php
 
-// Start session with secure settings
-if (session_status() === PHP_SESSION_NONE) {
-  // Set secure session parameters
-  ini_set('session.cookie_httponly', 1);
-  ini_set('session.cookie_secure', 1);
-  ini_set('session.use_strict_mode', 1);
-  session_start();
+
+require_once 'res/cnfg/config.php';
+require_once 'res/cnfg/login.php';
+
+if (isLoggedIn()) {
+    header('Location: portal.php');
+    exit;
 }
 
 $url = $_GET['url'] ?? 'home';
@@ -27,10 +27,6 @@ switch ($url) {
     // show home/dashboard
     break;
 }
-
-require_once 'res/cnfg/config.php';
-require_once 'res/cnfg/login.php';
-
 ?>
 
 <!DOCTYPE html>

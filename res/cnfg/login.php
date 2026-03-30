@@ -1,4 +1,5 @@
 <?php
+// login.php - Handles user login logic
 
 $errors = [];
 $success = '';
@@ -17,12 +18,16 @@ if (!isset($_SESSION['login_attempts'])) {
 
 // Check if user is rate limited (5 attempts per 15 minutes)
 $current_time = time();
-if ($_SESSION['login_attempts'] >= 10 && ($current_time - $_SESSION['last_attempt']) < 10) {
+if (
+  isset($_SESSION['login_attempts'], $_SESSION['last_attempt']) &&
+  $_SESSION['login_attempts'] >= 10 &&
+  ($current_time - $_SESSION['last_attempt']) < 10
+) {
   $errors[] = "Too many login attempts. Please try again in " .
     ceil((10 - ($current_time - $_SESSION['last_attempt'])) / 60) . " minutes.";
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($errors)) {
+if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST' && empty($errors)) {
   // CSRF Protection
   if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
     $errors[] = "Invalid request. Please try again.";

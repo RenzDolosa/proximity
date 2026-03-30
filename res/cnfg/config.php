@@ -1,5 +1,9 @@
 <?php
-// config.php - FIXED VERSION with clarification on my_database usage
+// config.php
+
+ini_set('log_errors', '0');
+ini_set('display_errors', '0');
+error_reporting(0);
 
 // Database configuration
 define('DB_HOST', 'localhost'); // localhost // sql212.infinityfree.com
@@ -12,7 +16,7 @@ define('USER_DB_HOST', DB_HOST);
 define('USER_DB_USER', DB_USER);
 define('USER_DB_PASS', DB_PASS);
 
-// ADDED: Maximum database name length for MySQL
+// Maximum database name length for MySQL
 define('MAX_DB_NAME_LENGTH', 64);
 
 // Create main database
@@ -22,7 +26,7 @@ function createDatabase()
 
   if (strlen($dbName) > MAX_DB_NAME_LENGTH) {
     $errorMsg = "Database name exceeds maximum length of " . MAX_DB_NAME_LENGTH . " characters. Generated name: '$dbName' (" . strlen($dbName) . " chars)";
-    error_log($errorMsg);
+    // error_log($errorMsg);
     return ['success' => false, 'error' => $errorMsg];
   }
 
@@ -40,13 +44,13 @@ function createDatabase()
     $stmt->execute([$dbName]);
 
     if ($stmt->rowCount() > 0) {
-      error_log("Database already exists: $dbName — skipping creation.");
+      // error_log("Database already exists: $dbName — skipping creation.");
       // Still connect and ensure tables exist
     } else {
       // Create the database
       $escapedDbName = str_replace("`", "``", $dbName);
       $pdo->exec("CREATE DATABASE `{$escapedDbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-      error_log("Database created successfully: $dbName");
+      // error_log("Database created successfully: $dbName");
     }
 
     // Connect to the (new or existing) database
@@ -57,11 +61,8 @@ function createDatabase()
       [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
 
-    // INDEX definitions inside CREATE TABLE use: INDEX idx_name (column)
-    // The "ON table(...)" form is only valid for standalone CREATE INDEX statements.
-    $sql = "
-      CREATE TABLE
-        IF NOT EXISTS `users` (
+    // Create tables one by one to avoid multi-statement failures
+    $dbPdo->exec("CREATE TABLE IF NOT EXISTS `users` (
         `id` int(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
         `username` varchar(50) NOT NULL,
         `email` varchar(100) NOT NULL,
@@ -69,8 +70,8 @@ function createDatabase()
         `first_name` varchar(50) NOT NULL,
         `last_name` varchar(50) NOT NULL,
         `phone` varchar(20) DEFAULT NULL,
-        `my_database` varchar(50) NOT NULL,
-        `user_group` varchar(50) NOT NULL,
+        `my_database` varchar(50) NOT NULL DEFAULT '',
+        `user_group` varchar(50) NOT NULL DEFAULT '',
         `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
         `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
         `last_login` timestamp NULL DEFAULT NULL,
@@ -78,20 +79,18 @@ function createDatabase()
         INDEX idx_username (username),
         INDEX idx_email (email),
         INDEX idx_session_token (session_token)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-      CREATE TABLE
-        IF NOT EXISTS `user_sessions` (
+    $dbPdo->exec("CREATE TABLE IF NOT EXISTS `user_sessions` (
         `id` int(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
         `user_id` int(11) NOT NULL,
         `session_token` varchar(255) NOT NULL,
         `expires_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
         `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
         CONSTRAINT `user_sessions_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-      CREATE TABLE
-        IF NOT EXISTS `system_logs` (
+    $dbPdo->exec("CREATE TABLE IF NOT EXISTS `system_logs` (
         `id` int(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
         `user_id` int(11) DEFAULT NULL,
         `action` varchar(100) NOT NULL,
@@ -99,69 +98,43 @@ function createDatabase()
         `ip_address` varchar(45) DEFAULT NULL,
         `user_agent` text DEFAULT NULL,
         `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-      CREATE TABLE
-        IF NOT EXISTS `user_groups` (
-          `id` INT (11) NOT NULL AUTO_INCREMENT,
-          `group_number` VARCHAR(64) NOT NULL UNIQUE COMMENT 'Auto-generated unique group number',
-          `group_name` VARCHAR(100) NOT NULL UNIQUE COMMENT 'Human-readable name e.g. Administrator',
-          `description` VARCHAR(255) DEFAULT NULL,
-          `is_enabled` TINYINT (1) NOT NULL DEFAULT 1 COMMENT '1 = enabled, 0 = disabled',
-          `permissions` JSON DEFAULT NULL COMMENT 'JSON object: { order: true, social: false, ... }',
-          `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          `updated_at` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
-          PRIMARY KEY (`id`)
-        ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+    $dbPdo->exec("CREATE TABLE IF NOT EXISTS `user_groups` (
+        `id` INT(11) NOT NULL AUTO_INCREMENT,
+        `group_number` VARCHAR(64) NOT NULL UNIQUE,
+        `group_name` VARCHAR(100) NOT NULL UNIQUE,
+        `description` VARCHAR(255) DEFAULT NULL,
+        `is_enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        `permissions` JSON DEFAULT NULL,
+        `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-      INSERT INTO `users` (`id`, `username`, `email`, `password`, `first_name`, `last_name`, `phone`, `my_database`, `user_group`, `created_at`, `updated_at`, `last_login`) VALUES
-      (1, 'Admin', 'administrator@gmail.com', '\$2y\$10\$/nqdViJv2DWyfjHhfS8ZDOPT.6QwxO3DWK1ocCwDFPUYvEE20Lkga', 'Renz', 'Admin', '09196398247', 'AdminServer', 'Administrator', NOW(), NOW(), NULL)
-      ON DUPLICATE KEY UPDATE id=id;
+    $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `user_group` VARCHAR(50) NOT NULL DEFAULT ''");
+    $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP");
+    $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+    $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `last_login` TIMESTAMP NULL DEFAULT NULL");
+    $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `session_token` VARCHAR(255) DEFAULT NULL");
+    $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `my_database` VARCHAR(50) NOT NULL DEFAULT ''");
 
-      INSERT IGNORE INTO `user_groups` (
-          `group_number`,
-          `group_name`,
-          `description`,
-          `is_enabled`,
-          `permissions`,
-          `created_at`
-        )
-        VALUES
-          (
-            '1',
-            'Administrator',
-            'Full access to all system features',
-            1,
-            JSON_OBJECT (
-              'system', true,
-              'datalog', true,
-              'proxcode', true,
-              'manual_input', true,
-              'live_sreach', true,
-              'account', true,
-              'employee_db', true,
-              'settings', true,
-              'system-log', true,
-              'user-management', true,
-              'scantest', true
-            ),
-            NOW()
-          );
-          
-      ALTER TABLE `users`
-        MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
-    ";
-
-    error_log("Creating/verifying tables in database: $dbName");
-    $dbPdo->exec($sql);
-
+    // error_log("Creating/verifying tables in database: $dbName");
     $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `user_group` VARCHAR(50)");
-    error_log("Tables ready in database: $dbName");
+
+    $adminHash = '$2y$10$/nqdViJv2DWyfjHhfS8ZDOPT.6QwxO3DWK1ocCwDFPUYvEE20Lkga';
+    $dbPdo->exec("INSERT INTO `users` (`id`, `username`, `email`, `password`, `first_name`, `last_name`, `phone`, `my_database`, `user_group`)
+      VALUES (1, 'Admin', 'administrator@gmail.com', '$adminHash', 'Renz', 'Admin', '09196398247', 'AdminServer', 'Administrator')
+      ON DUPLICATE KEY UPDATE id=id");
+
+    $dbPdo->exec("ALTER TABLE `users` MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;");
+
+    // error_log("Tables ready in database: $dbName");
 
     return ['success' => true, 'database_name' => $dbName];
   } catch (PDOException $e) {
     $errorMsg = "Error in createDatabase(): " . $e->getMessage();
-    error_log($errorMsg);
+    // error_log($errorMsg);
     return ['success' => false, 'error' => $errorMsg];
   }
 }
@@ -188,7 +161,7 @@ function getDBConnection()
     );
     return $pdo;
   } catch (PDOException $e) {
-    error_log("Database connection failed: " . $e->getMessage());
+    // error_log("Database connection failed: " . $e->getMessage());
     die("Database connection failed. Please try again later.");
   }
 }
@@ -221,7 +194,7 @@ function getUserDBConnection($userId)
     );
     return $pdo;
   } catch (PDOException $e) {
-    error_log("User database connection failed for user $userId: " . $e->getMessage());
+    // error_log("User database connection failed for user $userId: " . $e->getMessage());
     throw new Exception("User database connection failed");
   }
 }
@@ -248,7 +221,7 @@ function userDatabaseExists($userId)
 
     return $stmt->rowCount() > 0;
   } catch (PDOException $e) {
-    error_log("Error checking user database existence: " . $e->getMessage());
+    // error_log("Error checking user database existence: " . $e->getMessage());
     return false;
   }
 }
@@ -258,7 +231,7 @@ function createUserDatabase($userId)
 {
   if (!is_numeric($userId) || $userId <= 0) {
     $errorMsg = "Invalid user ID for database creation: $userId";
-    error_log($errorMsg);
+    // error_log($errorMsg);
     return ['success' => false, 'error' => $errorMsg];
   }
 
@@ -268,7 +241,7 @@ function createUserDatabase($userId)
   // ADDED: Validate database name length
   if (strlen($dbName) > MAX_DB_NAME_LENGTH) {
     $errorMsg = "Database name exceeds maximum length of " . MAX_DB_NAME_LENGTH . " characters. Generated name: '$dbName' (" . strlen($dbName) . " chars)";
-    error_log($errorMsg);
+    // error_log($errorMsg);
     return ['success' => false, 'error' => $errorMsg];
   }
 
@@ -284,9 +257,9 @@ function createUserDatabase($userId)
     // Create database with backticks and proper escaping
     $createDbQuery = "CREATE DATABASE IF NOT EXISTS `" . str_replace("`", "``", $dbName) . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
 
-    error_log("Attempting to create database: $dbName with query: $createDbQuery");
+    // error_log("Attempting to create database: $dbName with query: $createDbQuery");
     $pdo->exec($createDbQuery);
-    error_log("Database created successfully: $dbName");
+    // error_log("Database created successfully: $dbName");
 
     // Connect to the new database
     $userPdo = new PDO(
@@ -296,7 +269,7 @@ function createUserDatabase($userId)
       [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
 
-    error_log("Connected to new database: $dbName");
+    // error_log("Connected to new database: $dbName");
 
     // Create user-specific tables
     $sql = "
@@ -419,14 +392,14 @@ function createUserDatabase($userId)
           ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
     ";
 
-    error_log("Creating tables in database: $dbName");
+    // error_log("Creating tables in database: $dbName");
     $userPdo->exec($sql);
-    error_log("Tables created successfully in database: $dbName");
+    // error_log("Tables created successfully in database: $dbName");
 
     return ['success' => true, 'database_name' => $dbName];
   } catch (PDOException $e) {
     $errorMsg = "Error creating user database for user $userId: " . $e->getMessage();
-    error_log($errorMsg);
+    // error_log($errorMsg);
     return ['success' => false, 'error' => $errorMsg];
   }
 }
@@ -435,7 +408,7 @@ function createUserDatabase($userId)
 function ensureUserTablesExist($userId)
 {
   if (!is_numeric($userId) || $userId <= 0) {
-    error_log("Invalid user ID for ensuring tables: $userId");
+    // error_log("Invalid user ID for ensuring tables: $userId");
     return false;
   }
 
@@ -574,7 +547,7 @@ function ensureUserTablesExist($userId)
 function deleteUserDatabase($userId)
 {
   if (!is_numeric($userId) || $userId <= 0) {
-    error_log("Invalid user ID for deletion: $userId");
+    // error_log("Invalid user ID for deletion: $userId");
     return false;
   }
 
@@ -592,7 +565,7 @@ function deleteUserDatabase($userId)
     $pdo->exec("DROP DATABASE IF EXISTS `" . str_replace("`", "``", $dbName) . "`");
     return true;
   } catch (PDOException $e) {
-    error_log("Error deleting user database: " . $e->getMessage());
+    // error_log("Error deleting user database: " . $e->getMessage());
     return false;
   }
 }
@@ -603,6 +576,9 @@ function deleteUserDatabase($userId)
 
 // Start session if not already started
 if (session_status() === PHP_SESSION_NONE) {
+  ini_set('session.cookie_httponly', 1);
+  ini_set('session.cookie_secure', 0);  // ← Change to 0 for local HTTP
+  ini_set('session.use_strict_mode', 1);
   session_start();
 }
 
@@ -644,7 +620,7 @@ function customDatabaseExists($dbName)
 
     return $stmt->rowCount() > 0;
   } catch (PDOException $e) {
-    error_log("Error checking custom database existence: " . $e->getMessage());
+    // error_log("Error checking custom database existence: " . $e->getMessage());
     return true; // Return true to be safe and prevent creation
   }
 }
@@ -737,7 +713,7 @@ function registerUser($username, $email, $password, $firstName, $lastName, $myDa
     // Commit the user creation first
     $pdo->commit();
 
-    error_log("User created successfully: ID=$userId, Username=$username, My_Database=$myDatabase");
+    // error_log("User created successfully: ID=$userId, Username=$username, My_Database=$myDatabase");
 
     // Now create user-specific database with actual name: user_{$userId}
     $dbResult = createUserDatabase($userId);
@@ -749,9 +725,9 @@ function registerUser($username, $email, $password, $firstName, $lastName, $myDa
         $deleteStmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
         $deleteStmt->execute([$userId]);
         $pdo->commit();
-        error_log("User deleted due to database creation failure: ID=$userId");
+        // error_log("User deleted due to database creation failure: ID=$userId");
       } catch (PDOException $e) {
-        error_log("Error rolling back user creation: " . $e->getMessage());
+        // error_log("Error rolling back user creation: " . $e->getMessage());
       }
 
       // Return the actual error from database creation
@@ -776,11 +752,11 @@ function registerUser($username, $email, $password, $firstName, $lastName, $myDa
         $pdo->rollBack();
       }
     } catch (Exception $rollbackError) {
-      error_log("Error during rollback: " . $rollbackError->getMessage());
+      // error_log("Error during rollback: " . $rollbackError->getMessage());
     }
 
     $errorMsg = "Registration error: " . $e->getMessage();
-    error_log($errorMsg);
+    // error_log($errorMsg);
     return ['success' => false, 'errors' => ['Database error occurred during registration. ' . $e->getMessage()]];
   }
 }
@@ -826,7 +802,7 @@ function loginUser($username, $password)
       return ['success' => false, 'errors' => ['Invalid username or password']];
     }
   } catch (PDOException $e) {
-    error_log("Login error: " . $e->getMessage());
+    // error_log("Login error: " . $e->getMessage());
     return ['success' => false, 'errors' => ['Database error occurred during login: ' . $e->getMessage()]];
   }
 }
@@ -907,10 +883,10 @@ function createMainTables()
 
     $pdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `user_group` VARCHAR(50)");
 
-    error_log("Main system tables created successfully");
+    // error_log("Main system tables created successfully");
     return true;
   } catch (PDOException $e) {
-    error_log("Error creating main tables: " . $e->getMessage());
+    // error_log("Error creating main tables: " . $e->getMessage());
     return false;
   }
 }
@@ -936,7 +912,7 @@ function logSystemAction($userId, $action, $details = null)
       $_SERVER['HTTP_USER_AGENT'] ?? null
     ]);
   } catch (PDOException $e) {
-    error_log("Error logging system action: " . $e->getMessage());
+    // error_log("Error logging system action: " . $e->getMessage());
   }
 }
 
