@@ -1,7 +1,12 @@
 <?php
-// proxcode_backend.php - Proximity Management System Backend
+// proxcode_backend.php
 
 require_once 'config.php';
+
+if (isset($_GET['serve_file'])) {
+  header('Cache-Control: public, max-age=3600');
+  header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 3600) . ' GMT');
+}
 
 // Database management class
 class Database

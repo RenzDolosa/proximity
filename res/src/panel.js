@@ -360,11 +360,11 @@ async function _sys_renderTable() {
       <td class="Col7"><div style="height:50px;overflow-y:auto;scrollbar-width:thin;align-content:center;"><small>${emp.violation || "None"}</small></div></td>
       <td class="Col8">${
         emp.image
-          ? `<img src="${imgSrc}" alt="${_escapeHtml(emp.fullname)}" class="employee-image" onerror="this.style.display='none';this.nextSibling.style.display='inline'"><span style="display:none">📷</span>`
+          ? `<img src="${imgSrc}" alt="${_escapeHtml(emp.fullname)}" class="employee-image" loading="lazy" onerror="this.style.display='none';this.nextSibling.style.display='inline'"><span style="display:none">📷</span>`
           : `<div class="ph-cont"><div class="employee-ph">${initials}</div></div>`
       }</td>
       <td class="Col9" onclick="sys_copyQR('${_escapeHtml(emp.qr_code)}')" title="Copy Proximity code" style="cursor:pointer">
-        <img src="../icon/nfc-icon.png" style="width:20px;height:20px"></td>
+        <img src="../icon/nfc-icon.png" loading="lazy" style="width:20px;height:20px"></td>
       <td><small>${emp.created_at}</small></td>
       <td><small>${emp.updated_at}</small></td>
       <td>
@@ -492,7 +492,7 @@ async function _sys_loadEmployeeData(id) {
       if (e.image) {
         const src = `../../uploads/user/${e.image}?t=${Date.now()}`;
         lbl.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:8px">
-          <img src="${src}" alt="Current" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover">
+          <img src="${src}" alt="Current" loading="lazy" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover">
           </div>`;
       }
     } else {
@@ -777,7 +777,7 @@ function _sys_setupFileUpload() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       lbl.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:8px">
-        <img src="${ev.target.result}" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover">
+        <img src="${ev.target.result}" loading="lazy" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover">
         <small style="color:#4CAF50">✓ New image selected</small></div>`;
     };
     reader.readAsDataURL(f);
@@ -953,11 +953,11 @@ async function _dtl_renderTable() {
       <td class="Col7"><div style="height:50px;overflow-y:auto;scrollbar-width:thin;align-content:center;"><small>${emp.violation || "None"}</small></div></td>
       <td class="Col8">${
         imgUrl
-          ? `<img src="${imgUrl}" alt="${_escapeHtml(display)}" class="employee-image" title="${_escapeHtml(tooltip)}" onerror="this.style.display='none';this.nextSibling.style.display='inline'"><span style="display:none" title="${_escapeHtml(tooltip)}">📷</span>`
+          ? `<img src="${imgUrl}" alt="${_escapeHtml(display)}" class="employee-image" loading="lazy" title="${_escapeHtml(tooltip)}" onerror="this.style.display='none';this.nextSibling.style.display='inline'"><span style="display:none" title="${_escapeHtml(tooltip)}">📷</span>`
           : `<div class="ph-cont" title="${_escapeHtml(tooltip)}"><div class="employee-ph">${initials}</div></div>`
       }</td>
       <td class="Col9" onclick="dtl_copyQR('${_escapeHtml(emp.qr_code || "")}')" title="Copy Proximity code" style="cursor:pointer">
-        <img src="../icon/nfc-icon.png" style="width:20px;height:20px"></td>
+        <img src="../icon/nfc-icon.png" loading="lazy" style="width:20px;height:20px"></td>
       <td class="employee-timestamp"><small>${emp.access_timestamp || "N/A"}</small></td>
       <td><div class="check-status-${(emp.check_status || "").toLowerCase()}"><div class="employee-ph">${emp.check_status || "N/A"}</div></div></td>
     </tr>`;
@@ -1295,12 +1295,12 @@ async function _prx_renderTable() {
       <td>${start + i + 1}</td>
       <td class="Col8">${
         imgUrl
-          ? `<img src="${imgUrl}" alt="${_escapeHtml(display)}" class="employee-image" title="${_escapeHtml(tooltip)}" onerror="this.style.display='none';this.nextSibling.style.display='inline'"><span style="display:none">📷</span>`
+          ? `<img src="${imgUrl}" alt="${_escapeHtml(display)}" class="employee-image" loading="lazy" title="${_escapeHtml(tooltip)}" onerror="this.style.display='none';this.nextSibling.style.display='inline'"><span style="display:none">📷</span>`
           : `<div class="ph-cont" title="${_escapeHtml(tooltip)}"><div class="employee-ph">${initials}</div></div>`
       }</td>
       <td><strong>${_escapeHtml(String(empId))}</strong></td>
       <td class="Col9" onclick="prx_copyQR('${_escapeHtml(emp.qr_code || "")}')" title="Copy Proximity code" style="cursor:pointer">
-        <img src="../icon/nfc-icon.png" style="width:20px;height:20px"></td>
+        <img src="../icon/nfc-icon.png" loading="lazy" style="width:20px;height:20px"></td>
       <td><span class="remarks-${remarks.toLowerCase()}">${remarks}</span></td>
       <td><small>${emp.created_at || ""}</small></td>
       <td><small>${emp.updated_at || ""}</small></td>

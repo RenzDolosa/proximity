@@ -112,6 +112,7 @@ if (!$portalAccessGranted) {
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Portal Access</title>
+    <link rel="preload" href="../icon/database-icon.png" as="image">
     <link rel="icon" href="res/icon/database-icon.png" type="image/png">
     <link rel="stylesheet" href="res/css/req.css">
     <link rel="stylesheet" href="res/css/sbar.css">
@@ -146,7 +147,7 @@ if (!$portalAccessGranted) {
           <h1>Proximity</h1>
         </div>
         <div class="s-search-section">
-          <img src="res/icon/nfc-icon.png" alt="NFC Icon">
+          <img src="res/icon/nfc-icon.png" alt="NFC Icon" loading="lazy">
           <div>
             <h3>Live Search</h3>
             <p>Web pass verifier application</p>

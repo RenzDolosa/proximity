@@ -342,6 +342,7 @@ function audioCard(string $label, string $inputName, string $dbKey, array $curre
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($user['my_database'] ?? 'System', ENT_QUOTES) ?> – Settings</title>
+  <link rel="preload" href="../icon/database-icon.png" as="image">
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../css/system.css">
   <link rel="stylesheet" href="../css/ptl.css">
@@ -467,7 +468,7 @@ function audioCard(string $label, string $inputName, string $dbKey, array $curre
       <div class="menu-card">
         <h2><i class="fas fa-database"></i> Database Information</h2>
         <div class="database-info">
-          <img src="../icon/database-icon.png" alt="MySQL Logo" class="database-logo">
+          <img src="../icon/database-icon.png" alt="MySQL Logo" class="database-logo" loading="lazy">
           <p>Connected to your personal database:</p>
           <div class="database-name">
             <?php if ($databaseConnected): ?>

@@ -75,6 +75,7 @@ if ($databaseConnected) {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Scanned Log</title>
+  <link rel="preload" href="../icon/database-icon.png" as="image">
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../css/system.css">
   <link rel="stylesheet" href="../css/ptl.css">
@@ -153,7 +154,7 @@ if ($databaseConnected) {
             <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Search by proximity code..." style="cursor: default;" autocomplete="off">
           </div>
         </div>
-        <img src="../icon/nfc-icon.png" alt="Proximity" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
+        <img src="../icon/nfc-icon.png" alt="Proximity" loading="lazy" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
       </form>
       <div class="form-row-btn">
         <div class="form-row">
@@ -228,7 +229,7 @@ if ($databaseConnected) {
             <h3 id="inactive_employees"><?php echo $stats['inactive_employees']; ?></h3>
           </div>
           <div style="display: flex; gap: 10px;">
-            <img src="../icon/scan-icon.png" class="scan-emp">
+            <img src="../icon/scan-icon.png" class="scan-emp" loading="lazy">
             <p>Scanned Today</p>
             <h3 id="today_attendance"><?php echo $stats['today_attendance']; ?></h3>
           </div>

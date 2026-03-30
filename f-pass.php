@@ -100,6 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Forgot Password</title>
+  <link rel="preload" href="../icon/database-icon.png" as="image">
   <link rel="icon" href="res/icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="res/css/r-l.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -109,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <div class="container">
     <div class="header">
-      <div><img src="res/logo/database.png" alt="My Database Logo" class="logo"></div>
+      <div><img src="res/logo/database.png" alt="My Database Logo" class="logo" loading="lazy"></div>
       <h2>Forgot Password</h2>
       <p class="subtitle">Enter your email address and we'll send you instructions to reset your password.</p>
     </div>

@@ -45,6 +45,7 @@ try {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($myDatabase ?? 'My Database'); ?> - Portal</title>
+  <link rel="preload" href="../icon/database-icon.png" as="image">
   <link rel="icon" href="res/icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="res/css/system.css">
   <link rel="stylesheet" href="res/css/ptl.css">
@@ -87,7 +88,7 @@ try {
           <h1>Proximity</h1>
         </div>
         <div class="s-search-section">
-          <img src="res/icon/nfc-icon.png" alt="NFC Icon">
+          <img src="res/icon/nfc-icon.png" alt="NFC Icon" loading="lazy">
           <div>
             <h3>Live Search</h3>
             <p>Web pass verifier application</p>
@@ -102,7 +103,7 @@ try {
     <header class="header">
       <div class="myDatabase-logo">
         <a href="portal.php" class="link">
-          <img src="res/logo/mysql.png" alt="MySql Logo" class="header-logo">
+          <img src="res/logo/mysql.png" alt="MySql Logo" class="header-logo" loading="lazy">
           <h1 style="padding-left: 50px; margin: 0;"><?= htmlspecialchars($myDatabase ?? 'My Database'); ?></h1>
         </a>
       </div>

@@ -23,7 +23,8 @@ $email = $_SESSION['email'] ?? '';
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Proximity Pass</title>
-  <link rel="icon" href="../logo/nfc-logo.svg" type="image/svg+xml">
+  <link rel="preload" href="../logo/nfc-logo.svg" as="svg+xml">
+  <link rel="preload" href="../logo/nfc-logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../css/qp.css">
   <link rel="stylesheet" href="../css/sbar.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -37,7 +38,7 @@ $email = $_SESSION['email'] ?? '';
         <h1>Proximity</h1>
       </div>
       <div class="s-search-section">
-        <img src="../icon/nfc-icon.png" alt="NFC Icon">
+        <img src="../icon/nfc-icon.png" alt="NFC Icon" loading="lazy">
         <div>
           <h3>Live Search</h3>
           <p>Web pass verifier application</p>
@@ -49,7 +50,7 @@ $email = $_SESSION['email'] ?? '';
         <h1>Manual Entry</h1>
       </div>
       <div class="s-search-section">
-        <img src="../logo/manual.png" alt="Manual Entry">
+        <img src="../logo/manual.png" alt="Manual Entry" loading="lazy">
         <div>
           <h3>Employee Entry</h3>
           <p>This area is served for manual entry</p>

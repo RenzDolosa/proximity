@@ -49,6 +49,7 @@ if ($databaseConnected) {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Proximity Code</title>
+  <link rel="preload" href="../icon/database-icon.png" as="image">
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../css/system.css">
   <link rel="stylesheet" href="../css/ptl.css">
@@ -90,7 +91,7 @@ if ($databaseConnected) {
             <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="cursor: default;" autocomplete="off">
           </div>
         </div>
-        <img src="../icon/nfc-icon.png" alt="Proximity" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
+        <img src="../icon/nfc-icon.png" alt="Proximity" loading="lazy" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
       </form>
       <div class="form-row-btn">
         <div class="form-row">
@@ -302,7 +303,6 @@ if ($databaseConnected) {
   <audio id="noResultSound" src="../sounds/noResultsFound.mp3" preload="auto"></audio>
   <audio id="warningSound" src="../sounds/ohh-ow.mp3" preload="auto"></audio>
   <audio id="inactiveSound" src="../sounds/inactive.mp3" preload="auto"></audio>
-  <!-- Add XLSX library for Excel file support -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="../src/proxcode.js"></script>
   <script src="../src/btn.js"></script>

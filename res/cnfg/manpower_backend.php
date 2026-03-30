@@ -3,6 +3,11 @@
 
 require_once 'config.php';
 
+if (isset($_GET['serve_file'])) {
+  header('Cache-Control: public, max-age=3600');
+  header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 3600) . ' GMT');
+}
+
 class Database
 {
   private $mainConn;
@@ -94,19 +99,55 @@ class EmployeeManager
     $query  = "SELECT * FROM " . $this->table . " WHERE 1=1";
     $params = [];
 
-    if (!empty($filters['id']))             { $query .= " AND id LIKE :id";                    $params[':id']        = '%' . $filters['id'] . '%'; }
-    if (!empty($filters['fullname']))       { $query .= " AND fullname LIKE :fullname";         $params[':fullname']  = '%' . $filters['fullname'] . '%'; }
-    if (!empty($filters['position']))       { $query .= " AND position LIKE :position";         $params[':position']  = '%' . $filters['position'] . '%'; }
-    if (!empty($filters['position_none']))  { $query .= " AND (position IS NULL OR TRIM(position) = '' OR LOWER(TRIM(position)) = 'none')"; }
-    if (!empty($filters['brand']))          { $query .= " AND brand LIKE :brand";               $params[':brand']     = '%' . $filters['brand'] . '%'; }
-    if (!empty($filters['brand_none']))     { $query .= " AND (brand IS NULL OR TRIM(brand) = '' OR LOWER(TRIM(brand)) = 'none')"; }
-    if (!empty($filters['status']))         { $query .= " AND status = :status";                $params[':status']    = $filters['status']; }
-    if (!empty($filters['shift']))          { $query .= " AND shift = :shift";                  $params[':shift']     = $filters['shift']; }
-    if (!empty($filters['violation']))      { $query .= " AND violation LIKE :violation";        $params[':violation'] = '%' . $filters['violation'] . '%'; }
-    if (!empty($filters['violation_none'])) { $query .= " AND (violation IS NULL OR TRIM(violation) = '' OR LOWER(TRIM(violation)) = 'none')"; }
-    if (!empty($filters['qr_code']))        { $query .= " AND qr_code LIKE :qr_code";           $params[':qr_code']   = '%' . $filters['qr_code'] . '%'; }
-    if (!empty($filters['created_at']))     { $query .= " AND created_at LIKE :created_at";     $params[':created_at']  = '%' . $filters['created_at'] . '%'; }
-    if (!empty($filters['updated_at']))     { $query .= " AND updated_at LIKE :updated_at";     $params[':updated_at']  = '%' . $filters['updated_at'] . '%'; }
+    if (!empty($filters['id'])) {
+      $query .= " AND id LIKE :id";
+      $params[':id']        = '%' . $filters['id'] . '%';
+    }
+    if (!empty($filters['fullname'])) {
+      $query .= " AND fullname LIKE :fullname";
+      $params[':fullname']  = '%' . $filters['fullname'] . '%';
+    }
+    if (!empty($filters['position'])) {
+      $query .= " AND position LIKE :position";
+      $params[':position']  = '%' . $filters['position'] . '%';
+    }
+    if (!empty($filters['position_none'])) {
+      $query .= " AND (position IS NULL OR TRIM(position) = '' OR LOWER(TRIM(position)) = 'none')";
+    }
+    if (!empty($filters['brand'])) {
+      $query .= " AND brand LIKE :brand";
+      $params[':brand']     = '%' . $filters['brand'] . '%';
+    }
+    if (!empty($filters['brand_none'])) {
+      $query .= " AND (brand IS NULL OR TRIM(brand) = '' OR LOWER(TRIM(brand)) = 'none')";
+    }
+    if (!empty($filters['status'])) {
+      $query .= " AND status = :status";
+      $params[':status']    = $filters['status'];
+    }
+    if (!empty($filters['shift'])) {
+      $query .= " AND shift = :shift";
+      $params[':shift']     = $filters['shift'];
+    }
+    if (!empty($filters['violation'])) {
+      $query .= " AND violation LIKE :violation";
+      $params[':violation'] = '%' . $filters['violation'] . '%';
+    }
+    if (!empty($filters['violation_none'])) {
+      $query .= " AND (violation IS NULL OR TRIM(violation) = '' OR LOWER(TRIM(violation)) = 'none')";
+    }
+    if (!empty($filters['qr_code'])) {
+      $query .= " AND qr_code LIKE :qr_code";
+      $params[':qr_code']   = '%' . $filters['qr_code'] . '%';
+    }
+    if (!empty($filters['created_at'])) {
+      $query .= " AND created_at LIKE :created_at";
+      $params[':created_at']  = '%' . $filters['created_at'] . '%';
+    }
+    if (!empty($filters['updated_at'])) {
+      $query .= " AND updated_at LIKE :updated_at";
+      $params[':updated_at']  = '%' . $filters['updated_at'] . '%';
+    }
 
     $query .= " ORDER BY created_at DESC";
 
@@ -654,7 +695,7 @@ try {
             $response['success']       = true;
             $response['message']       = "Deleted $deleted_count employee(s) matching filters: $filterStr. Removed $deleted_images image(s).";
             $response['deleted_count'] = $deleted_count;
-            $response['deleted_images']= $deleted_images;
+            $response['deleted_images'] = $deleted_images;
 
             logSystemAction($database->getCurrentUserId(), 'FILTERED_EMPLOYEES_DELETED', "Deleted $deleted_count employees with filters: $filterStr");
           } else {
@@ -956,7 +997,7 @@ try {
         break;
     }
 
-  // ── GET handler ──────────────────────────────────────────────────────────
+    // ── GET handler ──────────────────────────────────────────────────────────
   } elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $action = $_GET['action'] ?? '';
 
@@ -1065,7 +1106,6 @@ try {
   } else {
     $_SESSION['error_message'] = $response['message'];
   }
-
 } catch (Exception $e) {
   $error_response = ['success' => false, 'message' => 'System error: ' . $e->getMessage()];
 

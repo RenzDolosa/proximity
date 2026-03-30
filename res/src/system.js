@@ -211,11 +211,10 @@ async function loadEmployeeData(employeeId) {
       const fileLabel = document.querySelector(".file-upload-label");
       if (employee.image) {
         const imagePath = `../../uploads/user/${employee.image}`;
-        const imageSrcWithCache = `${imagePath}?t=${new Date().getTime()}`;
 
         fileLabel.innerHTML = `
           <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-            <img id="existingImagePreview" src="${imageSrcWithCache}" alt="Current employee image"
+            <img id="existingImagePreview" src="${imagePath}" alt="Current employee image" loading="lazy"
               style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.15);"
               onerror="this.style.display='none'; document.getElementById('imageFallback').style.display='inline';">
             <span id="imageFallback" style="display:none;">📷 Image not available</span>
@@ -405,7 +404,7 @@ async function renderEmployeeTable() {
         });
       };
 
-      const imageSrcWithCache = `../../uploads/user/${employee.image}?t=${new Date().getTime()}`;
+      const imageSrc = `../../uploads/user/${employee.image}`;
 
       return `
         <tr>
@@ -420,13 +419,13 @@ async function renderEmployeeTable() {
               <small>${employee.violation || "None"}</small></div></td>
             <td class="Col8">${
               employee.image
-                ? `<img src="${imageSrcWithCache}" alt="${employee.fullname}" class="employee-image"
+                ? `<img src="${imageSrc}" alt="${employee.fullname}" class="employee-image" loading="lazy"
                      onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
                    <span style="display:none;">📷</span>`
                 : `<div class="ph-cont"><div class="employee-ph">${fullnameInitials}</div></div>`
             }</td>
             <td class="Col9" onclick="copyQRCode('${employee.qr_code}')" title="Copy Proximity code">
-              <img src="../icon/nfc-icon.png" alt="Copy Proximity code" style="width: 20px; height: 20px;"></td>
+              <img src="../icon/nfc-icon.png" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;"></td>
             <td><small>${employee.created_at}</small></td>
             <td><small>${employee.updated_at}</small></td>
             <td>
@@ -1131,7 +1130,7 @@ function setupFileUploadHandler() {
 
         label.innerHTML = `
           <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-            <img id="imagePreview" src="${imageDataUrl}" alt="New image preview"
+            <img id="imagePreview" src="${imageDataUrl}" alt="New image preview" loading="lazy"
               style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover;
                      box-shadow: 0 2px 8px rgba(0,0,0,0.15), 0 0 0 2px #4CAF50;">
             <small style="color: #4CAF50; font-size: 12px; font-weight: 500;">✓ New image selected</small>

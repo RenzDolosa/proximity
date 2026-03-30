@@ -133,6 +133,7 @@ if ($databaseConnected && $employeeManager) {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Employee Dashboard</title>
+  <link rel="preload" href="../icon/database-icon.png" as="image">
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../css/system.css">
   <link rel="stylesheet" href="../css/emp-db.css">
@@ -183,7 +184,7 @@ if ($databaseConnected && $employeeManager) {
         </div>
         <div class="stat-number"><?php echo number_format($stats['total_employees']); ?></div>
         <div class="stat-label">Total Employees</div>
-        <img src="../logo/mysql-logo.png" style="top: 10%; right: 2%; height: 40px; position:absolute;">
+        <img src="../logo/mysql-logo.png" loading="lazy" style="top: 10%; right: 2%; height: 40px; position:absolute;">
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #28a745, #20c997);">
@@ -191,7 +192,7 @@ if ($databaseConnected && $employeeManager) {
         </div>
         <div class="stat-number"><?php echo number_format($stats['active_employees']); ?></div>
         <div class="stat-label">Active Employees</div>
-        <img src="../logo/mysql-logo.png" style="top: 10%; right: 2%; height: 40px; position:absolute;">
+        <img src="../logo/mysql-logo.png" loading="lazy" style="top: 10%; right: 2%; height: 40px; position:absolute;">
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #dc3545, #fd7e14);">
@@ -199,7 +200,7 @@ if ($databaseConnected && $employeeManager) {
         </div>
         <div class="stat-number"><?php echo number_format($stats['inactive_employees']); ?></div>
         <div class="stat-label">Inactive Employees</div>
-        <img src="../logo/mysql-logo.png" style="top: 10%; right: 2%; height: 40px; position:absolute;">
+        <img src="../logo/mysql-logo.png" loading="lazy" style="top: 10%; right: 2%; height: 40px; position:absolute;">
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #17a2b8, #6f42c1);">
@@ -207,7 +208,7 @@ if ($databaseConnected && $employeeManager) {
         </div>
         <div class="stat-number"><?php echo number_format($stats['total_proxcode']); ?></div>
         <div class="stat-label">Proximity Codes</div>
-        <img src="../logo/mysql-logo.png" style="top: 10%; right: 2%; height: 40px; position:absolute;">
+        <img src="../logo/mysql-logo.png" loading="lazy" style="top: 10%; right: 2%; height: 40px; position:absolute;">
       </div>
     </section>
 
@@ -219,7 +220,7 @@ if ($databaseConnected && $employeeManager) {
         </div>
         <div class="stat-number"><?php echo number_format($stats['total_scanned']); ?></div>
         <div class="stat-label">Total Scanned</div>
-        <img src="../logo/database.png" style="top: 10%; right: 5%; height: 40px; position:absolute;">
+        <img src="../logo/database.png" loading="lazy" style="top: 10%; right: 5%; height: 40px; position:absolute;">
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #28a745, #20c997);">
@@ -227,7 +228,7 @@ if ($databaseConnected && $employeeManager) {
         </div>
         <div class="stat-number"><?php echo number_format($stats['active_scan']); ?></div>
         <div class="stat-label">Active Scanned</div>
-        <img src="../logo/database.png" style="top: 10%; right: 5%; height: 40px; position:absolute;">
+        <img src="../logo/database.png" loading="lazy" style="top: 10%; right: 5%; height: 40px; position:absolute;">
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #dc3545, #fd7e14);">
@@ -235,11 +236,11 @@ if ($databaseConnected && $employeeManager) {
         </div>
         <div class="stat-number"><?php echo number_format($stats['inactive_scan']); ?></div>
         <div class="stat-label">Inactive Scanned</div>
-        <img src="../logo/database.png" style="top: 10%; right: 5%; height: 40px; position:absolute;">
+        <img src="../logo/database.png" loading="lazy" style="top: 10%; right: 5%; height: 40px; position:absolute;">
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #17a2b8, #6f42c1);">
-          <img src="../icon/nfc-icon.png" style="width: 32px; height: 32px; z-index: 1000; filter: invert(1);">
+          <img src="../icon/nfc-icon.png" loading="lazy" style="width: 32px; height: 32px; z-index: 1000; filter: invert(1);">
         </div>
         <div class="stat-number"><?php echo number_format($stats['today_attendance']); ?></div>
         <div class="stat-label">Scanned Today</div>
@@ -247,7 +248,7 @@ if ($databaseConnected && $employeeManager) {
           In: <span id="todayIn"><?php echo $stats['today_in']; ?></span> |
           Out: <span id="todayOut"><?php echo $stats['today_out']; ?></span>
         </small>
-        <img src="../logo/database.png" style="top: 10%; right: 5%; height: 40px; position:absolute;">
+        <img src="../logo/database.png" loading="lazy" style="top: 10%; right: 5%; height: 40px; position:absolute;">
       </div>
     </section>
 
@@ -257,7 +258,7 @@ if ($databaseConnected && $employeeManager) {
         <h2><i class="fas fa-database"></i> Database Information</h2>
 
         <div class="database-info">
-          <img src="../icon/database-icon.png" alt="MySql Logo" class="database-logo">
+          <img src="../icon/database-icon.png" alt="MySql Logo" class="database-logo" loading="lazy">
           <p>Connected to your personal database:</p>
           <div class="database-name">
             <?php if ($databaseConnected): ?>
@@ -309,7 +310,7 @@ if ($databaseConnected && $employeeManager) {
                 <?php
                 // Get the image path from the log data or use a default
                 $userImage = $log['profile_image'] ?? $log['image'] ?? '../icon/database-icon.png';
-                $imagePath = "../../uploads/user_" . htmlspecialchars($userId) . "/" . htmlspecialchars($userImage);
+                $imagePath = "../../uploads/user/" . htmlspecialchars($userImage);
 
                 // Check if image file exists, otherwise use default
                 if (!file_exists($imagePath)) {
@@ -362,7 +363,7 @@ if ($databaseConnected && $employeeManager) {
 
           foreach ($imageSources as $imageFile) {
             if ($imageFile) {
-              $fullPath = "../../uploads/user_" . $userId . "/" . $imageFile;
+              $fullPath = "../../uploads/user/" . $imageFile;
               if (file_exists($fullPath)) {
                 return $fullPath;
               }

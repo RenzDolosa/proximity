@@ -11,7 +11,7 @@ let displayTimeout;
 let currentFilter = "all";
 let currentAudio = null;
 
-document.getElementById("message").innerHTML = '<img src="../logo/proximity-logo.png" alt="Proximity Code" style="width: 100%; height: 90vh;">';
+document.getElementById("message").innerHTML = '<img src="../logo/proximity-logo.png" alt="Proximity Code" loading="lazy" style="width: 100%; height: 90vh;">';
 
 // Setup event listeners
 function setupEventListeners() {
@@ -82,7 +82,7 @@ function setupEventListeners() {
 }
 
 function background() {
-  document.getElementById("message").innerHTML = '<img src="../logo/proximity-logo.png" alt="Proximity Code" style="width: 100%; height: 90vh;">';
+  document.getElementById("message").innerHTML = '<img src="../logo/proximity-logo.png" alt="Proximity Code" loading="lazy" style="width: 100%; height: 90vh;">';
 }
 
 // Function to stop any currently playing audio
@@ -291,7 +291,7 @@ function renderResults(results, query) {
                     <p>${position}</p>
                         ${
                           image
-                            ? `<img src="../../uploads/user/${image}" alt="${fullname}" class="employee-image">`
+                            ? `<img src="../../uploads/user/${image}" alt="${fullname}" class="employee-image" loading="lazy">`
                             : `<div class="ph-container"><div class="employee-placeholder">${fullnameInitials}</div></div>`
                         }
                 </div>

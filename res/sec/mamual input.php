@@ -31,6 +31,7 @@ try {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($myDatabase); ?> - Manual Search</title>
+  <link rel="preload" href="../logo/nfc-logo.svg" as="svg+xml">
   <link rel="icon" href="../logo/nfc-logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../css/m-i.css">
   <link rel="stylesheet" href="../css/btn.css">
@@ -46,7 +47,7 @@ try {
         <h1>Proximity</h1>
       </div>
       <div class="s-search-section">
-        <img src="../icon/nfc-icon.png" alt="NFC Icon">
+        <img src="../icon/nfc-icon.png" alt="NFC Icon" loading="lazy">
         <div>
           <h3>Live Search</h3>
           <p>Web pass verifier application</p>
@@ -58,7 +59,7 @@ try {
         <h1>Manual Entry</h1>
       </div>
       <div class="s-search-section">
-        <img src="../logo/manual.png" alt="Manual Entry">
+        <img src="../logo/manual.png" alt="Manual Entry" loading="lazy">
         <div>
           <h3>Employee Entry</h3>
           <p>This area is served for manual entry</p>
@@ -97,7 +98,7 @@ try {
         <div class="form-group" style="position: fixed; left: 1%; top: 1%; opacity: 0;">
           <input type="text" id="search_qr" name="qr_code" placeholder="Proximity Code" style="cursor: default;" autocomplete="off">
         </div>
-        <img src="../icon/nfc-icon.png" alt="Proximity" style="position: absolute; left: 24px; top: 10%; width: 100px; height: 100px; filter: invert(1);">
+        <img src="../icon/nfc-icon.png" alt="Proximity" loading="lazy" style="position: absolute; left: 24px; top: 10%; width: 100px; height: 100px; filter: invert(1);">
       </form>
     </div>
 
@@ -109,7 +110,7 @@ try {
       <div class="employee-grid" id="resultsTable">
         <!-- Default blank state -->
         <div class="no-results" id="defaultState">
-          <div class="no-results-icon"><img src="../icon/nfc-icon.png" alt="Proximity Code" style="width: 10%; height: 10%;"></div>
+          <div class="no-results-icon"><img src="../icon/nfc-icon.png" alt="Proximity Code" loading="lazy" style="width: 10%; height: 10%;"></div>
           <h3>Search for Employees</h3>
           <p>Enter a name or proximity code to find employees</p>
         </div>
@@ -260,7 +261,7 @@ try {
       if (!hasSearched) {
         resultsTable.innerHTML = `
       <div class="no-results" id="defaultState">
-        <div class="no-results-icon"><img src="../icon/nfc-icon.png" alt="Proximity Code" style="width: 10%; height: 10%;"></div>
+        <div class="no-results-icon"><img src="../icon/nfc-icon.png" alt="Proximity Code" loading="lazy" style="width: 10%; height: 10%;"></div>
         <h3>Search for Employees</h3>
         <p>Enter a name or proximity code to find employees</p>
       </div>
@@ -291,7 +292,7 @@ try {
         // Handle employee image display
         let avatarContent;
         if (employee.image && employee.image.trim() !== '') {
-          avatarContent = `<img src="../../uploads/user_${currentUserId}/${employee.image}" alt="${employee.fullname}" class="employee-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          avatarContent = `<img src="../../uploads/user/${employee.image}" alt="${employee.fullname}" class="employee-image" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                       <div class="avatar-fallback" style="display:none;">${getInitials(employee.fullname)}</div>`;
         } else {
           avatarContent = `<div class="avatar-fallback">${getInitials(employee.fullname)}</div>`;

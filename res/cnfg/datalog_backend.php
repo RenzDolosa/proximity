@@ -1,11 +1,12 @@
 <?php
 // datalog_backend.php
-// PURPOSE: Read-only view of employee_access_log (written by qr_search_backend.php).
-// employee_access_log is populated by qr_search_backend.php whenever a QR scan occurs.
-// check_in_out is the IN/OUT toggle source of truth (also written by qr_search_backend.php).
-// This file never writes to employees — that is manpower_backend.php's job.
 
 require_once 'config.php';
+
+if (isset($_GET['serve_file'])) {
+  header('Cache-Control: public, max-age=3600');
+  header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 3600) . ' GMT');
+}
 
 class Database
 {
@@ -271,25 +272,25 @@ class AccessLogManager
     $deleted = $stmt->rowCount();
 
     if ($deleted > 0 && (!empty($employeeIds) || !empty($qrCodes))) {
-    $conditions = [];
-    $params     = [];
+      $conditions = [];
+      $params     = [];
 
-    if (!empty($employeeIds)) {
-      $ep = implode(',', array_fill(0, count($employeeIds), '?'));
-      $conditions[] = "employee_id IN ({$ep})";
-      $params = array_merge($params, $employeeIds);
-    }
-    if (!empty($qrCodes)) {
-      $qp = implode(',', array_fill(0, count($qrCodes), '?'));
-      $conditions[] = "qr_code IN ({$qp})";
-      $params = array_merge($params, $qrCodes);
-    }
+      if (!empty($employeeIds)) {
+        $ep = implode(',', array_fill(0, count($employeeIds), '?'));
+        $conditions[] = "employee_id IN ({$ep})";
+        $params = array_merge($params, $employeeIds);
+      }
+      if (!empty($qrCodes)) {
+        $qp = implode(',', array_fill(0, count($qrCodes), '?'));
+        $conditions[] = "qr_code IN ({$qp})";
+        $params = array_merge($params, $qrCodes);
+      }
 
-    $checkStmt = $this->conn->prepare(
-      "DELETE FROM {$this->checkTable} WHERE " . implode(' OR ', $conditions)
-    );
-    $checkStmt->execute($params);
-  }
+      $checkStmt = $this->conn->prepare(
+        "DELETE FROM {$this->checkTable} WHERE " . implode(' OR ', $conditions)
+      );
+      $checkStmt->execute($params);
+    }
 
     return $deleted;
   }

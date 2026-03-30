@@ -4,6 +4,7 @@
 let currentAction = "add";
 let employees = [];
 let employeeDataCache = null; // 🆕 Cache employee data from manpower_backend
+let qrImageMapCache = null; // 🆕 Cache QR code to image mapping
 
 // Update variables
 let autoUpdateInterval = null;
@@ -343,6 +344,7 @@ async function loadEmployeesAuto(filters = {}) {
         employees = data.data;
         // 🆕 Clear cache to fetch fresh manpower data
         employeeDataCache = null;
+        qrImageMapCache = null;
         await renderEmployeeTable();
         showAutoUpdateNotification();
         console.log(
@@ -560,9 +562,10 @@ async function getManpowerEmployeeData() {
 
 // 🆕 Build a map of QR codes to employee images and details
 async function buildQRToImageMap() {
+  if (qrImageMapCache) return qrImageMapCache; // Return cached map
+
   const manpowerEmployees = await getManpowerEmployeeData();
   const qrImageMap = {};
-
   manpowerEmployees.forEach((emp) => {
     if (emp.qr_code) {
       qrImageMap[emp.qr_code.trim().toLowerCase()] = {
@@ -576,7 +579,7 @@ async function buildQRToImageMap() {
       };
     }
   });
-
+  qrImageMapCache = qrImageMap; // Cache it
   return qrImageMap;
 }
 
@@ -635,8 +638,8 @@ async function loadEmployeeData(employeeId) {
   }
 }
 
-async function renderEmployeeError(message = 'Failed to load employee data.') {
-  const tbody = document.getElementById('employeeTableBody');
+async function renderEmployeeError(message = "Failed to load employee data.") {
+  const tbody = document.getElementById("employeeTableBody");
   const paginationDiv = document.getElementById("pagination");
   const noDataDiv = document.getElementById("no-data");
 
@@ -735,9 +738,7 @@ async function renderEmployeeTable() {
         .substring(0, 2)
         .toUpperCase();
 
-      const empId = matchedEmployeeData
-        ? `${matchedEmployeeData.id}`
-        : "";
+      const empId = matchedEmployeeData ? `${matchedEmployeeData.id}` : "";
 
       String.prototype.toProperCase = function () {
         return this.replace(/[^\s,\-]+/g, function (txt) {
@@ -760,16 +761,15 @@ async function renderEmployeeTable() {
                 <small>${employee.violation || "None"}</small></div></td>
               <td class="Col8">${
                 imageUrl
-                  ? `
-                <img src="${imageUrl}" alt="${displayName}" class="employee-image" 
-                     title="${tooltipText}" 
-                     onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
-                  <span style="display:none;" title="${tooltipText}">📷</span>`
+                  ? `<img src="${imageUrl}" alt="${displayName}" class="employee-image" loading="lazy"
+                    title="${tooltipText}" 
+                    onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
+                    <span style="display:none;" title="${tooltipText}">📷</span>`
                   : `<div class="ph-cont" title="${tooltipText}"><div class="employee-ph">${fullnameInitials}</div></div>`
               }
               </td>
               <td class="Col9" onclick="copyQRCode('${escapeHtml(employee.qr_code || "")}')" title="Copy Proximity code" style="cursor: pointer;">
-              <img src="../icon/nfc-icon.png" alt="Copy Proximity code" style="width: 20px; height: 20px;"></td>
+              <img src="../icon/nfc-icon.png" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;"></td>
               <td class="employee-timestamp"><small>${employee.access_timestamp || "N/A"}</small></td>
               <td><div class="check-status-${(employee.check_status || "").toLowerCase()}"><div class="employee-ph">${
                 employee.check_status || "N/A"
@@ -1109,21 +1109,21 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
 
 // 🆕 UPDATE DELETE BUTTON STATE based on active filters
 function updateDeleteButtonState() {
-  const deleteBtn = document.querySelector('.delete-all-btn .btn-danger');
+  const deleteBtn = document.querySelector(".delete-all-btn .btn-danger");
   if (!deleteBtn) return;
 
   const hasFilters = hasActiveFilters();
 
   if (hasFilters) {
     deleteBtn.disabled = false;
-    deleteBtn.style.opacity = '1';
-    deleteBtn.style.cursor = 'pointer';
-    deleteBtn.title = 'Delete filtered employees';
+    deleteBtn.style.opacity = "1";
+    deleteBtn.style.cursor = "pointer";
+    deleteBtn.title = "Delete filtered employees";
   } else {
     deleteBtn.disabled = true;
-    deleteBtn.style.opacity = '0.4';
-    deleteBtn.style.cursor = 'not-allowed';
-    deleteBtn.title = 'Apply filters first to enable deletion';
+    deleteBtn.style.opacity = "0.4";
+    deleteBtn.style.cursor = "not-allowed";
+    deleteBtn.title = "Apply filters first to enable deletion";
   }
 }
 
@@ -1192,7 +1192,7 @@ function updateColor() {
     document.getElementById("search_status"),
     document.getElementById("search_shift"),
     document.getElementById("search_violation"),
-    document.getElementById("search_in-out")
+    document.getElementById("search_in-out"),
   ];
 
   selects.forEach(updateSelectColor);
@@ -1306,6 +1306,7 @@ async function loadEmployees(filters = {}, preservePage = false) {
 
       // 🆕 Clear cache to fetch fresh manpower data
       employeeDataCache = null;
+      qrImageMapCache = null;
 
       await renderEmployeeTable();
       lastUpdateTimestamp = Date.now();
@@ -1318,12 +1319,12 @@ async function loadEmployees(filters = {}, preservePage = false) {
 
       console.log(`Loaded ${data.total || employees.length} employees`);
     } else {
-      await renderEmployeeError('Network error. Please try again.');
+      await renderEmployeeError("Network error. Please try again.");
       showAlert(data.message || "Error loading employees", "error");
     }
   } catch (error) {
     console.error("Error loading employees:", error);
-    await renderEmployeeError('Network error. Please try again.');
+    await renderEmployeeError("Network error. Please try again.");
     showAlert(
       "Failed to load employees. Please check your connection.",
       "error",
@@ -1426,6 +1427,7 @@ async function handleFormSubmit(e) {
       closeModal();
       // 🆕 Clear cache and reload with fresh manpower data
       employeeDataCache = null;
+      qrImageMapCache = null;
       const preservePage = currentAction === "edit";
       const filtersToUse = hasActiveFilters() ? getActiveFilters() : {};
       await loadEmployees(filtersToUse, preservePage);
@@ -1507,6 +1509,7 @@ async function deleteEmployee(employeeId) {
       showAlert(data.message, "success");
       // 🆕 Clear cache and reload
       employeeDataCache = null;
+      qrImageMapCache = null;
       await loadEmployees();
     } else {
       showAlert(data.message, "error");
@@ -1547,6 +1550,7 @@ async function deleteAllEmployees() {
       showAlert(data.message, "success");
       // Clear cache and reload the table (will show empty)
       employeeDataCache = null;
+      qrImageMapCache = null;
       await loadEmployees();
     } else {
       // Show error message from backend

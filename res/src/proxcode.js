@@ -5,6 +5,8 @@ let currentAction = "add";
 let employees = [];
 let currentUserId = null; // Cache current user ID
 let employeeDataCache = null; // Cache employee data from manpower_backend
+let qrImageMapCache = null;
+let systemQRCodesCache = null;
 
 // Pagination variables
 let currentPage = 1;
@@ -81,6 +83,8 @@ async function getManpowerEmployeeData() {
 
 // 🆕 Build a map of QR codes to employee images and details
 async function buildQRToImageMap() {
+  if (qrImageMapCache) return qrImageMapCache;
+
   const manpowerEmployees = await getManpowerEmployeeData();
   const qrImageMap = {};
 
@@ -98,33 +102,17 @@ async function buildQRToImageMap() {
     }
   });
 
+  qrImageMapCache = qrImageMap; // ← Cache it
   return qrImageMap;
 }
 
-// 🆕 Fetch QR codes from system.js employee data
 async function getSystemEmployeeQRCodes() {
-  try {
-    const response = await fetch("../cnfg/manpower_backend.php?action=get", {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data.success && Array.isArray(data.data)) {
-        // Extract QR codes from system.js employees and normalize (trim + lowercase)
-        return data.data
-          .map((emp) => emp.qr_code)
-          .filter((qr) => qr) // Remove empty QR codes
-          .map((qr) => qr.trim().toLowerCase()); // Normalize for comparison
-      }
-    }
-  } catch (error) {
-    console.error("Error fetching system QR codes:", error);
-  }
-
-  return []; // Return empty array on error
+  // Reuse manpower cache
+  const manpowerEmployees = await getManpowerEmployeeData();
+  return manpowerEmployees
+    .map((emp) => emp.qr_code)
+    .filter((qr) => qr)
+    .map((qr) => qr.trim().toLowerCase());
 }
 
 // 🆕 Count and display available QR codes
@@ -377,8 +365,8 @@ async function loadEmployeeData(employeeId) {
   }
 }
 
-async function renderEmployeeError(message = 'Failed to load employee data.') {
-  const tbody = document.getElementById('employeeTableBody');
+async function renderEmployeeError(message = "Failed to load employee data.") {
+  const tbody = document.getElementById("employeeTableBody");
   const paginationDiv = document.getElementById("pagination");
   const noDataDiv = document.getElementById("no-data");
 
@@ -490,26 +478,24 @@ async function renderEmployeeTable() {
         ? `${matchedEmployeeData.fullname}\n${matchedEmployeeData.position}\n${matchedEmployeeData.brand}`
         : "No matched employee";
 
-      const empid = matchedEmployeeData
-        ? `${matchedEmployeeData.id}`
-        : "";
-      
+      const empid = matchedEmployeeData ? `${matchedEmployeeData.id}` : "";
+
       return `
         <tr>
             <td>${startIndex + index + 1}</td>
             <td class="Col8">
               ${
                 imageUrl
-                  ? `<img src="${imageUrl}" alt="${displayName}" class="employee-image" 
-                       title="${tooltipText}" 
-                       onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
+                  ? `<img src="${imageUrl}" alt="${displayName}" class="employee-image" loading="lazy"
+                    title="${tooltipText}" 
+                    onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
                     <span style="display:none;" title="${tooltipText}">📷</span>`
                   : `<div class="ph-cont" title="${tooltipText}"><div class="employee-ph">${displayInitials}</div></div>`
               }
             </td>
             <td><strong>${empid}</strong></td>
             <td class="Col9" onclick="copyQRCode('${escapeHtml(employee.qr_code)}')" title="Copy Proximity code" style="cursor: pointer;">
-              <img src="../icon/nfc-icon.png" alt="Copy Proximity code" style="width: 20px; height: 20px;">
+              <img src="../icon/nfc-icon.png" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;">
             </td>
             <td><span class="remarks-${displayRemarks.toLowerCase()}">${displayRemarks}</span></td>
             <td><small>${employee.created_at || ""}</small></td>
@@ -866,21 +852,21 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
 
 // 🆕 UPDATE DELETE BUTTON STATE based on active filters
 function updateDeleteButtonState() {
-  const deleteBtn = document.querySelector('.delete-all-btn .btn-danger');
+  const deleteBtn = document.querySelector(".delete-all-btn .btn-danger");
   if (!deleteBtn) return;
 
   const hasFilters = hasActiveFilters();
 
   if (hasFilters) {
     deleteBtn.disabled = false;
-    deleteBtn.style.opacity = '1';
-    deleteBtn.style.cursor = 'pointer';
-    deleteBtn.title = 'Delete filtered employees';
+    deleteBtn.style.opacity = "1";
+    deleteBtn.style.cursor = "pointer";
+    deleteBtn.title = "Delete filtered employees";
   } else {
     deleteBtn.disabled = true;
-    deleteBtn.style.opacity = '0.4';
-    deleteBtn.style.cursor = 'not-allowed';
-    deleteBtn.title = 'Apply filters first to enable deletion';
+    deleteBtn.style.opacity = "0.4";
+    deleteBtn.style.cursor = "not-allowed";
+    deleteBtn.title = "Apply filters first to enable deletion";
   }
 }
 
@@ -948,9 +934,7 @@ function updateSelectColor(select) {
 }
 
 function updateColor() {
-  const selects = [
-    document.getElementById("search_remarks"),
-  ];
+  const selects = [document.getElementById("search_remarks")];
 
   selects.forEach(updateSelectColor);
 }
@@ -962,13 +946,13 @@ async function populateFilter(employeeList) {
   // ✅ Compute live remarks using QR matching (same logic as renderEmployeeTable)
   const systemQRCodes = await getSystemEmployeeQRCodes();
   const normalizedSystemQRCodes = systemQRCodes.map((code) =>
-    String(code).trim().toLowerCase()
+    String(code).trim().toLowerCase(),
   );
 
   const remarksSet = new Set();
   for (const emp of employeeList) {
     const isOccupied = normalizedSystemQRCodes.includes(
-      String(emp.qr_code).trim().toLowerCase()
+      String(emp.qr_code).trim().toLowerCase(),
     );
     remarksSet.add(isOccupied ? "Occupied" : "Available");
   }
@@ -1039,11 +1023,11 @@ async function loadEmployees(filters = {}, preservePage = false) {
       if (remarksFilter) {
         const systemQRCodes = await getSystemEmployeeQRCodes();
         const normalizedSystemQRCodes = systemQRCodes.map((code) =>
-          String(code).trim().toLowerCase()
+          String(code).trim().toLowerCase(),
         );
         employees = employees.filter((emp) => {
           const isOccupied = normalizedSystemQRCodes.includes(
-            String(emp.qr_code).trim().toLowerCase()
+            String(emp.qr_code).trim().toLowerCase(),
           );
           const displayRemarks = isOccupied ? "Occupied" : "Available";
           return displayRemarks.toLowerCase() === remarksFilter.toLowerCase();
@@ -1061,13 +1045,16 @@ async function loadEmployees(filters = {}, preservePage = false) {
         displayFilterStatus();
       }
     } else {
-      await renderEmployeeError('Network error. Please try again.');
+      await renderEmployeeError("Network error. Please try again.");
       showAlert(data.message || "Error loading employees", "error");
     }
   } catch (error) {
     console.error("Error loading employees:", error);
-    await renderEmployeeError('Network error. Please try again.');
-    showAlert("Failed to load employees. Please check your connection.", "error");
+    await renderEmployeeError("Network error. Please try again.");
+    showAlert(
+      "Failed to load employees. Please check your connection.",
+      "error",
+    );
   } finally {
     showLoading(false);
   }

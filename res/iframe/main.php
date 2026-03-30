@@ -45,6 +45,7 @@ try {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($myDatabase ?? 'My Database'); ?> - Portal</title>
+  <link rel="preload" href="../icon/database-icon.png" as="image">
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../css/system.css">
   <!-- <link rel="stylesheet" href="../css/main.css"> -->
@@ -93,7 +94,7 @@ try {
       </div>
 
       <div class="stat-card" onclick="navigateWithLoading('../tb/proximity code.php');">
-        <div class="icon"><img src="../logo/nfc-logo.svg" alt="NFC Icon" style="width: 36px; height: 36px; margin: 8px 0 -12px 0;"></div>
+        <div class="icon"><img src="../logo/nfc-logo.svg" alt="NFC Icon" loading="lazy" style="width: 36px; height: 36px; margin: 8px 0 -12px 0;"></div>
         <h3>Proximity Center</h3>
         <p>Check your proximity code status</p>
       </div>
@@ -109,7 +110,7 @@ try {
       <div class="menu-card" onclick="navigateWithLoading('../tb/table panel.php');">
         <a href="../tb/table panel.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/table panel.php');">Input Employee</a>
         <div class="favi">
-          <img src="../logo/mysql-logo.png" alt="MySql Logo" style="width: 125px; height: 100px;">
+          <img src="../logo/mysql-logo.png" alt="MySql Logo" loading="lazy" style="width: 125px; height: 100px;">
           <div>
             <h3>Employee Manager</h3>
             <p>Manage your employee information</p>
@@ -120,7 +121,7 @@ try {
       <!-- <div class="menu-card" onclick="navigateWithLoading('../tb/datalog.php');">
         <a href="../tb/datalog.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/datalog.php');">Scanned Log</a>
         <div class="favi">
-          <img src="../logo/database.png" alt="Database" style="width: 100px; height: 100px;">
+          <img src="../logo/database.png" alt="Database" loading="lazy" style="width: 100px; height: 100px;">
           <div>
             <h3>Scan History</h3>
             <p>View employee activity</p>
@@ -131,7 +132,7 @@ try {
       <div class="menu-card" onclick="navigateWithLoading('../sec/scan test.php');" disabled>
         <a href="../sec/scan test.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../sec/scan test.php');">Test QR or Proximity Code</a>
         <div class="favi">
-          <img src="../icon/nfc-icon.png" alt="NFC Icon" style="width: 100px; height: 100px;">
+          <img src="../icon/nfc-icon.png" alt="NFC Icon" loading="lazy" style="width: 100px; height: 100px;">
           <div>
             <h3>Test Live Search</h3>
             <p>Web Proximity verifier application</p>
@@ -142,7 +143,7 @@ try {
       <!-- <div class="menu-card" onclick="navigateWithLoading('../tb/table panel.php');" style="background: linear-gradient(to right, rgb(183, 183, 183), rgb(147, 147, 147)); transform: scale(1);">
         <a href="../tb/table panel.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/table panel.php');">Coming Soon</a>
         <div class="favi">
-          <img src="../logo/coming-soon.png" alt="Coming Soon" style="width: 125px; height: 100px;">
+          <img src="../logo/coming-soon.png" alt="Coming Soon" loading="lazy" style="width: 125px; height: 100px;">
           <div>
             <h3>Under Development</h3>
             <p>This area is reserved for future Development</p>

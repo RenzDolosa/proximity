@@ -24,6 +24,11 @@ header('Access-Control-Max-Age: 86400');
 // ── Config (already guards session_start internally) ────────
 require_once 'config.php';
 
+if (isset($_GET['serve_file'])) {
+  header('Cache-Control: public, max-age=3600');
+  header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 3600) . ' GMT');
+}
+
 // ── Discard any stray output before we echo JSON ────────────
 ob_clean();
 

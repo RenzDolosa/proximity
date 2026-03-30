@@ -120,6 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Register</title>
+  <link rel="preload" href="../icon/database-icon.png" as="image">
   <link rel="icon" href="res/icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="res/css/r-l.css">
   <link rel="stylesheet" href="res/css/btn.css">
@@ -139,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <div class="container">
     <div class="header">
-      <div><img src="res/logo/database.png" alt="My Database Logo" class="logo"></div>
+      <div><img src="res/logo/database.png" alt="My Database Logo" class="logo" loading="lazy"></div>
       <h2>Create Your Account</h2>
       <p class="subtitle">Sign up to Proximity Database</p>
     </div>
