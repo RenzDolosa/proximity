@@ -1,5 +1,5 @@
 <?php
-// emp-db.php
+// test.php
 
 require_once 'config.php';
 require_once 'req.php';
@@ -496,7 +496,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $databaseConnected) {
         ❌ Database Connection Error: <?php echo htmlspecialchars($dbError ?? 'Unknown error'); ?>
       </div>
     <?php endif; ?>
-    <div onclick="window.location.href='../iframe/ptl.php';" style="position: fixed;
+    <div onclick="window.history.back()" style="position: fixed;
       top: 0;
       right: 1vmin;
       padding: 1vmin;

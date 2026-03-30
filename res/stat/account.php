@@ -221,7 +221,7 @@ try {
     <section class="welcome-card">
       <h1><i class="fas fa-user"></i> Account Information</h1>
       <div class="breadcrumb">
-        <a href="../iframe/ptl.php"><i class="fas fa-home"></i> Portal</a> / Account Info
+        <a onclick="window.history.back()"><i class="fas fa-home"></i> Portal</a> / Account Info
       </div>
     </section>
 

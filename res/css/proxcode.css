@@ -84,7 +84,9 @@ body {
 }
 
 .controls {
-  position: relative;
+  position: sticky;
+  top: 0;           /* sticks to very top when no header; adjust if a header exists */
+  z-index: 200;
   background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%);
   padding: 1.5rem;
   border-radius: 10px;

@@ -79,7 +79,7 @@ try {
 <body>
   <main>
     <!-- Security indicator -->
-    <div class="security-badge"><i class="fas fa-shield-alt"></i> Secured</div>
+    <!-- <div class="security-badge"><i class="fas fa-shield-alt"></i> Secured</div> -->
 
     <div class="side-bar" style="top: 64px;">
       <div onclick="window.location.href='proximity.php';" class="side-btn">
@@ -108,24 +108,43 @@ try {
       </div>
       <div class="user-info">
         <span>Welcome, <?= htmlspecialchars($username ?? 'User'); ?>
-        <?php if ($databaseConnected): ?>
-          <span style="color: #28a745;"></span>
-        <?php else: ?>
-          <span style="color: #dc3545;"><i class="fas fa-exclamation"></i></span>
-          <?php if (!empty($missingTables)): ?>
+          <?php if ($databaseConnected): ?>
+            <span style="color: #28a745;"></span>
+          <?php else: ?>
+            <span style="color: #dc3545;"><i class="fas fa-exclamation"></i></span>
+            <?php if (!empty($missingTables)): ?>
+            <?php endif; ?>
           <?php endif; ?>
-        <?php endif; ?>
-        <a href="?logout=1" class="logout-btn">Logout ▼</a>
+          <a href="?logout=1" class="logout-btn">Logout ▼</a>
       </div>
     </header>
 
     <portal class="main-content">
-      <iframe src="res/iframe/ptl.php" class="frames" frameborder="0" allowfullscreen="allowfullscreen"></iframe>
+      <iframe src="res/iframe/main.php" class="frames" frameborder="0" allowfullscreen="allowfullscreen"></iframe>
     </portal>
   </main>
 
   <script src="res/src/req.js"></script>
   <script src="res/src/ver.js"></script>
+  <script src="res/src/req.js"></script>
+  <script src="res/src/ver.js"></script>
+  <script>
+    // Guard: if the main iframe navigates to login, redirect the whole top window
+    const mainFrame = document.querySelector('.frames');
+    if (mainFrame) {
+      mainFrame.addEventListener('load', function() {
+        try {
+          const frameUrl = this.contentWindow.location.href;
+          if (frameUrl.includes('index.php') || frameUrl.includes('login')) {
+            window.top.location.href = frameUrl;
+          }
+        } catch (e) {
+          // Cross-origin means a real redirect happened — go to login
+          window.top.location.href = 'index.php';
+        }
+      });
+    }
+  </script>
 </body>
 
 </html>

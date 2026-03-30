@@ -1244,9 +1244,3 @@ function showLoading(show) {
     body.classList.remove("loading");
   }
 }
-
-// Close modal when clicking outside
-window.onclick = function (event) {
-  const modal = document.getElementById("employeeModal");
-  if (event.target === modal) closeModal();
-};

@@ -1,5 +1,5 @@
 <?php
-// portal.php - Modified security section to use current user's password
+// proximity.php
 
 require_once 'res/cnfg/config.php';
 require_once 'res/cnfg/db.php';
@@ -24,7 +24,7 @@ require_once 'res/cnfg/db.php';
 <body>
 
   <main class="main-content">
-    <iframe src="res/sec/qr.php" class="sec-frames" frameborder="0" allowfullscreen="allowfullscreen"></iframe>
+    <iframe src="res/sec/qr proximity.php" class="sec-frames" frameborder="0" allowfullscreen="allowfullscreen"></iframe>
   </main>
 
   <div id="portalButton"></div>

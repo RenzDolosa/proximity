@@ -1,5 +1,5 @@
 <?php
-// ptl.php - Modified security section to use current user's password
+// main.php - Modified security section to use current user's password
 
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
@@ -47,6 +47,7 @@ try {
   <title><?= htmlspecialchars($myDatabase ?? 'My Database'); ?> - Portal</title>
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../css/system.css">
+  <!-- <link rel="stylesheet" href="../css/main.css"> -->
   <link rel="stylesheet" href="../css/ptl.css">
   <link rel="stylesheet" href="../css/btn.css">
   <link rel="stylesheet" href="../css/loading.css">
@@ -66,7 +67,7 @@ try {
   <main class="db-cont">
     <section class="welcome-card" style="height: 160px;">
       <h1><i class="fas fa-server"></i> Management Panel</h1>
-      <p>Welcome to your portal, <?= htmlspecialchars($username ?? 'User'); ?> 
+      <p>Welcome to your portal, <?= htmlspecialchars($username ?? 'User'); ?>
         <?php if ($databaseConnected): ?>
           <span style="color: #28a745;">You're successfully logged in.</span>
         <?php else: ?>
@@ -79,25 +80,25 @@ try {
     </section>
 
     <section class="stats-grid">
-      <div class="stat-card" onclick="window.location.href='../stat/acct.php';">
+      <div class="stat-card" onclick="window.location.href='../stat/account.php';">
         <div class="icon">👤</div>
         <h3>Account Info</h3>
         <p>Manage your account settings and personal information</p>
       </div>
 
-      <div class="stat-card" onclick="window.location.href='../stat/emp-db.php';">
+      <div class="stat-card" onclick="window.location.href='../stat/employee dashboard.php';">
         <div class="icon">📊</div>
         <h3>Insights</h3>
         <p>View your activity statistics and insights</p>
       </div>
 
-      <div class="stat-card" onclick="navigateWithLoading('../stat/proximitycode.php');">
+      <div class="stat-card" onclick="navigateWithLoading('../tb/proximity code.php');">
         <div class="icon"><img src="../logo/nfc-logo.svg" alt="NFC Icon" style="width: 36px; height: 36px; margin: 8px 0 -12px 0;"></div>
         <h3>Proximity Center</h3>
         <p>Check your proximity code status</p>
       </div>
 
-      <div class="stat-card" onclick="window.location.href='../stat/admin-panel.php';">
+      <div class="stat-card" onclick="window.location.href='../stat/admin panel.php';">
         <div class="icon">⚙️</div>
         <h3>Settings</h3>
         <p>Configure your application preferences</p>
@@ -105,8 +106,8 @@ try {
     </section>
 
     <section class="menu-grid">
-      <div class="menu-card" onclick="navigateWithLoading('../tb/system.php');">
-        <a href="../tb/system.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/system.php');">Input Employee</a>
+      <div class="menu-card" onclick="navigateWithLoading('../tb/table panel.php');">
+        <a href="../tb/table panel.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/table panel.php');">Input Employee</a>
         <div class="favi">
           <img src="../logo/mysql-logo.png" alt="MySql Logo" style="width: 125px; height: 100px;">
           <div>
@@ -116,8 +117,8 @@ try {
         </div>
       </div>
 
-      <div class="menu-card" onclick="navigateWithLoading('../tb/dtl.php');">
-        <a href="../tb/dtl.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/dtl.php');">Scanned Log</a>
+      <!-- <div class="menu-card" onclick="navigateWithLoading('../tb/datalog.php');">
+        <a href="../tb/datalog.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/datalog.php');">Scanned Log</a>
         <div class="favi">
           <img src="../logo/database.png" alt="Database" style="width: 100px; height: 100px;">
           <div>
@@ -125,10 +126,10 @@ try {
             <p>View employee activity</p>
           </div>
         </div>
-      </div>
+      </div> -->
 
-      <div class="menu-card" onclick="navigateWithLoading('../sec/scanTest.php');">
-        <a href="../sec/scanTest.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../sec/scanTest.php');">Test QR or Proximity Code</a>
+      <div class="menu-card" onclick="navigateWithLoading('../sec/scan test.php');" disabled>
+        <a href="../sec/scan test.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../sec/scan test.php');">Test QR or Proximity Code</a>
         <div class="favi">
           <img src="../icon/nfc-icon.png" alt="NFC Icon" style="width: 100px; height: 100px;">
           <div>
@@ -138,19 +139,8 @@ try {
         </div>
       </div>
 
-      <div class="menu-card" onclick="navigateWithLoading('../udev/m-i v2.php');" style="background: linear-gradient(to right, rgb(183, 183, 183), rgb(147, 147, 147)); transform: scale(1);">
-        <a href="../udev/m-i v2.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../udev/m-i v2.php');">Coming Soon</a>
-        <div class="favi">
-          <img src="../logo/coming-soon.png" alt="Coming Soon" style="width: 125px; height: 100px;">
-          <div>
-            <h3>Under Development</h3>
-            <p>This area is reserved for future Development</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- <div class="menu-card" onclick="navigateWithLoading('../stat/system-log.php');" style="background: linear-gradient(to right, rgb(183, 183, 183), rgb(147, 147, 147)); transform: scale(1);">
-        <a href="../stat/system-log.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../stat/system-log.php');">Coming Soon</a>
+      <!-- <div class="menu-card" onclick="navigateWithLoading('../tb/table panel.php');" style="background: linear-gradient(to right, rgb(183, 183, 183), rgb(147, 147, 147)); transform: scale(1);">
+        <a href="../tb/table panel.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/table panel.php');">Coming Soon</a>
         <div class="favi">
           <img src="../logo/coming-soon.png" alt="Coming Soon" style="width: 125px; height: 100px;">
           <div>
@@ -164,6 +154,41 @@ try {
 
   <script src="../src/req.js"></script>
   <script src="../src/loading.js"></script>
+  <script>
+    const srcs = {
+      employees: 'system.php',
+      scanned: 'datalog.php',
+      proximity: 'proximity code.php',
+    };
+
+    function switchTab(name, btn) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-frame').forEach(f => f.classList.remove('active'));
+      btn.classList.add('active');
+
+      const frame = document.getElementById('frame-' + name);
+      if (!frame.src || frame.src === window.location.href) {
+        frame.src = srcs[name];
+      }
+      frame.classList.add('active');
+    }
+
+    // Guard: catch session expiry inside nested iframes
+    function attachFrameGuard(frame) {
+      frame.addEventListener('load', function() {
+        try {
+          const frameUrl = this.contentWindow.location.href;
+          if (frameUrl.includes('index.php') || frameUrl.includes('login')) {
+            window.top.location.href = frameUrl;
+          }
+        } catch (e) {
+          window.top.location.href = '../../index.php';
+        }
+      });
+    }
+
+    document.querySelectorAll('.tab-frame').forEach(attachFrameGuard);
+  </script>
 </body>
 
 </html>

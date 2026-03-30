@@ -50,7 +50,7 @@ if ($databaseConnected) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Proximity Code</title>
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
-  <link rel="stylesheet" href="../css/proxcode.css">
+  <link rel="stylesheet" href="../css/system.css">
   <link rel="stylesheet" href="../css/ptl.css">
   <link rel="stylesheet" href="../css/modal.css">
   <link rel="stylesheet" href="../css/btn.css">
@@ -69,10 +69,6 @@ if ($databaseConnected) {
       <div class="loading-text">Loading...</div>
       <div class="loading-subtext">Please wait while we prepare your content</div>
     </div>
-  </div>
-
-  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.history.back();">
-    <i class="fas fa-times"></i>
   </div>
 
   <div class="container">
@@ -314,7 +310,7 @@ if ($databaseConnected) {
   <script src="../src/eas.js"></script>
   <script src="../src/opt-btn.js"></script>
   <script src="../src/loading.js"></script>
-  <script src="../src/req.js"></script>
+  <!-- <script src="../src/req.js"></script> -->
 </body>
 
 </html>

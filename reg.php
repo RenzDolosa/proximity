@@ -236,7 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     document.addEventListener("keydown", function(e) {
       if (e.key === "Escape" && closeBtn) {
-        window.location = "res/iframe/ptl.php";
+        window.location = "res/iframe/main.php";
       }
     });
 

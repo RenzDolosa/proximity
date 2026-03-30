@@ -1,8 +1,8 @@
 <?php
-// scanTest.php
+// qr proximity.php
 
 require_once '../cnfg/config.php';
-require_once '../cnfg/manpower_backend.php';
+
 if (!isset($_SESSION['user_id'])) {
   header('Location: ../../index.php');
   exit();
@@ -22,25 +22,50 @@ $email = $_SESSION['email'] ?? '';
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?php echo htmlspecialchars($myDatabase); ?> - Test QR Code</title>
-  <link rel="icon" href="../icon/scanTest.png" type="image/png">
+  <title><?php echo htmlspecialchars($myDatabase); ?> - Proximity Pass</title>
+  <link rel="icon" href="../logo/nfc-logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../css/qp.css">
-  <link rel="stylesheet" href="../css/btn.css">
-  <link rel="stylesheet" href="../css/loading.css">
+  <link rel="stylesheet" href="../css/sbar.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
 <body>
 
-  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.history.back()">
-    <i class="fas fa-times"></i>
+  <div class="side-bar" style="top: 0;">
+    <div onclick="window.location.href='qr proximity.php';" class="side-btn">
+      <div class="s-header">
+        <h1>Proximity</h1>
+      </div>
+      <div class="s-search-section">
+        <img src="../icon/nfc-icon.png" alt="NFC Icon">
+        <div>
+          <h3>Live Search</h3>
+          <p>Web pass verifier application</p>
+        </div>
+      </div>
+    </div>
+    <div onclick="window.location.href='mamual input.php';" class="side-btn">
+      <div class="s-header">
+        <h1>Manual Entry</h1>
+      </div>
+      <div class="s-search-section">
+        <img src="../logo/manual.png" alt="Manual Entry">
+        <div>
+          <h3>Employee Entry</h3>
+          <p>This area is served for manual entry</p>
+        </div>
+      </div>
+    </div>
+    <version_compare style="z-index: 1000;">
+      <p id="version"></p>
+    </version_compare>
   </div>
 
   <div class="container">
-    <h2>Test Proximity Code Live Search</h2>
+    <h2>Live Search</h2>
 
     <div class="search-container">
-      <input type="text" id="searchInput" autocomplete="off" autofocus>
+      <input type="text" id="searchInput" autocomplete="off" autofocus >
     </div>
 
     <div id="resultsTable" style="display: none;">
@@ -54,10 +79,9 @@ $email = $_SESSION['email'] ?? '';
   <audio id="warningSound" src="../sounds/ohh-ow.mp3" preload="auto"></audio>
   <audio id="inactiveSound" src="../sounds/inactive.mp3" preload="auto"></audio>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
-  <script src="../src/st.js"></script>
-  <script src="../src/btn.js"></script>
+  <script src="../src/qp.js"></script>
   <script src="../src/req.js"></script>
-  <script src="../src/loading.js"></script>
+  <script src="../src/ver.js"></script>
 </body>
 
 </html>

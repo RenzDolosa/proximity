@@ -206,3 +206,10 @@ function showLoadingForCustomOperation(operationName, duration = 2000) {
     hideLoadingForOperation();
   }, duration);
 }
+
+if (window.self !== window.top) {
+  document.addEventListener('DOMContentLoaded', function() {
+    const nav = document.querySelector('nav, header, .navbar');
+    if (nav) nav.style.display = 'none';
+  });
+}

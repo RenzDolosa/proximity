@@ -1,5 +1,5 @@
 <?php
-// emp-db.php
+// employee dashboard.php
 
 require_once '../cnfg/config.php';
 require_once '../cnfg/manpower_backend.php';
@@ -153,7 +153,7 @@ if ($databaseConnected && $employeeManager) {
     <section class="welcome-card">
       <h1><i class="fas fa-tachometer-alt"></i> Employee Data Insights</h1>
       <div class="breadcrumb">
-        <a href="../iframe/ptl.php"><i class="fas fa-home"></i> Portal</a> / Insights
+        <a onclick="window.history.back()"><i class="fas fa-home"></i> Portal</a> / Insights
       </div>
     </section>
 

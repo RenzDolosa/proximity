@@ -1,5 +1,5 @@
 <?php
-// m-i v2.php
+// manual input.php
 
 require_once '../cnfg/config.php';
 require_once '../cnfg/manpower_backend.php';
@@ -53,7 +53,7 @@ try {
         </div>
       </div>
     </div>
-    <div onclick="window.location.href='m-i.php';" class="side-btn">
+    <div onclick="window.location.href='mamual input.php';" class="side-btn">
       <div class="s-header">
         <h1>Manual Entry</h1>
       </div>

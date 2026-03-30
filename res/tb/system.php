@@ -1,5 +1,5 @@
 <?php
-// system.php - ENHANCED WITH CAMERA SUPPORT
+// system.php
 
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
@@ -44,6 +44,7 @@ if ($databaseConnected) {
   <title><?php echo htmlspecialchars($myDatabase); ?> - Manage</title>
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../css/system.css">
+  <!-- <link rel="stylesheet" href="../css/system-responsive.css"> -->
   <link rel="stylesheet" href="../css/system-camera.css">
   <link rel="stylesheet" href="../css/ptl.css">
   <link rel="stylesheet" href="../css/modal.css">
@@ -63,10 +64,6 @@ if ($databaseConnected) {
       <div class="loading-text">Loading...</div>
       <div class="loading-subtext">Please wait while we prepare your content</div>
     </div>
-  </div>
-
-  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.history.back();">
-    <i class="fas fa-times"></i>
   </div>
 
   <div class="container">

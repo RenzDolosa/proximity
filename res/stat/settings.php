@@ -1,5 +1,5 @@
 <?php
-// sett/settings.php
+// settings.php
 
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
@@ -430,7 +430,7 @@ function audioCard(string $label, string $inputName, string $dbKey, array $curre
     <section class="welcome-card">
       <h1><i class="fas fa-cogs"></i> Settings &amp; Configuration</h1>
       <div class="breadcrumb">
-        <a href="../iframe/ptl.php"><i class="fas fa-home"></i> Portal</a> / Settings
+        <a onclick="window.history.back()"><i class="fas fa-home"></i> Portal</a> / Settings
       </div>
     </section>
 

@@ -1,15 +1,13 @@
 <?php
-// admin_panel.php — Users Management + System Logs (tabbed)
+// admin-panel.php
 require_once '../cnfg/config.php';
+require_once '../cnfg/db.php';
 
 // ════════════════════════════════════════════════════════════════════════════
 // AJAX HANDLERS
 // ════════════════════════════════════════════════════════════════════════════
 if (isset($_GET['action'])) {
   header('Content-Type: application/json');
-
-  $group = $_SESSION['user_group'] ?? '';
-  $isAdminSession = ($group === 'Administrator');
 
   try {
     $pdo = getMainDBConnection();
@@ -290,15 +288,6 @@ if (isset($_GET['action'])) {
   }
   exit;
 }
-
-// ── Auth guard ────────────────────────────────────────────────────────────────
-if (!isLoggedIn()) {
-  header('Location: ../../portal.php');
-  exit;
-}
-
-$isAdmin       = ($_SESSION['user_group'] ?? '') === 'Administrator';
-$sessionUserId = (int)($_SESSION['user_id'] ?? 0);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1143,7 +1132,7 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
           </thead>
           <tbody id="userTableBody">
             <tr class="empty-row">
-              <td colspan="9"><span class="spinner"></span> Loading users…</td>
+              <td colspan="10"><span class="spinner"></span> Loading users…</td>
             </tr>
           </tbody>
         </table>
@@ -1155,8 +1144,66 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
   <!-- ══════════════════════════════════════════
        TAB: USERS GROUP
   ══════════════════════════════════════════ -->
+  <div class="tab-panel" id="panelGroup">
 
+    <!-- Toolbar -->
+    <div class="toolbar" style="border-radius:0 8px 0 0;">
+      <button class="btn btn-search" onclick="loadGroups()">
+        <i class="fas fa-search"></i> Search
+      </button>
+      <button class="btn btn-clear" onclick="clearGroupsSearch()">
+        <i class="fas fa-times"></i> Clear
+      </button>
+      <input id="groupSearchInput" type="text" placeholder="Usergroup"
+        oninput="debounceGroups()" style="width:220px;" autocomplete="off"
+        readonly onfocus="this.removeAttribute('readonly')">
+      <?php if ($isAdmin): ?>
+        <button class="btn btn-add" onclick="openAddGroup()">
+          <i class="fas fa-user-plus"></i> Add Group
+        </button>
+      <?php endif; ?>
+    </div>
 
+    <!-- Panel -->
+    <div class="panel">
+      <div class="stats-header">
+        <span class="stats-title">User Groups</span>
+        <span class="stat-item"><i class="fas fa-list"></i> Total <strong id="gStatTotal">—</strong></span>
+        <span class="refresh-indicator">
+          <?php if ($isAdmin): ?>
+            <span class="pulse-dot" id="uPulseDot"></span>
+            <span>Live</span>
+          <?php else: ?>
+            <span class="pulse-dot2" id="uPulseDot"></span>
+            <span>✗ Disconnected</span>
+          <?php endif; ?>
+        </span>
+      </div>
+      <div class="countdown-bar-wrap">
+        <div class="countdown-bar" id="gCountdownBar"></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>SN</th>
+              <th>Groupname</th>
+              <th>Bound user</th>
+              <th>Created At</th>
+              <th>Last update</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="groupTableBody">
+            <tr class="empty-row">
+              <td colspan="10"><span class="spinner"></span> Loading groups…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination" id="gPaginationWrap"></div>
+    </div>
+  </div><!-- /panelGroup -->
 
   <!-- ══════════════════════════════════════════
        TAB: SYSTEM LOGS
@@ -1221,7 +1268,7 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
           </thead>
           <tbody id="logTableBody">
             <tr class="empty-row">
-              <td colspan="8"><span class="spinner"></span> Loading logs…</td>
+              <td colspan="10"><span class="spinner"></span> Loading logs…</td>
             </tr>
           </tbody>
         </table>
@@ -1382,11 +1429,11 @@ $sessionUserId = (int)($_SESSION['user_id'] ?? 0);
 
     function switchTab(tab) {
       activeTab = tab;
-      ['users', 'logs'].forEach(t => {
+      ['users', 'group', 'logs'].forEach(t => {
         document.getElementById('tabBtn' + cap(t)).classList.toggle('active', t === tab);
         document.getElementById('panel' + cap(t)).classList.toggle('active', t === tab);
       });
-      
+
       if (tab === 'logs' && allLogs.length === 0) {
         loadLogActionOptions();
         loadLogs().then(startLogsCountdown);
