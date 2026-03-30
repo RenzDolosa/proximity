@@ -150,9 +150,8 @@ if ($databaseConnected) {
           <div class="form-group">
             <input type="text" id="search_date" name="access_timestamp" placeholder="Date">
           </div>
-          <div class="form-group" style="position: fixed; left: 1%; top: 1%; opacity: 0;">
-            <label for="search_qr">Proximity Code</label>
-            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Search by proximity code..." style="cursor: default;" autocomplete="off">
+          <div class="form-group" style="position: fixed; left: 0; top: 0; opacity: 0;">
+            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; cursor: default;" autocomplete="off">
           </div>
         </div>
         <img src="../icon/nfc-icon.png" alt="Proximity" loading="lazy" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
