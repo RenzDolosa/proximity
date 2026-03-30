@@ -1,133 +1,98 @@
-// system-camera-enhanced.js - Camera Capture with Multi-Camera Support
-// FEATURES:
-// - Discovers all available cameras on the device
-// - Allows users to switch between cameras during active session
-// - Clean UI with camera selector dropdown
-// - Proper error handling and status messages
+// system-camera.js
+
+"use strict";
 
 let cameraStream = null;
-let capturedCanvas = null;
-let capturedImageData = null;
+let capturedImageData = null; // final (possibly cropped) JPEG data-URL
+let rawCaptureDataUrl = null; // pre-crop data-URL kept for retake
 let availableCameras = [];
 let currentCameraId = null;
 let currentCameraLabel = null;
+let cropperInstance = null;
 
-// ============================================
-// STEP 1: DISCOVER AVAILABLE CAMERAS
-// ============================================
-
-/**
- * Enumerate and store all available video input devices
- * This function discovers what cameras are connected to the device
- */
+// ─────────────────────────────────────────────────────────────
+// 1. DISCOVER CAMERAS
+// ─────────────────────────────────────────────────────────────
 async function discoverAvailableCameras() {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    availableCameras = [];
-
-    // Filter only video input devices (cameras)
-    devices.forEach((device) => {
-      if (device.kind === "videoinput") {
-        availableCameras.push({
-          id: device.deviceId,
-          label: device.label || `Camera ${availableCameras.length + 1}`,
-        });
-      }
-    });
-
-    console.log("Available cameras:", availableCameras);
+    availableCameras = devices
+      .filter((d) => d.kind === "videoinput")
+      .map((d, i) => ({
+        id: d.deviceId,
+        label: d.label || `Camera ${i + 1}`,
+      }));
     return availableCameras;
-  } catch (error) {
-    console.error("Error discovering cameras:", error);
+  } catch (err) {
+    console.error("Camera discovery error:", err);
     return [];
   }
 }
 
-/**
- * Populate the camera selector dropdown with available cameras
- */
 function populateCameraSelector() {
-  const cameraSelect = document.getElementById("cameraSelector");
-  if (!cameraSelect) return;
+  const sel = document.getElementById("cameraSelector");
+  if (!sel) return;
 
-  cameraSelect.innerHTML = "";
+  sel.innerHTML = "";
 
-  if (availableCameras.length === 0) {
-    cameraSelect.innerHTML =
-      '<option value="">No cameras found</option>';
-    cameraSelect.disabled = true;
+  if (!availableCameras.length) {
+    sel.innerHTML = '<option value="">No cameras found</option>';
+    sel.disabled = true;
     return;
   }
 
-  availableCameras.forEach((camera) => {
-    const option = document.createElement("option");
-    option.value = camera.id;
-    option.textContent = camera.label;
-    cameraSelect.appendChild(option);
+  availableCameras.forEach((cam) => {
+    const opt = document.createElement("option");
+    opt.value = cam.id;
+    opt.textContent = cam.label;
+    sel.appendChild(opt);
   });
 
-  // Set the first camera as default
-  if (availableCameras.length > 0) {
-    cameraSelect.value = availableCameras[0].id;
-    currentCameraId = availableCameras[0].id;
-    currentCameraLabel = availableCameras[0].label;
-    cameraSelect.disabled = availableCameras.length <= 1;
-  }
+  sel.value = availableCameras[0].id;
+  currentCameraId = availableCameras[0].id;
+  currentCameraLabel = availableCameras[0].label;
+  sel.disabled = availableCameras.length <= 1;
 }
 
-// ============================================
-// STEP 2: REQUEST PERMISSION AND INITIALIZE CAMERA
-// ============================================
-
-/**
- * Open camera modal and initialize camera discovery
- */
+// ─────────────────────────────────────────────────────────────
+// 2. OPEN / CLOSE MODAL
+// ─────────────────────────────────────────────────────────────
 function openCameraModal() {
-  const cameraModal = document.getElementById("cameraModal");
-  if (!cameraModal) return;
-
-  cameraModal.style.display = "block";
+  const modal = document.getElementById("cameraModal");
+  if (!modal) return;
+  modal.style.display = "flex"; // flex → proper centering
   initializeCamera();
 }
 
-/**
- * Close camera modal and clean up
- */
 function closeCameraModal() {
-  const cameraModal = document.getElementById("cameraModal");
-  if (!cameraModal) return;
-
-  cameraModal.style.display = "none";
+  const modal = document.getElementById("cameraModal");
+  if (!modal) return;
+  modal.style.display = "none";
   stopCamera();
+  destroyCropper();
   resetCameraUI();
 }
 
-/**
- * Initialize camera access with selected camera or default
- */
+// ─────────────────────────────────────────────────────────────
+// 3. INITIALIZE CAMERA
+// ─────────────────────────────────────────────────────────────
 async function initializeCamera() {
-  const videoElement = document.getElementById("cameraStream");
-  const cameraStatus = document.getElementById("cameraStatus");
+  const video = document.getElementById("cameraStream");
   const captureBtn = document.getElementById("captureBtn");
+  if (!video) return;
 
-  if (!videoElement || !cameraStatus) return;
+  updateCameraStatus("Requesting camera access…", "info");
 
   try {
-    // First, discover available cameras
     await discoverAvailableCameras();
     populateCameraSelector();
 
-    // If no cameras found, show error
-    if (availableCameras.length === 0) {
-      handleCameraError(
-        { name: "NotFoundError" },
-        cameraStatus
-      );
-      captureBtn.disabled = true;
+    if (!availableCameras.length) {
+      handleCameraError({ name: "NotFoundError" });
+      if (captureBtn) captureBtn.disabled = true;
       return;
     }
 
-    // Request camera access with the selected or default camera
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
         deviceId: currentCameraId ? { exact: currentCameraId } : undefined,
@@ -138,58 +103,47 @@ async function initializeCamera() {
     });
 
     cameraStream = stream;
-    videoElement.srcObject = stream;
+    video.srcObject = stream;
 
-    videoElement.onloadedmetadata = () => {
-      videoElement.play();
+    video.onloadedmetadata = () => {
+      video.play();
       updateCameraStatus(
-        `✓ ${currentCameraLabel} ready. Tap Capture to take photo.`,
-        "success"
+        `✓ ${currentCameraLabel} ready — tap Capture.`,
+        "success",
       );
-      captureBtn.disabled = false;
+      if (captureBtn) captureBtn.disabled = false;
     };
-  } catch (error) {
-    console.error("Camera error:", error);
-    handleCameraError(error, cameraStatus);
-    captureBtn.disabled = true;
+  } catch (err) {
+    console.error("Camera init error:", err);
+    handleCameraError(err);
+    if (captureBtn) captureBtn.disabled = true;
   }
 }
 
-// ============================================
-// STEP 3: SWITCH CAMERAS DURING SESSION
-// ============================================
-
-/**
- * Switch to a different camera during an active session
- * This stops the current camera stream and starts a new one
- */
+// ─────────────────────────────────────────────────────────────
+// 4. SWITCH CAMERA
+// ─────────────────────────────────────────────────────────────
 async function switchCamera() {
-  const cameraSelect = document.getElementById("cameraSelector");
-  const cameraStatus = document.getElementById("cameraStatus");
-  const videoElement = document.getElementById("cameraStream");
+  const sel = document.getElementById("cameraSelector");
+  const video = document.getElementById("cameraStream");
+  if (!sel || !video) return;
 
-  if (!cameraSelect || !videoElement) return;
+  const id = sel.value;
+  if (!id || id === currentCameraId) return;
 
-  const selectedCameraId = cameraSelect.value;
-  if (!selectedCameraId || selectedCameraId === currentCameraId) return;
+  updateCameraStatus("Switching camera…", "info");
+  stopCamera();
+  destroyCropper();
+  resetCaptureUI();
+
+  currentCameraId = id;
+  const cam = availableCameras.find((c) => c.id === id);
+  currentCameraLabel = cam ? cam.label : "Camera";
 
   try {
-    updateCameraStatus("Switching camera...", "info");
-
-    // Stop the current stream
-    stopCamera();
-
-    // Update current camera info
-    currentCameraId = selectedCameraId;
-    const selectedCamera = availableCameras.find(
-      (cam) => cam.id === selectedCameraId
-    );
-    currentCameraLabel = selectedCamera ? selectedCamera.label : "Camera";
-
-    // Request new camera stream
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
-        deviceId: { exact: selectedCameraId },
+        deviceId: { exact: id },
         width: { ideal: 1280 },
         height: { ideal: 720 },
       },
@@ -197,145 +151,218 @@ async function switchCamera() {
     });
 
     cameraStream = stream;
-    videoElement.srcObject = stream;
+    video.srcObject = stream;
 
-    videoElement.onloadedmetadata = () => {
-      videoElement.play();
-      updateCameraStatus(
-        `✓ Switched to ${currentCameraLabel}. Ready to capture.`,
-        "success"
-      );
+    video.onloadedmetadata = () => {
+      video.play();
+      updateCameraStatus(`✓ Switched to ${currentCameraLabel}.`, "success");
     };
-
-    // Reset capture UI when switching cameras
-    resetCaptureUI();
-  } catch (error) {
-    console.error("Camera switch error:", error);
+  } catch (err) {
+    console.error("Camera switch error:", err);
     updateCameraStatus(
-      `❌ Failed to switch to ${currentCameraLabel}. Please try again.`,
-      "error"
+      `❌ Failed to switch to ${currentCameraLabel}.`,
+      "error",
     );
   }
 }
 
-/**
- * Reset capture UI (used when switching cameras)
- */
-function resetCaptureUI() {
-  const video = document.getElementById("cameraStream");
-  const canvas = document.getElementById("cameraPreview");
-  const captureBtn = document.getElementById("captureBtn");
-  const retakeBtn = document.getElementById("retakeBtn");
-  const uploadBtn = document.getElementById("uploadCameraBtn");
-
-  if (video) video.style.display = "block";
-  if (canvas) canvas.style.display = "none";
-  if (captureBtn) captureBtn.style.display = "inline-flex";
-  if (retakeBtn) retakeBtn.style.display = "none";
-  if (uploadBtn) uploadBtn.style.display = "none";
-
-  capturedCanvas = null;
-  capturedImageData = null;
-}
-
-// ============================================
-// STEP 4: CAPTURE PHOTO
-// ============================================
-
-/**
- * Capture photo from current video stream
- */
+// ─────────────────────────────────────────────────────────────
+// 5. CAPTURE  (BUG FIX: context.save() added before transform)
+// ─────────────────────────────────────────────────────────────
 function capturePhoto() {
   const video = document.getElementById("cameraStream");
-  const canvas = document.getElementById("cameraPreview");
+
+  if (!video || !video.videoWidth) {
+    updateCameraStatus("❌ Camera not ready — please wait.", "error");
+    return;
+  }
+
+  // Offscreen canvas — never attached to DOM
+  const offscreen = document.createElement("canvas");
+  offscreen.width = video.videoWidth;
+  offscreen.height = video.videoHeight;
+  const ctx = offscreen.getContext("2d");
+
+  // FIX: save() MUST precede translate+scale so restore() works correctly
+  ctx.save();
+  ctx.translate(offscreen.width, 0);
+  ctx.scale(-1, 1); // un-mirror CSS scaleX(-1)
+  ctx.drawImage(video, 0, 0, offscreen.width, offscreen.height);
+  ctx.restore();
+
+  rawCaptureDataUrl = offscreen.toDataURL("image/jpeg", 0.95);
+  showCropInterface(rawCaptureDataUrl);
+}
+
+// ─────────────────────────────────────────────────────────────
+// 6. CROP INTERFACE  (Cropper.js)
+// ─────────────────────────────────────────────────────────────
+function showCropInterface(dataUrl) {
+  const video = document.getElementById("cameraStream");
+  const cropWrap = document.getElementById("cropContainer");
+  const cropImg = document.getElementById("cropImage");
   const captureBtn = document.getElementById("captureBtn");
   const retakeBtn = document.getElementById("retakeBtn");
+  const applyCropBtn = document.getElementById("applyCropBtn");
   const uploadBtn = document.getElementById("uploadCameraBtn");
+  const previewCanvas = document.getElementById("cameraPreview");
+  const cameraContainer = document.querySelector(".camera-container");
+  if (cameraContainer) cameraContainer.style.display = "none";
 
-  if (!video || !canvas) return;
+  if (!cropWrap || !cropImg) {
+    // Fallback if HTML not updated yet — skip crop step
+    capturedImageData = dataUrl;
+    finalizeCapture(dataUrl);
+    return;
+  }
 
-  try {
-    // Set canvas dimensions to match video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+  if (video) video.style.display = "none";
+  if (previewCanvas) previewCanvas.style.display = "none";
+  cropWrap.style.display = "flex";
 
-    const context = canvas.getContext("2d");
-    if (!context) {
+  if (captureBtn) captureBtn.style.display = "none";
+  if (retakeBtn) retakeBtn.style.display = "inline-flex";
+  if (applyCropBtn) applyCropBtn.style.display = "inline-flex";
+  if (uploadBtn) uploadBtn.style.display = "none";
+
+  destroyCropper();
+  cropImg.src = dataUrl;
+
+  cropImg.onload = () => {
+    if (typeof Cropper === "undefined") {
+      // Cropper.js not loaded — skip crop, go straight to preview
+      capturedImageData = dataUrl;
+      if (applyCropBtn) applyCropBtn.style.display = "none";
+      if (uploadBtn) uploadBtn.style.display = "inline-flex";
       updateCameraStatus(
-        "❌ Unable to capture image. Please try again.",
-        "error"
+        '✓ Photo captured! Click "Use Photo" to proceed.',
+        "success",
       );
       return;
     }
 
-    // Mirror the image (flip horizontally) to match video preview
-    context.translate(canvas.width, 0);
-    context.scale(-1, 1);
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    context.restore();
-
-    // Store the captured image data
-    capturedCanvas = canvas;
-    capturedImageData = canvas.toDataURL("image/jpeg", 0.95);
-
-    // Update UI
-    video.style.display = "none";
-    canvas.style.display = "block";
-    captureBtn.style.display = "none";
-    retakeBtn.style.display = "inline-flex";
-    uploadBtn.style.display = "inline-flex";
+    cropperInstance = new Cropper(cropImg, {
+      aspectRatio: NaN,
+      viewMode: 2,
+      autoCropArea: 0.85,
+      movable: true,
+      zoomable: true,
+      rotatable: false,
+      scalable: false,
+      responsive: true,
+      restore: true,
+      background: true,
+      guides: true,
+      center: true,
+      highlight: true,
+      cropBoxMovable: true,
+      cropBoxResizable: true,
+      minContainerWidth: 0,
+      minContainerHeight: 0,
+    });
 
     updateCameraStatus(
-      '✓ Photo captured! Review and click "Use Photo" to proceed.',
-      "success"
+      '✂️  Drag to reposition · Resize handles to crop · Click "Apply Crop" when done.',
+      "success",
     );
-  } catch (error) {
-    console.error("Capture error:", error);
-    updateCameraStatus(
-      "❌ Failed to capture photo. Please try again.",
-      "error"
-    );
-  }
+  };
 }
 
-// ============================================
-// STEP 5: RETAKE PHOTO
-// ============================================
+function applyCrop() {
+  if (!cropperInstance) {
+    capturedImageData = rawCaptureDataUrl;
+    finalizeCapture(capturedImageData);
+    return;
+  }
 
-/**
- * Retake a photo by returning to live camera view
- */
-function retakePhoto() {
-  const video = document.getElementById("cameraStream");
-  const canvas = document.getElementById("cameraPreview");
-  const captureBtn = document.getElementById("captureBtn");
+  const cropped = cropperInstance.getCroppedCanvas({
+    maxWidth: 2048,
+    maxHeight: 2048,
+    imageSmoothingEnabled: true,
+    imageSmoothingQuality: "high",
+  });
+
+  if (!cropped) {
+    updateCameraStatus("❌ Crop failed — try again.", "error");
+    return;
+  }
+
+  capturedImageData = cropped.toDataURL("image/jpeg", 0.95);
+  destroyCropper();
+  finalizeCapture(capturedImageData);
+}
+
+function finalizeCapture(dataUrl) {
+  const cropWrap = document.getElementById("cropContainer");
+  const previewCanvas = document.getElementById("cameraPreview");
+  const applyCropBtn = document.getElementById("applyCropBtn");
   const retakeBtn = document.getElementById("retakeBtn");
   const uploadBtn = document.getElementById("uploadCameraBtn");
+  const cameraContainer = document.querySelector(".camera-container");
+  if (cameraContainer) cameraContainer.style.display = "flex";
 
-  if (!video || !canvas) return;
+  if (cropWrap) cropWrap.style.display = "none";
 
-  video.style.display = "block";
-  canvas.style.display = "none";
-  captureBtn.style.display = "inline-flex";
-  retakeBtn.style.display = "none";
-  uploadBtn.style.display = "none";
+  if (previewCanvas && dataUrl) {
+    const img = new Image();
+    img.onload = () => {
+      previewCanvas.width = img.width;
+      previewCanvas.height = img.height;
+      previewCanvas.getContext("2d").drawImage(img, 0, 0);
+    };
+    img.src = dataUrl;
+    previewCanvas.style.display = "block";
+  }
 
-  capturedCanvas = null;
-  capturedImageData = null;
+  if (applyCropBtn) applyCropBtn.style.display = "none";
+  if (retakeBtn) retakeBtn.style.display = "inline-flex";
+  if (uploadBtn) uploadBtn.style.display = "inline-flex";
 
   updateCameraStatus(
-    `Camera ready. Tap Capture to take another photo.`,
-    "success"
+    '✓ Crop applied! Review below, then click "Use Photo".',
+    "success",
   );
 }
 
-// ============================================
-// STEP 6: UPLOAD PHOTO TO FORM
-// ============================================
+// ─────────────────────────────────────────────────────────────
+// 7. RETAKE
+// ─────────────────────────────────────────────────────────────
+function retakePhoto() {
+  destroyCropper();
 
-/**
- * Upload captured photo to the image input field
- */
+  const video = document.getElementById("cameraStream");
+  const cropWrap = document.getElementById("cropContainer");
+  const previewCanvas = document.getElementById("cameraPreview");
+  const captureBtn = document.getElementById("captureBtn");
+  const retakeBtn = document.getElementById("retakeBtn");
+  const applyCropBtn = document.getElementById("applyCropBtn");
+  const uploadBtn = document.getElementById("uploadCameraBtn");
+  const cameraContainer = document.querySelector(".camera-container");
+  if (cameraContainer) cameraContainer.style.display = "flex";
+
+  if (video) {
+    video.style.display = "block";
+  }
+  if (cropWrap) cropWrap.style.display = "none";
+  if (previewCanvas) previewCanvas.style.display = "none";
+
+  if (captureBtn) {
+    captureBtn.style.display = "inline-flex";
+    captureBtn.disabled = false;
+  }
+  if (retakeBtn) retakeBtn.style.display = "none";
+  if (applyCropBtn) applyCropBtn.style.display = "none";
+  if (uploadBtn) uploadBtn.style.display = "none";
+
+  capturedImageData = null;
+  rawCaptureDataUrl = null;
+
+  updateCameraStatus("✓ Camera ready — tap Capture.", "success");
+}
+
+// ─────────────────────────────────────────────────────────────
+// 8. UPLOAD TO FORM
+// ─────────────────────────────────────────────────────────────
 function uploadCameraPhoto() {
   if (!capturedImageData) {
     updateCameraStatus("❌ No photo captured. Please try again.", "error");
@@ -343,158 +370,115 @@ function uploadCameraPhoto() {
   }
 
   try {
-    // Convert data URL to Blob
-    const blobBin = atob(capturedImageData.split(",")[1]);
-    const array = [];
-    for (let i = 0; i < blobBin.length; i++) {
-      array.push(blobBin.charCodeAt(i));
-    }
-    const blob = new Blob([new Uint8Array(array)], { type: "image/jpeg" });
+    const byteStr = atob(capturedImageData.split(",")[1]);
+    const arr = new Uint8Array(byteStr.length);
+    for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
 
-    // Create a File object
-    const file = new File([blob], `camera-photo-${Date.now()}.jpg`, {
+    const blob = new Blob([arr], { type: "image/jpeg" });
+    const file = new File([blob], `camera-${Date.now()}.jpg`, {
       type: "image/jpeg",
     });
 
-    // Create a DataTransfer object and add the file
-    const dataTransfer = new DataTransfer();
-    dataTransfer.items.add(file);
+    const dt = new DataTransfer();
+    dt.items.add(file);
 
-    // Set the file to the input
     const fileInput = document.getElementById("image");
-    if (fileInput) {
-      fileInput.files = dataTransfer.files;
-
-      // Trigger change event to update preview
-      const event = new Event("change", { bubbles: true });
-      fileInput.dispatchEvent(event);
-
-      updateCameraStatus("✓ Photo uploaded to form successfully!", "success");
-
-      // Close modal after brief delay
-      setTimeout(() => {
-        closeCameraModal();
-      }, 800);
-    } else {
-      updateCameraStatus("❌ Form error. Please try again.", "error");
+    if (!fileInput) {
+      updateCameraStatus("❌ Form input not found.", "error");
+      return;
     }
-  } catch (error) {
-    console.error("Upload error:", error);
-    updateCameraStatus("❌ Failed to upload photo. Please try again.", "error");
+
+    fileInput.files = dt.files;
+    fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+    updateCameraStatus("✓ Photo added to form!", "success");
+    setTimeout(closeCameraModal, 700);
+  } catch (err) {
+    console.error("Upload error:", err);
+    updateCameraStatus("❌ Upload failed — try again.", "error");
   }
 }
 
-// ============================================
-// STEP 7: UTILITY FUNCTIONS
-// ============================================
+// ─────────────────────────────────────────────────────────────
+// 9. UTILITIES
+// ─────────────────────────────────────────────────────────────
+function destroyCropper() {
+  if (cropperInstance) {
+    cropperInstance.destroy();
+    cropperInstance = null;
+  }
+}
 
-/**
- * Stop the current camera stream
- */
 function stopCamera() {
   const video = document.getElementById("cameraStream");
-  if (!video || !video.srcObject) return;
-
-  const tracks = video.srcObject.getTracks();
-  tracks.forEach((track) => track.stop());
-  video.srcObject = null;
+  if (video && video.srcObject) {
+    video.srcObject.getTracks().forEach((t) => t.stop());
+    video.srcObject = null;
+  }
   cameraStream = null;
 }
 
-/**
- * Update camera status message
- */
-function updateCameraStatus(message, type = "info") {
-  const statusElement = document.getElementById("cameraStatus");
-  if (!statusElement) return;
-
-  statusElement.textContent = message;
-  statusElement.className = `camera-status ${type}`;
+function updateCameraStatus(msg, type = "info") {
+  const el = document.getElementById("cameraStatus");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = `camera-status ${type}`;
 }
 
-/**
- * Handle camera errors with user-friendly messages
- */
-function handleCameraError(error, statusElement) {
-  let message = "Unable to access camera";
-
-  if (error.name === "NotAllowedError") {
-    message =
-      "❌ Camera access denied. Please allow camera permissions in your browser settings.";
-  } else if (error.name === "NotFoundError") {
-    message = "❌ No camera found on this device.";
-  } else if (error.name === "NotReadableError") {
-    message =
-      "❌ Camera is being used by another application. Please close it and try again.";
-  } else if (error.name === "SecurityError") {
-    message =
-      "❌ Camera access is not allowed on insecure connections (HTTPS required).";
-  } else if (error.name === "TypeError") {
-    message = "❌ Camera API not supported in your browser.";
-  }
-
-  updateCameraStatus(message, "error");
+function handleCameraError(err) {
+  const map = {
+    NotAllowedError:
+      "❌ Camera access denied. Allow permissions in your browser settings.",
+    NotFoundError: "❌ No camera found on this device.",
+    NotReadableError:
+      "❌ Camera in use by another app — close it and try again.",
+    SecurityError: "❌ Camera requires a secure connection (HTTPS).",
+    TypeError: "❌ Camera API not supported in this browser.",
+  };
+  updateCameraStatus(map[err.name] || "❌ Camera unavailable.", "error");
 }
 
-/**
- * Reset camera UI to initial state
- */
-function resetCameraUI() {
+function resetCaptureUI() {
   const video = document.getElementById("cameraStream");
-  const canvas = document.getElementById("cameraPreview");
+  const cropWrap = document.getElementById("cropContainer");
+  const previewCanvas = document.getElementById("cameraPreview");
   const captureBtn = document.getElementById("captureBtn");
   const retakeBtn = document.getElementById("retakeBtn");
+  const applyCropBtn = document.getElementById("applyCropBtn");
   const uploadBtn = document.getElementById("uploadCameraBtn");
-  const statusElement = document.getElementById("cameraStatus");
+  const cameraContainer = document.querySelector(".camera-container");
+  if (cameraContainer) cameraContainer.style.display = "flex";
 
   if (video) video.style.display = "block";
-  if (canvas) canvas.style.display = "none";
+  if (cropWrap) cropWrap.style.display = "none";
+  if (previewCanvas) previewCanvas.style.display = "none";
   if (captureBtn) captureBtn.style.display = "inline-flex";
   if (retakeBtn) retakeBtn.style.display = "none";
+  if (applyCropBtn) applyCropBtn.style.display = "none";
   if (uploadBtn) uploadBtn.style.display = "none";
-  if (statusElement) {
-    statusElement.textContent = "Initializing camera...";
-    statusElement.className = "camera-status";
-  }
 
-  capturedCanvas = null;
   capturedImageData = null;
+  rawCaptureDataUrl = null;
 }
 
-// ============================================
-// STEP 8: EVENT LISTENERS
-// ============================================
+function resetCameraUI() {
+  destroyCropper();
+  resetCaptureUI();
+  updateCameraStatus("Initializing camera…", "");
+}
 
-/**
- * Handle camera selection change
- */
+// ─────────────────────────────────────────────────────────────
+// 10. EVENT LISTENERS
+// ─────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
-  const cameraSelector = document.getElementById("cameraSelector");
-  if (cameraSelector) {
-    cameraSelector.addEventListener("change", switchCamera);
-  }
+  const sel = document.getElementById("cameraSelector");
+  if (sel) sel.addEventListener("change", switchCamera);
 });
 
-/**
- * Close camera modal when clicking outside
- */
-window.addEventListener("click", function (event) {
-  const cameraModal = document.getElementById("cameraModal");
-  if (event.target === cameraModal) {
-    closeCameraModal();
-  }
+window.addEventListener("click", (e) => {
+  const modal = document.getElementById("cameraModal");
+  if (e.target === modal) closeCameraModal();
 });
 
-/**
- * Cleanup camera on page unload
- */
-window.addEventListener("beforeunload", function () {
-  stopCamera();
-});
-
-/**
- * Handle browser back button while camera is open
- */
-window.addEventListener("popstate", function () {
-  stopCamera();
-});
+window.addEventListener("beforeunload", stopCamera);
+window.addEventListener("popstate", stopCamera);

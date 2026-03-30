@@ -57,6 +57,7 @@ if ($databaseConnected) {
   <link rel="stylesheet" href="../css/pg.css">
   <link rel="stylesheet" href="../css/loading.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css" />
 </head>
 
 <body>
@@ -303,40 +304,68 @@ if ($databaseConnected) {
   <!-- Camera Modal -->
   <div id="cameraModal" class="camera-modal">
     <div class="camera-modal-content">
+
       <div class="camera-modal-header">
-        <h2><i class="fas fa-camera"></i> Capture Photo</h2>
+        <h2><i class="fas fa-camera"></i> Capture &amp; Crop Photo</h2>
         <button type="button" class="close-camera" onclick="closeCameraModal()">
           <i class="fas fa-times"></i>
         </button>
       </div>
+
       <div class="camera-modal-body">
+
+        <!-- Camera selector + status -->
         <div class="camera-selextor-grid">
           <div class="camera-selector-container">
             <label for="cameraSelector">
-              <i class="fas fa-video"></i> Select Camera:
+              <i class="fas fa-video"></i> Camera:
             </label>
             <select id="cameraSelector">
-              <option value="">Loading cameras...</option>
+              <option value="">Loading…</option>
             </select>
           </div>
-          <div class="camera-status" id="cameraStatus">
-            Initializing camera...
+          <div class="camera-status info" id="cameraStatus">
+            Initializing camera…
           </div>
         </div>
+
+        <!-- Live video + final preview canvas share this wrapper -->
         <div class="camera-container">
           <video id="cameraStream" playsinline autoplay></video>
-          <canvas id="cameraPreview" style="display: none;"></canvas>
+          <canvas id="cameraPreview" style="display:none;"></canvas>
         </div>
+
+        <!--
+        Crop container — hidden until a photo is captured.
+        Cropper.js mounts on #cropImage.
+      -->
+        <div id="cropContainer" style="display:none;">
+          <img id="cropImage" alt="Capture for cropping" />
+        </div>
+
+        <!-- Action buttons -->
         <div class="camera-controls">
-          <button type="button" class="camera-btn capture" id="captureBtn" onclick="capturePhoto()">
+          <button type="button" class="camera-btn capture"
+            id="captureBtn" onclick="capturePhoto()">
             <i class="fas fa-circle"></i> Capture
           </button>
-          <button type="button" class="camera-btn retake" id="retakeBtn" onclick="retakePhoto()" style="display: none;">
+
+          <!-- Shown while crop interface is active -->
+          <button type="button" class="camera-btn apply-crop"
+            id="applyCropBtn" onclick="applyCrop()" style="display:none;">
+            <i class="fas fa-crop-alt"></i> Apply Crop
+          </button>
+
+          <button type="button" class="camera-btn retake"
+            id="retakeBtn" onclick="retakePhoto()" style="display:none;">
             <i class="fas fa-redo"></i> Retake
           </button>
-          <button type="button" class="camera-btn upload" id="uploadCameraBtn" onclick="uploadCameraPhoto()" style="display: none;">
+
+          <button type="button" class="camera-btn upload"
+            id="uploadCameraBtn" onclick="uploadCameraPhoto()" style="display:none;">
             <i class="fas fa-check"></i> Use Photo
           </button>
+
           <button type="button" class="camera-btn cancel" onclick="closeCameraModal()">
             <i class="fas fa-times"></i> Cancel
           </button>
@@ -436,6 +465,7 @@ if ($databaseConnected) {
   <audio id="inactiveSound" src="../sounds/inactive.mp3" preload="auto"></audio>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
   <script src="../src/system.js"></script>
   <script src="../src/system-camera.js"></script>
   <script src="../src/btn.js"></script>
@@ -443,7 +473,7 @@ if ($databaseConnected) {
   <script src="../src/eas.js"></script>
   <script src="../src/opt-btn.js"></script>
   <script src="../src/loading.js"></script>
-  <script src="../src/req.js"></script>
+  <!-- <script src="../src/req.js"></script> -->
 </body>
 
 </html>
