@@ -24,6 +24,7 @@ $email = $_SESSION['email'] ?? '';
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Test QR Code</title>
   <link rel="preload" href="../icon/scanTest.png" as="image">
+  <link rel="preload" href="../logo/proximitycode.svg" as="image/svg+xml">
   <link rel="icon" href="../icon/scanTest.png" type="image/png">
   <link rel="stylesheet" href="../css/qp.css">
   <link rel="stylesheet" href="../css/btn.css">

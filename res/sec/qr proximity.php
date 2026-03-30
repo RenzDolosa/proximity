@@ -23,8 +23,9 @@ $email = $_SESSION['email'] ?? '';
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Proximity Pass</title>
-  <link rel="preload" href="../logo/nfc-logo.svg" as="svg+xml">
-  <link rel="preload" href="../logo/nfc-logo.svg" type="image/svg+xml">
+  <link rel="preload" href="../logo/nfc-logo.svg" as="image/svg+xml">
+  <link rel="preload" href="../logo/proximity-logo.svg" type="image/svg+xml">
+  <link rel="icon" href="../logo/nfc-logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../css/qp.css">
   <link rel="stylesheet" href="../css/sbar.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">

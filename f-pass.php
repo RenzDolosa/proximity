@@ -110,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <div class="container">
     <div class="header">
-      <div><img src="res/logo/database.png" alt="My Database Logo" class="logo" loading="lazy"></div>
+      <div><img src="res/logo/database.svg" alt="My Database Logo" class="logo" loading="lazy"></div>
       <h2>Forgot Password</h2>
       <p class="subtitle">Enter your email address and we'll send you instructions to reset your password.</p>
     </div>

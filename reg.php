@@ -140,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <div class="container">
     <div class="header">
-      <div><img src="res/logo/database.png" alt="My Database Logo" class="logo" loading="lazy"></div>
+      <div><img src="res/logo/database.svg" alt="My Database Logo" class="logo" loading="lazy"></div>
       <h2>Create Your Account</h2>
       <p class="subtitle">Sign up to Proximity Database</p>
     </div>

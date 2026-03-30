@@ -220,7 +220,7 @@ if ($databaseConnected && $employeeManager) {
         </div>
         <div class="stat-number"><?php echo number_format($stats['total_scanned']); ?></div>
         <div class="stat-label">Total Scanned</div>
-        <img src="../logo/database.png" loading="lazy" style="top: 10%; right: 5%; height: 40px; position:absolute;">
+        <img src="../logo/database.svg" loading="lazy" style="top: 10%; right: 5%; height: 40px; position:absolute;">
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #28a745, #20c997);">
@@ -228,7 +228,7 @@ if ($databaseConnected && $employeeManager) {
         </div>
         <div class="stat-number"><?php echo number_format($stats['active_scan']); ?></div>
         <div class="stat-label">Active Scanned</div>
-        <img src="../logo/database.png" loading="lazy" style="top: 10%; right: 5%; height: 40px; position:absolute;">
+        <img src="../logo/database.svg" loading="lazy" style="top: 10%; right: 5%; height: 40px; position:absolute;">
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #dc3545, #fd7e14);">
@@ -236,7 +236,7 @@ if ($databaseConnected && $employeeManager) {
         </div>
         <div class="stat-number"><?php echo number_format($stats['inactive_scan']); ?></div>
         <div class="stat-label">Inactive Scanned</div>
-        <img src="../logo/database.png" loading="lazy" style="top: 10%; right: 5%; height: 40px; position:absolute;">
+        <img src="../logo/database.svg" loading="lazy" style="top: 10%; right: 5%; height: 40px; position:absolute;">
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #17a2b8, #6f42c1);">
@@ -248,7 +248,7 @@ if ($databaseConnected && $employeeManager) {
           In: <span id="todayIn"><?php echo $stats['today_in']; ?></span> |
           Out: <span id="todayOut"><?php echo $stats['today_out']; ?></span>
         </small>
-        <img src="../logo/database.png" loading="lazy" style="top: 10%; right: 5%; height: 40px; position:absolute;">
+        <img src="../logo/database.svg" loading="lazy" style="top: 10%; right: 5%; height: 40px; position:absolute;">
       </div>
     </section>
 

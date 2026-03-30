@@ -50,6 +50,7 @@ if ($databaseConnected) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Proximity Code</title>
   <link rel="preload" href="../icon/database-icon.png" as="image">
+  <link rel="preconnect" href="https://filemanager.ai">
   <link rel="prefetch" href="https://filemanager.ai/new3/index.php?home=%2Fhtdocs%2Fuploads%2Fuser">
   <link rel="icon" href="../icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../css/system.css">

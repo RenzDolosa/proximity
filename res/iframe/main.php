@@ -117,11 +117,11 @@ try {
           </div>
         </div>
       </div>
-
+      
       <!-- <div class="menu-card" onclick="navigateWithLoading('../tb/datalog.php');">
         <a href="../tb/datalog.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/datalog.php');">Scanned Log</a>
         <div class="favi">
-          <img src="../logo/database.png" alt="Database" loading="lazy" style="width: 100px; height: 100px;">
+          <img src="../logo/database.svg" alt="Database" loading="lazy" style="width: 100px; height: 100px;">
           <div>
             <h3>Scan History</h3>
             <p>View employee activity</p>

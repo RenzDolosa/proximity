@@ -11,7 +11,7 @@ let displayTimeout;
 let currentFilter = "all";
 let currentAudio = null;
 
-document.getElementById("message").innerHTML = '<img src="../logo/proximity-logo.png" loading="lazy" alt="Proximity Code" style="width: 100%; height: 90vh;">';
+document.getElementById("message").innerHTML = '<img src="../logo/proximity-logo.svg" loading="lazy" alt="Proximity Code" style="width: 100%; height: 90vh;">';
 
 // Setup event listeners
 function setupEventListeners() {
@@ -75,7 +75,7 @@ function setupEventListeners() {
 //  Background / idle state
 // ─────────────────────────────────────────────────────────────────
 function background() {
-  document.getElementById("message").innerHTML = '<img src="../logo/proximity-logo.png" alt="Proximity Code" loading="lazy" style="width: 100%; height: 90vh;">';
+  document.getElementById("message").innerHTML = '<img src="../logo/proximity-logo.svg" alt="Proximity Code" loading="lazy" style="width: 100%; height: 90vh;">';
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -219,7 +219,7 @@ async function searchEmployees(query) {
       if (rawResults.length === 0) {
         messageEl.innerHTML =
           `<p class="no-results-message">No results found. 🔍</p>
-          <img src="../logo/proximity-logo.png" alt="Proximity Code" loading="lazy" style="width: 100%; height: 90vh;">`;
+          <img src="../logo/proximity-logo.svg" alt="Proximity Code" loading="lazy" style="width: 100%; height: 90vh;">`;
         playNoResultSound();
         blockSearchInput();
         return;
