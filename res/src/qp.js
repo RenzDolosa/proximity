@@ -338,7 +338,7 @@ function buildCard(employee) {
     .toUpperCase();
 
   const imageHtml = image
-    ? `<img src="../../uploads/user/${image}" alt="${fullname}" class="employee-image" loading="lazy">`
+    ? `<img src="${window.location.origin}/uploads/user/${image}" alt="${fullname}" class="employee-image" loading="lazy">`
     : `<div class="ph-container"><div class="employee-placeholder">${initials}</div></div>`;
 
   // ── Last log panel ────────────────────────────────────────────────

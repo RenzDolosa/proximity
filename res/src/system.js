@@ -210,7 +210,7 @@ async function loadEmployeeData(employeeId) {
 
       const fileLabel = document.querySelector(".file-upload-label");
       if (employee.image) {
-        const imagePath = `../../uploads/user/${employee.image}`;
+        const imagePath = `${window.location.origin}/uploads/user/${employee.image}`;
 
         fileLabel.innerHTML = `
           <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
@@ -404,7 +404,8 @@ async function renderEmployeeTable() {
         });
       };
 
-      const imageSrc = `../../uploads/user/${employee.image}`;
+      const isAboveFold = index < 5;
+      const imageSrc = `${window.location.origin}/uploads/user/${employee.image}`;
 
       return `
         <tr>
@@ -419,8 +420,9 @@ async function renderEmployeeTable() {
               <small>${employee.violation || "None"}</small></div></td>
             <td class="Col8">${
               employee.image
-                ? `<img src="${imageSrc}" alt="${employee.fullname}" class="employee-image" loading="lazy"
-                     onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
+                ? `<img src="${imageSrc}" alt="${employee.fullname}" class="employee-image" 
+                    loading="${isAboveFold ? "eager" : "lazy"}"
+                    onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
                    <span style="display:none;">📷</span>`
                 : `<div class="ph-cont"><div class="employee-ph">${fullnameInitials}</div></div>`
             }</td>

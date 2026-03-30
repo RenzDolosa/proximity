@@ -721,12 +721,12 @@ async function renderEmployeeTable() {
 
       if (matchedEmployeeData && matchedEmployeeData.image) {
         // Use image from manpower_backend if QR matches
-        imageUrl = `../../uploads/user/${matchedEmployeeData.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${matchedEmployeeData.image}`;
+        imageUrl = `${window.location.origin}/uploads/user/${matchedEmployeeData.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${matchedEmployeeData.image}`;
         displayName = matchedEmployeeData.fullname || employee.fullname;
         tooltipText = `${matchedEmployeeData.fullname}\n${matchedEmployeeData.position}\n${matchedEmployeeData.brand}`;
       } else if (employee.image) {
         // Fallback to datalog's own image
-        imageUrl = `../../uploads/user/${employee.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${employee.image}`;
+        imageUrl = `${window.location.origin}/uploads/user/${employee.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${employee.image}`;
         tooltipText = `${employee.fullname}\n${employee.position}\n${employee.brand}`;
       }
 

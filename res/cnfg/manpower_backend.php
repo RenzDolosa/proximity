@@ -4,8 +4,12 @@
 require_once 'config.php';
 
 if (isset($_GET['serve_file'])) {
-  header('Cache-Control: public, max-age=3600');
-  header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 3600) . ' GMT');
+  header('Content-Type: ' . $content_type);
+  header('Content-Disposition: inline; filename="' . $filename . '"');
+  header('Content-Length: ' . filesize($filepath));
+  header('Cache-Control: public, max-age=86400');
+  header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 86400) . ' GMT');
+  header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($filepath)) . ' GMT');
 }
 
 class Database
