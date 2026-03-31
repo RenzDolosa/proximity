@@ -1228,7 +1228,8 @@ function populateFilter(employeeList) {
   const status = document.getElementById("search_status");
   const shift = document.getElementById("search_shift");
   const violation = document.getElementById("search_violation");
-  if (!position || !brand || !status || !shift || !violation) return;
+  const inOut = document.getElementById("search_in-out");
+  if (!position || !brand || !status || !shift || !violation || !inOut) return;
 
   // Convert a string to Proper Case
   function toProperCase(str) {
@@ -1271,6 +1272,7 @@ function populateFilter(employeeList) {
   const statusMap = new Map();
   const shiftMap = new Map();
   const violationMap = new Map();
+  const inOutMap = new Map();
 
   for (const emp of employeeList) {
     const add = (map, raw) => {
@@ -1286,6 +1288,7 @@ function populateFilter(employeeList) {
     add(statusMap, emp.status);
     add(shiftMap, emp.shift);
     add(violationMap, emp.violation);
+    add(inOutMap, emp.check_status);
   }
 
   buildSelect(position, "Position", "No Position", positionMap);
@@ -1293,6 +1296,7 @@ function populateFilter(employeeList) {
   buildSelect(status, "Status", "No Status", statusMap);
   buildSelect(shift, "Shift", "No Shift", shiftMap);
   buildSelect(violation, "Violation", "No Violation", violationMap);
+  buildSelect(inOut, "In/Out Status", "No In/Out Status", inOutMap);
 
   updateColor();
 }
