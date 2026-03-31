@@ -1027,7 +1027,7 @@ function requireAccess(string $pageKey, string $redirectUrl = '../index.php'): v
   $permissions = getUserGroupPermissions();
 
   if (canAccess($permissions, $pageKey)) {
-    return;   // ← all good, continue loading the page
+    return;
   }
 
   // ── AJAX: return JSON 403 ──────────────────────────────────────────────
@@ -1039,14 +1039,15 @@ function requireAccess(string $pageKey, string $redirectUrl = '../index.php'): v
     http_response_code(403);
     echo json_encode([
       'success'  => false,
-      'message'  => 'Access denied. You do not have permission to view this page.',
+      'message'  => 'Access denied.',
       'redirect' => $redirectUrl,
     ]);
     exit;
   }
 
-  // ── Normal request: full HTML access-denied screen ────────────────────
-  http_response_code(403);
+  // ── Normal request: immediately redirect ─────────────────────────────
+  header('Location: ' . $redirectUrl);
+  exit;
 ?>
   <!DOCTYPE html>
   <html lang="en">

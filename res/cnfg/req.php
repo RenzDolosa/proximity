@@ -4,7 +4,7 @@
 require_once 'res/cnfg/config.php';
 require_once 'res/cnfg/db.php';
 
-requireAccess('request', 'index.php');
+requireAccess('main', '../../proximity.php', true);
 
 $portalAccessGranted = isset($_SESSION['portal_access_granted']) && $_SESSION['portal_access_granted'] === true;
 

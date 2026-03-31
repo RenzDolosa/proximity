@@ -4,7 +4,7 @@
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
-requireAccess('main', 'index.php');
+requireAccess('main', '../../proximity.php', true);
 
 $userGroup = $_SESSION['user_group'] ?? '';
 
