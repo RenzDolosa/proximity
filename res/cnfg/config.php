@@ -950,3 +950,291 @@ function logoutUser()
   session_destroy();
   return true;
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// PERMISSION SYSTEM
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Returns the decoded permissions array for the current user's group.
+ * Reads $_SESSION['user_group'] (already set by loginUser()) so no extra
+ * DB query is needed on every page load — only one query per call.
+ *
+ * Returns: ['system' => 'allow'|'deny', 'datalog' => 'allow'|'deny', ...]
+ */
+function getUserGroupPermissions(): array
+{
+  // Administrators always get full access — skip DB lookup entirely
+  if (!empty($_SESSION['user_group']) && $_SESSION['user_group'] === 'Administrator') {
+    return [];   // canAccess() treats Administrator specially below
+  }
+
+  if (empty($_SESSION['user_group'])) {
+    return [];
+  }
+
+  try {
+    $pdo  = getMainDBConnection();
+    $stmt = $pdo->prepare(
+      "SELECT permissions FROM user_groups
+             WHERE group_name = ? AND is_enabled = 1
+             LIMIT 1"
+    );
+    $stmt->execute([$_SESSION['user_group']]);
+    $permJson = $stmt->fetchColumn();
+
+    if (!$permJson) return [];
+
+    $perms = json_decode($permJson, true);
+    return is_array($perms) ? $perms : [];
+  } catch (PDOException $e) {
+    error_log('getUserGroupPermissions error: ' . $e->getMessage());
+    return [];
+  }
+}
+
+/**
+ * Returns true when the current user may access $pageKey.
+ *
+ * Rules:
+ *   - Administrators → always allowed
+ *   - Key missing from saved permissions → default ALLOW
+ *   - Key present and value === 'allow' → allowed
+ *   - Key present and value === 'deny'  → denied
+ */
+function canAccess(array $permissions, string $pageKey): bool
+{
+  if (!empty($_SESSION['user_group']) && $_SESSION['user_group'] === 'Administrator') {
+    return true;
+  }
+  $value = $permissions[$pageKey] ?? 'allow';
+  return strtolower($value) === 'allow';
+}
+
+/**
+ * Hard-gate a page.  Call this at the very top of every protected page
+ * (after requiring config.php and db.php, before any HTML output).
+ *
+ * If the user is not allowed:
+ *   • AJAX requests get a 403 JSON response
+ *   • Normal requests get a full HTML "Access Denied" screen
+ *
+ * @param string $pageKey     Matches the 'key' in $MENU_PAGES: 'system', 'datalog', 'proxcode'
+ * @param string $redirectUrl Back-link shown on the access-denied page
+ */
+function requireAccess(string $pageKey, string $redirectUrl = '../index.php'): void
+{
+  $permissions = getUserGroupPermissions();
+
+  if (canAccess($permissions, $pageKey)) {
+    return;   // ← all good, continue loading the page
+  }
+
+  // ── AJAX: return JSON 403 ──────────────────────────────────────────────
+  if (
+    !empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
+    strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest'
+  ) {
+    header('Content-Type: application/json');
+    http_response_code(403);
+    echo json_encode([
+      'success'  => false,
+      'message'  => 'Access denied. You do not have permission to view this page.',
+      'redirect' => $redirectUrl,
+    ]);
+    exit;
+  }
+
+  // ── Normal request: full HTML access-denied screen ────────────────────
+  http_response_code(403);
+?>
+  <!DOCTYPE html>
+  <html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Access Denied</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: #f0f2f5;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+
+      .card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 52px 44px;
+        text-align: center;
+        max-width: 440px;
+        width: 92%;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, .10);
+      }
+
+      .icon-wrap {
+        width: 76px;
+        height: 76px;
+        border-radius: 50%;
+        background: #fee2e2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 22px;
+      }
+
+      .icon-wrap i {
+        font-size: 34px;
+        color: #ef4444;
+      }
+
+      h1 {
+        font-size: 22px;
+        color: #1f2937;
+        margin-bottom: 10px;
+        font-weight: 700;
+      }
+
+      p {
+        font-size: 14px;
+        color: #6b7280;
+        line-height: 1.65;
+        margin-bottom: 30px;
+      }
+
+      .badge {
+        display: inline-block;
+        background: #ede9fe;
+        color: #7c3aed;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 3px 12px;
+        border-radius: 20px;
+        margin-bottom: 18px;
+        letter-spacing: .3px;
+      }
+
+      a {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #7c3aed;
+        color: #fff;
+        padding: 11px 28px;
+        border-radius: 7px;
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 600;
+        transition: background .15s;
+      }
+
+      a:hover {
+        background: #6d28d9;
+      }
+
+      .countdown {
+        display: inline-block;
+        background: #fee2e2;
+        color: #ef4444;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 20px;
+        margin-left: 6px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="card">
+      <div class="icon-wrap"><i class="fas fa-ban"></i></div>
+      <span class="badge"><i class="fas fa-shield-alt"></i> Permission Required</span>
+      <h1>Access Denied</h1>
+      <p>
+        You don't have permission to view this page.<br>
+        Contact your administrator if you think this is a mistake.
+      </p>
+      <a href="#" onclick="goBack(); return false;">
+        <i class="fas fa-arrow-left"></i> Go Back <span class="countdown" id="countdown">5</span>
+      </a>
+    </div>
+
+    <script src="../src/req.js"></script>
+    <script>
+      var url = '<?= htmlspecialchars($redirectUrl, ENT_QUOTES) ?>';
+
+      function goBack() {
+        window.history.back();
+      }
+
+      // Countdown timer — auto-triggers goBack() at 0
+      var seconds = 5;
+      var el = document.getElementById('countdown');
+      var timer = setInterval(function () {
+        seconds--;
+        el.textContent = seconds;
+        if (seconds <= 0) {
+          clearInterval(timer);
+          goBack();
+        }
+      }, 1000);
+    </script>
+  </body>
+
+  </html>
+<?php
+  exit;
+}
+
+/**
+ * For use in navigation / menu templates.
+ * Returns an associative array of [ pageKey => bool ] so the menu can
+ * show/hide links without calling canAccess() repeatedly.
+ *
+ * Usage in a menu file:
+ *   $access = getMenuAccess();
+ *   if ($access['system'])   echo '<a href="system.php">System</a>';
+ *   if ($access['datalog'])  echo '<a href="datalog.php">Datalog</a>';
+ *   if ($access['proxcode']) echo '<a href="proxcode.php">Proxcode</a>';
+ */
+function getMenuAccess(): array
+{
+  $permissions = getUserGroupPermissions();
+  $pages = [
+    'request',
+    'main',
+    'manual input',
+    'qr proximity',
+    'scan test',
+    'account info',
+    'admin panel',
+    'employee management',
+    'settings',
+    'datalog',
+    'proximity code',
+    'system',
+    'table panel',
+    'm-i v2',
+    'test',
+    'portal',
+    'proximity',
+    'reg'
+  ];
+  $access = [];
+  foreach ($pages as $key) {
+    $access[$key] = canAccess($permissions, $key);
+  }
+  return $access;
+}

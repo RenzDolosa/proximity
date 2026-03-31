@@ -5,6 +5,8 @@ require_once '../cnfg/config.php';
 require_once '../cnfg/manpower_backend.php';
 require_once '../cnfg/db.php';
 
+requireAccess('manual input', '../sec/qr proximity.php');
+
 try {
   // Initialize database and employee manager
   $db = new Database();

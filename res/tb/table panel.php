@@ -1,6 +1,10 @@
 <?php
+// table panel.php
+
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
+
+requireAccess('table panel', '../iframe/main.php');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -116,8 +120,8 @@ require_once '../cnfg/db.php';
   <iframe id="frame-scanned" class="tab-frame" src=""></iframe>
   <iframe id="frame-proximity" class="tab-frame" src=""></iframe>
 
-  <script src="res/src/req.js"></script>
-  <script src="res/src/ver.js"></script>
+  <script src="../src/req.js"></script>
+  <script src="../src/ver.js"></script>
   <script>
     const srcs = {
       employees: 'system.php',
@@ -146,8 +150,23 @@ require_once '../cnfg/db.php';
         }
       });
     });
-  </script>
 
+    // Guard: if the main iframe navigates to login, redirect the whole top window
+    const mainFrame = document.querySelector('.frames');
+    if (mainFrame) {
+      mainFrame.addEventListener('load', function() {
+        try {
+          const frameUrl = this.contentWindow.location.href;
+          if (frameUrl.includes('index.php') || frameUrl.includes('login')) {
+            window.top.location.href = frameUrl;
+          }
+        } catch (e) {
+          // Cross-origin means a real redirect happened — go to login
+          window.top.location.href = 'index.php';
+        }
+      });
+    }
+  </script>
 </body>
 
 </html>

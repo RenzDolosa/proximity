@@ -4,6 +4,8 @@
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
+requireAccess('datalog', '../iframe/main.php');
+
 // Get dashboard statistics if database is connected
 $stats = [
   'total_scanned' => 0,

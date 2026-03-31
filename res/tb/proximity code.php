@@ -4,6 +4,8 @@
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
+requireAccess('proximity code', '../iframe/main.php');
+
 // Get dashboard statistics if database is connected
 $stats = [
   'total_employees' => 0,

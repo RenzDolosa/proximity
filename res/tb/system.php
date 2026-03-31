@@ -4,6 +4,8 @@
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
+requireAccess('system', '../../index.php');
+
 // Get dashboard statistics if database is connected
 $stats = [
   'total_employees' => 0,
@@ -480,7 +482,7 @@ if ($databaseConnected) {
   <script src="../src/eas.js"></script>
   <script src="../src/opt-btn.js"></script>
   <script src="../src/loading.js"></script>
-  <!-- <script src="../src/req.js"></script> -->
+  <script src="../src/req.js"></script>
 </body>
 
 </html>

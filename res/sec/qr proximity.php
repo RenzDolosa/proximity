@@ -3,8 +3,10 @@
 
 require_once '../cnfg/config.php';
 
+requireAccess('qr proximity', '/index.php');
+
 if (!isset($_SESSION['user_id'])) {
-  header('Location: ../../index.php');
+  header('Location: /index.php');
   exit();
 }
 

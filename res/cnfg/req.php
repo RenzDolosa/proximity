@@ -4,17 +4,21 @@
 require_once 'res/cnfg/config.php';
 require_once 'res/cnfg/db.php';
 
-// SECURITY: Check if user has passed the portal password check
+requireAccess('request', 'index.php');
+
 $portalAccessGranted = isset($_SESSION['portal_access_granted']) && $_SESSION['portal_access_granted'] === true;
 
-// SECURITY: Check if portal access has expired (optional - expires after 1 minute)
 if ($portalAccessGranted) {
-  $accessTime = $_SESSION['portal_access_time'] ?? 0;
-  if (time() - $accessTime > 60) { // 1 minute
-    unset($_SESSION['portal_access_granted']);
-    unset($_SESSION['portal_access_time']);
-    $portalAccessGranted = false;
-    logSystemAction($userId, 'PORTAL_ACCESS_EXPIRED', 'Portal access expired');
+  $isAdministrator = isset($_SESSION['user_group']) && $_SESSION['user_group'] === 'Administrator';
+
+  if (!$isAdministrator) {
+    $accessTime = $_SESSION['portal_access_time'] ?? 0;
+    if (time() - $accessTime > 60) { // 1 minutes
+      unset($_SESSION['portal_access_granted']);
+      unset($_SESSION['portal_access_time']);
+      $portalAccessGranted = false;
+      logSystemAction($userId, 'PORTAL_ACCESS_EXPIRED', 'Portal access expired');
+    }
   }
 }
 

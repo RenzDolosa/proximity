@@ -4,6 +4,8 @@
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
+requireAccess('settings', '../iframe/main.php');
+
 if (!isLoggedIn()) {
   header('Location: ../index.php');
   exit;

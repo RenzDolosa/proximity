@@ -4,11 +4,7 @@
 require_once 'config.php';
 require_once 'req.php';
 
-// ── Auth guard ────────────────────────────────────────────────────────────────
-if (($_SESSION['user_group'] ?? '') !== 'Administrator') {
-  echo '<script>history.back();</script>';
-  exit;
-}
+requireAccess('test', '../iframe/main/php');
 
 // Get dashboard statistics if database is connected
 $stats = [

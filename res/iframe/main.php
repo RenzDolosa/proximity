@@ -1,8 +1,12 @@
 <?php
-// main.php - Modified security section to use current user's password
+// main.php
 
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
+
+requireAccess('main', 'index.php');
+
+$userGroup = $_SESSION['user_group'] ?? '';
 
 try {
   $userDb = getUserDBConnection($userId);
@@ -117,7 +121,7 @@ try {
           </div>
         </div>
       </div>
-      
+
       <!-- <div class="menu-card" onclick="navigateWithLoading('../tb/datalog.php');">
         <a href="../tb/datalog.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/datalog.php');">Scanned Log</a>
         <div class="favi">
@@ -140,8 +144,8 @@ try {
         </div>
       </div>
 
-      <!-- <div class="menu-card" onclick="navigateWithLoading('../tb/table panel.php');" style="background: linear-gradient(to right, rgb(183, 183, 183), rgb(147, 147, 147)); transform: scale(1);">
-        <a href="../tb/table panel.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/table panel.php');">Coming Soon</a>
+      <div class="menu-card" onclick="navigateWithLoading('../udev/m-i v2.php');" style="background: linear-gradient(to right, rgb(183, 183, 183), rgb(147, 147, 147)); transform: scale(1);">
+        <a href="../udev/m-i v2.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../udev/m-i v2.php');">Coming Soon</a>
         <div class="favi">
           <img src="../logo/coming-soon.png" alt="Coming Soon" loading="lazy" style="width: 125px; height: 100px;">
           <div>
@@ -149,7 +153,7 @@ try {
             <p>This area is reserved for future Development</p>
           </div>
         </div>
-      </div> -->
+      </div>
     </section>
   </main>
 

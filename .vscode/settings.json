@@ -36,5 +36,6 @@
     "editor.accessibilitySupport": "on",
     "security.workspace.trust.untrustedFiles": "open",
     "fiveServer.browser": ["chrome"],
-    "fiveServer.phpPath": "C:\\xampp\\php\\php.exe"
+    "fiveServer.phpPath": "C:\\xampp\\php\\php.exe",
+    "liveServer.settings.port": 5501
 }

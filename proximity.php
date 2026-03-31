@@ -4,7 +4,7 @@
 require_once 'res/cnfg/config.php';
 require_once 'res/cnfg/db.php';
 
-
+requireAccess('qr proximity', 'index.php');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -32,6 +32,23 @@ require_once 'res/cnfg/db.php';
 
   <script src="res/src/btn.js"></script>
   <script src="res/src/req.js"></script>
+  <script>
+    // Guard: if the main iframe navigates to login, redirect the whole top window
+    const mainFrame = document.querySelector('.frames');
+    if (mainFrame) {
+      mainFrame.addEventListener('load', function() {
+        try {
+          const frameUrl = this.contentWindow.location.href;
+          if (frameUrl.includes('index.php') || frameUrl.includes('login')) {
+            window.top.location.href = frameUrl;
+          }
+        } catch (e) {
+          // Cross-origin means a real redirect happened — go to login
+          window.top.location.href = 'index.php';
+        }
+      });
+    }
+  </script>
 </body>
 
 </html>

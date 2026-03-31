@@ -3,6 +3,9 @@
 
 require_once '../cnfg/config.php';
 require_once '../cnfg/manpower_backend.php';
+
+requireAccess('scan test', '../iframe/main.php');
+
 if (!isset($_SESSION['user_id'])) {
   header('Location: ../../index.php');
   exit();

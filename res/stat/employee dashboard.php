@@ -5,6 +5,8 @@ require_once '../cnfg/config.php';
 require_once '../cnfg/manpower_backend.php';
 require_once '../cnfg/db.php';
 
+requireAccess('employee dashboard', '../iframe/main.php');
+
 // Get dashboard statistics
 $stats = [
   'total_employees' => 0,

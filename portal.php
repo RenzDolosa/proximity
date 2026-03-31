@@ -4,6 +4,8 @@
 require_once 'res/cnfg/config.php';
 require_once 'res/cnfg/req.php';
 
+requireAccess('portal', 'index.php');
+
 try {
   $userDb = getUserDBConnection($userId);
   $databaseConnected = true;

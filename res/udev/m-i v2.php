@@ -4,11 +4,7 @@
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
-// ── Auth guard ────────────────────────────────────────────────────────────────
-if (($_SESSION['user_group'] ?? '') !== 'Administrator') {
-  echo '<script>history.back();</script>';
-  exit;
-}
+requireAccess('m-i v2', '../iframe/main.php');
 
 // FIX: Move ALL function definitions to the top before any calls
 function getDashboardData($userDb)

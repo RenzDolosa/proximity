@@ -3,6 +3,8 @@
 
 require_once 'res/cnfg/config.php';
 
+requireAccess('register', 'index.php');
+
 $errors = [];
 $success = '';
 
