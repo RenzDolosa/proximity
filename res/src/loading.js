@@ -120,17 +120,15 @@ function showLoadingForSave() {
 const originalSearchEmployees = window.searchEmployees;
 if (typeof originalSearchEmployees === 'function') {
   window.searchEmployees = function() {
-    showLoadingForSearch();
-    
-    // Call original function
-    const result = originalSearchEmployees.apply(this, arguments);
-    
-    // Hide loading after a short delay
-    setTimeout(() => {
-      hideLoadingForOperation();
-    }, 800);
-    
-    return result;
+    const dateInput = document.getElementById('search_date');
+    const isDatePickerOpen = dateInput === document.activeElement;
+
+    if (!isDatePickerOpen) {
+      showLoadingForSearch();
+      setTimeout(() => { hideLoadingForOperation(); }, 800);
+    }
+
+    return originalSearchEmployees.apply(this, arguments);
   };
 }
 

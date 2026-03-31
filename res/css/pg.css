@@ -8,38 +8,77 @@
   right: 0;
   justify-content: center;
   align-items: center;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 6px;
   margin: 0;
-  padding: 1rem;
+  padding: 10px 16px;
   background: white;
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,1);
-  cursor: default;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.12);
   z-index: 999;
 }
 
-.pagination button {
-  padding: 0.5rem 1rem;
+/* Prev / Next arrows */
+.page-arrow-btn {
+  padding: 6px 12px;
   border: 1px solid #ddd;
   background: white;
   border-radius: 4px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  font-size: 13px;
+  transition: background 0.2s, color 0.2s;
 }
 
-.pagination button:hover:not(:disabled) {
+.page-arrow-btn:hover:not(:disabled) {
   background: #007bff;
   color: white;
   border-color: #007bff;
 }
 
-.pagination button:disabled {
-  opacity: 0.5;
+.page-arrow-btn:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
+/* Numbered page buttons */
+.page-num-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.2s, color 0.2s;
+}
+
+.page-num-btn:hover:not(.active) {
+  background: #f0f0f0;
+}
+
+.page-num-btn.active {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+  cursor: default;
+}
+
+/* Ellipsis */
+.page-ellipsis {
+  padding: 0 4px;
+  color: #aaa;
+  line-height: 32px;
+  user-select: none;
+}
+
+/* Record count / page info */
 #page-info {
+  font-size: 12px;
   font-weight: 500;
   color: #666;
+  margin-left: 8px;
+  white-space: nowrap;
 }

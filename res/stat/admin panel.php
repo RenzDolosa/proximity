@@ -1681,13 +1681,36 @@ if (isset($_GET['action'])) {
     }
 
     function paginationHTML(total, pages, currentPage, fn) {
-      return `<span>${total} record${total !== 1 ? 's' : ''}</span>` +
-        Array.from({
-            length: pages
-          }, (_, i) =>
-          `<button class="page-btn${currentPage===i+1?' active':''}"
-                   onclick="${fn}(${i+1})">${i+1}</button>`
-        ).join('');
+      if (pages <= 1) return `<span>${total} record${total !== 1 ? 's' : ''}</span>`;
+
+      const buttons = [];
+      const delta = 2; // pages shown around the current page
+
+      const range = new Set();
+      range.add(1);
+      range.add(pages);
+      for (let i = Math.max(2, currentPage - delta); i <= Math.min(pages - 1, currentPage + delta); i++) {
+        range.add(i);
+      }
+
+      const sorted = [...range].sort((a, b) => a - b);
+      let prev = null;
+      for (const p of sorted) {
+        if (prev !== null && p - prev > 1) {
+          buttons.push(`<span style="padding:0 4px;color:#aaa;line-height:30px;">…</span>`);
+        }
+        buttons.push(
+          `<button class="page-btn${currentPage === p ? ' active' : ''}" onclick="${fn}(${p})">${p}</button>`
+        );
+        prev = p;
+      }
+
+      return `<span>${total} record${total !== 1 ? 's' : ''}</span>
+      <button class="page-btn" onclick="${fn}(${Math.max(1, currentPage - 1)})"
+      ${currentPage === 1 ? 'disabled style="opacity:.4;cursor:default"' : ''}>‹</button>
+      ${buttons.join('')}
+      <button class="page-btn" onclick="${fn}(${Math.min(pages, currentPage + 1)})"
+      ${currentPage === pages ? 'disabled style="opacity:.4;cursor:default"' : ''}>›</button>`;
     }
 
     /* ══════════════════════════════════════════════════════════════════

@@ -126,12 +126,18 @@ class EmployeeManager
       $query .= " AND (brand IS NULL OR TRIM(brand) = '' OR LOWER(TRIM(brand)) = 'none')";
     }
     if (!empty($filters['status'])) {
-      $query .= " AND status = :status";
-      $params[':status']    = $filters['status'];
+      $query .= " AND status LIKE :status";
+      $params[':status']  = '%' . $filters['status'] . '%';
+    }
+    if (!empty($filters['status_none'])) {
+      $query .= " AND (status IS NULL OR TRIM(status) = '' OR LOWER(TRIM(status)) = 'none')";
     }
     if (!empty($filters['shift'])) {
-      $query .= " AND shift = :shift";
-      $params[':shift']     = $filters['shift'];
+      $query .= " AND shift LIKE :shift";
+      $params[':shift']     = '%' . $filters['shift'] . '%';
+    }
+    if (!empty($filters['shift_none'])) {
+      $query .= " AND (shift IS NULL OR TRIM(shift) = '' OR LOWER(TRIM(shift)) = 'none')";
     }
     if (!empty($filters['violation'])) {
       $query .= " AND violation LIKE :violation";
@@ -145,12 +151,12 @@ class EmployeeManager
       $params[':qr_code']   = '%' . $filters['qr_code'] . '%';
     }
     if (!empty($filters['created_at'])) {
-      $query .= " AND created_at LIKE :created_at";
-      $params[':created_at']  = '%' . $filters['created_at'] . '%';
+      $query .= " AND DATE(created_at) = :created_at";
+      $params[':created_at'] = $filters['created_at'];
     }
     if (!empty($filters['updated_at'])) {
-      $query .= " AND updated_at LIKE :updated_at";
-      $params[':updated_at']  = '%' . $filters['updated_at'] . '%';
+      $query .= " AND DATE(updated_at) = :updated_at";
+      $params[':updated_at'] = $filters['updated_at'];
     }
 
     $query .= " ORDER BY created_at DESC";
@@ -1021,6 +1027,17 @@ try {
         if (!empty($_GET['violation']))      $filters['violation']      = $_GET['violation'];
         if (!empty($_GET['violation_none'])) $filters['violation_none'] = '1';
         if (!empty($_GET['qr_code']))        $filters['qr_code']        = $_GET['qr_code'];
+        if (!empty($_GET['created_at'])) { $filters['created_at'] = $_GET['created_at']; }
+         elseif (!empty($_GET['created_from']) && !empty($_GET['created_to'])) {
+          $filters['created_from'] = $_GET['created_from'];
+          $filters['created_to']   = $_GET['created_to'];
+        }
+
+         if (!empty($_GET['updated_at'])) { $filters['updated_at'] = $_GET['updated_at']; }
+         elseif (!empty($_GET['updated_from']) && !empty($_GET['updated_to'])) {
+          $filters['updated_from'] = $_GET['updated_from'];
+          $filters['updated_to']   = $_GET['updated_to'];
+        }
 
         try {
           $employees           = $employeeManager->getEmployees($filters);

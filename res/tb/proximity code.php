@@ -90,7 +90,7 @@ if ($databaseConnected) {
             <input type="text" id="search_date" name="created_at" placeholder="Date">
           </div>
           <div class="form-group" style="position: fixed; left: 0; top: 0; opacity: 0;">
-            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; cursor: default;" autocomplete="off">
+            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; width: 8px; cursor: default;" autocomplete="off">
           </div>
         </div>
         <img src="../icon/nfc-icon.png" alt="Proximity" loading="lazy" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
@@ -122,7 +122,6 @@ if ($databaseConnected) {
             <div class="add-options-menu" id="exportOptionsMenu">
               <button onclick="exportAllCodes(); hideExportOptions();"><i class="fas fa-download"></i> Export All Data</button>
               <button onclick="exportFilteredCodes(); hideExportOptions();"><i class="fas fa-download"></i> Export Filtered Data</button>
-              <button onclick="exportWithImages(); hideExportOptions();"><i class="fas fa-download"></i> Export with Images</button>
               <button onclick="hideExportOptions();"><i class="fas fa-times"></i> Cancel</button>
             </div>
           </div>

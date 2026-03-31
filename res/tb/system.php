@@ -90,19 +90,12 @@ if ($databaseConnected) {
           </div>
           <div class="form-group">
             <select id="search_status" name="status">
-              <option value="" selected>Status</option>
-              <option value="" disabled>──────────</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
+              <option value="">Default: ALL</option>
             </select>
           </div>
           <div class="form-group">
             <select id="search_shift" name="shift">
-              <option value="" selected>Shifts</option>
-              <option value="" disabled>──────────</option>
-              <option value="Day Shift">Day Shift</option>
-              <option value="Night Shift">Night Shift</option>
-              <option value="Graveyard Shift">Graveyard Shift</option>
+              <option value="">Default: ALL</option>
             </select>
           </div>
           <div class="form-group">
@@ -110,11 +103,25 @@ if ($databaseConnected) {
               <option value="">Default: ALL</option>
             </select>
           </div>
-          <div class="form-group">
+          <!-- <div class="form-group">
             <input type="text" id="search_date" name="created_at" placeholder="Date">
+          </div> -->
+          <div class="form-group" style="position: relative;">
+            <input type="date"
+              id="search_date"
+              name="created_at"
+              title="Filter by registration date"
+              style="padding-right: 28px; cursor: pointer;">
+            <button type="button"
+              id="clear_date_btn"
+              onclick="clearDateFilter()"
+              title="Clear date"
+              style="display:none; position:absolute; right:6px; top:50%; transform:translateY(-50%);
+                 background:none; border:none; cursor:pointer; font-size:14px;
+                 color:var(--color-text-secondary); padding:0; line-height:1;">✕</button>
           </div>
           <div class="form-group" style="position: fixed; left: 0; top: 0; opacity: 0;">
-            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; cursor: default;" autocomplete="off">
+            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; width: 8px; cursor: default;" autocomplete="off">
           </div>
         </div>
         <img src="../icon/nfc-icon.png" alt="Proximity" loading="lazy" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">

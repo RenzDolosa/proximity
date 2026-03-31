@@ -728,11 +728,17 @@ try {
         if (!empty($_GET['qr_code'])) {
           $filters['qr_code'] = $_GET['qr_code'];
         }
-        if (!empty($_GET['created_at'])) {
-          $filters['created_at'] = $_GET['created_at'];
+        
+        if (!empty($_GET['created_at'])) { $filters['created_at'] = $_GET['created_at']; }
+         elseif (!empty($_GET['created_from']) && !empty($_GET['created_to'])) {
+          $filters['created_from'] = $_GET['created_from'];
+          $filters['created_to']   = $_GET['created_to'];
         }
-        if (!empty($_GET['updated_at'])) {
-          $filters['updated_at'] = $_GET['updated_at'];
+
+         if (!empty($_GET['updated_at'])) { $filters['updated_at'] = $_GET['updated_at']; }
+         elseif (!empty($_GET['updated_from']) && !empty($_GET['updated_to'])) {
+          $filters['updated_from'] = $_GET['updated_from'];
+          $filters['updated_to']   = $_GET['updated_to'];
         }
 
         try {

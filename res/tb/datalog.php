@@ -120,19 +120,12 @@ if ($databaseConnected) {
           </div>
           <div class="form-group">
             <select id="search_status" name="status">
-              <option value="" selected>Status</option>
-              <option value="" disabled>──────────</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
+              <option value="">Default: ALL</option>
             </select>
           </div>
           <div class="form-group">
             <select id="search_shift" name="shift">
-              <option value="" selected>Shifts</option>
-              <option value="" disabled>──────────</option>
-              <option value="Day Shift">Day Shift</option>
-              <option value="Night Shift">Night Shift</option>
-              <option value="Graveyard Shift">Graveyard Shift</option>
+              <option value="">Default: ALL</option>
             </select>
           </div>
           <div class="form-group">
@@ -142,17 +135,14 @@ if ($databaseConnected) {
           </div>
           <div class="form-group">
             <select id="search_in-out" name="check_status">
-              <option value="" selected>Check Status</option>
-              <option value="" disabled>──────────</option>
-              <option value="In">IN</option>
-              <option value="Out">OUT</option>
+              <option value="">Default: ALL</option>
             </select>
           </div>
           <div class="form-group">
             <input type="text" id="search_date" name="access_timestamp" placeholder="Date">
           </div>
           <div class="form-group" style="position: fixed; left: 0; top: 0; opacity: 0;">
-            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; cursor: default;" autocomplete="off">
+            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; width: 8px; cursor: default;" autocomplete="off">
           </div>
         </div>
         <img src="../icon/nfc-icon.png" alt="Proximity" loading="lazy" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">

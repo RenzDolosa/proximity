@@ -125,6 +125,13 @@ function exportAllData() {
   }
 }
 
+function toProperCase(str) {
+  if (!str) return "";
+  return str
+    .toLowerCase()
+    .replace(/(^|[\s-,])(\w)/g, (char) => char.toUpperCase());
+}
+
 // Updated helper function to export employee data array
 async function exportEmployeeData(employees, type = "Data") {
   try {
@@ -158,9 +165,9 @@ async function exportEmployeeData(employees, type = "Data") {
       const rowData = [
         String(index + 1), // SN
         String(employee.employee_id) || "", 
-        employee.fullname || "",
-        employee.position || "",
-        employee.brand || "",
+        toProperCase(employee.fullname) || "",
+        toProperCase(employee.position) || "",
+        toProperCase(employee.brand) || "",
         employee.status || "",
         employee.shift || "",
         employee.violation || "None",
@@ -465,56 +472,338 @@ function exportToExcelDTL(type = "Filtered") {
 }
 
 // Enhanced export function with filtering options
-function exportFilteredData() {
-  showAlert("Exporting filtered data...", "info");
-  try {
-    // Get current filter values
-    const filters = {
-      fullname: document.getElementById("search_fullname").value.toLowerCase(),
-      position: document.getElementById("search_position").value.toLowerCase(),
-      brand: document.getElementById("search_brand").value.toLowerCase(),
-      status: document.getElementById("search_status").value,
-      shift: document.getElementById("search_shift").value,
-      qr_code: document.getElementById("search_qr").value.toLowerCase(),
-    };
+async function exportFilteredData() {
+  const hasFilters = hasActiveFilters();
 
-    // Check if any filters are active
-    const hasActiveFilters = Object.values(filters).some(
-      (filter) => filter !== "",
-    );
+  const isFiltered =
+    hasFilters || Object.keys(activeFilters).length > 0;
 
-    if (hasActiveFilters) {
-      const result = confirm(
-        "Export filtered data only or export all data?\n\nClick OK to export filtered data\nClick Cancel to export all data",
-      );
-      if (result) {
-        exportToExcelDTL(); // Export only visible/filtered data
-      } else {
-        exportAllData(); // Export all data regardless of filters
-      }
-    } else {
-      exportToExcelDTL(); // Export all data
-    }
-  } catch (error) {
-    console.error("Export filter error:", error);
-    exportToExcelDTL(); // Fallback to regular export
+  if (!isFiltered) {
+    exportAllData();
+    return;
   }
 
-  console.log("Exporting filtered data");
+  showAlert("Exporting filtered data...", "info");
 
-  setTimeout(() => {
-    showAlert("Data exported successfully!", "success");
-  }, 1500);
+  try {
+    if (!employees || employees.length === 0) {
+      showAlert("No filtered employee data found!", "warning");
+      return;
+    }
+
+    exportEmployeeData(employees, "Filtered");
+  } catch (error) {
+    console.error("Export filtered data error:", error);
+    showAlert("Error exporting filtered data: " + error.message, "error");
+  }
 }
 
-function exportWithImages() {
-  showAlert("Exporting data with images...", "info");
-  // Your export logic here
-  console.log("Exporting with images");
+// ─── Dynamic loader for ExcelJS (image-aware Excel library) ───────────────
+function loadExcelJS() {
+  return new Promise((resolve, reject) => {
+    if (window.ExcelJS) return resolve();
+    const script = document.createElement("script");
+    script.src =
+      "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("Failed to load ExcelJS"));
+    document.head.appendChild(script);
+  });
+}
 
-  setTimeout(() => {
-    showAlert("Data with images exported successfully!", "success");
-  }, 2000);
+// ─── Resolve image URL from table cell OR fallback to employee ID path ─────
+function resolveEmployeeImageUrl(employee, tableRow) {
+  // 1. Try to grab <img src> from table cell[8] (the photo column)
+  if (tableRow) {
+    const imgEl = tableRow.querySelectorAll("td")[8]?.querySelector("img");
+    if (imgEl?.src) return imgEl.src;
+  }
+  // 2. Fallback: construct URL from employee ID (adjust path to match your setup)
+  const basePaths = [
+    `../uploads/employees/${employee.id}.jpg`,
+    `../uploads/employees/${employee.id}.png`,
+    `../uploads/${employee.id}.jpg`,
+  ];
+  return basePaths[0]; // primary guess; others tried inside fetchImageBase64
+}
+
+// ─── Fetch an image URL and return { base64, extension } ──────────────────
+async function fetchImageBase64(url) {
+  const extensions = ["jpg", "jpeg", "png", "webp"];
+  const urlsToTry = [url];
+
+  // Also try swapping extension if the primary URL fails
+  const base = url.replace(/\.(jpg|jpeg|png|webp)$/i, "");
+  extensions.forEach((ext) => {
+    const alt = `${base}.${ext}`;
+    if (alt !== url) urlsToTry.push(alt);
+  });
+
+  for (const tryUrl of urlsToTry) {
+    try {
+      const res = await fetch(tryUrl);
+      if (!res.ok) continue;
+
+      const blob = await res.blob();
+      if (!blob.type.startsWith("image/")) continue;
+
+      const ext = blob.type.split("/")[1].replace("jpeg", "jpeg") || "jpeg";
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result.split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      return { base64, extension: ext === "jpeg" ? "jpeg" : ext };
+    } catch {
+      // try next
+    }
+  }
+  return null; // image not available
+}
+
+// ─── Resize & center-crop image to a square using canvas ──────────────────
+function resizeImageToSquare(base64, extension, size = 60) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+
+      // Center-crop: scale so the shorter side fills the square
+      const scale = Math.max(size / img.width, size / img.height);
+      const scaledW = img.width * scale;
+      const scaledH = img.height * scale;
+      const offsetX = (size - scaledW) / 2;
+      const offsetY = (size - scaledH) / 2;
+
+      ctx.drawImage(img, offsetX, offsetY, scaledW, scaledH);
+      const resizedBase64 = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
+      resolve({ base64: resizedBase64, extension: "jpeg" });
+    };
+    img.onerror = () => resolve(null);
+    img.src = `data:image/${extension === "jpeg" ? "jpeg" : extension};base64,${base64}`;
+  });
+}
+
+// ─── Main export function ──────────────────────────────────────────────────
+async function exportWithImages() {
+  showAlert("Preparing export — loading image engine...", "info");
+
+  try {
+    await loadExcelJS();
+  } catch (err) {
+    showAlert("Could not load image export library: " + err.message, "error");
+    return;
+  }
+
+  // ── Determine which employees to export ──────────────────────────────────
+  const hasFilters = hasActiveFilters();
+  let exportEmployees = [];
+  let exportType = "All";
+
+  if (hasFilters && employees && employees.length > 0) {
+    exportEmployees = employees;
+    exportType = "Filtered";
+    showAlert(`Exporting ${exportEmployees.length} filtered record(s) with images...`, "info");
+  } else {
+    showAlert("Fetching all scan history data...", "info");
+    try {
+      exportEmployees = await fetchAllEmployeesForExport();
+    } catch (err) {
+      showAlert("Error fetching data: " + err.message, "error");
+      return;
+    }
+  }
+
+  if (!exportEmployees || exportEmployees.length === 0) {
+    showAlert("No data found!", "warning");
+    return;
+  }
+
+  // ── Build QR → image map from manpower_backend (same as dtl.js does) ─────
+  showAlert("Matching employee images...", "info");
+  let qrImageMap = {};
+  try {
+    qrImageMap = await buildQRToImageMap();
+  } catch (err) {
+    console.warn("Could not build QR image map:", err);
+    // Continue without images rather than aborting
+  }
+
+  showAlert(`Building Excel with images for ${exportEmployees.length} record(s)...`, "info");
+
+  // ── Workbook setup ────────────────────────────────────────────────────────
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Employee Management System";
+  workbook.created = new Date();
+  const worksheet = workbook.addWorksheet("Scan History");
+
+  const ROW_HEIGHT   = 55;
+  const IMG_COL_WIDTH = 14;
+  const IMG_PX_W     = 60;
+  const IMG_PX_H     = 48;
+
+  // ── Column definitions (matches DTL table columns) ────────────────────────
+  worksheet.columns = [
+    { header: "SN",             key: "sn",               width: 5  },
+    { header: "EMPID",          key: "employee_id",      width: 12 },
+    { header: "Photo",          key: "photo",            width: IMG_COL_WIDTH },
+    { header: "Fullname",       key: "fullname",         width: 26 },
+    { header: "Position",       key: "position",         width: 22 },
+    { header: "Brand",          key: "brand",            width: 16 },
+    { header: "Status",         key: "status",           width: 12 },
+    { header: "Shift",          key: "shift",            width: 15 },
+    { header: "Violation",      key: "violation",        width: 20 },
+    { header: "Proximity Code", key: "qr_code",          width: 16 },
+    { header: "Timestamp",      key: "access_timestamp", width: 22 },
+    { header: "Check Status",   key: "check_status",     width: 14 },
+  ];
+
+  // ── Style header row ──────────────────────────────────────────────────────
+  const headerRow = worksheet.getRow(1);
+  headerRow.height = 22;
+  headerRow.eachCell((cell) => {
+    cell.font      = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+    cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4472C4" } };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border    = {
+      top:    { style: "thin", color: { argb: "FF000000" } },
+      bottom: { style: "thin", color: { argb: "FF000000" } },
+      left:   { style: "thin", color: { argb: "FF000000" } },
+      right:  { style: "thin", color: { argb: "FF000000" } },
+    };
+  });
+
+  const borderStyle = {
+    top:    { style: "thin", color: { argb: "FF000000" } },
+    bottom: { style: "thin", color: { argb: "FF000000" } },
+    left:   { style: "thin", color: { argb: "FF000000" } },
+    right:  { style: "thin", color: { argb: "FF000000" } },
+  };
+
+  // ── Add data rows with images ─────────────────────────────────────────────
+  let successCount  = 0;
+  let missingImages = 0;
+
+  for (let i = 0; i < exportEmployees.length; i++) {
+    const emp = exportEmployees[i];
+
+    // ── Resolve matched manpower data via QR code (same logic as renderEmployeeTable) ──
+    const qrKey         = (emp.qr_code || "").trim().toLowerCase();
+    const matchedData   = qrImageMap[qrKey] || null;
+
+    // Use matched manpower data for display fields when available
+    const displayEmpId  = matchedData ? String(matchedData.id)       : (emp.employee_id || "");
+    const displayName   = matchedData ? matchedData.fullname          : (emp.fullname   || "");
+    const displayPos    = matchedData ? matchedData.position          : (emp.position   || "");
+    const displayBrand  = matchedData ? matchedData.brand             : (emp.brand      || "");
+
+    const dataRow = worksheet.addRow({
+      sn:               i + 1,
+      employee_id:      displayEmpId,
+      photo:            "",  // placeholder — image embedded below
+      fullname:         toProperCase(displayName),
+      position:         toProperCase(displayPos),
+      brand:            toProperCase(displayBrand),
+      status:           emp.status         || "",
+      shift:            emp.shift          || "",
+      violation:        emp.violation      || "None",
+      qr_code:          emp.qr_code        || "",
+      access_timestamp: formatDate(emp.access_timestamp),
+      check_status:     emp.check_status   || "",
+    });
+
+    dataRow.height = ROW_HEIGHT;
+
+    dataRow.eachCell({ includeEmpty: true }, (cell, colNum) => {
+      cell.border    = borderStyle;
+      cell.alignment = {
+        vertical:   "middle",
+        horizontal: colNum === 1 ? "center" : "left",
+        wrapText:   false,
+      };
+    });
+
+    // ── Resolve image URL via QR match (the key fix) ──────────────────────
+    let imgUrl = null;
+
+    if (matchedData && matchedData.image) {
+      // Primary: use the manpower employee's image (matched by QR code)
+      imgUrl = `${window.location.origin}/uploads/user/${matchedData.image}`;
+    } else if (emp.image) {
+      // Fallback: use the log record's own image if present
+      imgUrl = `${window.location.origin}/uploads/user/${emp.image}`;
+    }
+
+    if (imgUrl) {
+      const imgResult = await fetchImageBase64(imgUrl);
+
+      if (imgResult) {
+        try {
+          const squared = await resizeImageToSquare(
+            imgResult.base64,
+            imgResult.extension,
+            IMG_PX_W,
+          );
+
+          const imageId = workbook.addImage({
+            base64:    (squared || imgResult).base64,
+            extension: (squared || imgResult).extension,
+          });
+
+          worksheet.addImage(imageId, {
+            tl:     { col: 2.08, row: i + 1.08 },
+            ext:    { width: IMG_PX_W, height: IMG_PX_H },
+            editAs: "oneCell",
+          });
+
+          successCount++;
+        } catch (imgErr) {
+          console.warn(`Could not embed image for QR ${emp.qr_code}:`, imgErr);
+          missingImages++;
+        }
+      } else {
+        missingImages++;
+      }
+    } else {
+      missingImages++;
+    }
+  }
+
+  // ── Generate and download ─────────────────────────────────────────────────
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob   = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+
+  const now     = new Date();
+  const dateStr =
+    now.getFullYear() + "-" +
+    String(now.getMonth() + 1).padStart(2, "0") + "-" +
+    String(now.getDate()).padStart(2, "0");
+  const timeStr =
+    String(now.getHours()).padStart(2, "0") + "-" +
+    String(now.getMinutes()).padStart(2, "0");
+  const filename = `Scan_History_${exportType}_With_Images_${dateStr}_${timeStr}.xlsx`;
+
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement("a");
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  const msg =
+    missingImages > 0
+      ? `Exported ${exportEmployees.length} records (${successCount} with photos, ${missingImages} without) → ${filename}`
+      : `Successfully exported ${exportEmployees.length} records with photos → ${filename}`;
+
+  showAlert(msg, missingImages > 0 ? "warning" : "success");
 }
 
 // Show alert message

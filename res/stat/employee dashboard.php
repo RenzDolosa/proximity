@@ -95,27 +95,19 @@ if ($databaseConnected && $employeeManager) {
     $stats['today_out'] = (int)$stmt->fetchColumn();
 
     // Get recent employee logs
-    $stmt = $userDb->prepare("
-            SELECT el.*, e.fullname 
-            FROM employee_access_log el
-            LEFT JOIN employees e ON el.employee_id = e.id
-            ORDER BY el.access_timestamp DESC 
-            LIMIT 6
-        ");
-    $stmt->execute();
-    $recentLogs = $stmt->fetchAll();
-
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM code");
     $stmt->execute();
     $stats['total_proxcode'] = $stmt->fetchColumn();
 
-    // Get recent employee logs
+    // Get recent activity from employee_access_log joined with employees
     $stmt = $userDb->prepare("
-            SELECT el.*, e.qr_code
-            FROM code el
-            ORDER BY el.access_timestamp DESC 
-            LIMIT 6
-        ");
+        SELECT el.*,
+               COALESCE(NULLIF(TRIM(el.fullname), ''), e.fullname, 'Unknown Employee') AS fullname
+        FROM employee_access_log el
+        LEFT JOIN employees e ON el.employee_id = e.id
+        ORDER BY el.access_timestamp DESC 
+        LIMIT 6
+    ");
     $stmt->execute();
     $recentLogs = $stmt->fetchAll();
   } catch (PDOException $e) {
@@ -123,8 +115,8 @@ if ($databaseConnected && $employeeManager) {
     error_log($dbError);
   }
 }
-?>
 
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -324,7 +316,7 @@ if ($databaseConnected && $employeeManager) {
 
                 <div class="activity-details">
                   <div class="activity-name">
-                    <strong><?php echo htmlspecialchars($log['fullname'] ?? 'Unknown Employee'); ?></strong>
+                    <strong><?php echo htmlspecialchars(mb_convert_case($log['fullname'] ?? 'Unknown Employee', MB_CASE_TITLE, 'UTF-8'), ENT_QUOTES, 'UTF-8'); ?></strong>
                   </div>
                   <div class="activity-time">
                     <?php echo date('M j, Y g:i A', strtotime($log['access_timestamp'])); ?>

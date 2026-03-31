@@ -115,12 +115,18 @@ class AccessLogManager
       $query .= " AND (brand IS NULL OR TRIM(brand) = '' OR LOWER(TRIM(brand)) = 'none')";
     }
     if (!empty($filters['status'])) {
-      $query .= " AND status = :status";
-      $params[':status'] = $filters['status'];
+      $query .= " AND status LIKE :status";
+      $params[':status'] = '%' . $filters['status'] . '%';
+    }
+    if (!empty($filters['status_none'])) {
+      $query .= " AND (status IS NULL OR TRIM(status) = '' OR LOWER(TRIM(status)) = 'none')";
     }
     if (!empty($filters['shift'])) {
-      $query .= " AND shift = :shift";
-      $params[':shift'] = $filters['shift'];
+      $query .= " AND shift LIKE :shift";
+      $params[':shift'] = '%' . $filters['shift'] . '%';
+    }
+    if (!empty($filters['shift_none'])) {
+      $query .= " AND (shift IS NULL OR TRIM(shift) = '' OR LOWER(TRIM(shift)) = 'none')";
     }
     if (!empty($filters['violation'])) {
       $query .= " AND violation LIKE :violation";

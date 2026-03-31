@@ -860,10 +860,6 @@ function copyQRCode(code) {
 // Pagination functions
 function updatePaginationControls() {
   const paginationDiv = document.getElementById("pagination");
-  const prevBtn = document.getElementById("prev-btn");
-  const nextBtn = document.getElementById("next-btn");
-  const pageInfo = document.getElementById("page-info");
-
   if (!paginationDiv) return;
 
   if (totalPages <= 1) {
@@ -873,12 +869,40 @@ function updatePaginationControls() {
 
   paginationDiv.style.display = "flex";
 
-  // Update page info
-  pageInfo.textContent = `Page ${currentPage} of ${totalPages} (${employees.length} total employees)`;
+  const delta = 2;
+  const range = new Set();
+  range.add(1);
+  range.add(totalPages);
+  for (
+    let i = Math.max(2, currentPage - delta);
+    i <= Math.min(totalPages - 1, currentPage + delta);
+    i++
+  ) {
+    range.add(i);
+  }
 
-  // Update button states
-  prevBtn.disabled = currentPage <= 1;
-  nextBtn.disabled = currentPage >= totalPages;
+  const sorted = [...range].sort((a, b) => a - b);
+  let prev = null;
+  let buttonsHTML = "";
+
+  for (const p of sorted) {
+    if (prev !== null && p - prev > 1) {
+      buttonsHTML += `<span class="page-ellipsis">…</span>`;
+    }
+    buttonsHTML += `<button class="page-num-btn ${currentPage === p ? "active" : ""}" onclick="goToPage(${p})">${p}</button>`;
+    prev = p;
+  }
+
+  paginationDiv.innerHTML = `
+    <button class="page-arrow-btn" onclick="previousPage()" ${currentPage <= 1 ? "disabled" : ""}>
+      <i class="fas fa-arrow-left"></i>
+    </button>
+    ${buttonsHTML}
+    <button class="page-arrow-btn" onclick="nextPage()" ${currentPage >= totalPages ? "disabled" : ""}>
+      <i class="fas fa-arrow-right"></i>
+    </button>
+    <span id="page-info">${employees.length} total &nbsp;|&nbsp; Page ${currentPage} of ${totalPages}</span>
+  `;
 }
 
 function previousPage() {
@@ -1201,11 +1225,21 @@ function updateColor() {
 function populateFilter(employeeList) {
   const position = document.getElementById("search_position");
   const brand = document.getElementById("search_brand");
+  const status = document.getElementById("search_status");
+  const shift = document.getElementById("search_shift");
   const violation = document.getElementById("search_violation");
-  if (!position || !brand || !violation) return;
+  if (!position || !brand || !status || !shift || !violation) return;
 
-  // Helper to rebuild a select with collected values
-  function buildSelect(select, placeholder, noneLabel, values) {
+  // Convert a string to Proper Case
+  function toProperCase(str) {
+    return str.replace(
+      /[^\s,\-]+/g,
+      (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
+    );
+  }
+
+  // Rebuild a <select>; values is a Map<lowerKey, originalValue>
+  function buildSelect(select, placeholder, noneLabel, valuesMap) {
     const current = select.value;
 
     select.innerHTML =
@@ -1213,14 +1247,17 @@ function populateFilter(employeeList) {
       `<option value="">Default: ALL</option>` +
       `<option value="__none__">${noneLabel}</option>`;
 
-    if (values.size > 0) {
-      select.innerHTML += "<option disabled>──────────</option>";
-      [...values].sort().forEach((v) => {
-        const opt = document.createElement("option");
-        opt.value = v;
-        opt.textContent = v;
-        select.appendChild(opt);
-      });
+    if (valuesMap.size > 0) {
+      select.innerHTML += `<option disabled>──────────</option>`;
+
+      [...valuesMap.values()]
+        .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+        .forEach((v) => {
+          const opt = document.createElement("option");
+          opt.value = v; // raw DB value — filter matching stays intact
+          opt.textContent = toProperCase(v); // display only
+          select.appendChild(opt);
+        });
     }
 
     if (current && [...select.options].some((o) => o.value === current)) {
@@ -1228,27 +1265,35 @@ function populateFilter(employeeList) {
     }
   }
 
-  // Collect unique values per field
-  const positionSet = new Set();
-  const brandSet = new Set();
-  const violationSet = new Set();
+  // Collect unique values (case-insensitive dedup; first occurrence wins)
+  const positionMap = new Map();
+  const brandMap = new Map();
+  const statusMap = new Map();
+  const shiftMap = new Map();
+  const violationMap = new Map();
 
   for (const emp of employeeList) {
-    const pos = (emp.position || "").trim();
-    if (pos && pos.toLowerCase() !== "none") positionSet.add(pos);
+    const add = (map, raw) => {
+      const v = (raw || "").trim();
+      if (v && v.toLowerCase() !== "none") {
+        const key = v.toLowerCase();
+        if (!map.has(key)) map.set(key, v); // keep first-seen casing as value
+      }
+    };
 
-    const br = (emp.brand || "").trim();
-    if (br && br.toLowerCase() !== "none") brandSet.add(br);
-
-    const vio = (emp.violation || "").trim();
-    if (vio && vio.toLowerCase() !== "none") violationSet.add(vio);
+    add(positionMap, emp.position);
+    add(brandMap, emp.brand);
+    add(statusMap, emp.status);
+    add(shiftMap, emp.shift);
+    add(violationMap, emp.violation);
   }
 
-  buildSelect(position, "Position", "No Position", positionSet);
-  buildSelect(brand, "Brand", "No Brand", brandSet);
-  buildSelect(violation, "Violation", "No Violation", violationSet);
+  buildSelect(position, "Position", "No Position", positionMap);
+  buildSelect(brand, "Brand", "No Brand", brandMap);
+  buildSelect(status, "Status", "No Status", statusMap);
+  buildSelect(shift, "Shift", "No Shift", shiftMap);
+  buildSelect(violation, "Violation", "No Violation", violationMap);
 
-  // Re-apply color after repopulating
   updateColor();
 }
 
@@ -1273,6 +1318,10 @@ async function loadEmployees(filters = {}, preservePage = false) {
         params.append("position_none", "1");
       } else if (key === "brand" && value === "__none__") {
         params.append("brand_none", "1");
+      } else if (key === "status" && value === "__none__") {
+        params.append("status_none", "1");
+      } else if (key === "shift" && value === "__none__") {
+        params.append("shift_none", "1");
       } else if (key === "violation" && value === "__none__") {
         params.append("violation_none", "1");
       } else {

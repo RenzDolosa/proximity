@@ -186,7 +186,14 @@ function setupEventListeners() {
     input.addEventListener("input", debounce(searchEmployees, 300));
   });
 
-  // 🔥 AUTO-FOCUS LOGIC
+  const dateInput = document.getElementById("search_date");
+  if (dateInput) {
+    dateInput.addEventListener("change", function () {
+      const clearBtn = document.getElementById("clear_date_btn");
+      if (clearBtn) clearBtn.style.display = this.value ? "block" : "none";
+    });
+  }
+
   const codeInput = document.getElementById("search_qr");
 
   function autoFocus() {
@@ -581,16 +588,10 @@ function copyQRCode(code) {
   }
 }
 
-// Add these new pagination functions
+// Pagination functions
 function updatePaginationControls() {
   const paginationDiv = document.getElementById("pagination");
-  const prevBtn = document.getElementById("prev-btn");
-  const nextBtn = document.getElementById("next-btn");
-  const pageInfo = document.getElementById("page-info");
-
-  if (!paginationDiv || !prevBtn || !nextBtn || !pageInfo) {
-    return;
-  }
+  if (!paginationDiv) return;
 
   if (totalPages <= 1) {
     paginationDiv.style.display = "none";
@@ -599,12 +600,36 @@ function updatePaginationControls() {
 
   paginationDiv.style.display = "flex";
 
-  // Update page info
-  pageInfo.textContent = `Page ${currentPage} of ${totalPages} (${employees.length} total proximity codes)`;
+  const delta = 2;
+  const range = new Set();
+  range.add(1);
+  range.add(totalPages);
+  for (let i = Math.max(2, currentPage - delta); i <= Math.min(totalPages - 1, currentPage + delta); i++) {
+    range.add(i);
+  }
 
-  // Update button states
-  prevBtn.disabled = currentPage <= 1;
-  nextBtn.disabled = currentPage >= totalPages;
+  const sorted = [...range].sort((a, b) => a - b);
+  let prev = null;
+  let buttonsHTML = "";
+
+  for (const p of sorted) {
+    if (prev !== null && p - prev > 1) {
+      buttonsHTML += `<span class="page-ellipsis">…</span>`;
+    }
+    buttonsHTML += `<button class="page-num-btn ${currentPage === p ? "active" : ""}" onclick="goToPage(${p})">${p}</button>`;
+    prev = p;
+  }
+
+  paginationDiv.innerHTML = `
+    <button class="page-arrow-btn" onclick="previousPage()" ${currentPage <= 1 ? "disabled" : ""}>
+      <i class="fas fa-arrow-left"></i>
+    </button>
+    ${buttonsHTML}
+    <button class="page-arrow-btn" onclick="nextPage()" ${currentPage >= totalPages ? "disabled" : ""}>
+      <i class="fas fa-arrow-right"></i>
+    </button>
+    <span id="page-info">${employees.length} total &nbsp;|&nbsp; Page ${currentPage} of ${totalPages}</span>
+  `;
 }
 
 function previousPage() {
@@ -669,6 +694,14 @@ function clearSearch() {
   activeFilters = {};
   loadEmployees({}, false); // Load without filters
   updateDeleteButtonState();
+}
+
+function clearDateFilter() {
+  const dateInput = document.getElementById("search_date");
+  const clearBtn = document.getElementById("clear_date_btn");
+  if (dateInput) dateInput.value = "";
+  if (clearBtn) clearBtn.style.display = "none";
+  searchEmployees();
 }
 
 // Open modal

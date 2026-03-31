@@ -5,7 +5,7 @@ ini_set('log_errors', '0');
 ini_set('display_errors', '0');
 error_reporting(0);
 
-// Database configuration
+// Database configuration 
 define('DB_HOST', '127.0.0.1:3307'); // localhost // sql212.infinityfree.com
 define('DB_NAME', 'if0_41430152_proximity3pl'); // system_database // if0_41430152_proximity3pl
 define('DB_USER', 'root'); // root // if0_41430152
