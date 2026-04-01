@@ -125,7 +125,7 @@ try {
         <div class="menu-card" onclick="navigateWithLoading('../tb/table panel.php');">
           <a href="../tb/table panel.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/table panel.php');">Input Employee</a>
           <div class="favi">
-            <img src="../logo/mysql-logo.png" alt="MySql Logo" loading="lazy" style="width: 125px; height: 100px;">
+            <img src="../logo/mysql-logo.svg" alt="MySql Logo" loading="lazy" style="width: 125px; height: 100px;">
             <div>
               <h3>Employee Manager</h3>
               <p>Manage your employee information</p>
@@ -151,7 +151,7 @@ try {
         <div class="menu-card" onclick="navigateWithLoading('../sec/scan test.php');" disabled>
           <a href="../sec/scan test.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../sec/scan test.php');">Test QR or Proximity Code</a>
           <div class="favi">
-            <img src="../icon/nfc-icon.png" alt="NFC Icon" loading="lazy" style="width: 100px; height: 100px;">
+            <img src="../icon/nfc-icon.svg" alt="NFC Icon" loading="lazy" style="width: 100px; height: 100px;">
             <div>
               <h3>Test Live Search</h3>
               <p>Web Proximity verifier application</p>
@@ -164,7 +164,7 @@ try {
         <div class="menu-card" onclick="navigateWithLoading('../udev/m-i v2.php');" style="background: linear-gradient(to right, rgb(183, 183, 183), rgb(147, 147, 147)); transform: scale(1);">
           <a href="../udev/m-i v2.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../udev/m-i v2.php');">Coming Soon</a>
           <div class="favi">
-            <img src="../logo/coming-soon.png" alt="Coming Soon" loading="lazy" style="width: 125px; height: 100px;">
+            <img src="../logo/coming-soon.svg" alt="Coming Soon" loading="lazy" style="width: 125px; height: 100px;">
             <div>
               <h3>Under Development</h3>
               <p>This area is reserved for future Development</p>

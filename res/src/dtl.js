@@ -769,7 +769,7 @@ async function renderEmployeeTable() {
               }
               </td>
               <td class="Col9" onclick="copyQRCode('${escapeHtml(employee.qr_code || "")}')" title="Copy Proximity code" style="cursor: pointer;">
-              <img src="../icon/nfc-icon.png" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;"></td>
+              <img src="../icon/nfc-icon.svg" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;"></td>
               <td class="employee-timestamp"><small>${employee.access_timestamp || "N/A"}</small></td>
               <td><div class="check-status-${(employee.check_status || "").toLowerCase()}"><div class="employee-ph">${
                 employee.check_status || "N/A"

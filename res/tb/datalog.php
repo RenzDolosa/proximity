@@ -156,7 +156,7 @@ if ($databaseConnected) {
             <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; width: 8px; cursor: default;" autocomplete="off">
           </div>
         </div>
-        <img src="../icon/nfc-icon.png" alt="Proximity" loading="lazy" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
+        <img src="../icon/nfc-icon.svg" alt="Proximity" loading="lazy" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
       </form>
       <div class="form-row-btn">
         <div class="form-row">
@@ -231,7 +231,7 @@ if ($databaseConnected) {
             <h3 id="inactive_employees"><?php echo $stats['inactive_employees']; ?></h3>
           </div>
           <div style="display: flex; gap: 10px;">
-            <img src="../icon/scan-icon.png" class="scan-emp" loading="lazy">
+            <img src="../icon/scan-icon.svg" class="scan-emp" loading="lazy">
             <p>Scanned Today</p>
             <h3 id="today_attendance"><?php echo $stats['today_attendance']; ?></h3>
           </div>

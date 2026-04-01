@@ -153,7 +153,7 @@ if (!$portalAccessGranted) {
             <h1>Proximity</h1>
           </div>
           <div class="s-search-section">
-            <img src="res/icon/nfc-icon.png" alt="NFC Icon" loading="lazy">
+            <img src="res/icon/nfc-icon.svg" alt="NFC Icon" loading="lazy">
             <div>
               <h3>Live Search</h3>
               <p>Web pass verifier application</p>

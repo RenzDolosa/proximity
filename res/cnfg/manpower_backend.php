@@ -413,10 +413,10 @@ class FileUploader
     }
 
     $file_extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-    $allowed_types  = ['jpg', 'jpeg', 'png', 'gif'];
+    $allowed_types  = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
     if (!in_array($file_extension, $allowed_types)) {
-      throw new Exception("Invalid file type. Only JPG, JPEG, PNG, and GIF allowed.");
+      throw new Exception("Invalid file type. Only JPG, JPEG, PNG, GIF and WEBP allowed.");
     }
 
     if ($file['size'] > $this->max_size) {
@@ -452,6 +452,12 @@ class FileUploader
         return $fallbackName;
       }
       return false;
+    }
+
+    if ($converted) {
+      // Generate thumb_<filename> at 80px wide for table display
+      $thumbPath = $this->upload_dir . 'thumb_' . $filename;
+      $this->convertToWebP($file['tmp_name'], $file_extension, $thumbPath, 75, 80);
     }
 
     return $filename;
@@ -513,15 +519,21 @@ class FileUploader
 
   public function deleteImage($filename)
   {
-    if ($filename && file_exists($this->upload_dir . $filename)) {
-      return unlink($this->upload_dir . $filename);
-    }
-    return false;
-  }
+    if (!$filename) return false;
 
-  public function getImagePath($filename)
-  {
-    return $this->upload_dir . $filename;
+    $deleted = false;
+    $main  = $this->upload_dir . $filename;
+    $thumb = $this->upload_dir . 'thumb_' . $filename;
+
+    if (file_exists($main)) {
+      unlink($main);
+      $deleted = true;
+    }
+    if (file_exists($thumb)) {
+      unlink($thumb);
+    }
+
+    return $deleted;
   }
 }
 
@@ -1246,11 +1258,17 @@ function serveFile($filepath, $filename = null)
 
   $content_type = $content_types[$file_extension] ?? 'application/octet-stream';
 
-  header('Content-Type: ' . $content_type);
-  header('Content-Disposition: attachment; filename="' . $filename . '"');
-  header('Content-Length: ' . filesize($filepath));
-  header('Cache-Control: no-cache, must-revalidate');
-  header('Expires: 0');
+  $image_types = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+
+  if (in_array($file_extension, $image_types)) {
+    header('Content-Disposition: inline; filename="' . $filename . '"');
+    header('Cache-Control: public, max-age=31536000, immutable');
+    header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 31536000) . ' GMT');
+  } else {
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Cache-Control: no-cache, must-revalidate');
+    header('Expires: 0');
+  }
 
   readfile($filepath);
   exit;

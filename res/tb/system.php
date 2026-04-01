@@ -135,7 +135,7 @@ if ($databaseConnected) {
             <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; width: 8px; cursor: default;" autocomplete="off">
           </div>
         </div>
-        <img src="../icon/nfc-icon.png" alt="Proximity" loading="lazy" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
+        <img src="../icon/nfc-icon.svg" alt="Proximity" loading="lazy" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
       </form>
       <div class="form-row-btn">
         <div class="form-row">

@@ -8,3 +8,10 @@ Require all denied
 <FilesMatch "(?i)\.(jpg|jpeg|png|gif|webp|pdf|txt|zip)$">
   Require all granted
 </FilesMatch>
+
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType image/webp "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/png  "access plus 1 year"
+</IfModule>

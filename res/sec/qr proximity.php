@@ -56,7 +56,7 @@ $email = $_SESSION['email'] ?? '';
           <h1>Proximity</h1>
         </div>
         <div class="s-search-section">
-          <img src="../icon/nfc-icon.png" alt="NFC Icon" loading="lazy">
+          <img src="../icon/nfc-icon.svg" alt="NFC Icon" loading="lazy">
           <div>
             <h3>Live Search</h3>
             <p>Web pass verifier application</p>
@@ -71,7 +71,7 @@ $email = $_SESSION['email'] ?? '';
           <h1>Manual Entry</h1>
         </div>
         <div class="s-search-section">
-          <img src="../logo/manual.png" alt="Manual Entry" loading="lazy">
+          <img src="../logo/manual.svg" alt="Manual Entry" loading="lazy">
           <div>
             <h3>Employee Entry</h3>
             <p>This area is served for manual entry</p>

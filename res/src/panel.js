@@ -364,7 +364,7 @@ async function _sys_renderTable() {
           : `<div class="ph-cont"><div class="employee-ph">${initials}</div></div>`
       }</td>
       <td class="Col9" onclick="sys_copyQR('${_escapeHtml(emp.qr_code)}')" title="Copy Proximity code" style="cursor:pointer">
-        <img src="../icon/nfc-icon.png" loading="lazy" style="width:20px;height:20px"></td>
+        <img src="../icon/nfc-icon.svg" loading="lazy" style="width:20px;height:20px"></td>
       <td><small>${emp.created_at}</small></td>
       <td><small>${emp.updated_at}</small></td>
       <td>
@@ -957,7 +957,7 @@ async function _dtl_renderTable() {
           : `<div class="ph-cont" title="${_escapeHtml(tooltip)}"><div class="employee-ph">${initials}</div></div>`
       }</td>
       <td class="Col9" onclick="dtl_copyQR('${_escapeHtml(emp.qr_code || "")}')" title="Copy Proximity code" style="cursor:pointer">
-        <img src="../icon/nfc-icon.png" loading="lazy" style="width:20px;height:20px"></td>
+        <img src="../icon/nfc-icon.svg" loading="lazy" style="width:20px;height:20px"></td>
       <td class="employee-timestamp"><small>${emp.access_timestamp || "N/A"}</small></td>
       <td><div class="check-status-${(emp.check_status || "").toLowerCase()}"><div class="employee-ph">${emp.check_status || "N/A"}</div></div></td>
     </tr>`;
@@ -1300,7 +1300,7 @@ async function _prx_renderTable() {
       }</td>
       <td><strong>${_escapeHtml(String(empId))}</strong></td>
       <td class="Col9" onclick="prx_copyQR('${_escapeHtml(emp.qr_code || "")}')" title="Copy Proximity code" style="cursor:pointer">
-        <img src="../icon/nfc-icon.png" loading="lazy" style="width:20px;height:20px"></td>
+        <img src="../icon/nfc-icon.svg" loading="lazy" style="width:20px;height:20px"></td>
       <td><span class="remarks-${remarks.toLowerCase()}">${remarks}</span></td>
       <td><small>${emp.created_at || ""}</small></td>
       <td><small>${emp.updated_at || ""}</small></td>

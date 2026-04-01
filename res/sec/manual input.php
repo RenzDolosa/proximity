@@ -63,7 +63,7 @@ try {
           <h1>Proximity</h1>
         </div>
         <div class="s-search-section">
-          <img src="../icon/nfc-icon.png" alt="NFC Icon" loading="lazy">
+          <img src="../icon/nfc-icon.svg" alt="NFC Icon" loading="lazy">
           <div>
             <h3>Live Search</h3>
             <p>Web pass verifier application</p>
@@ -78,7 +78,7 @@ try {
           <h1>Manual Entry</h1>
         </div>
         <div class="s-search-section">
-          <img src="../logo/manual.png" alt="Manual Entry" loading="lazy">
+          <img src="../logo/manual.svg" alt="Manual Entry" loading="lazy">
           <div>
             <h3>Employee Entry</h3>
             <p>This area is served for manual entry</p>
@@ -118,7 +118,7 @@ try {
         <div class="form-group" style="position: fixed; left: 1%; top: 1%; opacity: 0;">
           <input type="text" id="search_qr" name="qr_code" placeholder="Proximity Code" style="cursor: default;" autocomplete="off">
         </div>
-        <img src="../icon/nfc-icon.png" alt="Proximity" loading="lazy" style="position: absolute; left: 24px; top: 10%; width: 100px; height: 100px; filter: invert(1);">
+        <img src="../icon/nfc-icon.svg" alt="Proximity" loading="lazy" style="position: absolute; left: 24px; top: 10%; width: 100px; height: 100px; filter: invert(1);">
       </form>
     </div>
 
@@ -130,7 +130,7 @@ try {
       <div class="employee-grid" id="resultsTable">
         <!-- Default blank state -->
         <div class="no-results" id="defaultState">
-          <div class="no-results-icon"><img src="../icon/nfc-icon.png" alt="Proximity Code" loading="lazy" style="width: 10%; height: 10%;"></div>
+          <div class="no-results-icon"><img src="../icon/nfc-icon.svg" alt="Proximity Code" loading="lazy" style="width: 10%; height: 10%;"></div>
           <h3>Search for Employees</h3>
           <p>Enter a name or proximity code to find employees</p>
         </div>
@@ -281,7 +281,7 @@ try {
       if (!hasSearched) {
         resultsTable.innerHTML = `
       <div class="no-results" id="defaultState">
-        <div class="no-results-icon"><img src="../icon/nfc-icon.png" alt="Proximity Code" loading="lazy" style="width: 10%; height: 10%;"></div>
+        <div class="no-results-icon"><img src="../icon/nfc-icon.svg" alt="Proximity Code" loading="lazy" style="width: 10%; height: 10%;"></div>
         <h3>Search for Employees</h3>
         <p>Enter a name or proximity code to find employees</p>
       </div>

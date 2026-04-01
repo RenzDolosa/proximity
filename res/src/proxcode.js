@@ -502,7 +502,7 @@ async function renderEmployeeTable() {
             </td>
             <td><strong>${empid}</strong></td>
             <td class="Col9" onclick="copyQRCode('${escapeHtml(employee.qr_code)}')" title="Copy Proximity code" style="cursor: pointer;">
-              <img src="../icon/nfc-icon.png" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;">
+              <img src="../icon/nfc-icon.svg" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;">
             </td>
             <td><span class="remarks-${displayRemarks.toLowerCase()}">${displayRemarks}</span></td>
             <td><small>${employee.created_at || ""}</small></td>

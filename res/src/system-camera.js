@@ -60,7 +60,7 @@ function populateCameraSelector() {
 function openCameraModal() {
   const modal = document.getElementById("cameraModal");
   if (!modal) return;
-  modal.style.display = "flex"; // flex → proper centering
+  modal.style.display = "flex";
   initializeCamera();
 }
 
@@ -167,7 +167,7 @@ async function switchCamera() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 5. CAPTURE  (BUG FIX: context.save() added before transform)
+// 5. CAPTURE
 // ─────────────────────────────────────────────────────────────
 function capturePhoto() {
   const video = document.getElementById("cameraStream");
@@ -177,13 +177,11 @@ function capturePhoto() {
     return;
   }
 
-  // Offscreen canvas — never attached to DOM
   const offscreen = document.createElement("canvas");
   offscreen.width = video.videoWidth;
   offscreen.height = video.videoHeight;
   const ctx = offscreen.getContext("2d");
 
-  // FIX: save() MUST precede translate+scale so restore() works correctly
   ctx.save();
   ctx.translate(offscreen.width, 0);
   ctx.scale(-1, 1); // un-mirror CSS scaleX(-1)
@@ -210,7 +208,6 @@ function showCropInterface(dataUrl) {
   if (cameraContainer) cameraContainer.style.display = "none";
 
   if (!cropWrap || !cropImg) {
-    // Fallback if HTML not updated yet — skip crop step
     capturedImageData = dataUrl;
     finalizeCapture(dataUrl);
     return;
@@ -230,7 +227,6 @@ function showCropInterface(dataUrl) {
 
   cropImg.onload = () => {
     if (typeof Cropper === "undefined") {
-      // Cropper.js not loaded — skip crop, go straight to preview
       capturedImageData = dataUrl;
       if (applyCropBtn) applyCropBtn.style.display = "none";
       if (uploadBtn) uploadBtn.style.display = "inline-flex";
@@ -361,7 +357,7 @@ function retakePhoto() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 8. UPLOAD TO FORM
+// 8. UPLOAD TO FORM  (converts captured JPEG → WebP via Canvas)
 // ─────────────────────────────────────────────────────────────
 function uploadCameraPhoto() {
   if (!capturedImageData) {
@@ -369,6 +365,74 @@ function uploadCameraPhoto() {
     return;
   }
 
+  updateCameraStatus("🔄 Converting to WebP…", "info");
+
+  try {
+    const img = new Image();
+
+    img.onload = () => {
+      // Draw onto canvas then export as WebP
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+
+      const ctx = canvas.getContext("2d");
+      // White background handles any edge-case transparency
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            // Fallback: browser doesn't support WebP encoding — use JPEG
+            fallbackJpegUpload();
+            return;
+          }
+
+          const webpFile = new File(
+            [blob],
+            `camera-${Date.now()}.webp`,
+            { type: "image/webp" },
+          );
+
+          const dt = new DataTransfer();
+          dt.items.add(webpFile);
+
+          const fileInput = document.getElementById("image");
+          if (!fileInput) {
+            updateCameraStatus("❌ Form input not found.", "error");
+            return;
+          }
+
+          fileInput.files = dt.files;
+          // Trigger the change event so setupFileUploadHandler updates the preview label
+          fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+          updateCameraStatus(
+            `✓ Converted to WebP (${(webpFile.size / 1024).toFixed(0)} KB) — added to form!`,
+            "success",
+          );
+          setTimeout(closeCameraModal, 800);
+        },
+        "image/webp",
+        0.85,
+      );
+    };
+
+    img.onerror = () => {
+      fallbackJpegUpload();
+    };
+
+    img.src = capturedImageData;
+  } catch (err) {
+    console.error("Camera upload error:", err);
+    fallbackJpegUpload();
+  }
+}
+
+// Fallback: upload as JPEG if WebP encoding is unavailable
+function fallbackJpegUpload() {
   try {
     const byteStr = atob(capturedImageData.split(",")[1]);
     const arr = new Uint8Array(byteStr.length);
@@ -391,10 +455,10 @@ function uploadCameraPhoto() {
     fileInput.files = dt.files;
     fileInput.dispatchEvent(new Event("change", { bubbles: true }));
 
-    updateCameraStatus("✓ Photo added to form!", "success");
-    setTimeout(closeCameraModal, 700);
+    updateCameraStatus("✓ Photo added (JPEG fallback).", "success");
+    setTimeout(closeCameraModal, 800);
   } catch (err) {
-    console.error("Upload error:", err);
+    console.error("Fallback JPEG upload error:", err);
     updateCameraStatus("❌ Upload failed — try again.", "error");
   }
 }

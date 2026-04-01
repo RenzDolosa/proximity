@@ -337,7 +337,7 @@ async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
     setTimeout(() => {
       searchEmployees();
       if (button) {
-        button.innerHTML = originalText; // ← restored correctly
+        button.innerHTML = originalText;
         button.disabled = false;
       }
     }, 1000);
@@ -412,6 +412,7 @@ async function renderEmployeeTable() {
       };
 
       const isAboveFold = index < 5;
+      const thumbSrc = `${window.location.origin}/uploads/user/thumb_${employee.image}`;
       const imageSrc = `${window.location.origin}/uploads/user/${employee.image}`;
 
       return `
@@ -427,14 +428,17 @@ async function renderEmployeeTable() {
               <small>${employee.violation || "None"}</small></div></td>
             <td class="Col8">${
               employee.image
-                ? `<img src="${imageSrc}" alt="${employee.fullname}" class="employee-image" 
+                ? `<img src="${thumbSrc}" alt="${employee.fullname}" class="employee-image"
+                    width="48" height="48"
                     loading="${isAboveFold ? "eager" : "lazy"}"
-                    onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
-                   <span style="display:none;">📷</span>`
+                    decoding="async"
+                    ${isAboveFold ? 'fetchpriority="high"' : ''}
+                    onerror="this.src='${imageSrc}'; this.onerror=null;">
+                  <span style="display:none;">📷</span>`
                 : `<div class="ph-cont"><div class="employee-ph">${fullnameInitials}</div></div>`
             }</td>
             <td class="Col9" onclick="copyQRCode('${employee.qr_code}')" title="Copy Proximity code">
-              <img src="../icon/nfc-icon.png" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;"></td>
+              <img src="../icon/nfc-icon.svg" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;"></td>
             <td><small>${employee.created_at}</small></td>
             <td><small>${employee.updated_at}</small></td>
             <td>
@@ -638,7 +642,6 @@ async function openModal(action, employeeId = null) {
     modalTitle.innerHTML = `<i class="fas fa-edit" style="color:#7c3aed"></i> Edit Employee`;
     modal.style.display = "block";
     await loadEmployeeData(employeeId);
-    // Focus the ID field so user can immediately change it
     const idField = document.getElementById("employee_id");
     if (idField) {
       idField.focus();
@@ -859,7 +862,6 @@ function populateFilter(employeeList) {
   const violation = document.getElementById("search_violation");
   if (!position || !brand || !status || !shift || !violation) return;
 
-  // Convert a string to Proper Case
   function toProperCase(str) {
     return str.replace(
       /[^\s,\-]+/g,
@@ -867,7 +869,6 @@ function populateFilter(employeeList) {
     );
   }
 
-  // Rebuild a <select>; values is a Map<lowerKey, originalValue>
   function buildSelect(select, placeholder, noneLabel, valuesMap) {
     const current = select.value;
 
@@ -883,8 +884,8 @@ function populateFilter(employeeList) {
         .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
         .forEach((v) => {
           const opt = document.createElement("option");
-          opt.value = v; // raw DB value — filter matching stays intact
-          opt.textContent = toProperCase(v); // display only
+          opt.value = v;
+          opt.textContent = toProperCase(v);
           select.appendChild(opt);
         });
     }
@@ -894,7 +895,6 @@ function populateFilter(employeeList) {
     }
   }
 
-  // Collect unique values (case-insensitive dedup; first occurrence wins)
   const positionMap = new Map();
   const brandMap = new Map();
   const statusMap = new Map();
@@ -906,7 +906,7 @@ function populateFilter(employeeList) {
       const v = (raw || "").trim();
       if (v && v.toLowerCase() !== "none") {
         const key = v.toLowerCase();
-        if (!map.has(key)) map.set(key, v); // keep first-seen casing as value
+        if (!map.has(key)) map.set(key, v);
       }
     };
 
@@ -1018,7 +1018,6 @@ function closeModal() {
 }
 
 // Handle form submission
-// FIX: was referencing getElementById("id") which doesn't exist — correct ID is "employee_id"
 async function handleFormSubmit(e) {
   e.preventDefault();
 
@@ -1030,7 +1029,6 @@ async function handleFormSubmit(e) {
     const shift = document.getElementById("shift").value;
     const originalId = document.getElementById("original_id").value.trim();
 
-    // --- Required field validation ---
     if (!empid) {
       showAlert("EMPID is required", "error");
       return;
@@ -1052,7 +1050,6 @@ async function handleFormSubmit(e) {
       return;
     }
 
-    // --- Client-side duplicate ID check (edit + ID changed) ---
     if (currentAction === "edit" && empid !== originalId) {
       const idTaken = employees.some((emp) => String(emp.id) === String(empid));
       if (idTaken) {
@@ -1061,14 +1058,13 @@ async function handleFormSubmit(e) {
       }
     }
 
-    // --- Duplicate fullname check (exclude the employee being edited) ---
     const isDuplicate = employees.some((emp) => {
       if (
         currentAction === "edit" &&
         originalId &&
         String(emp.id) === String(originalId)
       ) {
-        return false; // Skip the row we're editing
+        return false;
       }
       return (
         emp.fullname.toLowerCase().trim() === fullname.toLowerCase().trim()
@@ -1080,7 +1076,6 @@ async function handleFormSubmit(e) {
       return;
     }
 
-    // --- Image validation ---
     const imageInput = document.getElementById("image");
     if (imageInput.files.length > 0) {
       const file = imageInput.files[0];
@@ -1093,9 +1088,10 @@ async function handleFormSubmit(e) {
         "image/jpg",
         "image/png",
         "image/gif",
+        "image/webp",
       ];
       if (!allowedTypes.includes(file.type)) {
-        showAlert("Only image files (JPEG, PNG, GIF) are allowed", "error");
+        showAlert("Only image files (JPEG, PNG, GIF, WebP) are allowed", "error");
         return;
       }
     }
@@ -1103,13 +1099,9 @@ async function handleFormSubmit(e) {
     showLoading(true);
 
     const formData = new FormData(e.target);
-
-    // Explicitly set the fields the backend depends on, regardless of what
-    // name attributes the HTML happens to use.
     formData.set("action", currentAction);
     formData.set("id", empid);
 
-    // original_id is only meaningful (and must be present) for edits.
     if (currentAction === "edit") {
       formData.set("original_id", originalId);
     }
@@ -1154,68 +1146,127 @@ async function handleFormSubmit(e) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// CLIENT-SIDE WEBP CONVERSION
+// Converts any image File to WebP using Canvas API.
+// Falls back to original file if browser doesn't support WebP encoding.
+// ─────────────────────────────────────────────────────────────
+async function convertImageToWebP(file, quality = 0.85) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+
+      const ctx = canvas.getContext("2d");
+      // Fill white background (handles transparent PNGs)
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+
+      URL.revokeObjectURL(objectUrl);
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            const webpName = file.name.replace(/\.[^.]+$/, ".webp");
+            resolve(new File([blob], webpName, { type: "image/webp" }));
+          } else {
+            // Browser doesn't support WebP encoding — return original
+            resolve(file);
+          }
+        },
+        "image/webp",
+        quality,
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file); // fallback: return original on load error
+    };
+
+    img.src = objectUrl;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// FILE UPLOAD HANDLER  (now converts to WebP before storing)
+// ─────────────────────────────────────────────────────────────
 function setupFileUploadHandler() {
   const imageInput = document.getElementById("image");
 
-  imageInput.addEventListener("change", function (e) {
+  imageInput.addEventListener("change", async function (e) {
     const label = document.querySelector(".file-upload-label");
 
-    if (e.target.files.length > 0) {
-      const file = imageInput.files[0];
-      const maxSize = 5 * 1024 * 1024;
+    if (e.target.files.length === 0) {
+      label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
+      return;
+    }
 
-      if (file.size > maxSize) {
-        showAlert("File size must be less than 5MB", "error");
-        e.target.value = "";
-        label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
-        return;
-      }
+    const file = imageInput.files[0];
+    const maxSize = 5 * 1024 * 1024;
 
-      const allowedTypes = [
-        "image/jpeg",
-        "image/jpg",
-        "image/png",
-        "image/gif",
-      ];
-      if (!allowedTypes.includes(file.type)) {
-        showAlert("Only image files are allowed", "error");
-        e.target.value = "";
-        label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
-        return;
-      }
+    // --- Validation ---
+    if (file.size > maxSize) {
+      showAlert("File size must be less than 5MB", "error");
+      e.target.value = "";
+      label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
+      return;
+    }
 
+    const allowedTypes = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+    ];
+    if (!allowedTypes.includes(file.type)) {
+      showAlert("Only image files are allowed (JPEG, PNG, GIF, WebP)", "error");
+      e.target.value = "";
+      label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
+      return;
+    }
+
+    // Show converting indicator
+    label.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+        <i class="fas fa-spinner fa-spin" style="font-size:24px;color:#2196F3;"></i>
+        <small style="color:#2196F3;">Converting to WebP…</small>
+      </div>`;
+
+    try {
+      // --- Convert to WebP ---
+      const webpFile = await convertImageToWebP(file);
+
+      // Replace file in the input via DataTransfer
+      const dt = new DataTransfer();
+      dt.items.add(webpFile);
+      imageInput.files = dt.files;
+
+      // --- Show preview from the converted WebP blob ---
       const reader = new FileReader();
-
-      reader.onerror = function () {
-        showAlert("Error reading file", "error");
-        e.target.value = "";
-        label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
-      };
-
-      reader.onload = function (event) {
-        const imageDataUrl = event.target.result;
-
-        const existingImg = label.querySelector("img");
-        if (existingImg) {
-          existingImg.src = "";
-          existingImg.removeAttribute("src");
-        }
-
+      reader.onload = (event) => {
+        const isConverted = webpFile.type === "image/webp" && file.type !== "image/webp";
         label.innerHTML = `
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-            <img id="imagePreview" src="${imageDataUrl}" alt="New image preview" loading="lazy"
-              style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover;
-                     box-shadow: 0 2px 8px rgba(0,0,0,0.15), 0 0 0 2px #4CAF50;">
-            <small style="color: #4CAF50; font-size: 12px; font-weight: 500;">✓ New image selected</small>
-          </div>
-        `;
-
-        const previewImg = label.querySelector("#imagePreview");
-        if (previewImg) previewImg.offsetHeight;
+          <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+            <img id="imagePreview" src="${event.target.result}" alt="New image preview" loading="lazy"
+              style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;
+                     box-shadow:0 2px 8px rgba(0,0,0,0.15),0 0 0 2px #4CAF50;">
+            <small style="color:#4CAF50;font-size:12px;font-weight:500;">
+              ✓ ${isConverted ? "Converted to WebP" : "WebP ready"} · ${(webpFile.size / 1024).toFixed(0)} KB
+            </small>
+          </div>`;
       };
-
-      reader.readAsDataURL(file);
-    } else {
+      reader.readAsDataURL(webpFile);
+    } catch (err) {
+      console.error("WebP conversion error:", err);
+      showAlert("Error converting image. Please try again.", "error");
+      e.target.value = "";
       label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
     }
   });

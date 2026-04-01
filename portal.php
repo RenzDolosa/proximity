@@ -93,7 +93,7 @@ try {
             <h1>Proximity</h1>
           </div>
           <div class="s-search-section">
-            <img src="res/icon/nfc-icon.png" alt="NFC Icon" loading="lazy">
+            <img src="res/icon/nfc-icon.svg" alt="NFC Icon" loading="lazy">
             <div>
               <h3>Live Search</h3>
               <p>Web pass verifier application</p>
@@ -109,7 +109,7 @@ try {
     <header class="header">
       <div class="myDatabase-logo">
         <a href="portal.php" class="link">
-          <img src="res/logo/mysql.png" alt="MySql Logo" class="header-logo" loading="lazy">
+          <img src="res/logo/mysql.svg" alt="MySql Logo" class="header-logo" loading="lazy">
           <h1 style="padding-left: 50px; margin: 0;"><?= htmlspecialchars($myDatabase ?? 'My Database'); ?></h1>
         </a>
       </div>

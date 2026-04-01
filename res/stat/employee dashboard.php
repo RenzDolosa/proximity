@@ -179,7 +179,7 @@ if ($databaseConnected && $employeeManager) {
         </div>
         <div class="stat-number"><?php echo number_format($stats['total_employees']); ?></div>
         <div class="stat-label">Total Employees</div>
-        <img src="../logo/mysql-logo.png" loading="lazy" style="top: 10%; right: 2%; height: 40px; position:absolute;">
+        <img src="../logo/mysql-logo.svg" loading="lazy" style="top: 10%; right: 2%; height: 40px; position:absolute;">
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #28a745, #20c997);">
@@ -187,7 +187,7 @@ if ($databaseConnected && $employeeManager) {
         </div>
         <div class="stat-number"><?php echo number_format($stats['active_employees']); ?></div>
         <div class="stat-label">Active Employees</div>
-        <img src="../logo/mysql-logo.png" loading="lazy" style="top: 10%; right: 2%; height: 40px; position:absolute;">
+        <img src="../logo/mysql-logo.svg" loading="lazy" style="top: 10%; right: 2%; height: 40px; position:absolute;">
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #dc3545, #fd7e14);">
@@ -195,7 +195,7 @@ if ($databaseConnected && $employeeManager) {
         </div>
         <div class="stat-number"><?php echo number_format($stats['inactive_employees']); ?></div>
         <div class="stat-label">Inactive Employees</div>
-        <img src="../logo/mysql-logo.png" loading="lazy" style="top: 10%; right: 2%; height: 40px; position:absolute;">
+        <img src="../logo/mysql-logo.svg" loading="lazy" style="top: 10%; right: 2%; height: 40px; position:absolute;">
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #17a2b8, #6f42c1);">
@@ -203,7 +203,7 @@ if ($databaseConnected && $employeeManager) {
         </div>
         <div class="stat-number"><?php echo number_format($stats['total_proxcode']); ?></div>
         <div class="stat-label">Proximity Codes</div>
-        <img src="../logo/mysql-logo.png" loading="lazy" style="top: 10%; right: 2%; height: 40px; position:absolute;">
+        <img src="../logo/mysql-logo.svg" loading="lazy" style="top: 10%; right: 2%; height: 40px; position:absolute;">
       </div>
     </section>
 
@@ -235,7 +235,7 @@ if ($databaseConnected && $employeeManager) {
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #17a2b8, #6f42c1);">
-          <img src="../icon/nfc-icon.png" loading="lazy" style="width: 32px; height: 32px; z-index: 1000; filter: invert(1);">
+          <img src="../icon/nfc-icon.svg" loading="lazy" style="width: 32px; height: 32px; z-index: 1000; filter: invert(1);">
         </div>
         <div class="stat-number"><?php echo number_format($stats['today_attendance']); ?></div>
         <div class="stat-label">Scanned Today</div>
@@ -315,7 +315,7 @@ if ($databaseConnected && $employeeManager) {
                 <img src=<?php echo $imagePath; ?>
                   alt="<?php echo htmlspecialchars($log['fullname'] ?? 'User'); ?> Profile"
                   class="activity-icon"
-                  onerror="this.src='../logo/3Pl.png'; this.nextSibling.style.display='inline';">
+                  onerror="this.src='../logo/3PL.svg'; this.nextSibling.style.display='inline';">
 
                 <div class="activity-details">
                   <div class="activity-name">
@@ -365,7 +365,7 @@ if ($databaseConnected && $employeeManager) {
             }
           }
 
-          return "../logo/3PL.png";
+          return "../logo/3PL.svg";
         }
         ?>
         <hr style="border: none; height: 1px; background: #e1e5e9;">
