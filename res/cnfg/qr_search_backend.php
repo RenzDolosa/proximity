@@ -11,7 +11,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // ── Suppress display_errors — log to file, never to output ─
 error_reporting(E_ALL);
-ini_set('display_errors', 0);   // NEVER echo errors into the JSON stream
+ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
 // ── Headers ─────────────────────────────────────────────────
@@ -21,7 +21,6 @@ header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, X-Requested-With, Authorization');
 header('Access-Control-Max-Age: 86400');
 
-// ── Config (already guards session_start internally) ────────
 require_once 'config.php';
 
 if (isset($_GET['serve_file'])) {
@@ -29,7 +28,6 @@ if (isset($_GET['serve_file'])) {
   header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 3600) . ' GMT');
 }
 
-// ── Discard any stray output before we echo JSON ────────────
 ob_clean();
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -51,9 +49,57 @@ if (!isset($_SESSION['user_id'])) {
 $currentUserId = $_SESSION['user_id'];
 
 // ─────────────────────────────────────────────
-//  Database — connects to the user's database
-//  (same approach as manpower_backend.php)
+//  IMAGE PATH HELPER
+//  Normalizes whatever is stored in the DB:
+//    - null / empty   → null  (no image)
+//    - "abc123.webp"  → "abc123.webp"   (already clean)
+//    - "/uploads/user/abc123.webp" → "abc123.webp"  (strip path)
+//    - "uploads/user/abc123.webp"  → "abc123.webp"  (strip path)
 // ─────────────────────────────────────────────
+function normalizeImageFilename(?string $image): ?string
+{
+    if ($image === null || trim($image) === '') {
+        return null;
+    }
+
+    $image = trim($image);
+
+    // Strip any leading path so only the bare filename remains.
+    // This covers stored values like:
+    //   /uploads/user/file.webp
+    //   uploads/user/file.webp
+    //   ../../uploads/user/file.webp
+    $image = basename($image);
+
+    // Safety: reject obviously invalid values
+    if ($image === '' || $image === '.' || $image === '..') {
+        return null;
+    }
+
+    return $image;
+}
+
+// ─────────────────────────────────────────────
+//  Verify the image file actually exists on disk
+//  Returns the filename if found, null otherwise.
+// ─────────────────────────────────────────────
+function verifyImageExists(?string $filename): ?string
+{
+    if ($filename === null) return null;
+
+    // __DIR__ is the cnfg/ folder; uploads/user/ is two levels up
+    $uploadDir = __DIR__ . '/../../uploads/user/';
+    $fullPath  = $uploadDir . $filename;
+
+    return file_exists($fullPath) ? $filename : null;
+}
+
+// Combine both helpers
+function resolveImage(?string $raw): ?string
+{
+    return verifyImageExists(normalizeImageFilename($raw));
+}
+
 class Database
 {
   private $conn;
@@ -67,7 +113,6 @@ class Database
   public function connect()
   {
     try {
-      // Ensure the user database exists (mirrors manpower_backend.php)
       if (!userDatabaseExists($this->userId)) {
         if (!createUserDatabase($this->userId)) {
           throw new Exception("Failed to create user database");
@@ -75,10 +120,7 @@ class Database
       }
 
       $this->conn = getUserDBConnection($this->userId);
-
-      // Guarantee the check_in_out table is present
       $this->createCheckInOutTable();
-
       return $this->conn;
     } catch (Exception $e) {
       error_log("User DB Connection error: " . $e->getMessage());
@@ -86,7 +128,6 @@ class Database
     }
   }
 
-  // Create check_in_out table if it doesn't exist
   private function createCheckInOutTable()
   {
     try {
@@ -110,13 +151,10 @@ class Database
     }
   }
 
-  public function getUserId()   { return $this->userId; }
+  public function getUserId()     { return $this->userId; }
   public function getConnection() { return $this->conn; }
 }
 
-// ─────────────────────────────────────────────
-//  QueryLogger — logs access & IN/OUT events
-// ─────────────────────────────────────────────
 class QueryLogger
 {
   private $conn;
@@ -128,27 +166,11 @@ class QueryLogger
     $this->userId = $userId;
   }
 
-  // ── Core IN/OUT logic ──────────────────────
-  //
-  //  Rule:
-  //    No previous record  → first scan  → IN
-  //    Last record = IN    → next scan   → OUT
-  //    Last record = OUT   → next scan   → IN
-  //
-  //  i.e. the NEW status is always the OPPOSITE of the last one,
-  //  with a default of OUT (so the first toggle produces IN).
-  // ───────────────────────────────────────────
-
-  /**
-   * Returns the most-recent check_type for this employee,
-   * or 'OUT' when no record exists yet (so first scan → IN).
-   */
   public function getEmployeeCheckStatus($employeeId, $qrCode = null)
   {
     if (!$this->conn) return 'OUT';
 
     try {
-      // Match by employee_id OR qr_code (whichever is available)
       if ($qrCode) {
         $sql = "SELECT check_type FROM check_in_out
                 WHERE employee_id = :employee_id OR qr_code = :qr_code
@@ -166,8 +188,6 @@ class QueryLogger
       }
 
       $row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-      // No record → default OUT (so first scan produces IN)
       return $row ? $row['check_type'] : 'OUT';
     } catch (PDOException $e) {
       error_log("Get check status error: " . $e->getMessage());
@@ -175,9 +195,6 @@ class QueryLogger
     }
   }
 
-  /**
-   * Inserts a new check_in_out row with the given check_type.
-   */
   public function logCheckInOut($employeeId, $qrCode, $fullname, $checkType)
   {
     if (!$this->conn) return false;
@@ -198,13 +215,6 @@ class QueryLogger
         ':user_agent'  => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
       ]);
 
-      // logSystemAction($this->userId, 'check_in_out', json_encode([
-      //   'employee_id' => $employeeId,
-      //   'fullname'    => $fullname,
-      //   'qr_code'     => $qrCode,
-      //   'check_type'  => $checkType,
-      // ]));
-
       return true;
     } catch (PDOException $e) {
       error_log("Check-in/out logging error: " . $e->getMessage());
@@ -212,15 +222,6 @@ class QueryLogger
     }
   }
 
-  /**
-   * Toggles the employee's status (IN→OUT or OUT→IN) and persists it.
-   * Returns the NEW status string, or false on failure.
-   *
-   *  Scan 1 (no record) : last='OUT' → new='IN'
-   *  Scan 2             : last='IN'  → new='OUT'
-   *  Scan 3             : last='OUT' → new='IN'
-   *  Scan 4             : last='IN'  → new='OUT'
-   */
   public function toggleEmployeeStatus($employeeId, $qrCode, $fullname)
   {
     $lastStatus = $this->getEmployeeCheckStatus($employeeId, $qrCode);
@@ -233,12 +234,6 @@ class QueryLogger
     return false;
   }
 
-  // ── Access log (employee_access_log) ───────
-
-  /**
-   * Logs a row to employee_access_log, which mirrors the structure
-   * used by datalog_backend.php.
-   */
   public function logEmployeeAccess($employeeData, $accessType)
   {
     if (!$this->conn) return false;
@@ -262,7 +257,7 @@ class QueryLogger
         ':status'      => $employeeData['status']        ?? null,
         ':shift'       => $employeeData['shift']         ?? null,
         ':violation'   => $employeeData['violation']     ?? null,
-        ':image'       => $employeeData['image']         ?? null,
+        ':image'       => $employeeData['image']         ?? null,  // stored as clean filename
         ':qr_code'     => $employeeData['qr_code']       ?? null,
         ':check_status'=> $employeeData['check_status']  ?? null,
         ':access_type' => $accessType,
@@ -270,20 +265,12 @@ class QueryLogger
         ':user_agent'  => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
       ]);
 
-      // logSystemAction($this->userId, 'employee_access', json_encode([
-      //   'employee_id' => $employeeData['id'] ?? null,
-      //   'fullname'    => $employeeData['fullname'] ?? null,
-      //   'access_type' => $accessType,
-      // ]));
-
       return true;
     } catch (PDOException $e) {
       error_log("Employee access logging error: " . $e->getMessage());
       return false;
     }
   }
-
-  // ── Generic search-query audit log ─────────
 
   public function logSearchQuery(
     $queryType, $searchTerm, $searchParams,
@@ -302,16 +289,16 @@ class QueryLogger
 
       $stmt = $this->conn->prepare($sql);
       $stmt->execute([
-        ':query_type'       => $queryType,
-        ':search_term'      => $searchTerm,
-        ':search_parameters'=> json_encode($searchParams),
-        ':results_count'    => $resultsCount,
-        ':results_data'     => json_encode($resultsData),
-        ':ip_address'       => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-        ':user_agent'       => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
-        ':execution_time'   => $executionTime,
-        ':success'          => $success ? 1 : 0,
-        ':error_message'    => $errorMessage,
+        ':query_type'        => $queryType,
+        ':search_term'       => $searchTerm,
+        ':search_parameters' => json_encode($searchParams),
+        ':results_count'     => $resultsCount,
+        ':results_data'      => json_encode($resultsData),
+        ':ip_address'        => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+        ':user_agent'        => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
+        ':execution_time'    => $executionTime,
+        ':success'           => $success ? 1 : 0,
+        ':error_message'     => $errorMessage,
       ]);
 
       logSystemAction($this->userId, 'SEARCH_QUERY', json_encode([
@@ -329,17 +316,11 @@ class QueryLogger
   }
 }
 
-// ─────────────────────────────────────────────
-//  LiveSearchHandler — reads from `employees`
-//  (the manpower_backend.php source of truth)
-// ─────────────────────────────────────────────
 class LiveSearchHandler
 {
   private $conn;
   private $logger;
   private $userId;
-
-  // Source-of-truth table (managed by manpower_backend.php — DO NOT write here)
   private $employeesTable = 'employees';
 
   public function __construct($db, $logger, $userId)
@@ -349,14 +330,13 @@ class LiveSearchHandler
     $this->userId = $userId;
   }
 
-  // ── Helpers ────────────────────────────────
+  // ── Normalize image on every employee row that leaves this class ──
+  private function cleanEmployee(array $employee): array
+  {
+    $employee['image'] = resolveImage($employee['image'] ?? null);
+    return $employee;
+  }
 
-  /**
-   * Enriches an employee row with its current IN/OUT check_status
-   * by looking up the most recent check_in_out record.
-   *
-   * We do this via a sub-select so the caller gets a single flat array.
-   */
   private function attachCheckStatus(array $employee): array
   {
     if (!$this->conn) {
@@ -378,8 +358,6 @@ class LiveSearchHandler
       ]);
 
       $row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-      // No record → default OUT (first scan will produce IN)
       $employee['check_status'] = $row ? $row['check_type'] : 'OUT';
     } catch (PDOException $e) {
       error_log("attachCheckStatus error: " . $e->getMessage());
@@ -389,12 +367,6 @@ class LiveSearchHandler
     return $employee;
   }
 
-  // ── Public API ─────────────────────────────
-
-  /**
-   * Full-text live search across the `employees` table.
-   * Returns employees with their current check_status attached.
-   */
   public function searchEmployees($searchParams = [])
   {
     $startTime    = microtime(true);
@@ -408,7 +380,6 @@ class LiveSearchHandler
       $sql    = "SELECT * FROM {$this->employeesTable} WHERE 1=1";
       $params = [];
 
-      // Detect a free-text search term from any of the recognised fields
       $searchableFields = ['qr_code', 'fullname', 'position', 'brand', 'shift', 'status'];
       foreach ($searchableFields as $field) {
         if (!empty($searchParams[$field])) {
@@ -430,7 +401,6 @@ class LiveSearchHandler
         $sql .= " AND (" . implode(' OR ', $conditions) . ")";
         $params[':search_term'] = '%' . $searchTerm . '%';
 
-        // Rank exact/prefix matches first
         $sql .= " ORDER BY
                     CASE
                       WHEN qr_code  = :exact_term THEN 1
@@ -444,7 +414,6 @@ class LiveSearchHandler
         $params[':exact_term']  = $searchTerm;
         $params[':starts_term'] = $searchTerm . '%';
       } else {
-        // Structured filters
         if (!empty($searchParams['status'])) {
           $sql .= " AND status = :status";
           $params[':status'] = $searchParams['status'];
@@ -468,9 +437,9 @@ class LiveSearchHandler
       $stmt->execute();
       $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      // Attach check_status and log each result
       foreach ($rows as $employee) {
         $employee = $this->attachCheckStatus($employee);
+        $employee = $this->cleanEmployee($employee);  // ← normalize image
         $results[] = $employee;
 
         if ($this->logger) {
@@ -502,18 +471,6 @@ class LiveSearchHandler
     return $results;
   }
 
-  /**
-   * Fetch a single employee by QR code, then toggle their IN/OUT status.
-   *
-   *  Scan sequence per employee:
-   *    1st scan  → IN
-   *    2nd scan  → OUT
-   *    3rd scan  → IN
-   *    4th scan  → OUT   … and so on
-   *
-   * @param string $qr_code     QR / proximity code scanned
-   * @param bool   $autoToggle  Set false to skip the toggle (read-only lookup)
-   */
   public function getEmployeeByQR($qr_code, $autoToggle = true)
   {
     $startTime    = microtime(true);
@@ -530,8 +487,10 @@ class LiveSearchHandler
       $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
       if ($result) {
+        // ── Normalize image BEFORE anything else ──
+        $result = $this->cleanEmployee($result);
+
         if ($autoToggle && $this->logger) {
-          // Determine the NEW status before attaching it
           $previousStatus = $this->logger->getEmployeeCheckStatus(
             $result['id'], $result['qr_code']
           );
@@ -545,17 +504,14 @@ class LiveSearchHandler
             $result['previous_status'] = $previousStatus;
             $result['status_changed']  = true;
           } else {
-            // Toggle failed; attach read-only status
             $result = $this->attachCheckStatus($result);
             $result['status_changed'] = false;
           }
         } else {
-          // Read-only path
           $result = $this->attachCheckStatus($result);
           $result['status_changed'] = false;
         }
 
-        // Log the access with the resolved check_status
         if ($this->logger) {
           $this->logger->logEmployeeAccess($result, 'qr_code_scan');
         }
@@ -579,9 +535,6 @@ class LiveSearchHandler
     return $result;
   }
 
-  /**
-   * Fetch a single employee by their primary key ID (read-only, no toggle).
-   */
   public function getEmployee($id)
   {
     $startTime    = microtime(true);
@@ -598,6 +551,7 @@ class LiveSearchHandler
       $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
       if ($result) {
+        $result = $this->cleanEmployee($result);  // ← normalize image
         $result = $this->attachCheckStatus($result);
 
         if ($this->logger) {
@@ -637,18 +591,11 @@ try {
 
   $logger        = new QueryLogger($db, $currentUserId);
   $searchHandler = new LiveSearchHandler($db, $logger, $currentUserId);
-  $response      = ['success' => false, 'message' => '', 'data' => [], 'debug' => []];
+  $response      = ['success' => false, 'message' => '', 'data' => []];
 
-  $response['debug'] = [
-    'user_id'        => $currentUserId,
-    'request_method' => $_SERVER['REQUEST_METHOD'],
-    'timestamp'      => date('Y-m-d H:i:s'),
-  ];
-
-  // ── GET — live search ──────────────────────
   if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    $searchParams    = [];
-    $allowedParams   = ['fullname', 'position', 'brand', 'status', 'shift', 'qr_code'];
+    $searchParams  = [];
+    $allowedParams = ['fullname', 'position', 'brand', 'status', 'shift', 'qr_code'];
 
     foreach ($allowedParams as $param) {
       $value = isset($_GET[$param]) ? trim($_GET[$param]) : '';
@@ -656,8 +603,6 @@ try {
         $searchParams[$param] = $value;
       }
     }
-
-    $response['debug']['search_params'] = $searchParams;
 
     if (empty($searchParams)) {
       $response['message'] = 'No search parameters provided';
@@ -672,21 +617,16 @@ try {
         ? 'No employees found matching your search criteria.'
         : count($employees) . ' employee(s) found.';
     }
-  }
-
-  // ── POST — action-based ────────────────────
-  elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $input = json_decode(file_get_contents('php://input'), true);
     if (!$input) {
       $input = $_POST;
     }
 
     $action = $input['action'] ?? '';
-    $response['debug']['action'] = $action;
 
     switch ($action) {
 
-      // Scan QR code → toggle IN/OUT, log to employee_access_log
       case 'get_by_qr':
         $qr_code    = trim($input['qr_code'] ?? '');
         $autoToggle = isset($input['auto_toggle']) ? (bool)$input['auto_toggle'] : true;
@@ -703,7 +643,6 @@ try {
           $response['data']    = $employee;
 
           if (!empty($employee['status_changed'])) {
-            // Build a human-friendly direction message
             $prev = $employee['previous_status'] ?? '–';
             $curr = $employee['check_status'];
             $response['message'] = "Employee checked {$curr}. (was {$prev})";
@@ -715,7 +654,6 @@ try {
         }
         break;
 
-      // Read-only lookup by employee primary key
       case 'get_by_id':
         $employee_id = intval($input['id'] ?? 0);
 
@@ -735,11 +673,10 @@ try {
         }
         break;
 
-      // Explicit manual toggle (e.g. from UI button)
       case 'toggle_status':
         $employee_id = intval($input['employee_id'] ?? 0);
-        $qr_code     = trim($input['qr_code']     ?? '');
-        $fullname    = trim($input['fullname']     ?? '');
+        $qr_code     = trim($input['qr_code']      ?? '');
+        $fullname    = trim($input['fullname']      ?? '');
 
         if ($employee_id <= 0 || empty($qr_code) || empty($fullname)) {
           $response['message'] = 'Employee ID, QR code, and fullname are required';
@@ -766,23 +703,12 @@ try {
   }
 } catch (Exception $e) {
   $response = [
-    'success'       => false,
-    'message'       => 'Server error: ' . $e->getMessage(),
-    'data'          => [],
-    'error_details' => [
-      'file'  => $e->getFile(),
-      'line'  => $e->getLine(),
-      'trace' => $e->getTraceAsString(),
-    ],
+    'success' => false,
+    'message' => 'Server error: ' . $e->getMessage(),
+    'data'    => [],
   ];
   error_log("Critical server error: " . $e->getMessage());
   http_response_code(500);
-}
-
-// Strip debug/error details in production (pass ?debug=1 to keep them)
-if (empty($_GET['debug']) && empty($_POST['debug'])) {
-  unset($response['debug']);
-  unset($response['error_details']);
 }
 
 echo json_encode($response, JSON_PRETTY_PRINT);

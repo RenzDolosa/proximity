@@ -413,8 +413,9 @@ class FileUploader
     }
 
     $file_extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    $allowed_types  = ['jpg', 'jpeg', 'png', 'gif'];
 
-    if (!in_array($file_extension, $this->allowed_types)) {
+    if (!in_array($file_extension, $allowed_types)) {
       throw new Exception("Invalid file type. Only JPG, JPEG, PNG, and GIF allowed.");
     }
 
@@ -422,22 +423,92 @@ class FileUploader
       throw new Exception("File too large. Maximum size is 5MB.");
     }
 
+    // Always save as .webp
     if ($existingFilename && !empty($existingFilename)) {
-      $filename = $existingFilename;
+      // Keep same base name but force .webp extension
+      $filename = preg_replace('/\.[^.]+$/', '.webp', $existingFilename);
       $filepath = $this->upload_dir . $filename;
       if (file_exists($filepath)) {
         @unlink($filepath);
       }
+      // Also delete old non-webp file if extension changed
+      $oldPath = $this->upload_dir . $existingFilename;
+      if ($oldPath !== $filepath && file_exists($oldPath)) {
+        @unlink($oldPath);
+      }
     } else {
-      $filename = uniqid() . '.' . $file_extension;
+      $filename = uniqid() . '.webp';
       $filepath = $this->upload_dir . $filename;
     }
 
-    if (move_uploaded_file($file['tmp_name'], $filepath)) {
-      return $filename;
+    // Convert to WebP using GD
+    $converted = $this->convertToWebP($file['tmp_name'], $file_extension, $filepath);
+
+    if (!$converted) {
+      // GD conversion failed — fall back to original format
+      $fallbackName = preg_replace('/\.webp$/', '.' . $file_extension, $filename);
+      $fallbackPath = $this->upload_dir . $fallbackName;
+      if (move_uploaded_file($file['tmp_name'], $fallbackPath)) {
+        return $fallbackName;
+      }
+      return false;
     }
 
-    return false;
+    return $filename;
+  }
+
+  /**
+   * Convert any supported image to WebP via GD.
+   * Quality 82 is a good balance between size and sharpness.
+   * Images wider than $maxWidth are resized proportionally.
+   */
+  private function convertToWebP($tmpPath, $srcExtension, $destPath, $quality = 82, $maxWidth = 800)
+  {
+    if (!function_exists('imagewebp')) {
+      return false; // GD WebP support not compiled in
+    }
+
+    switch ($srcExtension) {
+      case 'jpg':
+      case 'jpeg':
+        $src = @imagecreatefromjpeg($tmpPath);
+        break;
+      case 'png':
+        $src = @imagecreatefrompng($tmpPath);
+        break;
+      case 'gif':
+        $src = @imagecreatefromgif($tmpPath);
+        break;
+      default:
+        return false;
+    }
+
+    if (!$src) return false;
+
+    $origW = imagesx($src);
+    $origH = imagesy($src);
+
+    // Resize if wider than $maxWidth
+    if ($origW > $maxWidth) {
+      $newW  = $maxWidth;
+      $newH  = (int) round($origH * ($maxWidth / $origW));
+      $resized = imagecreatetruecolor($newW, $newH);
+
+      // Preserve transparency for PNG/GIF
+      imagealphablending($resized, false);
+      imagesavealpha($resized, true);
+      $transparent = imagecolorallocatealpha($resized, 0, 0, 0, 127);
+      imagefilledrectangle($resized, 0, 0, $newW, $newH, $transparent);
+
+      imagecopyresampled($resized, $src, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
+      imagedestroy($src);
+      $src = $resized;
+    }
+
+    $result = imagewebp($src, $destPath, $quality);
+    imagedestroy($src);
+
+    return $result;
   }
 
   public function deleteImage($filename)
@@ -1027,14 +1098,16 @@ try {
         if (!empty($_GET['violation']))      $filters['violation']      = $_GET['violation'];
         if (!empty($_GET['violation_none'])) $filters['violation_none'] = '1';
         if (!empty($_GET['qr_code']))        $filters['qr_code']        = $_GET['qr_code'];
-        if (!empty($_GET['created_at'])) { $filters['created_at'] = $_GET['created_at']; }
-         elseif (!empty($_GET['created_from']) && !empty($_GET['created_to'])) {
+        if (!empty($_GET['created_at'])) {
+          $filters['created_at'] = $_GET['created_at'];
+        } elseif (!empty($_GET['created_from']) && !empty($_GET['created_to'])) {
           $filters['created_from'] = $_GET['created_from'];
           $filters['created_to']   = $_GET['created_to'];
         }
 
-         if (!empty($_GET['updated_at'])) { $filters['updated_at'] = $_GET['updated_at']; }
-         elseif (!empty($_GET['updated_from']) && !empty($_GET['updated_to'])) {
+        if (!empty($_GET['updated_at'])) {
+          $filters['updated_at'] = $_GET['updated_at'];
+        } elseif (!empty($_GET['updated_from']) && !empty($_GET['updated_to'])) {
           $filters['updated_from'] = $_GET['updated_from'];
           $filters['updated_to']   = $_GET['updated_to'];
         }

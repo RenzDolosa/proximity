@@ -1224,6 +1224,7 @@ function setupFileUploadHandler() {
         "image/jpg",
         "image/png",
         "image/gif",
+        "image/webp",
       ];
       if (!allowedTypes.includes(file.type)) {
         showAlert("Only image files are allowed", "error");

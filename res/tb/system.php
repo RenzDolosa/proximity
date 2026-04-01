@@ -299,7 +299,7 @@ if ($databaseConnected) {
               <label for="image">Employee Image</label>
               <div class="file-upload-wrapper">
                 <div class="file-upload">
-                  <input type="file" id="image" name="image" accept="image/*">
+                  <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/gif,image/webp">
                   <label for="image" class="file-upload-label">
                     <i class="fas fa-file-image"></i> Click to select image (Max 5MB)
                   </label>

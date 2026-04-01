@@ -1,26 +1,44 @@
 // qp.js
 
-// QR Pass Employee Filter System
 const searchInput = document.getElementById("searchInput");
 const body = document.body;
 
-// Global variables
 let searchTimeout;
 let currentResults = [];
 let displayTimeout;
 let currentFilter = "all";
 let currentAudio = null;
 
-document.getElementById("message").innerHTML = '<img src="../logo/proximity-logo.svg" loading="lazy" alt="Proximity Code" style="width: 100%; height: 90vh;">';
+document.getElementById("message").innerHTML =
+  '<img src="../logo/proximity-logo.svg" loading="lazy" alt="Proximity Code" style="width: 100%; height: 90vh;">';
 
-// Setup event listeners
+// ─────────────────────────────────────────────────────────────────
+//  IMAGE URL HELPER
+//  Accepts the raw value from employee.image (bare filename, or null)
+//  and returns a fully-qualified URL the browser can load.
+//
+//  The uploads folder lives at /uploads/user/ from the web root,
+//  regardless of which subfolder this page is served from.
+// ─────────────────────────────────────────────────────────────────
+function imageUrl(filename) {
+  if (!filename || filename.trim() === "") return null;
+
+  // Strip any accidental path prefix stored in the DB
+  const bare = filename.trim().replace(/^.*[\\/]/, "");
+  if (!bare) return null;
+
+  // Always build from origin so subfolder pages resolve correctly
+  return `${window.location.origin}/uploads/user/${bare}`;
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  Event listeners
+// ─────────────────────────────────────────────────────────────────
 function setupEventListeners() {
-  // Live search with debounce
   searchInput.addEventListener("input", function (e) {
     clearTimeout(searchTimeout);
     const query = e.target.value.trim();
 
-    // Auto-clear the input 300 ms after the user stops typing
     if (query !== "") {
       clearTimeout(searchInput.autoClearTimeout);
       searchInput.autoClearTimeout = setTimeout(() => {
@@ -36,7 +54,6 @@ function setupEventListeners() {
     }, 300);
   });
 
-  // Handle Enter key
   searchInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter") {
       clearTimeout(searchTimeout);
@@ -46,14 +63,12 @@ function setupEventListeners() {
     }
   });
 
-  // Re-focus on any click outside interactive elements
   document.addEventListener("click", function (e) {
     if (!e.target.matches("input, button, select, textarea, a")) {
       searchInput.focus();
     }
   });
 
-  // Re-focus on any keydown when the input is not already active
   document.addEventListener("keydown", function (e) {
     if (
       document.activeElement.tagName !== "INPUT" &&
@@ -64,7 +79,6 @@ function setupEventListeners() {
     }
   });
 
-  // Initial focus
   setTimeout(() => {
     searchInput.value = "";
     searchInput.focus();
@@ -75,7 +89,8 @@ function setupEventListeners() {
 //  Background / idle state
 // ─────────────────────────────────────────────────────────────────
 function background() {
-  document.getElementById("message").innerHTML = '<img src="../logo/proximity-logo.svg" alt="Proximity Code" loading="lazy" style="width: 100%; height: 90vh;">';
+  document.getElementById("message").innerHTML =
+    '<img src="../logo/proximity-logo.svg" alt="Proximity Code" loading="lazy" style="width: 100%; height: 90vh;">';
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -98,10 +113,10 @@ function playSound(id) {
   sound.play().catch((e) => console.log("Audio play error:", e));
 }
 
-const playSuccessSound = () => playSound("successSound");
+const playSuccessSound  = () => playSound("successSound");
 const playInactiveSound = () => playSound("inactiveSound");
 const playNoResultSound = () => playSound("noResultSound");
-const playWarningSound = () => playSound("warningSound");
+const playWarningSound  = () => playSound("warningSound");
 
 // ─────────────────────────────────────────────────────────────────
 //  Input-block helper (prevents double-scans)
@@ -130,12 +145,10 @@ function looksLikeQRCode(query) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  Fetch last log entry for an employee from datalog_backend.php
-//  Uses the QR code (most specific) or fullname as fallback.
+//  Fetch last log entry for an employee
 // ─────────────────────────────────────────────────────────────────
 async function fetchLastLog(qrCode, fullname) {
   try {
-    // Prefer QR code lookup — most specific
     const params = qrCode
       ? new URLSearchParams({ action: "get", qr_code: qrCode })
       : new URLSearchParams({ action: "get", fullname: fullname });
@@ -150,7 +163,6 @@ async function fetchLastLog(qrCode, fullname) {
     const data = await response.json();
 
     if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-      // getLogs() returns rows ORDER BY id DESC — first row is the most recent
       return data.data[0];
     }
   } catch (e) {
@@ -163,9 +175,9 @@ async function fetchLastLog(qrCode, fullname) {
 //  Core search function
 // ─────────────────────────────────────────────────────────────────
 async function searchEmployees(query) {
-  const messageEl = document.getElementById("message");
+  const messageEl    = document.getElementById("message");
   const resultsTable = document.getElementById("resultsTable");
-  const resultsBody = document.getElementById("resultsBody");
+  const resultsBody  = document.getElementById("resultsBody");
 
   try {
     resultsTable.style.display = "none";
@@ -174,12 +186,12 @@ async function searchEmployees(query) {
     let url, method, fetchBody;
 
     if (looksLikeQRCode(query)) {
-      url = "../cnfg/qr_search_backend.php";
-      method = "POST";
-      fetchBody = JSON.stringify({ action: "get_by_qr", qr_code: query });
+      url        = "../cnfg/qr_search_backend.php";
+      method     = "POST";
+      fetchBody  = JSON.stringify({ action: "get_by_qr", qr_code: query });
     } else {
       const params = new URLSearchParams({ fullname: query });
-      url = `../cnfg/qr_search_backend.php?${params.toString()}`;
+      url    = `../cnfg/qr_search_backend.php?${params.toString()}`;
       method = "GET";
     }
 
@@ -193,11 +205,7 @@ async function searchEmployees(query) {
       fetchOptions.body = fetchBody;
     }
 
-    // ── Fire QR scan + last-log fetch simultaneously ──────────────
-    const [response] = await Promise.all([
-      fetch(url, fetchOptions),
-      // The last-log fetch is handled per-employee after we know who was found
-    ]);
+    const [response] = await Promise.all([fetch(url, fetchOptions)]);
 
     if (response.status === 401) {
       messageEl.innerHTML =
@@ -211,21 +219,20 @@ async function searchEmployees(query) {
     }
 
     const data = await response.json();
-    console.log("Backend response:", data);
 
     if (data.success) {
       const rawResults = Array.isArray(data.data) ? data.data : [data.data];
 
       if (rawResults.length === 0) {
-        messageEl.innerHTML =
-          `<p class="no-results-message">No results found. 🔍</p>
-          <img src="../logo/proximity-logo.svg" alt="Proximity Code" loading="lazy" style="width: 100%; height: 90vh;">`;
+        messageEl.innerHTML = `
+          <p class="no-results-message">No results found. 🔍</p>
+          <img src="../logo/proximity-logo.svg" alt="Proximity Code" loading="lazy"
+               style="width: 100%; height: 90vh;">`;
         playNoResultSound();
         blockSearchInput();
         return;
       }
 
-      // ── Enrich every employee with their last log — all in parallel ──
       const enriched = await Promise.all(
         rawResults.map(async (employee) => {
           const lastLog = await fetchLastLog(
@@ -239,7 +246,6 @@ async function searchEmployees(query) {
       currentResults = enriched;
       renderResults(currentResults);
     } else {
-      console.warn("Backend error:", data.message);
       messageEl.innerHTML =
         '<p class="no-results-message">No results found. 🔍</p>';
       playNoResultSound();
@@ -259,9 +265,9 @@ async function searchEmployees(query) {
 function renderResults(results) {
   stopCurrentAudio();
 
-  const messageEl = document.getElementById("message");
+  const messageEl    = document.getElementById("message");
   const resultsTable = document.getElementById("resultsTable");
-  const resultsBody = document.getElementById("resultsBody");
+  const resultsBody  = document.getElementById("resultsBody");
 
   if (displayTimeout) {
     clearTimeout(displayTimeout);
@@ -278,20 +284,17 @@ function renderResults(results) {
     (e) => (e.status || "").toLowerCase() === "inactive",
   );
 
-  resultsBody.innerHTML = results
-    .map((employee) => buildCard(employee))
-    .join("");
+  resultsBody.innerHTML = results.map((employee) => buildCard(employee)).join("");
 
-  // Auto-hide after 10 s
   displayTimeout = setTimeout(() => {
     resultsTable.style.display = "none";
     resultsBody.innerHTML = "";
     background();
   }, 10000);
 
-  if (hasViolations) playWarningSound();
+  if (hasViolations)    playWarningSound();
   else if (hasInactive) playInactiveSound();
-  else playSuccessSound();
+  else                  playSuccessSound();
 
   blockSearchInput();
 }
@@ -302,14 +305,10 @@ function renderResults(results) {
 function formatTimestamp(ts) {
   if (!ts) return "—";
   const d = new Date(ts);
-  if (isNaN(d)) return ts; // pass through if already a string
+  if (isNaN(d)) return ts;
   return d.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
+    year: "numeric", month: "short", day: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
 }
 
@@ -317,17 +316,13 @@ function formatTimestamp(ts) {
 //  Card builder
 // ─────────────────────────────────────────────────────────────────
 function buildCard(employee) {
-  const fullname = escapeHtml(employee.fullname || "Unknown");
-  const position = escapeHtml(employee.position || "Unknown");
-  const brand = escapeHtml(employee.brand || "N/A");
-  const status = escapeHtml(employee.status || "unknown");
-  const shift = escapeHtml(employee.shift || "N/A");
-  const violation = employee.violation ? escapeHtml(employee.violation) : null;
-  const image = employee.image ? escapeHtml(employee.image) : null;
-
-  const checkStatus = escapeHtml(
-    (employee.check_status || "OUT").toUpperCase(),
-  );
+  const fullname   = escapeHtml(employee.fullname  || "Unknown");
+  const position   = escapeHtml(employee.position  || "Unknown");
+  const brand      = escapeHtml(employee.brand     || "N/A");
+  const status     = escapeHtml(employee.status    || "unknown");
+  const shift      = escapeHtml(employee.shift     || "N/A");
+  const violation  = employee.violation ? escapeHtml(employee.violation) : null;
+  const checkStatus = escapeHtml((employee.check_status || "OUT").toUpperCase());
 
   // Initials placeholder
   const initials = (employee.fullname || "UN")
@@ -337,35 +332,24 @@ function buildCard(employee) {
     .substring(0, 2)
     .toUpperCase();
 
-  const imageHtml = image
-    ? `<img src="${window.location.origin}/uploads/user/${image}" alt="${fullname}" class="employee-image" loading="lazy">`
-    : `<div class="ph-container"><div class="employee-placeholder">${initials}</div></div>`;
+  // ── Image HTML ──────────────────────────────────────────────────
+  // employee.image is now always a bare filename (e.g. "abc123.webp")
+  // or null, thanks to the backend normalizer.
+  const src = imageUrl(employee.image);
 
-  // ── Last log panel ────────────────────────────────────────────────
-  // const log = employee.lastLog;
-  // let lastLogHtml = "";
-
-  // if (log) {
-  //   const logCheckStatus = escapeHtml((log.check_status || "—").toUpperCase());
-  //   const logAccessType = escapeHtml(log.access_type || "—");
-  //   const logTimestamp = escapeHtml(formatTimestamp(log.access_timestamp));
-  //   const logIP = escapeHtml(log.ip_address || "—");
-
-  //   lastLogHtml = `
-  //     <div class="last-log-panel">
-  //       <p class="last-log-title">Last Log Entry</p>
-  //       <p>Access Type : ${logAccessType}</p>
-  //       <p>Check Status: <span class="check-status-${logCheckStatus.toLowerCase()}">${logCheckStatus}</span></p>
-  //       <p>Timestamp   : ${logTimestamp}</p>
-  //       <p>IP Address  : ${logIP}</p>
-  //     </div>`;
-  // } else {
-  //   lastLogHtml = `
-  //     <div class="last-log-panel last-log-empty">
-  //       <p class="last-log-title">Last Log Entry</p>
-  //       <p>No previous log found.</p>
-  //     </div>`;
-  // }
+  const imageHtml = src
+    ? `<img
+         src="${src}"
+         alt="${fullname}"
+         class="employee-image"
+         loading="lazy"
+         onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+       <div class="ph-container" style="display:none;">
+         <div class="employee-placeholder">${initials}</div>
+       </div>`
+    : `<div class="ph-container">
+         <div class="employee-placeholder">${initials}</div>
+       </div>`;
 
   return `
     <div class="${violation ? "div-with-violation" : "div-container"}">
