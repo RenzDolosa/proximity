@@ -6,6 +6,7 @@ require_once '../cnfg/manpower_backend.php';
 require_once '../cnfg/db.php';
 
 requireAccess('scan test', '../iframe/main.php');
+$access = getMenuAccess();
 
 if (!isset($_SESSION['user_id'])) {
   header('Location: ../../index.php');

@@ -4,7 +4,8 @@
 require_once 'res/cnfg/config.php';
 require_once 'res/cnfg/db.php';
 
-requireAccess('qr proximity', 'index.php');
+requireAccess('proximity', 'index.php');
+$access = getMenuAccess();
 ?>
 <!DOCTYPE html>
 <html lang="en">

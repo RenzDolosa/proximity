@@ -6,6 +6,7 @@ require_once '../cnfg/manpower_backend.php';
 require_once '../cnfg/db.php';
 
 requireAccess('employee dashboard', '../iframe/main.php');
+$access = getMenuAccess();
 
 // Get dashboard statistics
 $stats = [
@@ -368,9 +369,11 @@ if ($databaseConnected && $employeeManager) {
         }
         ?>
         <hr style="border: none; height: 1px; background: #e1e5e9;">
-        <div style="text-align: center; margin-top: 20px;">
-          <a href="../tb/dtl.php" class="btn btn-secondary">View All Logs</a>
-        </div>
+        <?php if ($access['datalog']): ?>
+          <div style="text-align: center; margin-top: 20px;">
+            <a href="../tb/datalog.php" class="btn btn-secondary">View All Logs</a>
+          </div>
+        <?php endif; ?>
       </div>
     </section>
   </main>

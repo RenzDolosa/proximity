@@ -5,6 +5,7 @@ require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
 requireAccess('main', '../../proximity.php', true);
+$access = getMenuAccess();
 
 $userGroup = $_SESSION['user_group'] ?? '';
 
@@ -84,76 +85,93 @@ try {
       <p><strong>Email:</strong> <?= htmlspecialchars($email ?? ''); ?></p>
     </section>
 
+
     <section class="stats-grid">
-      <div class="stat-card" onclick="window.location.href='../stat/account.php';">
-        <div class="icon">👤</div>
-        <h3>Account Info</h3>
-        <p>Manage your account settings and personal information</p>
-      </div>
+      <?php if ($access['account info']): ?>
+        <div class="stat-card" onclick="window.location.href='../stat/account.php';">
+          <div class="icon">👤</div>
+          <h3>Account Info</h3>
+          <p>Manage your account settings and personal information</p>
+        </div>
+      <?php endif; ?>
 
-      <div class="stat-card" onclick="window.location.href='../stat/employee dashboard.php';">
-        <div class="icon">📊</div>
-        <h3>Insights</h3>
-        <p>View your activity statistics and insights</p>
-      </div>
+      <?php if ($access['employee dashboard']): ?>
+        <div class="stat-card" onclick="window.location.href='../stat/employee dashboard.php';">
+          <div class="icon">📊</div>
+          <h3>Insights</h3>
+          <p>View your activity statistics and insights</p>
+        </div>
+      <?php endif; ?>
 
-      <div class="stat-card" onclick="navigateWithLoading('../tb/proximity code.php');">
-        <div class="icon"><img src="../logo/nfc-logo.svg" alt="NFC Icon" loading="lazy" style="width: 36px; height: 36px; margin: 8px 0 -12px 0;"></div>
-        <h3>Proximity Center</h3>
-        <p>Check your proximity code status</p>
-      </div>
+      <?php if ($access['proximity code']): ?>
+        <div class="stat-card" onclick="navigateWithLoading('../tb/proximity code.php');">
+          <div class="icon"><img src="../logo/nfc-logo.svg" alt="NFC Icon" loading="lazy" style="width: 36px; height: 36px; margin: 8px 0 -12px 0;"></div>
+          <h3>Proximity Center</h3>
+          <p>Check your proximity code status</p>
+        </div>
+      <?php endif; ?>
 
-      <div class="stat-card" onclick="window.location.href='../stat/admin panel.php';">
-        <div class="icon">⚙️</div>
-        <h3>Settings</h3>
-        <p>Configure your application preferences</p>
-      </div>
+      <?php if ($access['settings']): ?>
+        <div class="stat-card" onclick="window.location.href='../stat/admin panel.php';">
+          <div class="icon">⚙️</div>
+          <h3>Settings</h3>
+          <p>Configure your application preferences</p>
+        </div>
+      <?php endif; ?>
     </section>
 
     <section class="menu-grid">
-      <div class="menu-card" onclick="navigateWithLoading('../tb/table panel.php');">
-        <a href="../tb/table panel.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/table panel.php');">Input Employee</a>
-        <div class="favi">
-          <img src="../logo/mysql-logo.png" alt="MySql Logo" loading="lazy" style="width: 125px; height: 100px;">
-          <div>
-            <h3>Employee Manager</h3>
-            <p>Manage your employee information</p>
+      <?php if ($access['table panel']): ?>
+        <div class="menu-card" onclick="navigateWithLoading('../tb/table panel.php');">
+          <a href="../tb/table panel.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/table panel.php');">Input Employee</a>
+          <div class="favi">
+            <img src="../logo/mysql-logo.png" alt="MySql Logo" loading="lazy" style="width: 125px; height: 100px;">
+            <div>
+              <h3>Employee Manager</h3>
+              <p>Manage your employee information</p>
+            </div>
           </div>
         </div>
-      </div>
+      <?php endif; ?>
 
-      <!-- <div class="menu-card" onclick="navigateWithLoading('../tb/datalog.php');">
-        <a href="../tb/datalog.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/datalog.php');">Scanned Log</a>
-        <div class="favi">
-          <img src="../logo/database.svg" alt="Database" loading="lazy" style="width: 100px; height: 100px;">
-          <div>
-            <h3>Scan History</h3>
-            <p>View employee activity</p>
+      <!-- <?php if ($access['datalog']): ?>
+        <div class="menu-card" onclick="navigateWithLoading('../tb/datalog.php');">
+          <a href="../tb/datalog.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/datalog.php');">Scanned Log</a>
+          <div class="favi">
+            <img src="../logo/database.svg" alt="Database" loading="lazy" style="width: 100px; height: 100px;">
+            <div>
+              <h3>Scan History</h3>
+              <p>View employee activity</p>
+            </div>
           </div>
-        </div>
-      </div> -->
+        </div> 
+      <?php endif; ?> -->
 
-      <div class="menu-card" onclick="navigateWithLoading('../sec/scan test.php');" disabled>
-        <a href="../sec/scan test.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../sec/scan test.php');">Test QR or Proximity Code</a>
-        <div class="favi">
-          <img src="../icon/nfc-icon.png" alt="NFC Icon" loading="lazy" style="width: 100px; height: 100px;">
-          <div>
-            <h3>Test Live Search</h3>
-            <p>Web Proximity verifier application</p>
+      <?php if ($access['scan test']): ?>
+        <div class="menu-card" onclick="navigateWithLoading('../sec/scan test.php');" disabled>
+          <a href="../sec/scan test.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../sec/scan test.php');">Test QR or Proximity Code</a>
+          <div class="favi">
+            <img src="../icon/nfc-icon.png" alt="NFC Icon" loading="lazy" style="width: 100px; height: 100px;">
+            <div>
+              <h3>Test Live Search</h3>
+              <p>Web Proximity verifier application</p>
+            </div>
           </div>
         </div>
-      </div>
+      <?php endif; ?>
 
-      <div class="menu-card" onclick="navigateWithLoading('../udev/m-i v2.php');" style="background: linear-gradient(to right, rgb(183, 183, 183), rgb(147, 147, 147)); transform: scale(1);">
-        <a href="../udev/m-i v2.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../udev/m-i v2.php');">Coming Soon</a>
-        <div class="favi">
-          <img src="../logo/coming-soon.png" alt="Coming Soon" loading="lazy" style="width: 125px; height: 100px;">
-          <div>
-            <h3>Under Development</h3>
-            <p>This area is reserved for future Development</p>
+      <?php if ($access['m-i v2']): ?>
+        <div class="menu-card" onclick="navigateWithLoading('../udev/m-i v2.php');" style="background: linear-gradient(to right, rgb(183, 183, 183), rgb(147, 147, 147)); transform: scale(1);">
+          <a href="../udev/m-i v2.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../udev/m-i v2.php');">Coming Soon</a>
+          <div class="favi">
+            <img src="../logo/coming-soon.png" alt="Coming Soon" loading="lazy" style="width: 125px; height: 100px;">
+            <div>
+              <h3>Under Development</h3>
+              <p>This area is reserved for future Development</p>
+            </div>
           </div>
         </div>
-      </div>
+      <?php endif; ?>
     </section>
   </main>
 

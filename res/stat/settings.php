@@ -5,6 +5,7 @@ require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
 requireAccess('settings', '../iframe/main.php');
+$access = getMenuAccess();
 
 if (!isLoggedIn()) {
   header('Location: ../index.php');

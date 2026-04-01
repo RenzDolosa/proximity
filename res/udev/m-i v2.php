@@ -5,6 +5,7 @@ require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
 requireAccess('m-i v2', '../iframe/main.php');
+$access = getMenuAccess();
 
 // FIX: Move ALL function definitions to the top before any calls
 function getDashboardData($userDb)

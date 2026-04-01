@@ -4,7 +4,16 @@
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
-requireAccess('datalog', '../iframe/main.php');
+$permissions = getUserGroupPermissions();
+if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') && !canAccess($permissions, 'proximity code')) {
+  echo '<!DOCTYPE html><html><body><script>
+        if (window.top !== window.self) { window.top.history.back(); } else { window.history.back(); }
+    </script></body></html>';
+  exit;
+}
+
+requireAccess('datalog', 'proximity.php');
+$access = getMenuAccess();
 
 // Get dashboard statistics if database is connected
 $stats = [

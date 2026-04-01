@@ -5,6 +5,7 @@ require_once 'res/cnfg/config.php';
 require_once 'res/cnfg/db.php';
 
 requireAccess('main', '../../proximity.php', true);
+$access = getMenuAccess();
 
 $portalAccessGranted = isset($_SESSION['portal_access_granted']) && $_SESSION['portal_access_granted'] === true;
 
@@ -13,7 +14,7 @@ if ($portalAccessGranted) {
 
   if (!$isAdministrator) {
     $accessTime = $_SESSION['portal_access_time'] ?? 0;
-    if (time() - $accessTime > 60) { // 1 minutes
+    if (time() - $accessTime > 600) { // 10 minutes
       unset($_SESSION['portal_access_granted']);
       unset($_SESSION['portal_access_time']);
       $portalAccessGranted = false;
@@ -146,18 +147,20 @@ if (!$portalAccessGranted) {
     </div>
 
     <div class="side-bar" style="top: 0;">
-      <div onclick="window.location.href='proximity.php';" class="side-btn">
-        <div class="s-header">
-          <h1>Proximity</h1>
-        </div>
-        <div class="s-search-section">
-          <img src="res/icon/nfc-icon.png" alt="NFC Icon" loading="lazy">
-          <div>
-            <h3>Live Search</h3>
-            <p>Web pass verifier application</p>
+      <?php if ($access['proximity']): ?>
+        <div onclick="window.location.href='proximity.php';" class="side-btn">
+          <div class="s-header">
+            <h1>Proximity</h1>
+          </div>
+          <div class="s-search-section">
+            <img src="res/icon/nfc-icon.png" alt="NFC Icon" loading="lazy">
+            <div>
+              <h3>Live Search</h3>
+              <p>Web pass verifier application</p>
+            </div>
           </div>
         </div>
-      </div>
+      <?php endif; ?>
       <version_compare style="z-index: 1000;">
         <p id="version"></p>
       </version_compare>

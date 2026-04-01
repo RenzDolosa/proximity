@@ -281,7 +281,7 @@ function requireAccess(string $pageKey, string $redirectUrl = '../index.php'): v
       // Countdown timer — auto-triggers goBack() at 0
       var seconds = 5;
       var el = document.getElementById('countdown');
-      var timer = setInterval(function () {
+      var timer = setInterval(function() {
         seconds--;
         el.textContent = seconds;
         if (seconds <= 0) {
@@ -313,23 +313,27 @@ function getMenuAccess(): array
   $permissions = getUserGroupPermissions();
   $pages = [
     'request',
+    'portal',
     'main',
-    'manual input',
-    'qr proximity',
     'scan test',
-    'account info',
-    'admin panel',
-    'employee management',
-    'settings',
-    'datalog',
-    'proximity code',
-    'system',
-    'table panel',
     'm-i v2',
     'test',
-    'portal',
     'proximity',
-    'reg'
+    'manual input',
+    'qr proximity',
+    'settings',
+    'account info',
+    'employee dashboard',
+    'admin panel',
+    'users',
+    'groups',
+    'system logs',
+    'phpmyadmin',
+    'reg',
+    'table panel',
+    'system',
+    'datalog',
+    'proximity code'
   ];
   $access = [];
   foreach ($pages as $key) {

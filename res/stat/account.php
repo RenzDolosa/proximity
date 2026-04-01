@@ -5,6 +5,7 @@ require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
 requireAccess('account info', '../iframe/main.php');
+$access = getMenuAccess();
 
 $user = getCurrentUser();
 $message = '';

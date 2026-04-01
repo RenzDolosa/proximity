@@ -4,7 +4,20 @@
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
+$permissions = getUserGroupPermissions();
+if (!canAccess($permissions, 'users') && !canAccess($permissions, 'groups') && !canAccess($permissions, 'system logs') && !canAccess($permissions, 'phpmyadmin')) {
+    echo '<!DOCTYPE html><html><body><script>
+        if (window.top !== window.self) {
+            window.top.history.back();
+        } else {
+            window.history.back();
+        }
+    </script></body></html>';
+    exit;
+}
+
 requireAccess('admin panel', '../iframe/main.php');
+$access = getMenuAccess();
 
 // ════════════════════════════════════════════════════════════════════════════
 // AJAX HANDLERS
@@ -20,7 +33,7 @@ if (isset($_GET['action'])) {
     // ── USERS MANAGEMENT ACTIONS ─────────────────────────────────────────────
 
     if ($_GET['action'] === 'fetch_users') {
-      if (!$isAdminSession) {
+      if ($access['users'] !== true) {
         echo json_encode(['success' => false, 'message' => 'Access denied. Administrators only.']);
         exit;
       }
@@ -57,7 +70,7 @@ if (isset($_GET['action'])) {
     }
 
     if (in_array($_GET['action'], ['add_user', 'get_user', 'update_user', 'delete_user'], true)) {
-      if (!$isAdminSession) {
+      if ($access['users'] !== true) {
         echo json_encode(['success' => false, 'message' => 'Access denied. Administrators only.']);
         exit;
       }
@@ -213,7 +226,7 @@ if (isset($_GET['action'])) {
 
     // ── FETCH GROUPS FOR USER FORM DROPDOWN ──────────────────────────────────
     if ($_GET['action'] === 'fetch_groups_dropdown') {
-      if (!$isAdminSession) {
+      if ($access['users'] !== true) {
         echo json_encode(['success' => false]);
         exit;
       }
@@ -226,7 +239,7 @@ if (isset($_GET['action'])) {
     // ── SYSTEM LOG ACTIONS ───────────────────────────────────────────────────
 
     if (in_array($_GET['action'], ['fetch_logs', 'fetch_log_actions', 'delete_log', 'delete_all_logs'], true)) {
-      if (!$isAdminSession) {
+      if ($access['system logs'] !== true) {
         echo json_encode(['success' => false, 'message' => 'Access denied.']);
         exit;
       }
@@ -305,7 +318,7 @@ if (isset($_GET['action'])) {
       'fetch_group_users'
     ], true)) {
 
-      if (!$isAdminSession) {
+      if ($access['groups'] !== true) {
         echo json_encode(['success' => false, 'message' => 'Access denied. Administrators only.']);
         exit;
       }
@@ -474,7 +487,7 @@ if (isset($_GET['action'])) {
 
     // ── PHP MYADMIN — EXPORT SQL ─────────────────────────────────────────────
     if ($_GET['action'] === 'export_db') {
-      if (!$isAdminSession) {
+      if ($access['phpmyadmin'] !== true) {
         echo json_encode(['success' => false, 'message' => 'Access denied. Administrators only.']);
         exit;
       }
@@ -525,25 +538,126 @@ if (isset($_GET['action'])) {
 
 // ── Define menu pages for Bind Access ────────────────────────────────────────
 $MENU_PAGES = [
-  ['key' => 'request',            'label' => 'Portal Access',      'icon' => 'fa-cogs'],
-  ['key' => 'portal',             'label' => 'Portal',             'icon' => 'fa-cogs'],
-  ['key' => 'main',               'label' => 'Main',               'icon' => 'fa-cogs'],
-  ['key' => 'proximity',          'label' => 'Proximity',          'icon' => 'fa-qrcode'],
-  ['key' => 'manual input',       'label' => 'Manual Input',       'icon' => 'fa-qrcode'],
-  ['key' => 'qr proximity',       'label' => 'Live Search',        'icon' => 'fa-qrcode'],
-  ['key' => 'account info',       'label' => 'Account',            'icon' => 'fa-cogs'],
-  ['key' => 'employee dashboard', 'label' => 'Employee Dashboard', 'icon' => 'fa-cogs'],
-  ['key' => 'settings',           'label' => 'Settings',           'icon' => 'fa-cogs'],
-  ['key' => 'admin panel',        'label' => 'Admin Panel',        'icon' => 'fa-cogs'],
-  ['key' => 'table panel',        'label' => 'Table Panel',        'icon' => 'fa-cogs'],
-  ['key' => 'datalog',            'label' => 'Sanned Log',         'icon' => 'fa-cogs'],
-  ['key' => 'proximity code',     'label' => 'Proximity Codes',    'icon' => 'fa-cogs'],
-  ['key' => 'system',             'label' => 'Manage Employees',   'icon' => 'fa-cogs'],
-  ['key' => 'scan test',          'label' => 'Test Search',        'icon' => 'fa-qrcode'],
-  ['key' => 'm-i v2',             'label' => 'Manual Input v2',    'icon' => 'fa-cogs'],
-  ['key' => 'test',               'label' => 'Test',               'icon' => 'fa-cogs'],
-  ['key' => 'reg',                'label' => 'Register',           'icon' => 'fa-cogs'],
+  [
+    'key' => 'request',
+    'label' => 'Portal Access',
+    'icon' => 'fa-door-open',
+    'children' => [],
+  ],
+  [
+    'key' => 'portal',
+    'label' => 'Portal',
+    'icon' => 'fa-th-large',
+    'children' => [
+      ['key' => 'main',               'label' => 'Main',               'icon' => 'fa-home'],
+      ['key' => 'scan test',          'label' => 'Test Search',        'icon' => 'fa-search'],
+      ['key' => 'm-i v2',             'label' => 'Manual Input v2',    'icon' => 'fa-keyboard'],
+      ['key' => 'test',               'label' => 'Test',               'icon' => 'fa-flask'],
+    ],
+  ],
+  [
+    'key' => 'proximity',
+    'label' => 'Proximity',
+    'icon' => 'fa-th-large',
+    'children' => [
+      ['key' => 'manual input',       'label' => 'Manual Input',       'icon' => 'fa-keyboard'],
+      ['key' => 'qr proximity',       'label' => 'Live Search',        'icon' => 'fa-qrcode'],
+    ],
+  ],
+  [
+    'key'   => 'settings',
+    'label' => 'Settings',
+    'icon' => 'fa-cog',
+    'children' => [
+      ['key' => 'account info',       'label' => 'Account',            'icon' => 'fa-user-circle'],
+      ['key' => 'employee dashboard', 'label' => 'Employee Dashboard', 'icon' => 'fa-tachometer-alt'],
+      [
+        'key' => 'admin panel',
+        'label' => 'Admin Panel',
+        'icon' => 'fa-user-shield',
+        'children' => [
+          ['key' => 'users',          'label' => 'Manage Users',       'icon' => 'fa-users'],
+          ['key' => 'groups',         'label' => 'User Groups',        'icon' => 'fa-users-cog'],
+          ['key' => 'system logs',    'label' => 'System Logs',        'icon' => 'fa-clipboard-list'],
+          ['key' => 'phpmyadmin',     'label' => 'PHP MyAdmin',        'icon' => 'fa-database'],
+        ],
+      ],
+      ['key' => 'reg',                'label' => 'Register',           'icon' => 'fa-user-plus'],
+    ],
+  ],
+  [
+    'key' => 'table panel',
+    'label' => 'Table Panel',
+    'icon' => 'fa-table',
+    'children' => [
+      ['key' => 'system',             'label' => 'Manage Employees',   'icon' => 'fa-users-cog'],
+      ['key' => 'datalog',            'label' => 'Scanned Log',        'icon' => 'fa-clipboard-list'],
+      ['key' => 'proximity code',     'label' => 'Proximity Codes',    'icon' => 'fa-barcode'],
+    ],
+  ],
 ];
+function renderBindRows(array $pages, int $depth = 0): void
+{
+  foreach ($pages as $page):
+    $hasChildren = !empty($page['children']);
+    $indent      = $depth * 20;
+    $isChild     = $depth > 0;
+    $key         = $page['key'];
+    $icon        = $page['icon'] ?? 'fa-circle';
+    $label       = htmlspecialchars($page['label']);
+?>
+    <div class="bind-group" data-key="<?= $key ?>" data-depth="<?= $depth ?>">
+
+      <div class="bind-row <?= $isChild ? 'bind-child-row' : '' ?> <?= $hasChildren ? 'has-children' : '' ?>"
+        style="<?= $depth > 0 ? "margin-left:{$indent}px; border-left: 2px solid #ede9fe;" : '' ?>">
+
+        <div class="bind-row-left">
+          <?php if ($hasChildren): ?>
+            <button type="button" class="bind-toggle-btn"
+              onclick="toggleBindChildren('<?= $key ?>')"
+              id="toggleBtn_<?= $key ?>">
+              <i class="fas fa-play" id="toggleIcon_<?= $key ?>"></i>
+            </button>
+          <?php else: ?>
+            <span style="width:24px;display:inline-block;flex-shrink:0;"></span>
+          <?php endif; ?>
+
+          <div class="bind-icon" style="<?= $depth > 0 ? 'width:26px;height:26px;font-size:11px;background:#f3f0ff;' : '' ?>">
+            <i class="fas <?= $icon ?>" style="<?= $depth > 0 ? 'color:#7c3aed;' : '' ?>"></i>
+          </div>
+
+          <div>
+            <span class="bind-label" style="<?= $depth > 0 ? 'font-size:12.5px;font-weight:500;color:#374151;' : '' ?>">
+              <?= $label ?>
+            </span>
+            <?php if ($depth > 1): ?>
+              <div style="font-size:10px;color:#9ca3af;margin-top:1px;">Sub-menu</div>
+            <?php endif; ?>
+          </div>
+        </div>
+
+        <div class="radio-pill-group" data-key="<?= $key ?>" data-depth="<?= $depth ?>">
+          <label class="radio-pill allow-pill selected" onclick="selectPill(this)">
+            <input type="radio" name="perm_<?= $key ?>" value="allow" checked>
+            <span class="radio-pill-dot"></span> Allow
+          </label>
+          <label class="radio-pill deny-pill" onclick="selectPill(this)">
+            <input type="radio" name="perm_<?= $key ?>" value="deny">
+            <span class="radio-pill-dot"></span> Not allow
+          </label>
+        </div>
+      </div>
+
+      <?php if ($hasChildren): ?>
+        <div class="bind-children-wrap" id="children_<?= $key ?>" style="display:none;">
+          <?php renderBindRows($page['children'], $depth + 1); ?>
+        </div>
+      <?php endif; ?>
+
+    </div>
+<?php
+  endforeach;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1439,6 +1553,59 @@ $MENU_PAGES = [
       color: #1f2937;
     }
 
+    /* ── Bind tree toggle button ── */
+    .bind-toggle-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      width: 24px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #7c3aed;
+      padding: 0;
+      flex-shrink: 0;
+      transition: transform .15s;
+    }
+
+    .bind-toggle-btn i {
+      font-size: 10px;
+      transition: transform .2s;
+    }
+
+    .bind-toggle-btn.open i {
+      transform: rotate(90deg);
+    }
+
+    /* ── Child rows ── */
+    .bind-children {
+      margin-left: 12px;
+      border-left: 2px solid #ede9fe;
+      padding-left: 4px;
+      margin-bottom: 4px;
+    }
+
+    .bind-child-row {
+      background: #fafafa;
+      border-color: #f3f0ff;
+    }
+
+    .bind-child-row:hover {
+      background: #f5f3ff;
+    }
+
+    .bind-children-wrap {
+      /* No extra styling needed — indentation is handled inline per depth */
+    }
+
+    /* ── Disabled pill state ── */
+    .radio-pill.disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
     /* Radio pill group */
     .radio-pill-group {
       display: flex;
@@ -1590,19 +1757,25 @@ $MENU_PAGES = [
 
   <!-- ══════════════════════════════════════════ TAB NAVIGATION ══ -->
   <div class="tab-nav">
-    <button class="tab-btn active" id="tabBtnUsers" onclick="switchTab('users')">
-      <i class="fas fa-users-cog"></i> Users Management
-      <span class="tab-badge" id="tabBadgeUsers">—</span>
-    </button>
-    <button class="tab-btn" id="tabBtnGroup" onclick="switchTab('group')">
-      <i class="fas fa-layer-group"></i> Users Group
-      <span class="tab-badge" id="tabBadgeGroup">—</span>
-    </button>
-    <button class="tab-btn" id="tabBtnLogs" onclick="switchTab('logs')">
-      <i class="fas fa-history"></i> System Logs
-      <span class="tab-badge" id="tabBadgeLogs">—</span>
-    </button>
-    <?php if ($isAdmin): ?>
+    <?php if ($access['users']): ?>
+      <button class="tab-btn active" id="tabBtnUsers" onclick="switchTab('users')">
+        <i class="fas fa-users-cog"></i> Users Management
+        <span class="tab-badge" id="tabBadgeUsers">—</span>
+      </button>
+    <?php endif; ?>
+    <?php if ($access['groups']): ?>
+      <button class="tab-btn" id="tabBtnGroup" onclick="switchTab('group')">
+        <i class="fas fa-layer-group"></i> Users Group
+        <span class="tab-badge" id="tabBadgeGroup">—</span>
+      </button>
+    <?php endif; ?>
+    <?php if ($access['system logs']): ?>
+      <button class="tab-btn" id="tabBtnLogs" onclick="switchTab('logs')">
+        <i class="fas fa-history"></i> System Logs
+        <span class="tab-badge" id="tabBadgeLogs">—</span>
+      </button>
+    <?php endif; ?>
+    <?php if ($access['phpmyadmin']): ?>
       <button class="tab-btn" id="tabBtnMyAdmin" onclick="switchTab('myadmin')">
         <i class="fas fa-database"></i> PHP MyAdmin
         <span class="tab-badge" id="tabBadgeMyAdmin">—</span>
@@ -1617,7 +1790,7 @@ $MENU_PAGES = [
       <button class="btn btn-clear" onclick="clearUsersSearch()"><i class="fas fa-times"></i> Clear</button>
       <input id="searchUser" type="text" placeholder="Username" oninput="debounceUsers()" style="width:180px;" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
       <input id="searchEmail" type="text" placeholder="Email" oninput="debounceUsers()" style="width:200px;" autocomplete="off">
-      <?php if ($isAdmin): ?>
+      <?php if ($access['users']): ?>
         <button class="btn btn-add" onclick="openAddUser()"><i class="fas fa-user-plus"></i> Add User</button>
       <?php endif; ?>
     </div>
@@ -1628,7 +1801,7 @@ $MENU_PAGES = [
         <span class="stat-item"><i class="fas fa-sign-in-alt"></i> Logged in <strong id="uStatLoggedIn">—</strong></span>
         <span class="stat-item"><i class="fas fa-user-clock"></i> Never logged <strong id="uStatNever">—</strong></span>
         <span class="refresh-indicator">
-          <?php if ($isAdmin): ?>
+          <?php if ($access['users']): ?>
             <span class="pulse-dot" id="uPulseDot"></span><span>Live</span>
           <?php else: ?>
             <span class="pulse-dot2"></span><span>✗ Disconnected</span>
@@ -1681,7 +1854,7 @@ $MENU_PAGES = [
       <button class="btn btn-search" onclick="loadGroups()"><i class="fas fa-search"></i> Search</button>
       <button class="btn btn-clear" onclick="clearGroupsSearch()"><i class="fas fa-times"></i> Clear</button>
       <input id="groupSearchInput" type="text" placeholder="Usergroup" oninput="debounceGroups()" style="width:220px;" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
-      <?php if ($isAdmin): ?>
+      <?php if ($access['groups']): ?>
         <button class="btn btn-add" onclick="openAddGroup()"><i class="fas fa-plus"></i> Add Group</button>
       <?php endif; ?>
     </div>
@@ -1690,7 +1863,7 @@ $MENU_PAGES = [
         <span class="stats-title">User Groups</span>
         <span class="stat-item"><i class="fas fa-list"></i> Total <strong id="gStatTotal">—</strong></span>
         <span class="refresh-indicator">
-          <?php if ($isAdmin): ?>
+          <?php if ($access['groups']): ?>
             <span class="pulse-dot" id="gPulseDot"></span><span>Live</span>
           <?php else: ?>
             <span class="pulse-dot2"></span><span>✗ Disconnected</span>
@@ -1742,7 +1915,7 @@ $MENU_PAGES = [
       <select id="logActionFilter" onchange="loadLogs()" style="padding:6px 10px;border:1px solid #ccc;border-radius:5px;font-size:13px;">
         <option value="">All Actions</option>
       </select>
-      <?php if ($isAdmin): ?>
+      <?php if ($access['system logs']): ?>
         <button class="btn btn-delete-all" onclick="confirmDeleteAllLogs()"><i class="fas fa-trash"></i> Delete All Data</button>
       <?php endif; ?>
     </div>
@@ -1754,7 +1927,7 @@ $MENU_PAGES = [
         <span class="stat-item"><i class="fas fa-user-edit"></i> Updates <strong id="lStatUpdates">—</strong></span>
         <span class="stat-item"><i class="fas fa-trash-alt"></i> Deletions <strong id="lStatDeletes">—</strong></span>
         <span class="refresh-indicator">
-          <?php if ($isAdmin): ?>
+          <?php if ($access['system logs']): ?>
             <span class="pulse-dot" id="lPulseDot"></span><span>Live</span>
           <?php else: ?>
             <span class="pulse-dot2"></span><span>✗ Disconnected</span>
@@ -1998,24 +2171,9 @@ $MENU_PAGES = [
           <div class="gmodal-tabpanel" id="gPanelAccess">
             <div class="bind-section-title"><i class="fas fa-sitemap" style="margin-right:4px;"></i> Menu Access</div>
             <div id="bindAccessRows">
-              <?php foreach ($MENU_PAGES as $page): ?>
-                <div class="bind-row">
-                  <div class="bind-row-left">
-                    <div class="bind-icon"><i class="fas <?= $page['icon'] ?>"></i></div>
-                    <span class="bind-label"><?= htmlspecialchars($page['label']) ?></span>
-                  </div>
-                  <div class="radio-pill-group" data-key="<?= $page['key'] ?>">
-                    <label class="radio-pill allow-pill selected" onclick="selectPill(this)">
-                      <input type="radio" name="perm_<?= $page['key'] ?>" value="allow" checked>
-                      <span class="radio-pill-dot"></span> Allow
-                    </label>
-                    <label class="radio-pill deny-pill" onclick="selectPill(this)">
-                      <input type="radio" name="perm_<?= $page['key'] ?>" value="deny">
-                      <span class="radio-pill-dot"></span> Not allow
-                    </label>
-                  </div>
-                </div>
-              <?php endforeach; ?>
+              <div id="bindAccessRows">
+                <?php renderBindRows($MENU_PAGES); ?>
+              </div>
             </div>
           </div>
 
@@ -2084,12 +2242,12 @@ $MENU_PAGES = [
   <script src="../src/btn.js"></script>
   <script src="../src/req.js"></script>
   <script>
-    const IS_ADMIN = <?= $isAdmin ? 'true' : 'false' ?>;
+    const IS_USERS = <?= $access['users'] ? 'true' : 'false' ?>;
+    const IS_GROUPS = <?= $access['groups'] ? 'true' : 'false' ?>;
+    const IS_LOGS = <?= $access['system logs'] ? 'true' : 'false' ?>;
+    const IS_MYADMIN = <?= $access['phpmyadmin'] ? 'true' : 'false' ?>;
     const SESSION_UID = <?= $sessionUserId ?>;
     const COLORS = ['#7F77DD', '#1D9E75', '#D85A30', '#D4537E', '#378ADD', '#639922', '#BA7517'];
-
-    // ── Menu pages for permissions (mirrors PHP $MENU_PAGES) ──
-    const MENU_PAGES = <?= json_encode($MENU_PAGES) ?>;
 
     /* ══════════════════════════════════════════════════════════════
        TAB SWITCHING (main tabs)
@@ -2145,35 +2303,183 @@ $MENU_PAGES = [
     }
 
     /* ══════════════════════════════════════════════════════════════
-       RADIO PILL INTERACTION
+      BIND ACCESS — Tree logic
     ══════════════════════════════════════════════════════════════ */
+
+    // ── Build flat key→children map recursively from any depth ──
+    const MENU_TREE = <?= json_encode($MENU_PAGES) ?>;
+
+    // Flatten tree: key → { parentKey, childKeys }
+    const NODE_MAP = {}; // key → { parentKey|null, childKeys[] }
+
+    function buildNodeMap(pages, parentKey = null) {
+      pages.forEach(page => {
+        NODE_MAP[page.key] = {
+          parentKey,
+          childKeys: (page.children || []).map(c => c.key),
+        };
+        if (page.children && page.children.length) {
+          buildNodeMap(page.children, page.key);
+        }
+      });
+    }
+    buildNodeMap(MENU_TREE);
+
+    // Get ALL descendant keys recursively
+    function getAllDescendants(key) {
+      const result = [];
+      const kids = NODE_MAP[key]?.childKeys || [];
+      kids.forEach(childKey => {
+        result.push(childKey);
+        result.push(...getAllDescendants(childKey));
+      });
+      return result;
+    }
+
+    // Get ALL ancestor keys
+    function getAllAncestors(key) {
+      const result = [];
+      let current = NODE_MAP[key]?.parentKey;
+      while (current) {
+        result.push(current);
+        current = NODE_MAP[current]?.parentKey;
+      }
+      return result;
+    }
+
+    function toggleBindChildren(key) {
+      const container = document.getElementById('children_' + key);
+      const btn = document.getElementById('toggleBtn_' + key);
+      if (!container) return;
+      const isOpen = container.style.display !== 'none';
+      container.style.display = isOpen ? 'none' : 'block';
+      if (btn) btn.classList.toggle('open', !isOpen);
+    }
+
     function selectPill(pill) {
       const group = pill.closest('.radio-pill-group');
+      const key = group.dataset.key;
+      const isDeny = pill.classList.contains('deny-pill');
+
+      // 1. Select this pill
       group.querySelectorAll('.radio-pill').forEach(p => p.classList.remove('selected'));
       pill.classList.add('selected');
       pill.querySelector('input[type="radio"]').checked = true;
+
+      // 2. Cascade DOWN to ALL descendants
+      const descendants = getAllDescendants(key);
+      descendants.forEach(descKey => {
+        const descGroup = document.querySelector(`.radio-pill-group[data-key="${descKey}"]`);
+        if (!descGroup) return;
+
+        if (isDeny) {
+          // Force deny + disable
+          descGroup.querySelectorAll('.radio-pill').forEach(p => {
+            p.classList.remove('selected');
+            p.classList.add('disabled');
+          });
+          const denyPill = descGroup.querySelector('.deny-pill');
+          if (denyPill) {
+            denyPill.classList.add('selected');
+            denyPill.querySelector('input[type="radio"]').checked = true;
+          }
+          // Expand so user can see inherited state
+          const container = document.getElementById('children_' + descKey);
+          const btn = document.getElementById('toggleBtn_' + descKey);
+          // Only expand the immediate parent's children container
+        } else {
+          // Re-enable + reset to allow
+          descGroup.querySelectorAll('.radio-pill').forEach(p => {
+            p.classList.remove('disabled');
+            p.classList.remove('selected');
+          });
+          const allowPill = descGroup.querySelector('.allow-pill');
+          if (allowPill) {
+            allowPill.classList.add('selected');
+            allowPill.querySelector('input[type="radio"]').checked = true;
+          }
+        }
+      });
+
+      // Auto-expand immediate children container when denying
+      if (isDeny) {
+        const container = document.getElementById('children_' + key);
+        const btn = document.getElementById('toggleBtn_' + key);
+        if (container) container.style.display = 'block';
+        if (btn) btn.classList.add('open');
+      }
+
+      // 3. When ALLOWING: check if all siblings also allow → re-enable parent
+      if (!isDeny) {
+        const ancestors = getAllAncestors(key);
+        ancestors.forEach(ancestorKey => {
+          const siblingKeys = NODE_MAP[ancestorKey]?.childKeys || [];
+          const allAllow = siblingKeys.every(sibKey => {
+            const sibGroup = document.querySelector(`.radio-pill-group[data-key="${sibKey}"]`);
+            if (!sibGroup) return true;
+            const checked = sibGroup.querySelector('input[type="radio"]:checked');
+            return checked?.value === 'allow';
+          });
+          if (allAllow) {
+            // Re-enable the ancestor's pills if they were disabled
+            const ancestorGroup = document.querySelector(`.radio-pill-group[data-key="${ancestorKey}"]`);
+            // Don't forcibly change ancestor — just let user decide
+            // But DO re-enable any pills that were locked
+          }
+        });
+      }
     }
 
     function getPermissionsFromForm() {
       const perms = {};
-      MENU_PAGES.forEach(page => {
-        const checked = document.querySelector(`input[name="perm_${page.key}"]:checked`);
-        perms[page.key] = checked ? checked.value : 'allow';
+      Object.keys(NODE_MAP).forEach(key => {
+        const checked = document.querySelector(`input[name="perm_${key}"]:checked`);
+        perms[key] = checked ? checked.value : 'allow';
       });
       return perms;
     }
 
     function setPermissionsToForm(permsObj) {
-      MENU_PAGES.forEach(page => {
-        const val = (permsObj && permsObj[page.key]) ? permsObj[page.key] : 'allow';
-        const group = document.querySelector(`.radio-pill-group[data-key="${page.key}"]`);
-        if (!group) return;
-        group.querySelectorAll('.radio-pill').forEach(p => {
-          const radio = p.querySelector('input[type="radio"]');
-          const match = radio.value === val;
-          p.classList.toggle('selected', match);
-          radio.checked = match;
-        });
+      // First pass: apply all values, clear disabled state
+      Object.keys(NODE_MAP).forEach(key => {
+        _applyPermToGroup(key, permsObj);
+      });
+
+      // Second pass: cascade deny from any parent downward
+      // Process top-level first, then deeper levels
+      function cascadeFromNode(key) {
+        const val = (permsObj && permsObj[key]) ? permsObj[key] : 'allow';
+        if (val === 'deny') {
+          const descendants = getAllDescendants(key);
+          // Expand container
+          const container = document.getElementById('children_' + key);
+          const btn = document.getElementById('toggleBtn_' + key);
+          if (container) container.style.display = 'block';
+          if (btn) btn.classList.add('open');
+
+          descendants.forEach(descKey => {
+            const descGroup = document.querySelector(`.radio-pill-group[data-key="${descKey}"]`);
+            if (!descGroup) return;
+            descGroup.querySelectorAll('.radio-pill').forEach(p => p.classList.add('disabled'));
+          });
+        }
+        // Recurse into children
+        (NODE_MAP[key]?.childKeys || []).forEach(cascadeFromNode);
+      }
+
+      MENU_TREE.forEach(page => cascadeFromNode(page.key));
+    }
+
+    function _applyPermToGroup(key, permsObj) {
+      const val = (permsObj && permsObj[key]) ? permsObj[key] : 'allow';
+      const group = document.querySelector(`.radio-pill-group[data-key="${key}"]`);
+      if (!group) return;
+      group.querySelectorAll('.radio-pill').forEach(p => {
+        const radio = p.querySelector('input[type="radio"]');
+        const match = radio.value === val;
+        p.classList.toggle('selected', match);
+        p.classList.remove('disabled');
+        radio.checked = match;
       });
     }
 
@@ -2361,11 +2667,11 @@ $MENU_PAGES = [
         const isSelf = +u.id === SESSION_UID;
         const isRoot = +u.id === 1 && u.user_group === 'Administrator';
 
-        const editBtn = !IS_ADMIN ?
+        const editBtn = !IS_USERS ?
           `<div class="lock-wrap"><button class="action-btn btn-edit-row" disabled><i class="fas fa-lock" style="opacity:.5"></i> Edit</button><span class="tip">Administrators only</span></div>` :
           `<button class="action-btn btn-edit-row" onclick="openEditUser(${u.id})"><i class="fas fa-edit"></i> Edit</button>`;
 
-        const delBtn = !IS_ADMIN ?
+        const delBtn = !IS_USERS ?
           `<div class="lock-wrap"><button class="action-btn btn-del-row" disabled><i class="fas fa-lock" style="opacity:.5"></i> Delete</button><span class="tip">Administrators only</span></div>` :
           isSelf ?
           `<div class="lock-wrap"><button class="action-btn btn-del-row" disabled><i class="fas fa-trash"></i> Delete</button></div>` :
@@ -2452,7 +2758,7 @@ $MENU_PAGES = [
     }
 
     async function openAddUser() {
-      if (!IS_ADMIN) {
+      if (!IS_USERS) {
         showToast('Access denied. Administrators only.', true);
         return;
       }
@@ -2467,7 +2773,7 @@ $MENU_PAGES = [
     }
 
     async function openEditUser(id) {
-      if (!IS_ADMIN) {
+      if (!IS_USERS) {
         showToast('Access denied. Administrators only.', true);
         return;
       }
@@ -2506,7 +2812,7 @@ $MENU_PAGES = [
     }
 
     async function submitUserForm() {
-      if (!IS_ADMIN) {
+      if (!IS_USERS) {
         showToast('Access denied.', true);
         return;
       }
@@ -2560,7 +2866,7 @@ $MENU_PAGES = [
     }
 
     function openDeleteUser(id, username) {
-      if (!IS_ADMIN) {
+      if (!IS_USERS) {
         showToast('Access denied. Administrators only.', true);
         return;
       }
@@ -2570,7 +2876,7 @@ $MENU_PAGES = [
     }
 
     async function confirmDeleteUser() {
-      if (!IS_ADMIN || !pendingDelUserId) return;
+      if (!IS_USERS || !pendingDelUserId) return;
       const btn = document.getElementById('btnConfirmDeleteUser');
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span> Deleting…';
@@ -2769,7 +3075,7 @@ $MENU_PAGES = [
     }
 
     function openAddGroup() {
-      if (!IS_ADMIN) {
+      if (!IS_GROUPS) {
         showToast('Access denied. Administrators only.', true);
         return;
       }
@@ -2781,7 +3087,7 @@ $MENU_PAGES = [
     }
 
     async function openEditGroup(id) {
-      if (!IS_ADMIN) {
+      if (!IS_GROUPS) {
         showToast('Access denied. Administrators only.', true);
         return;
       }
@@ -2816,7 +3122,7 @@ $MENU_PAGES = [
     }
 
     async function submitGroupForm() {
-      if (!IS_ADMIN) {
+      if (!IS_GROUPS) {
         showToast('Access denied.', true);
         return;
       }
@@ -2867,7 +3173,7 @@ $MENU_PAGES = [
     }
 
     function openDeleteGroup(id, name, boundCount) {
-      if (!IS_ADMIN) {
+      if (!IS_GROUPS) {
         showToast('Access denied. Administrators only.', true);
         return;
       }
@@ -2884,7 +3190,7 @@ $MENU_PAGES = [
     }
 
     async function confirmDeleteGroup() {
-      if (!IS_ADMIN || !pendingDelGrpId) return;
+      if (!IS_GROUPS || !pendingDelGrpId) return;
       const btn = document.getElementById('btnConfirmDeleteGroup');
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span> Deleting…';

@@ -6,6 +6,7 @@ require_once 'res/cnfg/db.php';
 require_once 'res/cnfg/req.php';
 
 requireAccess('portal', 'proximity.php', true);
+$access = getMenuAccess();
 
 try {
   $userDb = getUserDBConnection($userId);
@@ -86,18 +87,20 @@ try {
     <!-- <div class="security-badge"><i class="fas fa-shield-alt"></i> Secured</div> -->
 
     <div class="side-bar" style="top: 64px;">
-      <div onclick="window.location.href='proximity.php';" class="side-btn">
-        <div class="s-header">
-          <h1>Proximity</h1>
-        </div>
-        <div class="s-search-section">
-          <img src="res/icon/nfc-icon.png" alt="NFC Icon" loading="lazy">
-          <div>
-            <h3>Live Search</h3>
-            <p>Web pass verifier application</p>
+      <?php if ($access['proximity']): ?>
+        <div onclick="window.location.href='proximity.php';" class="side-btn">
+          <div class="s-header">
+            <h1>Proximity</h1>
+          </div>
+          <div class="s-search-section">
+            <img src="res/icon/nfc-icon.png" alt="NFC Icon" loading="lazy">
+            <div>
+              <h3>Live Search</h3>
+              <p>Web pass verifier application</p>
+            </div>
           </div>
         </div>
-      </div>
+      <?php endif; ?>
       <version_compare style="z-index: 1000;">
         <p id="version"></p>
       </version_compare>

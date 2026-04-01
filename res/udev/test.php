@@ -5,6 +5,7 @@ require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
 requireAccess('test', '../iframe/main/php');
+$access = getMenuAccess();
 
 // Get dashboard statistics if database is connected
 $stats = [

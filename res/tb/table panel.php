@@ -4,7 +4,21 @@
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
+$permissions = getUserGroupPermissions();
+if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') && !canAccess($permissions, 'proximity code')) {
+  echo '<!DOCTYPE html><html><body><script>
+        if (window.top !== window.self) { window.top.history.back(); } else { window.history.back(); }
+    </script></body></html>';
+  exit;
+}
+
 requireAccess('table panel', '../iframe/main.php');
+$access = getMenuAccess();
+
+$firstTab = null;
+if ($access['system'])         $firstTab = 'employees';
+elseif ($access['datalog'])    $firstTab = 'scanned';
+elseif ($access['proximity code']) $firstTab = 'proximity';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -102,23 +116,31 @@ requireAccess('table panel', '../iframe/main.php');
   </div>
 
   <div class="tab-bar">
-    <button class="tab-btn active" onclick="switchTab('employees', this)">
-      <i class="fas fa-users"></i>
-      Manage Employees
-    </button>
-    <button class="tab-btn" onclick="switchTab('scanned', this)">
-      <i class="fas fa-list-check"></i>
-      Scanned Log
-    </button>
-    <button class="tab-btn" onclick="switchTab('proximity', this)">
-      <i class="fas fa-id-card"></i>
-      Proximity Codes
-    </button>
+    <?php if ($access['system']): ?>
+      <button class="tab-btn <?= $firstTab === 'employees' ? 'active' : '' ?>" onclick="switchTab('employees', this)">
+        <i class="fas fa-users"></i> Manage Employees
+      </button>
+    <?php endif; ?>
+
+    <?php if ($access['datalog']): ?>
+      <button class="tab-btn <?= $firstTab === 'scanned' ? 'active' : '' ?>" onclick="switchTab('scanned', this)">
+        <i class="fas fa-list-check"></i> Scanned Log
+      </button>
+    <?php endif; ?>
+
+    <?php if ($access['proximity code']): ?>
+      <button class="tab-btn <?= $firstTab === 'proximity' ? 'active' : '' ?>" onclick="switchTab('proximity', this)">
+        <i class="fas fa-id-card"></i> Proximity Codes
+      </button>
+    <?php endif; ?>
   </div>
 
-  <iframe id="frame-employees" class="tab-frame active" src="system.php"></iframe>
-  <iframe id="frame-scanned" class="tab-frame" src=""></iframe>
-  <iframe id="frame-proximity" class="tab-frame" src=""></iframe>
+  <iframe id="frame-employees" class="tab-frame <?= $firstTab === 'employees' ? 'active' : '' ?>"
+    src="<?= $firstTab === 'employees' ? 'system.php' : '' ?>"></iframe>
+  <iframe id="frame-scanned" class="tab-frame <?= $firstTab === 'scanned'   ? 'active' : '' ?>"
+    src="<?= $firstTab === 'scanned'   ? 'datalog.php' : '' ?>"></iframe>
+  <iframe id="frame-proximity" class="tab-frame <?= $firstTab === 'proximity' ? 'active' : '' ?>"
+    src="<?= $firstTab === 'proximity' ? 'proximity code.php' : '' ?>"></iframe>
 
   <script src="../src/req.js"></script>
   <script src="../src/ver.js"></script>
@@ -152,20 +174,18 @@ requireAccess('table panel', '../iframe/main.php');
     });
 
     // Guard: if the main iframe navigates to login, redirect the whole top window
-    const mainFrame = document.querySelector('.frames');
-    if (mainFrame) {
-      mainFrame.addEventListener('load', function() {
+    document.querySelectorAll('.tab-frame').forEach(frame => {
+      frame.addEventListener('load', function() {
         try {
           const frameUrl = this.contentWindow.location.href;
           if (frameUrl.includes('index.php') || frameUrl.includes('login')) {
             window.top.location.href = frameUrl;
           }
         } catch (e) {
-          // Cross-origin means a real redirect happened — go to login
-          window.top.location.href = 'index.php';
+          window.top.location.href = '../index.php';
         }
       });
-    }
+    });
   </script>
 </body>
 

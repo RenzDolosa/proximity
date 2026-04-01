@@ -4,7 +4,20 @@
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';
 
-requireAccess('qr proximity', '/index.php');
+$permissions = getUserGroupPermissions();
+if (!canAccess($permissions, 'qr proximity') && !canAccess($permissions, 'manual input')) {
+    echo '<!DOCTYPE html><html><body><script>
+        if (window.top !== window.self) {
+            window.top.history.back();
+        } else {
+            window.history.back();
+        }
+    </script></body></html>';
+    exit;
+}
+
+requireAccess('qr proximity', 'manual input.php');
+$access = getMenuAccess();
 
 if (!isset($_SESSION['user_id'])) {
   header('Location: /index.php');
@@ -37,30 +50,35 @@ $email = $_SESSION['email'] ?? '';
 <body>
 
   <div class="side-bar" style="top: 0;">
-    <div onclick="window.location.href='qr proximity.php';" class="side-btn">
-      <div class="s-header">
-        <h1>Proximity</h1>
-      </div>
-      <div class="s-search-section">
-        <img src="../icon/nfc-icon.png" alt="NFC Icon" loading="lazy">
-        <div>
-          <h3>Live Search</h3>
-          <p>Web pass verifier application</p>
+    <?php if ($access['qr proximity']): ?>
+      <div onclick="window.location.href='qr proximity.php';" class="side-btn">
+        <div class="s-header">
+          <h1>Proximity</h1>
+        </div>
+        <div class="s-search-section">
+          <img src="../icon/nfc-icon.png" alt="NFC Icon" loading="lazy">
+          <div>
+            <h3>Live Search</h3>
+            <p>Web pass verifier application</p>
+          </div>
         </div>
       </div>
-    </div>
-    <div onclick="window.location.href='mamual input.php';" class="side-btn">
-      <div class="s-header">
-        <h1>Manual Entry</h1>
-      </div>
-      <div class="s-search-section">
-        <img src="../logo/manual.png" alt="Manual Entry" loading="lazy">
-        <div>
-          <h3>Employee Entry</h3>
-          <p>This area is served for manual entry</p>
+    <?php endif; ?>
+
+    <?php if ($access['manual input']): ?>
+      <div onclick="window.location.href='manual input.php';" class="side-btn">
+        <div class="s-header">
+          <h1>Manual Entry</h1>
+        </div>
+        <div class="s-search-section">
+          <img src="../logo/manual.png" alt="Manual Entry" loading="lazy">
+          <div>
+            <h3>Employee Entry</h3>
+            <p>This area is served for manual entry</p>
+          </div>
         </div>
       </div>
-    </div>
+    <?php endif; ?>
     <version_compare style="z-index: 1000;">
       <p id="version"></p>
     </version_compare>
@@ -70,7 +88,7 @@ $email = $_SESSION['email'] ?? '';
     <h2>Live Search</h2>
 
     <div class="search-container">
-      <input type="text" id="searchInput" autocomplete="off" autofocus >
+      <input type="text" id="searchInput" autocomplete="off" autofocus>
     </div>
 
     <div id="resultsTable" style="display: none;">
