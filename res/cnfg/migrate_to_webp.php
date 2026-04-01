@@ -1,7 +1,7 @@
 <?php
 // migrate_to_webp.php
 // Place this file in your /cnfg/ folder (same level as config.php)
-// Run once via browser: https://proximity3pl.page.gd/cnfg/migrate_to_webp.php?secret=CHANGE_THIS
+// Run once via browser: https://proximity3pl.page.gd/res/cnfg/migrate_to_webp.php?secret=AdminAdmin123
 // Then DELETE this file after migration is complete.
 
 // ─── SECURITY ────────────────────────────────────────────────────────────────
