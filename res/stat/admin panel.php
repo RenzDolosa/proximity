@@ -86,7 +86,10 @@ if (isset($_GET['action'])) {
         if (!$my_db)                                      $errors[] = 'Database name is required.';
         if (!in_array($user_group, $allowedGroups, true)) $errors[] = 'Invalid user group.';
 
-        if ($errors) { echo json_encode(['success' => false, 'errors' => $errors]); exit; }
+        if ($errors) {
+          echo json_encode(['success' => false, 'errors' => $errors]);
+          exit;
+        }
 
         $chk = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ? OR email = ?");
         $chk->execute([$username, $email]);
@@ -148,7 +151,10 @@ if (isset($_GET['action'])) {
         if (!$my_db)                                      $errors[] = 'Database name is required.';
         if (!in_array($user_group, $allowedGroups, true)) $errors[] = 'Invalid user group.';
 
-        if ($errors) { echo json_encode(['success' => false, 'errors' => $errors]); exit; }
+        if ($errors) {
+          echo json_encode(['success' => false, 'errors' => $errors]);
+          exit;
+        }
 
         if ($id === $self && $user_group !== 'Administrator') {
           echo json_encode(['success' => false, 'errors' => ['You cannot remove your own Administrator role.']]);
@@ -188,7 +194,10 @@ if (isset($_GET['action'])) {
         $chk->execute([$id]);
         $user = $chk->fetch(PDO::FETCH_ASSOC);
 
-        if (!$user) { echo json_encode(['success' => false, 'message' => 'User not found.']); exit; }
+        if (!$user) {
+          echo json_encode(['success' => false, 'message' => 'User not found.']);
+          exit;
+        }
         if ($id === 1 && $user['user_group'] === 'Administrator') {
           echo json_encode(['success' => false, 'message' => 'The root Administrator account cannot be deleted.']);
           exit;
@@ -204,7 +213,10 @@ if (isset($_GET['action'])) {
 
     // ── FETCH GROUPS FOR USER FORM DROPDOWN ──────────────────────────────────
     if ($_GET['action'] === 'fetch_groups_dropdown') {
-      if (!$isAdminSession) { echo json_encode(['success' => false]); exit; }
+      if (!$isAdminSession) {
+        echo json_encode(['success' => false]);
+        exit;
+      }
       $stmt = $pdo->query("SELECT group_name FROM user_groups WHERE is_enabled = 1 ORDER BY group_name ASC");
       $groups = $stmt->fetchAll(PDO::FETCH_COLUMN);
       echo json_encode(['success' => true, 'groups' => $groups]);
@@ -214,7 +226,10 @@ if (isset($_GET['action'])) {
     // ── SYSTEM LOG ACTIONS ───────────────────────────────────────────────────
 
     if (in_array($_GET['action'], ['fetch_logs', 'fetch_log_actions', 'delete_log', 'delete_all_logs'], true)) {
-      if (!$isAdminSession) { echo json_encode(['success' => false, 'message' => 'Access denied.']); exit; }
+      if (!$isAdminSession) {
+        echo json_encode(['success' => false, 'message' => 'Access denied.']);
+        exit;
+      }
 
       if ($_GET['action'] === 'fetch_log_actions') {
         $stmt = $pdo->query("SELECT DISTINCT action FROM system_logs ORDER BY action ASC");
@@ -282,7 +297,12 @@ if (isset($_GET['action'])) {
     // ── USER GROUPS ACTIONS ──────────────────────────────────────────────────
 
     if (in_array($_GET['action'], [
-      'fetch_groups', 'fetch_group', 'add_group', 'update_group', 'delete_group', 'fetch_group_users'
+      'fetch_groups',
+      'fetch_group',
+      'add_group',
+      'update_group',
+      'delete_group',
+      'fetch_group_users'
     ], true)) {
 
       if (!$isAdminSession) {
@@ -356,7 +376,10 @@ if (isset($_GET['action'])) {
         $chk->execute([$group_name]);
         if ($chk->fetchColumn() > 0) $errors[] = 'A group with that name already exists.';
 
-        if ($errors) { echo json_encode(['success' => false, 'errors' => $errors]); exit; }
+        if ($errors) {
+          echo json_encode(['success' => false, 'errors' => $errors]);
+          exit;
+        }
 
         $group_number = 'GRP-' . date('Ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(2)), 0, 4));
         $permJson = $permissions ? json_encode($permissions) : null;
@@ -388,7 +411,10 @@ if (isset($_GET['action'])) {
         $chk->execute([$group_name, $id]);
         if ($chk->fetchColumn() > 0) $errors[] = 'A group with that name already exists.';
 
-        if ($errors) { echo json_encode(['success' => false, 'errors' => $errors]); exit; }
+        if ($errors) {
+          echo json_encode(['success' => false, 'errors' => $errors]);
+          exit;
+        }
 
         $old = $pdo->prepare("SELECT group_name FROM user_groups WHERE id = ?");
         $old->execute([$id]);
@@ -421,7 +447,10 @@ if (isset($_GET['action'])) {
         $chk->execute([$id]);
         $group = $chk->fetch(PDO::FETCH_ASSOC);
 
-        if (!$group) { echo json_encode(['success' => false, 'message' => 'Group not found.']); exit; }
+        if (!$group) {
+          echo json_encode(['success' => false, 'message' => 'Group not found.']);
+          exit;
+        }
 
         $bound = $pdo->prepare("SELECT COUNT(*) FROM users WHERE user_group = ?");
         $bound->execute([$group['group_name']]);
@@ -497,27 +526,28 @@ if (isset($_GET['action'])) {
 // ── Define menu pages for Bind Access ────────────────────────────────────────
 $MENU_PAGES = [
   ['key' => 'request',            'label' => 'Portal Access',      'icon' => 'fa-cogs'],
-  ['key' => 'main',               'label' => 'Main',               'icon' => 'fa-qrcode'],
+  ['key' => 'portal',             'label' => 'Portal',             'icon' => 'fa-cogs'],
+  ['key' => 'main',               'label' => 'Main',               'icon' => 'fa-cogs'],
+  ['key' => 'proximity',          'label' => 'Proximity',          'icon' => 'fa-qrcode'],
   ['key' => 'manual input',       'label' => 'Manual Input',       'icon' => 'fa-qrcode'],
   ['key' => 'qr proximity',       'label' => 'Live Search',        'icon' => 'fa-qrcode'],
-  ['key' => 'scan test',          'label' => 'Test Search',        'icon' => 'fa-qrcode'],
-  ['key' => 'account info',       'label' => 'Account',            'icon' => 'fa-qrcode'],
-  ['key' => 'admin panel',        'label' => 'Admin Panel',        'icon' => 'fa-qrcode'],
-  ['key' => 'employee dashboard', 'label' => 'Employee Dashboard', 'icon' => 'fa-qrcode'],
-  ['key' => 'settings',           'label' => 'Settings',           'icon' => 'fa-qrcode'],
-  ['key' => 'datalog',            'label' => 'Sanned Log',         'icon' => 'fa-qrcode'],
-  ['key' => 'proximity code',     'label' => 'Proximity Codes',    'icon' => 'fa-qrcode'],
-  ['key' => 'system',             'label' => 'Manage Employees',   'icon' => 'fa-cogs'],
+  ['key' => 'account info',       'label' => 'Account',            'icon' => 'fa-cogs'],
+  ['key' => 'employee dashboard', 'label' => 'Employee Dashboard', 'icon' => 'fa-cogs'],
+  ['key' => 'settings',           'label' => 'Settings',           'icon' => 'fa-cogs'],
+  ['key' => 'admin panel',        'label' => 'Admin Panel',        'icon' => 'fa-cogs'],
   ['key' => 'table panel',        'label' => 'Table Panel',        'icon' => 'fa-cogs'],
+  ['key' => 'datalog',            'label' => 'Sanned Log',         'icon' => 'fa-cogs'],
+  ['key' => 'proximity code',     'label' => 'Proximity Codes',    'icon' => 'fa-cogs'],
+  ['key' => 'system',             'label' => 'Manage Employees',   'icon' => 'fa-cogs'],
+  ['key' => 'scan test',          'label' => 'Test Search',        'icon' => 'fa-qrcode'],
   ['key' => 'm-i v2',             'label' => 'Manual Input v2',    'icon' => 'fa-cogs'],
   ['key' => 'test',               'label' => 'Test',               'icon' => 'fa-cogs'],
-  ['key' => 'portal',             'label' => 'Portal',             'icon' => 'fa-cogs'],
-  ['key' => 'proximity',          'label' => 'Proximity',          'icon' => 'fa-cogs'],
   ['key' => 'reg',                'label' => 'Register',           'icon' => 'fa-cogs'],
 ];
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -528,7 +558,13 @@ $MENU_PAGES = [
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
 
   <style>
-    *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -539,411 +575,1015 @@ $MENU_PAGES = [
     }
 
     /* ── Tab navigation ── */
-    .tab-nav { display:flex; align-items:flex-end; gap:4px; margin-bottom:0; padding:0 4px; }
+    .tab-nav {
+      display: flex;
+      align-items: flex-end;
+      gap: 4px;
+      margin-bottom: 0;
+      padding: 0 4px;
+    }
 
     .tab-btn {
-      display:inline-flex; align-items:center; gap:8px;
-      padding:11px 22px 12px;
-      border:none; border-radius:8px 8px 0 0;
-      font-size:13.5px; font-weight:600; cursor:pointer;
-      transition:background .18s, color .18s, box-shadow .18s;
-      background:#d1d5db; color:#6b7280;
-      position:relative; letter-spacing:.2px; user-select:none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 11px 22px 12px;
+      border: none;
+      border-radius: 8px 8px 0 0;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .18s, color .18s, box-shadow .18s;
+      background: #d1d5db;
+      color: #6b7280;
+      position: relative;
+      letter-spacing: .2px;
+      user-select: none;
     }
-    .tab-btn i { font-size:14px; }
-    .tab-btn:hover:not(.active) { background:#e5e7eb; color:#374151; }
-    .tab-btn.active { background:#7c3aed; color:#fff; box-shadow:0 -2px 8px rgba(124,58,237,.25); z-index:2; }
+
+    .tab-btn i {
+      font-size: 14px;
+    }
+
+    .tab-btn:hover:not(.active) {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    .tab-btn.active {
+      background: #7c3aed;
+      color: #fff;
+      box-shadow: 0 -2px 8px rgba(124, 58, 237, .25);
+      z-index: 2;
+    }
 
     .tab-badge {
-      display:inline-flex; align-items:center; justify-content:center;
-      min-width:20px; height:20px; padding:0 5px; border-radius:10px;
-      font-size:11px; font-weight:700;
-      background:rgba(255,255,255,.25); color:inherit;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 5px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      background: rgba(255, 255, 255, .25);
+      color: inherit;
     }
-    .tab-btn:not(.active) .tab-badge { background:rgba(0,0,0,.1); }
 
-    .tab-panel { display:none; }
-    .tab-panel.active { display:block; }
+    .tab-btn:not(.active) .tab-badge {
+      background: rgba(0, 0, 0, .1);
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
 
     /* ── Toolbar ── */
     .toolbar {
-      display:flex; align-items:center; gap:8px; flex-wrap:wrap;
-      background:#e9ecef; padding:12px 16px;
-      border-radius:0 8px 0 0; border-bottom:1px solid #dee2e6;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      background: #e9ecef;
+      padding: 12px 16px;
+      border-radius: 0 8px 0 0;
+      border-bottom: 1px solid #dee2e6;
     }
-    .toolbar input, .toolbar select {
-      padding:6px 12px; border:1px solid #ccc; border-radius:5px; font-size:13px;
+
+    .toolbar input,
+    .toolbar select {
+      padding: 6px 12px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 13px;
     }
 
     /* ── Buttons ── */
     .btn {
-      display:inline-flex; align-items:center; gap:6px;
-      padding:7px 14px; border:none; border-radius:5px;
-      font-size:13px; font-weight:500; cursor:pointer;
-      transition:filter .15s, transform .1s; white-space:nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border: none;
+      border-radius: 5px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: filter .15s, transform .1s;
+      white-space: nowrap;
     }
-    .btn:hover { filter:brightness(.9); }
-    .btn:active { transform:scale(.97); }
-    .btn:disabled { opacity:.6; cursor:not-allowed; }
-    .btn-search { background:#6c757d; color:#fff; }
-    .btn-clear  { background:#343a40; color:#fff; }
-    .btn-add    { background:#7c3aed; color:#fff; margin-left:auto; }
-    .btn-delete-all { background:#fd7e6a; color:#fff; margin-left:auto; }
+
+    .btn:hover {
+      filter: brightness(.9);
+    }
+
+    .btn:active {
+      transform: scale(.97);
+    }
+
+    .btn:disabled {
+      opacity: .6;
+      cursor: not-allowed;
+    }
+
+    .btn-search {
+      background: #6c757d;
+      color: #fff;
+    }
+
+    .btn-clear {
+      background: #343a40;
+      color: #fff;
+    }
+
+    .btn-add {
+      background: #7c3aed;
+      color: #fff;
+      margin-left: auto;
+    }
+
+    .btn-delete-all {
+      background: #fd7e6a;
+      color: #fff;
+      margin-left: auto;
+    }
 
     /* ── Panel ── */
-    .panel { background:#fff; border-radius:0 0 8px 8px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,.08); }
+    .panel {
+      background: #fff;
+      border-radius: 0 0 8px 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, .08);
+    }
 
     /* ── Stats header ── */
     .stats-header {
-      background:linear-gradient(135deg,#7c3aed 0%,#6d28d9 40%,#5b21b6 100%);
-      padding:12px 18px; display:flex; align-items:center; gap:28px; flex-wrap:wrap;
+      background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 40%, #5b21b6 100%);
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      flex-wrap: wrap;
     }
-    .stats-title { color:#fff; font-size:15px; font-weight:700; letter-spacing:.3px; margin-right:10px; }
-    .stat-item { display:flex; align-items:center; gap:7px; color:#fff; font-size:13px; font-weight:500; }
-    .stat-item i { font-size:14px; opacity:.85; }
+
+    .stats-title {
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: .3px;
+      margin-right: 10px;
+    }
+
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .stat-item i {
+      font-size: 14px;
+      opacity: .85;
+    }
+
     .refresh-indicator {
-      display:flex; align-items:center; gap:7px; margin-left:auto;
-      color:rgba(255,255,255,.75); font-size:12px; font-weight:500; white-space:nowrap;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-left: auto;
+      color: rgba(255, 255, 255, .75);
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
     }
 
     .pulse-dot {
-      width:8px; height:8px; border-radius:50%; background:#4ade80;
-      box-shadow:0 0 0 0 rgba(74,222,128,.7);
-      animation:pulse-ring 2s ease-in-out infinite; flex-shrink:0;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+      box-shadow: 0 0 0 0 rgba(74, 222, 128, .7);
+      animation: pulse-ring 2s ease-in-out infinite;
+      flex-shrink: 0;
     }
+
     .pulse-dot2 {
-      width:8px; height:8px; border-radius:50%; background:#dc3545;
-      animation:pulse-ring2 2s ease-in-out infinite; flex-shrink:0;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #dc3545;
+      animation: pulse-ring2 2s ease-in-out infinite;
+      flex-shrink: 0;
     }
-    .pulse-dot.paused { background:#9ca3af; box-shadow:none; animation:none; }
+
+    .pulse-dot.paused {
+      background: #9ca3af;
+      box-shadow: none;
+      animation: none;
+    }
 
     @keyframes pulse-ring {
-      0%   { box-shadow:0 0 0 0 rgba(74,222,128,.7); }
-      70%  { box-shadow:0 0 0 7px rgba(74,222,128,0); }
-      100% { box-shadow:0 0 0 0 rgba(74,222,128,0); }
-    }
-    @keyframes pulse-ring2 {
-      0%   { box-shadow:0 0 0 0 rgba(222,74,74,.7); }
-      70%  { box-shadow:0 0 0 7px rgba(222,74,74,0); }
-      100% { box-shadow:0 0 0 0 rgba(222,74,99,0); }
+      0% {
+        box-shadow: 0 0 0 0 rgba(74, 222, 128, .7);
+      }
+
+      70% {
+        box-shadow: 0 0 0 7px rgba(74, 222, 128, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(74, 222, 128, 0);
+      }
     }
 
-    .countdown-bar-wrap { height:3px; background:rgba(255,255,255,.15); overflow:hidden; }
-    .countdown-bar { height:100%; background:rgba(255,255,255,.55); width:100%; transition:width 1s linear; }
+    @keyframes pulse-ring2 {
+      0% {
+        box-shadow: 0 0 0 0 rgba(222, 74, 74, .7);
+      }
+
+      70% {
+        box-shadow: 0 0 0 7px rgba(222, 74, 74, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(222, 74, 99, 0);
+      }
+    }
+
+    .countdown-bar-wrap {
+      height: 3px;
+      background: rgba(255, 255, 255, .15);
+      overflow: hidden;
+    }
+
+    .countdown-bar {
+      height: 100%;
+      background: rgba(255, 255, 255, .55);
+      width: 100%;
+      transition: width 1s linear;
+    }
 
     /* ── Table ── */
-    .table-wrap { overflow-x:auto; }
-    table { width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; }
-    thead tr { background:#f8f9fa; border-bottom:2px solid #e9ecef; }
-    th {
-      padding:11px 14px; text-align:left; font-weight:600; color:#495057;
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    .table-wrap {
+      overflow-x: auto;
     }
-    tbody tr { border-bottom:1px solid #f0f0f0; transition:background .12s; }
-    tbody tr:hover { background:#fafafa; }
-    tbody tr:last-child { border-bottom:none; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      table-layout: fixed;
+    }
+
+    thead tr {
+      background: #f8f9fa;
+      border-bottom: 2px solid #e9ecef;
+    }
+
+    th {
+      padding: 11px 14px;
+      text-align: left;
+      font-weight: 600;
+      color: #495057;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid #f0f0f0;
+      transition: background .12s;
+    }
+
+    tbody tr:hover {
+      background: #fafafa;
+    }
+
+    tbody tr:last-child {
+      border-bottom: none;
+    }
+
     td {
-      padding:10px 14px; color:#555; vertical-align:middle;
-      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+      padding: 10px 14px;
+      color: #555;
+      vertical-align: middle;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .avatar {
-      width:32px; height:32px; border-radius:50%;
-      display:flex; align-items:center; justify-content:center;
-      color:#fff; font-size:13px; font-weight:700; flex-shrink:0;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      flex-shrink: 0;
     }
-    .user-cell { display:flex; align-items:center; gap:9px; }
+
+    .user-cell {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
 
     /* ── Action buttons ── */
     .action-btn {
-      display:inline-flex; align-items:center; gap:5px;
-      padding:5px 11px; border:none; border-radius:4px;
-      font-size:12px; font-weight:600; cursor:pointer; transition:filter .15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 11px;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: filter .15s;
     }
-    .action-btn:hover { filter:brightness(.88); }
-    .action-btn:disabled { opacity:.5; cursor:not-allowed; filter:none; }
-    .btn-edit-row { background:#6d28d9; color:#fff; }
-    .btn-del-row  { background:#ef4444; color:#fff; }
-    .btn-view-log { background:#6d28d9; color:#fff; }
-    .btn-del-log  { background:#ef4444; color:#fff; }
 
-    .lock-wrap { position:relative; display:inline-block; }
-    .lock-wrap .tip {
-      display:none; position:absolute; bottom:110%; left:50%; transform:translateX(-50%);
-      background:#1f2937; color:#fff; font-size:11px; padding:4px 8px; border-radius:4px;
-      white-space:nowrap; z-index:20; pointer-events:none;
+    .action-btn:hover {
+      filter: brightness(.88);
     }
-    .lock-wrap:hover .tip { display:block; }
+
+    .action-btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+      filter: none;
+    }
+
+    .btn-edit-row {
+      background: #6d28d9;
+      color: #fff;
+    }
+
+    .btn-del-row {
+      background: #ef4444;
+      color: #fff;
+    }
+
+    .btn-view-log {
+      background: #6d28d9;
+      color: #fff;
+    }
+
+    .btn-del-log {
+      background: #ef4444;
+      color: #fff;
+    }
+
+    .lock-wrap {
+      position: relative;
+      display: inline-block;
+    }
+
+    .lock-wrap .tip {
+      display: none;
+      position: absolute;
+      bottom: 110%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1f2937;
+      color: #fff;
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    .lock-wrap:hover .tip {
+      display: block;
+    }
 
     /* ── Pagination ── */
     .pagination {
-      display:flex; align-items:center; justify-content:flex-end; gap:6px;
-      padding:12px 16px; border-top:1px solid #f0f0f0; font-size:13px; color:#888;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      padding: 12px 16px;
+      border-top: 1px solid #f0f0f0;
+      font-size: 13px;
+      color: #888;
     }
+
     .page-btn {
-      width:30px; height:30px; border-radius:5px; border:1px solid #dee2e6;
-      background:#fff; cursor:pointer; font-size:12px;
-      display:inline-flex; align-items:center; justify-content:center; transition:background .15s;
+      width: 30px;
+      height: 30px;
+      border-radius: 5px;
+      border: 1px solid #dee2e6;
+      background: #fff;
+      cursor: pointer;
+      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .15s;
     }
-    .page-btn.active { background:#7c3aed; color:#fff; border-color:#7c3aed; }
-    .page-btn:hover:not(.active) { background:#f0f0f0; }
+
+    .page-btn.active {
+      background: #7c3aed;
+      color: #fff;
+      border-color: #7c3aed;
+    }
+
+    .page-btn:hover:not(.active) {
+      background: #f0f0f0;
+    }
 
     /* ── Empty / Spinner ── */
-    .empty-row td { text-align:center; padding:36px; color:#adb5bd; font-style:italic; }
-    .spinner {
-      display:inline-block; width:18px; height:18px;
-      border:2px solid #c4b5fd; border-top-color:#7c3aed;
-      border-radius:50%; animation:spin .7s linear infinite;
-      vertical-align:middle; margin-right:6px;
+    .empty-row td {
+      text-align: center;
+      padding: 36px;
+      color: #adb5bd;
+      font-style: italic;
     }
-    @keyframes spin { to { transform:rotate(360deg); } }
+
+    .spinner {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border: 2px solid #c4b5fd;
+      border-top-color: #7c3aed;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
 
     /* ── Log badges ── */
     .badge {
-      display:inline-block; padding:3px 9px; border-radius:12px;
-      font-size:11.5px; font-weight:600; white-space:nowrap;
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 12px;
+      font-size: 11.5px;
+      font-weight: 600;
+      white-space: nowrap;
     }
-    .badge-login   { background:#d1fae5; color:#065f46; }
-    .badge-logout  { background:#fee2e2; color:#991b1b; }
-    .badge-create  { background:#dbeafe; color:#1e40af; }
-    .badge-update  { background:#fef3c7; color:#92400e; }
-    .badge-delete  { background:#ffe4e6; color:#9f1239; }
-    .badge-default { background:#e5e7eb; color:#374151; }
-    .details-cell  { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+    .badge-login {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .badge-logout {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .badge-create {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .badge-update {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .badge-delete {
+      background: #ffe4e6;
+      color: #9f1239;
+    }
+
+    .badge-default {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    .details-cell {
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
     /* ════════════════════════════════════
        MODALS — Base
     ════════════════════════════════════ */
     .modal-overlay {
-      display:none; position:fixed; inset:0;
-      background:rgba(0,0,0,.45); z-index:1000;
-      justify-content:center; align-items:center;
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .45);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
     }
-    .modal-overlay.show { display:flex; }
+
+    .modal-overlay.show {
+      display: flex;
+    }
 
     .modal-box {
-      background:#fff; border-radius:10px; padding:24px 24px 18px;
-      width:480px; max-width:96vw;
-      box-shadow:0 10px 40px rgba(0,0,0,.2);
-      animation:pop .2s ease; max-height:90vh; overflow-y:auto;
+      background: #fff;
+      border-radius: 10px;
+      padding: 24px 24px 18px;
+      width: 480px;
+      max-width: 96vw;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, .2);
+      animation: pop .2s ease;
+      max-height: 90vh;
+      overflow-y: auto;
     }
-    .modal-box.confirm { width:380px; text-align:center; }
+
+    .modal-box.confirm {
+      width: 380px;
+      text-align: center;
+    }
 
     @keyframes pop {
-      from { transform:scale(.9); opacity:0; }
-      to   { transform:scale(1);  opacity:1; }
+      from {
+        transform: scale(.9);
+        opacity: 0;
+      }
+
+      to {
+        transform: scale(1);
+        opacity: 1;
+      }
     }
 
     .modal-box h3 {
-      font-size:16px; margin-bottom:16px; color:#1f2937;
-      display:flex; align-items:center; gap:8px;
+      font-size: 16px;
+      margin-bottom: 16px;
+      color: #1f2937;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
-    .modal-box p { font-size:13.5px; color:#6b7280; margin-bottom:20px; }
 
-    .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
-    .form-row  { margin-bottom:12px; }
-    .form-row label { display:block; font-size:12px; font-weight:600; color:#374151; margin-bottom:4px; }
-    .form-row input, .form-row select {
-      width:100%; padding:7px 10px; font-size:13px;
-      border:1px solid #d1d5db; border-radius:5px;
-      outline:none; transition:border-color .15s; background:#fff;
+    .modal-box p {
+      font-size: 13.5px;
+      color: #6b7280;
+      margin-bottom: 20px;
     }
-    .form-row input:focus, .form-row select:focus {
-      border-color:#7c3aed; box-shadow:0 0 0 3px rgba(124,58,237,.1);
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 12px;
+    }
+
+    .form-row {
+      margin-bottom: 12px;
+    }
+
+    .form-row label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 4px;
+    }
+
+    .form-row input,
+    .form-row select {
+      width: 100%;
+      padding: 7px 10px;
+      font-size: 13px;
+      border: 1px solid #d1d5db;
+      border-radius: 5px;
+      outline: none;
+      transition: border-color .15s;
+      background: #fff;
+    }
+
+    .form-row input:focus,
+    .form-row select:focus {
+      border-color: #7c3aed;
+      box-shadow: 0 0 0 3px rgba(124, 58, 237, .1);
     }
 
     .err-box {
-      background:#fef2f2; border:1px solid #fecaca; border-radius:5px;
-      padding:8px 12px; font-size:12px; color:#b91c1c; margin-bottom:12px; display:none;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 5px;
+      padding: 8px 12px;
+      font-size: 12px;
+      color: #b91c1c;
+      margin-bottom: 12px;
+      display: none;
     }
 
     .modal-actions {
-      display:flex; gap:10px; justify-content:flex-end; margin-top:16px;
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 16px;
     }
+
     .modal-actions button {
-      padding:8px 18px; border:none; border-radius:5px;
-      font-size:13px; font-weight:600; cursor:pointer;
-      display:inline-flex; align-items:center; gap:6px;
+      padding: 8px 18px;
+      border: none;
+      border-radius: 5px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }
-    .btn-cancel  { background:#e5e7eb; color:#374151; }
-    .btn-confirm { background:#7c3aed; color:#fff; }
-    .btn-danger  { background:#ef4444; color:#fff; }
+
+    .btn-cancel {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    .btn-confirm {
+      background: #7c3aed;
+      color: #fff;
+    }
+
+    .btn-danger {
+      background: #ef4444;
+      color: #fff;
+    }
 
     /* Log detail */
-    .log-detail-grid  { display:grid; gap:10px; margin-bottom:22px; }
-    .log-detail-row   { display:grid; grid-template-columns:110px 1fr; gap:8px; font-size:13px; }
-    .log-detail-row .ldr-label { font-weight:600; color:#374151; }
-    .log-detail-row .ldr-val   { color:#555; word-break:break-word; }
+    .log-detail-grid {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+
+    .log-detail-row {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .log-detail-row .ldr-label {
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .log-detail-row .ldr-val {
+      color: #555;
+      word-break: break-word;
+    }
 
     /* ── Toast ── */
     .toast {
-      position:fixed; bottom:24px; right:24px;
-      background:#1f2937; color:#fff; padding:12px 20px;
-      border-radius:7px; font-size:13px; font-weight:500;
-      opacity:0; transform:translateY(10px); transition:all .3s;
-      z-index:2000; display:flex; align-items:center; gap:8px; pointer-events:none;
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1f2937;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all .3s;
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
     }
-    .toast.show { opacity:1; transform:translateY(0); }
-    .toast i { color:#34d399; }
-    .toast.error i { color:#f87171; }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .toast i {
+      color: #34d399;
+    }
+
+    .toast.error i {
+      color: #f87171;
+    }
 
     /* ════════════════════════════════════
        GROUP MODAL — Tabbed Layout
     ════════════════════════════════════ */
     .gmodal-box {
-      background:#fff; border-radius:12px;
-      width:600px; max-width:96vw; max-height:90vh;
-      box-shadow:0 10px 40px rgba(0,0,0,.22);
-      animation:pop .2s ease; overflow:hidden;
-      display:flex; flex-direction:column;
+      background: #fff;
+      border-radius: 12px;
+      width: 600px;
+      max-width: 96vw;
+      max-height: 90vh;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, .22);
+      animation: pop .2s ease;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
 
     /* Header */
     .gmodal-header {
-      padding:18px 24px 0;
-      border-bottom:1px solid #e9ecef;
-      flex-shrink:0;
+      padding: 18px 24px 0;
+      border-bottom: 1px solid #e9ecef;
+      flex-shrink: 0;
     }
+
     .gmodal-title {
-      font-size:16px; font-weight:700; color:#1f2937;
-      display:flex; align-items:center; gap:8px; margin-bottom:14px;
+      font-size: 16px;
+      font-weight: 700;
+      color: #1f2937;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
     }
 
     /* Sidebar + content split */
     .gmodal-body {
-      display:flex; flex:1; overflow:hidden;
+      display: flex;
+      flex: 1;
+      overflow: hidden;
     }
 
     /* Sidebar tabs */
     .gmodal-sidebar {
-      width:130px; flex-shrink:0;
-      background:#f8f9fa;
-      border-right:1px solid #e9ecef;
-      padding:14px 0;
-      display:flex; flex-direction:column; gap:2px;
+      width: 130px;
+      flex-shrink: 0;
+      background: #f8f9fa;
+      border-right: 1px solid #e9ecef;
+      padding: 14px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
     }
+
     .gmodal-sidetab {
-      display:flex; align-items:center; gap:8px;
-      padding:10px 16px; cursor:pointer;
-      font-size:13px; font-weight:500; color:#6b7280;
-      border:none; background:none; text-align:left;
-      border-right:3px solid transparent;
-      transition:all .15s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      color: #6b7280;
+      border: none;
+      background: none;
+      text-align: left;
+      border-right: 3px solid transparent;
+      transition: all .15s;
     }
-    .gmodal-sidetab:hover { background:#f0f0f0; color:#374151; }
+
+    .gmodal-sidetab:hover {
+      background: #f0f0f0;
+      color: #374151;
+    }
+
     .gmodal-sidetab.active {
-      background:#ede9fe; color:#7c3aed;
-      border-right-color:#7c3aed; font-weight:600;
+      background: #ede9fe;
+      color: #7c3aed;
+      border-right-color: #7c3aed;
+      font-weight: 600;
     }
-    .gmodal-sidetab i { font-size:13px; width:16px; text-align:center; }
+
+    .gmodal-sidetab i {
+      font-size: 13px;
+      width: 16px;
+      text-align: center;
+    }
 
     /* Tab panels */
     .gmodal-content {
-      flex:1; padding:20px 22px; overflow-y:auto;
+      flex: 1;
+      padding: 20px 22px;
+      overflow-y: auto;
     }
-    .gmodal-tabpanel { display:none; }
-    .gmodal-tabpanel.active { display:block; }
+
+    .gmodal-tabpanel {
+      display: none;
+    }
+
+    .gmodal-tabpanel.active {
+      display: block;
+    }
 
     /* Footer */
     .gmodal-footer {
-      padding:14px 24px; border-top:1px solid #e9ecef;
-      display:flex; gap:10px; justify-content:flex-end; flex-shrink:0;
+      padding: 14px 24px;
+      border-top: 1px solid #e9ecef;
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      flex-shrink: 0;
     }
 
     /* ── Bind Access rows ── */
     .bind-section-title {
-      font-size:11px; font-weight:700; letter-spacing:.6px;
-      text-transform:uppercase; color:#9ca3af; margin-bottom:10px; margin-top:4px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .6px;
+      text-transform: uppercase;
+      color: #9ca3af;
+      margin-bottom: 10px;
+      margin-top: 4px;
     }
 
     .bind-row {
-      display:flex; align-items:center; justify-content:space-between;
-      padding:10px 14px; border-radius:8px;
-      border:1px solid #f0f0f0; margin-bottom:8px;
-      transition:border-color .15s, background .15s;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid #f0f0f0;
+      margin-bottom: 8px;
+      transition: border-color .15s, background .15s;
     }
-    .bind-row:hover { background:#fafafa; border-color:#e0d9f8; }
+
+    .bind-row:hover {
+      background: #fafafa;
+      border-color: #e0d9f8;
+    }
 
     .bind-row-left {
-      display:flex; align-items:center; gap:10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
+
     .bind-icon {
-      width:32px; height:32px; border-radius:8px;
-      background:#ede9fe; color:#7c3aed;
-      display:flex; align-items:center; justify-content:center;
-      font-size:14px; flex-shrink:0;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: #ede9fe;
+      color: #7c3aed;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
     }
-    .bind-label { font-size:13px; font-weight:600; color:#1f2937; }
+
+    .bind-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1f2937;
+    }
 
     /* Radio pill group */
-    .radio-pill-group { display:flex; gap:6px; }
-    .radio-pill {
-      display:flex; align-items:center; gap:5px;
-      padding:5px 12px; border-radius:20px; cursor:pointer;
-      border:1.5px solid #e5e7eb;
-      font-size:12px; font-weight:600;
-      transition:all .15s; user-select:none;
-      color:#6b7280;
+    .radio-pill-group {
+      display: flex;
+      gap: 6px;
     }
-    .radio-pill input[type="radio"] { display:none; }
+
+    .radio-pill {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      border: 1.5px solid #e5e7eb;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all .15s;
+      user-select: none;
+      color: #6b7280;
+    }
+
+    .radio-pill input[type="radio"] {
+      display: none;
+    }
+
     .radio-pill-dot {
-      width:9px; height:9px; border-radius:50%;
-      border:2px solid #d1d5db; flex-shrink:0; transition:all .15s;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      border: 2px solid #d1d5db;
+      flex-shrink: 0;
+      transition: all .15s;
     }
 
     /* Allow state */
     .radio-pill.allow-pill.selected {
-      background:#d1fae5; border-color:#10b981; color:#065f46;
+      background: #d1fae5;
+      border-color: #10b981;
+      color: #065f46;
     }
+
     .radio-pill.allow-pill.selected .radio-pill-dot {
-      background:#10b981; border-color:#10b981;
+      background: #10b981;
+      border-color: #10b981;
     }
 
     /* Not allow state */
     .radio-pill.deny-pill.selected {
-      background:#fee2e2; border-color:#ef4444; color:#991b1b;
+      background: #fee2e2;
+      border-color: #ef4444;
+      color: #991b1b;
     }
+
     .radio-pill.deny-pill.selected .radio-pill-dot {
-      background:#ef4444; border-color:#ef4444;
+      background: #ef4444;
+      border-color: #ef4444;
     }
 
     /* ── Enabled toggle ── */
     .toggle-row {
-      display:flex; align-items:center; gap:12px;
-      padding:12px 14px; border-radius:8px;
-      border:1px solid #f0f0f0; margin-bottom:10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      border: 1px solid #f0f0f0;
+      margin-bottom: 10px;
     }
-    .toggle-switch {
-      position:relative; width:40px; height:22px; flex-shrink:0;
-    }
-    .toggle-switch input { opacity:0; width:0; height:0; }
-    .toggle-track {
-      position:absolute; inset:0; background:#d1d5db;
-      border-radius:11px; cursor:pointer; transition:background .2s;
-    }
-    .toggle-track::before {
-      content:''; position:absolute;
-      width:16px; height:16px; border-radius:50%;
-      background:#fff; top:3px; left:3px;
-      transition:transform .2s;
-      box-shadow:0 1px 3px rgba(0,0,0,.2);
-    }
-    input:checked + .toggle-track { background:#7c3aed; }
-    input:checked + .toggle-track::before { transform:translateX(18px); }
 
-    .toggle-label { font-size:13px; font-weight:500; color:#374151; }
-    .toggle-sublabel { font-size:11px; color:#9ca3af; margin-top:1px; }
+    .toggle-switch {
+      position: relative;
+      width: 40px;
+      height: 22px;
+      flex-shrink: 0;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: #d1d5db;
+      border-radius: 11px;
+      cursor: pointer;
+      transition: background .2s;
+    }
+
+    .toggle-track::before {
+      content: '';
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      top: 3px;
+      left: 3px;
+      transition: transform .2s;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .2);
+    }
+
+    input:checked+.toggle-track {
+      background: #7c3aed;
+    }
+
+    input:checked+.toggle-track::before {
+      transform: translateX(18px);
+    }
+
+    .toggle-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: #374151;
+    }
+
+    .toggle-sublabel {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-top: 1px;
+    }
 
     /* Description field style */
     .desc-textarea {
-      width:100%; padding:8px 10px; font-size:13px;
-      border:1px solid #d1d5db; border-radius:5px;
-      outline:none; resize:vertical; min-height:72px;
-      font-family:inherit; transition:border-color .15s;
+      width: 100%;
+      padding: 8px 10px;
+      font-size: 13px;
+      border: 1px solid #d1d5db;
+      border-radius: 5px;
+      outline: none;
+      resize: vertical;
+      min-height: 72px;
+      font-family: inherit;
+      transition: border-color .15s;
     }
-    .desc-textarea:focus { border-color:#7c3aed; box-shadow:0 0 0 3px rgba(124,58,237,.1); }
+
+    .desc-textarea:focus {
+      border-color: #7c3aed;
+      box-shadow: 0 0 0 3px rgba(124, 58, 237, .1);
+    }
   </style>
 </head>
+
 <body>
 
   <div id="closeButton"></div>
@@ -963,10 +1603,10 @@ $MENU_PAGES = [
       <span class="tab-badge" id="tabBadgeLogs">—</span>
     </button>
     <?php if ($isAdmin): ?>
-    <button class="tab-btn" id="tabBtnMyAdmin" onclick="switchTab('myadmin')">
-      <i class="fas fa-database"></i> PHP MyAdmin
-      <span class="tab-badge" id="tabBadgeMyAdmin">—</span>
-    </button>
+      <button class="tab-btn" id="tabBtnMyAdmin" onclick="switchTab('myadmin')">
+        <i class="fas fa-database"></i> PHP MyAdmin
+        <span class="tab-badge" id="tabBadgeMyAdmin">—</span>
+      </button>
     <?php endif; ?>
   </div>
 
@@ -974,11 +1614,11 @@ $MENU_PAGES = [
   <div class="tab-panel active" id="panelUsers">
     <div class="toolbar" style="border-radius:0 8px 0 0;">
       <button class="btn btn-search" onclick="loadUsers()"><i class="fas fa-search"></i> Search</button>
-      <button class="btn btn-clear"  onclick="clearUsersSearch()"><i class="fas fa-times"></i> Clear</button>
-      <input id="searchUser"  type="text" placeholder="Username" oninput="debounceUsers()" style="width:180px;" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
-      <input id="searchEmail" type="text" placeholder="Email"    oninput="debounceUsers()" style="width:200px;" autocomplete="off">
+      <button class="btn btn-clear" onclick="clearUsersSearch()"><i class="fas fa-times"></i> Clear</button>
+      <input id="searchUser" type="text" placeholder="Username" oninput="debounceUsers()" style="width:180px;" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
+      <input id="searchEmail" type="text" placeholder="Email" oninput="debounceUsers()" style="width:200px;" autocomplete="off">
       <?php if ($isAdmin): ?>
-      <button class="btn btn-add" onclick="openAddUser()"><i class="fas fa-user-plus"></i> Add User</button>
+        <button class="btn btn-add" onclick="openAddUser()"><i class="fas fa-user-plus"></i> Add User</button>
       <?php endif; ?>
     </div>
     <div class="panel">
@@ -995,20 +1635,39 @@ $MENU_PAGES = [
           <?php endif; ?>
         </span>
       </div>
-      <div class="countdown-bar-wrap"><div class="countdown-bar" id="uCountdownBar"></div></div>
+      <div class="countdown-bar-wrap">
+        <div class="countdown-bar" id="uCountdownBar"></div>
+      </div>
       <div class="table-wrap">
         <table>
           <colgroup>
-            <col style="width:46px"><col style="width:190px"><col style="width:190px">
-            <col style="width:110px"><col style="width:110px"><col style="width:120px">
-            <col style="width:145px"><col style="width:145px"><col style="width:155px">
+            <col style="width:46px">
+            <col style="width:190px">
+            <col style="width:190px">
+            <col style="width:110px">
+            <col style="width:110px">
+            <col style="width:120px">
+            <col style="width:145px">
+            <col style="width:145px">
+            <col style="width:155px">
           </colgroup>
           <thead>
-            <tr><th>SN</th><th>Username</th><th>Email</th><th>User Group</th>
-                <th>Phone</th><th>Database</th><th>Created At</th><th>Last Login</th><th>Actions</th></tr>
+            <tr>
+              <th>SN</th>
+              <th>Username</th>
+              <th>Email</th>
+              <th>User Group</th>
+              <th>Phone</th>
+              <th>Database</th>
+              <th>Created At</th>
+              <th>Last Login</th>
+              <th>Actions</th>
+            </tr>
           </thead>
           <tbody id="userTableBody">
-            <tr class="empty-row"><td colspan="9"><span class="spinner"></span> Loading users…</td></tr>
+            <tr class="empty-row">
+              <td colspan="9"><span class="spinner"></span> Loading users…</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -1020,10 +1679,10 @@ $MENU_PAGES = [
   <div class="tab-panel" id="panelGroup">
     <div class="toolbar" style="border-radius:0 8px 0 0;">
       <button class="btn btn-search" onclick="loadGroups()"><i class="fas fa-search"></i> Search</button>
-      <button class="btn btn-clear"  onclick="clearGroupsSearch()"><i class="fas fa-times"></i> Clear</button>
+      <button class="btn btn-clear" onclick="clearGroupsSearch()"><i class="fas fa-times"></i> Clear</button>
       <input id="groupSearchInput" type="text" placeholder="Usergroup" oninput="debounceGroups()" style="width:220px;" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
       <?php if ($isAdmin): ?>
-      <button class="btn btn-add" onclick="openAddGroup()"><i class="fas fa-plus"></i> Add Group</button>
+        <button class="btn btn-add" onclick="openAddGroup()"><i class="fas fa-plus"></i> Add Group</button>
       <?php endif; ?>
     </div>
     <div class="panel">
@@ -1038,18 +1697,35 @@ $MENU_PAGES = [
           <?php endif; ?>
         </span>
       </div>
-      <div class="countdown-bar-wrap"><div class="countdown-bar" id="gCountdownBar"></div></div>
+      <div class="countdown-bar-wrap">
+        <div class="countdown-bar" id="gCountdownBar"></div>
+      </div>
       <div class="table-wrap">
         <table>
           <colgroup>
-            <col style="width:46px"><col style="width:200px"><col style="width:130px">
-            <col style="width:90px"><col style="width:155px"><col style="width:155px"><col style="width:160px">
+            <col style="width:46px">
+            <col style="width:200px">
+            <col style="width:130px">
+            <col style="width:90px">
+            <col style="width:155px">
+            <col style="width:155px">
+            <col style="width:160px">
           </colgroup>
           <thead>
-            <tr><th>SN</th><th>Group Name</th><th>Bound Users</th><th>Status</th><th>Created At</th><th>Last Update</th><th>Actions</th></tr>
+            <tr>
+              <th>SN</th>
+              <th>Group Name</th>
+              <th>Bound Users</th>
+              <th>Status</th>
+              <th>Created At</th>
+              <th>Last Update</th>
+              <th>Actions</th>
+            </tr>
           </thead>
           <tbody id="groupTableBody">
-            <tr class="empty-row"><td colspan="7"><span class="spinner"></span> Loading groups…</td></tr>
+            <tr class="empty-row">
+              <td colspan="7"><span class="spinner"></span> Loading groups…</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -1061,13 +1737,13 @@ $MENU_PAGES = [
   <div class="tab-panel" id="panelLogs">
     <div class="toolbar" style="border-radius:0 8px 0 0;">
       <button class="btn btn-search" onclick="loadLogs()"><i class="fas fa-search"></i> Search</button>
-      <button class="btn btn-clear"  onclick="clearLogsSearch()"><i class="fas fa-times"></i> Clear</button>
+      <button class="btn btn-clear" onclick="clearLogsSearch()"><i class="fas fa-times"></i> Clear</button>
       <input id="logSearchInput" type="text" placeholder="Search action, user, IP, details…" oninput="debounceLogs()" style="padding:6px 12px;border:1px solid #ccc;border-radius:5px;font-size:13px;width:220px;">
       <select id="logActionFilter" onchange="loadLogs()" style="padding:6px 10px;border:1px solid #ccc;border-radius:5px;font-size:13px;">
         <option value="">All Actions</option>
       </select>
       <?php if ($isAdmin): ?>
-      <button class="btn btn-delete-all" onclick="confirmDeleteAllLogs()"><i class="fas fa-trash"></i> Delete All Data</button>
+        <button class="btn btn-delete-all" onclick="confirmDeleteAllLogs()"><i class="fas fa-trash"></i> Delete All Data</button>
       <?php endif; ?>
     </div>
     <div class="panel">
@@ -1085,14 +1761,27 @@ $MENU_PAGES = [
           <?php endif; ?>
         </span>
       </div>
-      <div class="countdown-bar-wrap"><div class="countdown-bar" id="lCountdownBar"></div></div>
+      <div class="countdown-bar-wrap">
+        <div class="countdown-bar" id="lCountdownBar"></div>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>SN</th><th>Username</th><th>Action</th><th>Details</th><th>IP Address</th><th>User Agent</th><th>Created At</th><th>Actions</th></tr>
+            <tr>
+              <th>SN</th>
+              <th>Username</th>
+              <th>Action</th>
+              <th>Details</th>
+              <th>IP Address</th>
+              <th>User Agent</th>
+              <th>Created At</th>
+              <th>Actions</th>
+            </tr>
           </thead>
           <tbody id="logTableBody">
-            <tr class="empty-row"><td colspan="8"><span class="spinner"></span> Loading logs…</td></tr>
+            <tr class="empty-row">
+              <td colspan="8"><span class="spinner"></span> Loading logs…</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -1310,22 +1999,22 @@ $MENU_PAGES = [
             <div class="bind-section-title"><i class="fas fa-sitemap" style="margin-right:4px;"></i> Menu Access</div>
             <div id="bindAccessRows">
               <?php foreach ($MENU_PAGES as $page): ?>
-              <div class="bind-row">
-                <div class="bind-row-left">
-                  <div class="bind-icon"><i class="fas <?= $page['icon'] ?>"></i></div>
-                  <span class="bind-label"><?= htmlspecialchars($page['label']) ?></span>
+                <div class="bind-row">
+                  <div class="bind-row-left">
+                    <div class="bind-icon"><i class="fas <?= $page['icon'] ?>"></i></div>
+                    <span class="bind-label"><?= htmlspecialchars($page['label']) ?></span>
+                  </div>
+                  <div class="radio-pill-group" data-key="<?= $page['key'] ?>">
+                    <label class="radio-pill allow-pill selected" onclick="selectPill(this)">
+                      <input type="radio" name="perm_<?= $page['key'] ?>" value="allow" checked>
+                      <span class="radio-pill-dot"></span> Allow
+                    </label>
+                    <label class="radio-pill deny-pill" onclick="selectPill(this)">
+                      <input type="radio" name="perm_<?= $page['key'] ?>" value="deny">
+                      <span class="radio-pill-dot"></span> Not allow
+                    </label>
+                  </div>
                 </div>
-                <div class="radio-pill-group" data-key="<?= $page['key'] ?>">
-                  <label class="radio-pill allow-pill selected" onclick="selectPill(this)">
-                    <input type="radio" name="perm_<?= $page['key'] ?>" value="allow" checked>
-                    <span class="radio-pill-dot"></span> Allow
-                  </label>
-                  <label class="radio-pill deny-pill" onclick="selectPill(this)">
-                    <input type="radio" name="perm_<?= $page['key'] ?>" value="deny">
-                    <span class="radio-pill-dot"></span> Not allow
-                  </label>
-                </div>
-              </div>
               <?php endforeach; ?>
             </div>
           </div>
@@ -1367,10 +2056,16 @@ $MENU_PAGES = [
       <div class="table-wrap" style="max-height:340px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:6px;">
         <table>
           <thead>
-            <tr><th style="width:40px">SN</th><th>User</th><th>Email</th></tr>
+            <tr>
+              <th style="width:40px">SN</th>
+              <th>User</th>
+              <th>Email</th>
+            </tr>
           </thead>
           <tbody id="viewGroupUsersBody">
-            <tr><td colspan="3" style="text-align:center;padding:20px">Loading…</td></tr>
+            <tr>
+              <td colspan="3" style="text-align:center;padding:20px">Loading…</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -1389,9 +2084,9 @@ $MENU_PAGES = [
   <script src="../src/btn.js"></script>
   <script src="../src/req.js"></script>
   <script>
-    const IS_ADMIN    = <?= $isAdmin ? 'true' : 'false' ?>;
+    const IS_ADMIN = <?= $isAdmin ? 'true' : 'false' ?>;
     const SESSION_UID = <?= $sessionUserId ?>;
-    const COLORS      = ['#7F77DD','#1D9E75','#D85A30','#D4537E','#378ADD','#639922','#BA7517'];
+    const COLORS = ['#7F77DD', '#1D9E75', '#D85A30', '#D4537E', '#378ADD', '#639922', '#BA7517'];
 
     // ── Menu pages for permissions (mirrors PHP $MENU_PAGES) ──
     const MENU_PAGES = <?= json_encode($MENU_PAGES) ?>;
@@ -1402,35 +2097,52 @@ $MENU_PAGES = [
     let activeTab = 'users';
 
     const TAB_IDS = {
-      users:   { btn:'tabBtnUsers',   panel:'panelUsers'   },
-      group:   { btn:'tabBtnGroup',   panel:'panelGroup'   },
-      logs:    { btn:'tabBtnLogs',    panel:'panelLogs'    },
-      myadmin: { btn:'tabBtnMyAdmin', panel:'panelMyadmin' },
+      users: {
+        btn: 'tabBtnUsers',
+        panel: 'panelUsers'
+      },
+      group: {
+        btn: 'tabBtnGroup',
+        panel: 'panelGroup'
+      },
+      logs: {
+        btn: 'tabBtnLogs',
+        panel: 'panelLogs'
+      },
+      myadmin: {
+        btn: 'tabBtnMyAdmin',
+        panel: 'panelMyadmin'
+      },
     };
 
     function switchTab(tab) {
       activeTab = tab;
       Object.entries(TAB_IDS).forEach(([t, ids]) => {
-        const btn   = document.getElementById(ids.btn);
+        const btn = document.getElementById(ids.btn);
         const panel = document.getElementById(ids.panel);
-        if (btn)   btn.classList.toggle('active', t === tab);
+        if (btn) btn.classList.toggle('active', t === tab);
         if (panel) panel.classList.toggle('active', t === tab);
       });
       if (tab === 'group' && allGroups.length === 0) loadGroups().then(startGroupsCountdown);
-      if (tab === 'logs'  && allLogs.length  === 0) { loadLogActionOptions(); loadLogs().then(startLogsCountdown); }
+      if (tab === 'logs' && allLogs.length === 0) {
+        loadLogActionOptions();
+        loadLogs().then(startLogsCountdown);
+      }
     }
 
     /* ══════════════════════════════════════════════════════════════
        GROUP MODAL — inner tab switching
     ══════════════════════════════════════════════════════════════ */
     function switchGroupTab(tab) {
-      ['basic','access'].forEach(t => {
-        document.getElementById('gSide'  + cap(t)).classList.toggle('active', t === tab);
+      ['basic', 'access'].forEach(t => {
+        document.getElementById('gSide' + cap(t)).classList.toggle('active', t === tab);
         document.getElementById('gPanel' + cap(t)).classList.toggle('active', t === tab);
       });
     }
 
-    function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+    function cap(s) {
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    }
 
     /* ══════════════════════════════════════════════════════════════
        RADIO PILL INTERACTION
@@ -1453,7 +2165,7 @@ $MENU_PAGES = [
 
     function setPermissionsToForm(permsObj) {
       MENU_PAGES.forEach(page => {
-        const val   = (permsObj && permsObj[page.key]) ? permsObj[page.key] : 'allow';
+        const val = (permsObj && permsObj[page.key]) ? permsObj[page.key] : 'allow';
         const group = document.querySelector(`.radio-pill-group[data-key="${page.key}"]`);
         if (!group) return;
         group.querySelectorAll('.radio-pill').forEach(p => {
@@ -1485,7 +2197,9 @@ $MENU_PAGES = [
     }
 
     document.querySelectorAll('.modal-overlay').forEach(el => {
-      el.addEventListener('click', e => { if (e.target === el) closeModal(el.id); });
+      el.addEventListener('click', e => {
+        if (e.target === el) closeModal(el.id);
+      });
     });
 
     document.addEventListener('keydown', e => {
@@ -1496,19 +2210,19 @@ $MENU_PAGES = [
       if (e.key === 'Enter') {
         const open = document.querySelector('.modal-overlay.show');
         if (!open) return;
-        if (open.id === 'userFormModal')      submitUserForm();
-        if (open.id === 'deleteUserModal')    confirmDeleteUser();
+        if (open.id === 'userFormModal') submitUserForm();
+        if (open.id === 'deleteUserModal') confirmDeleteUser();
         if (open.id === 'deleteSingleLogModal') deleteSingleLog();
         if (open.id === 'deleteAllLogsModal') deleteAllLogs();
-        if (open.id === 'groupFormModal')     submitGroupForm();
-        if (open.id === 'deleteGroupModal')   confirmDeleteGroup();
+        if (open.id === 'groupFormModal') submitGroupForm();
+        if (open.id === 'deleteGroupModal') confirmDeleteGroup();
       }
     });
 
     function escHtml(str) {
       return String(str)
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     function hashStr(str) {
@@ -1518,8 +2232,9 @@ $MENU_PAGES = [
     }
 
     let toastTimer = null;
+
     function showToast(msg, isError = false) {
-      const t  = document.getElementById('toast');
+      const t = document.getElementById('toast');
       const ic = document.getElementById('toastIcon');
       document.getElementById('toastMsg').textContent = msg;
       ic.className = isError ? 'fas fa-times-circle' : 'fas fa-check-circle';
@@ -1532,7 +2247,11 @@ $MENU_PAGES = [
     function paginate(items, page, perPage) {
       const pages = Math.max(1, Math.ceil(items.length / perPage));
       if (page > pages) page = pages;
-      return { slice: items.slice((page - 1) * perPage, page * perPage), pages, page };
+      return {
+        slice: items.slice((page - 1) * perPage, page * perPage),
+        pages,
+        page
+      };
     }
 
     function paginationHTML(total, pages, currentPage, fn) {
@@ -1557,17 +2276,37 @@ $MENU_PAGES = [
        USERS TAB
     ══════════════════════════════════════════════════════════════ */
     const U_REFRESH = 30;
-    let allUsers = [], uPage = 1;
+    let allUsers = [],
+      uPage = 1;
     const U_PER = 10;
-    let editingUserId = null, pendingDelUserId = null, uDebounce = null;
-    let uCountdownLeft = U_REFRESH, uTick = null, uRefreshTimer = null;
+    let editingUserId = null,
+      pendingDelUserId = null,
+      uDebounce = null;
+    let uCountdownLeft = U_REFRESH,
+      uTick = null,
+      uRefreshTimer = null;
 
     function startUsersCountdown() {
-      stopUsersCountdown(); uCountdownLeft = U_REFRESH; updateUsersCountdownUI();
-      uTick = setInterval(() => { if (!anyModalOpen) { uCountdownLeft = Math.max(0, uCountdownLeft - 1); updateUsersCountdownUI(); } }, 1000);
-      uRefreshTimer = setTimeout(async () => { if (!anyModalOpen) await loadUsers(true); startUsersCountdown(); }, U_REFRESH * 1000);
+      stopUsersCountdown();
+      uCountdownLeft = U_REFRESH;
+      updateUsersCountdownUI();
+      uTick = setInterval(() => {
+        if (!anyModalOpen) {
+          uCountdownLeft = Math.max(0, uCountdownLeft - 1);
+          updateUsersCountdownUI();
+        }
+      }, 1000);
+      uRefreshTimer = setTimeout(async () => {
+        if (!anyModalOpen) await loadUsers(true);
+        startUsersCountdown();
+      }, U_REFRESH * 1000);
     }
-    function stopUsersCountdown() { clearInterval(uTick); clearTimeout(uRefreshTimer); }
+
+    function stopUsersCountdown() {
+      clearInterval(uTick);
+      clearTimeout(uRefreshTimer);
+    }
+
     function updateUsersCountdownUI() {
       document.getElementById('uCountdownBar').style.width = ((uCountdownLeft / U_REFRESH) * 100) + '%';
       const dot = document.getElementById('uPulseDot');
@@ -1577,20 +2316,23 @@ $MENU_PAGES = [
     async function loadUsers(silent = false) {
       const su = document.getElementById('searchUser').value.trim();
       const se = document.getElementById('searchEmail').value.trim();
-      const params = new URLSearchParams({ action: 'fetch_users' });
+      const params = new URLSearchParams({
+        action: 'fetch_users'
+      });
       if (su) params.append('search_user', su);
       if (se) params.append('search_email', se);
 
       if (!silent) document.getElementById('userTableBody').innerHTML =
         `<tr class="empty-row"><td colspan="9"><span class="spinner"></span> Loading…</td></tr>`;
       try {
-        const res  = await fetch('?' + params.toString());
+        const res = await fetch('?' + params.toString());
         const data = await res.json();
         if (!data.success) throw new Error(data.message || 'Fetch failed');
         allUsers = data.users;
         document.getElementById('tabBadgeUsers').textContent = data.stats.total ?? 0;
-        renderUsersTable(); updateUsersStats(data.stats);
-      } catch(err) {
+        renderUsersTable();
+        updateUsersStats(data.stats);
+      } catch (err) {
         if (!silent) {
           showToast('Failed to load users: ' + err.message, true);
           document.getElementById('userTableBody').innerHTML =
@@ -1601,7 +2343,11 @@ $MENU_PAGES = [
 
     function renderUsersTable() {
       const tbody = document.getElementById('userTableBody');
-      const { slice, pages, page } = paginate(allUsers, uPage, U_PER);
+      const {
+        slice,
+        pages,
+        page
+      } = paginate(allUsers, uPage, U_PER);
       uPage = page;
       if (!slice.length) {
         tbody.innerHTML = `<tr class="empty-row"><td colspan="9"><i class="fas fa-users" style="font-size:24px;display:block;margin-bottom:6px;opacity:.4"></i>No users found.</td></tr>`;
@@ -1609,23 +2355,23 @@ $MENU_PAGES = [
         return;
       }
       tbody.innerHTML = slice.map((u, i) => {
-        const idx    = (uPage - 1) * U_PER + i;
-        const color  = COLORS[(u.id - 1) % COLORS.length];
-        const init   = ((u.first_name || u.username)[0] || '?').toUpperCase();
+        const idx = (uPage - 1) * U_PER + i;
+        const color = COLORS[(u.id - 1) % COLORS.length];
+        const init = ((u.first_name || u.username)[0] || '?').toUpperCase();
         const isSelf = +u.id === SESSION_UID;
         const isRoot = +u.id === 1 && u.user_group === 'Administrator';
 
-        const editBtn = !IS_ADMIN
-          ? `<div class="lock-wrap"><button class="action-btn btn-edit-row" disabled><i class="fas fa-lock" style="opacity:.5"></i> Edit</button><span class="tip">Administrators only</span></div>`
-          : `<button class="action-btn btn-edit-row" onclick="openEditUser(${u.id})"><i class="fas fa-edit"></i> Edit</button>`;
+        const editBtn = !IS_ADMIN ?
+          `<div class="lock-wrap"><button class="action-btn btn-edit-row" disabled><i class="fas fa-lock" style="opacity:.5"></i> Edit</button><span class="tip">Administrators only</span></div>` :
+          `<button class="action-btn btn-edit-row" onclick="openEditUser(${u.id})"><i class="fas fa-edit"></i> Edit</button>`;
 
-        const delBtn = !IS_ADMIN
-          ? `<div class="lock-wrap"><button class="action-btn btn-del-row" disabled><i class="fas fa-lock" style="opacity:.5"></i> Delete</button><span class="tip">Administrators only</span></div>`
-          : isSelf
-          ? `<div class="lock-wrap"><button class="action-btn btn-del-row" disabled><i class="fas fa-trash"></i> Delete</button></div>`
-          : isRoot
-          ? `<div class="lock-wrap"><button class="action-btn btn-del-row" disabled><i class="fas fa-trash"></i> Delete</button><span class="tip">Root Administrator cannot be deleted</span></div>`
-          : `<button class="action-btn btn-del-row" onclick="openDeleteUser(${u.id},'${escHtml(u.username)}')"><i class="fas fa-trash"></i> Delete</button>`;
+        const delBtn = !IS_ADMIN ?
+          `<div class="lock-wrap"><button class="action-btn btn-del-row" disabled><i class="fas fa-lock" style="opacity:.5"></i> Delete</button><span class="tip">Administrators only</span></div>` :
+          isSelf ?
+          `<div class="lock-wrap"><button class="action-btn btn-del-row" disabled><i class="fas fa-trash"></i> Delete</button></div>` :
+          isRoot ?
+          `<div class="lock-wrap"><button class="action-btn btn-del-row" disabled><i class="fas fa-trash"></i> Delete</button><span class="tip">Root Administrator cannot be deleted</span></div>` :
+          `<button class="action-btn btn-del-row" onclick="openDeleteUser(${u.id},'${escHtml(u.username)}')"><i class="fas fa-trash"></i> Delete</button>`;
 
         return `<tr>
           <td style="color:#aaa">${idx+1}</td>
@@ -1648,52 +2394,70 @@ $MENU_PAGES = [
       document.getElementById('uPaginationWrap').innerHTML = paginationHTML(allUsers.length, pages, uPage, 'uGoPage');
     }
 
-    function uGoPage(p) { uPage = p; renderUsersTable(); }
-    function updateUsersStats(s) {
-      document.getElementById('uStatTotal').textContent    = s.total ?? 0;
-      document.getElementById('uStatLoggedIn').textContent = s.logged_in ?? 0;
-      document.getElementById('uStatNever').textContent    = s.never_logged ?? 0;
+    function uGoPage(p) {
+      uPage = p;
+      renderUsersTable();
     }
+
+    function updateUsersStats(s) {
+      document.getElementById('uStatTotal').textContent = s.total ?? 0;
+      document.getElementById('uStatLoggedIn').textContent = s.logged_in ?? 0;
+      document.getElementById('uStatNever').textContent = s.never_logged ?? 0;
+    }
+
     function debounceUsers() {
       clearTimeout(uDebounce);
-      uDebounce = setTimeout(() => { uPage = 1; stopUsersCountdown(); loadUsers().then(startUsersCountdown); }, 380);
+      uDebounce = setTimeout(() => {
+        uPage = 1;
+        stopUsersCountdown();
+        loadUsers().then(startUsersCountdown);
+      }, 380);
     }
+
     function clearUsersSearch() {
       document.getElementById('searchUser').value = '';
       document.getElementById('searchEmail').value = '';
-      uPage = 1; stopUsersCountdown(); loadUsers().then(startUsersCountdown);
+      uPage = 1;
+      stopUsersCountdown();
+      loadUsers().then(startUsersCountdown);
     }
 
     /* ── User form ── */
     async function populateGroupDropdown() {
       try {
-        const res  = await fetch('?action=fetch_groups_dropdown');
+        const res = await fetch('?action=fetch_groups_dropdown');
         const data = await res.json();
-        const sel  = document.getElementById('fUsergroup');
+        const sel = document.getElementById('fUsergroup');
         sel.innerHTML = '<option value="">— Select group —</option>';
         if (data.success) {
           data.groups.forEach(g => {
             const opt = document.createElement('option');
-            opt.value = g; opt.textContent = g;
+            opt.value = g;
+            opt.textContent = g;
             sel.appendChild(opt);
           });
         }
-      } catch(e) {}
+      } catch (e) {}
     }
 
     function clearUserForm() {
-      ['fFirstName','fLastName','fUsername','fEmail','fPassword','fPhone','fDatabase']
-        .forEach(id => document.getElementById(id).value = '');
+      ['fFirstName', 'fLastName', 'fUsername', 'fEmail', 'fPassword', 'fPhone', 'fDatabase']
+      .forEach(id => document.getElementById(id).value = '');
       document.getElementById('fUsergroup').value = '';
       const e = document.getElementById('userFormErr');
-      e.style.display = 'none'; e.innerHTML = '';
-      ['fFirstName','fLastName','fUsername','fEmail','fPhone','fDatabase','fUsergroup','fPassword']
-        .forEach(id => document.getElementById(id).disabled = false);
+      e.style.display = 'none';
+      e.innerHTML = '';
+      ['fFirstName', 'fLastName', 'fUsername', 'fEmail', 'fPhone', 'fDatabase', 'fUsergroup', 'fPassword']
+      .forEach(id => document.getElementById(id).disabled = false);
     }
 
     async function openAddUser() {
-      if (!IS_ADMIN) { showToast('Access denied. Administrators only.', true); return; }
-      editingUserId = null; clearUserForm();
+      if (!IS_ADMIN) {
+        showToast('Access denied. Administrators only.', true);
+        return;
+      }
+      editingUserId = null;
+      clearUserForm();
       await populateGroupDropdown();
       document.getElementById('userFormTitle').innerHTML = '<i class="fas fa-user-plus" style="color:#7c3aed"></i> Add New User';
       document.getElementById('pwHint').textContent = '(min 8 chars, upper, lower, number)';
@@ -1703,68 +2467,103 @@ $MENU_PAGES = [
     }
 
     async function openEditUser(id) {
-      if (!IS_ADMIN) { showToast('Access denied. Administrators only.', true); return; }
-      editingUserId = id; clearUserForm();
+      if (!IS_ADMIN) {
+        showToast('Access denied. Administrators only.', true);
+        return;
+      }
+      editingUserId = id;
+      clearUserForm();
       await populateGroupDropdown();
       document.getElementById('userFormTitle').innerHTML = '<i class="fas fa-edit" style="color:#7c3aed"></i> Edit User';
       document.getElementById('pwHint').textContent = '(leave blank to keep current)';
       document.getElementById('fPassword').placeholder = 'Leave blank to keep current password';
       const btn = document.getElementById('btnUserFormSubmit');
-      btn.innerHTML = '<span class="spinner"></span> Loading…'; btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Loading…';
+      btn.disabled = true;
       openModal('userFormModal');
       try {
-        const res  = await fetch(`?action=get_user&id=${id}`);
+        const res = await fetch(`?action=get_user&id=${id}`);
         const data = await res.json();
         if (!data.success) throw new Error(data.message);
         const u = data.user;
-        document.getElementById('fFirstName').value  = u.first_name   || '';
-        document.getElementById('fLastName').value   = u.last_name    || '';
-        document.getElementById('fUsername').value   = u.username     || '';
-        document.getElementById('fEmail').value      = u.email        || '';
-        document.getElementById('fPhone').value      = u.phone        || '';
-        document.getElementById('fDatabase').value   = u.my_database  || '';
-        document.getElementById('fUsergroup').value  = u.user_group   || '';
+        document.getElementById('fFirstName').value = u.first_name || '';
+        document.getElementById('fLastName').value = u.last_name || '';
+        document.getElementById('fUsername').value = u.username || '';
+        document.getElementById('fEmail').value = u.email || '';
+        document.getElementById('fPhone').value = u.phone || '';
+        document.getElementById('fDatabase').value = u.my_database || '';
+        document.getElementById('fUsergroup').value = u.user_group || '';
         if (+id === SESSION_UID) {
-          document.getElementById('fEmail').disabled    = true;
+          document.getElementById('fEmail').disabled = true;
           document.getElementById('fUsergroup').disabled = true;
         }
-        btn.innerHTML = '<i class="fas fa-save"></i> Save Changes'; btn.disabled = false;
-      } catch(err) { showToast('Failed to load user: ' + err.message, true); closeModal('userFormModal'); }
+        btn.innerHTML = '<i class="fas fa-save"></i> Save Changes';
+        btn.disabled = false;
+      } catch (err) {
+        showToast('Failed to load user: ' + err.message, true);
+        closeModal('userFormModal');
+      }
     }
 
     async function submitUserForm() {
-      if (!IS_ADMIN) { showToast('Access denied.', true); return; }
+      if (!IS_ADMIN) {
+        showToast('Access denied.', true);
+        return;
+      }
       const payload = {
-        first_name:  document.getElementById('fFirstName').value.trim(),
-        last_name:   document.getElementById('fLastName').value.trim(),
-        username:    document.getElementById('fUsername').value.trim(),
-        email:       document.getElementById('fEmail').value.trim(),
-        user_group:  document.getElementById('fUsergroup').value,
-        password:    document.getElementById('fPassword').value,
-        phone:       document.getElementById('fPhone').value.trim(),
+        first_name: document.getElementById('fFirstName').value.trim(),
+        last_name: document.getElementById('fLastName').value.trim(),
+        username: document.getElementById('fUsername').value.trim(),
+        email: document.getElementById('fEmail').value.trim(),
+        user_group: document.getElementById('fUsergroup').value,
+        password: document.getElementById('fPassword').value,
+        phone: document.getElementById('fPhone').value.trim(),
         my_database: document.getElementById('fDatabase').value.trim(),
       };
       const errBox = document.getElementById('userFormErr');
-      if (!payload.user_group) { errBox.style.display='block'; errBox.textContent='Please select a User Group.'; return; }
+      if (!payload.user_group) {
+        errBox.style.display = 'block';
+        errBox.textContent = 'Please select a User Group.';
+        return;
+      }
       errBox.style.display = 'none';
       const btn = document.getElementById('btnUserFormSubmit');
-      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…';
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Saving…';
       const url = editingUserId ? `?action=update_user&id=${editingUserId}` : `?action=add_user`;
       try {
-        const res  = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
         const data = await res.json();
-        if (!data.success) { errBox.style.display='block'; errBox.textContent=(data.errors||[data.message]).join('\n'); return; }
-        closeModal('userFormModal'); showToast(data.message);
-        uPage = 1; stopUsersCountdown(); await loadUsers(); startUsersCountdown();
-      } catch(err) { showToast('Error: ' + err.message, true); }
-      finally {
+        if (!data.success) {
+          errBox.style.display = 'block';
+          errBox.textContent = (data.errors || [data.message]).join('\n');
+          return;
+        }
+        closeModal('userFormModal');
+        showToast(data.message);
+        uPage = 1;
+        stopUsersCountdown();
+        await loadUsers();
+        startUsersCountdown();
+      } catch (err) {
+        showToast('Error: ' + err.message, true);
+      } finally {
         btn.disabled = false;
         btn.innerHTML = editingUserId ? '<i class="fas fa-save"></i> Save Changes' : '<i class="fas fa-save"></i> Register User';
       }
     }
 
     function openDeleteUser(id, username) {
-      if (!IS_ADMIN) { showToast('Access denied. Administrators only.', true); return; }
+      if (!IS_ADMIN) {
+        showToast('Access denied. Administrators only.', true);
+        return;
+      }
       pendingDelUserId = id;
       document.getElementById('deleteUserMsg').innerHTML = `Delete <strong>${escHtml(username)}</strong>? This cannot be undone.`;
       openModal('deleteUserModal');
@@ -1773,32 +2572,61 @@ $MENU_PAGES = [
     async function confirmDeleteUser() {
       if (!IS_ADMIN || !pendingDelUserId) return;
       const btn = document.getElementById('btnConfirmDeleteUser');
-      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Deleting…';
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Deleting…';
       try {
-        const res  = await fetch(`?action=delete_user&id=${pendingDelUserId}`);
+        const res = await fetch(`?action=delete_user&id=${pendingDelUserId}`);
         const data = await res.json();
         if (!data.success) throw new Error(data.message);
-        pendingDelUserId = null; closeModal('deleteUserModal'); showToast(data.message);
-        stopUsersCountdown(); await loadUsers(); startUsersCountdown();
-      } catch(err) { showToast('Error: ' + err.message, true); }
-      finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash"></i> Delete'; }
+        pendingDelUserId = null;
+        closeModal('deleteUserModal');
+        showToast(data.message);
+        stopUsersCountdown();
+        await loadUsers();
+        startUsersCountdown();
+      } catch (err) {
+        showToast('Error: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-trash"></i> Delete';
+      }
     }
 
     /* ══════════════════════════════════════════════════════════════
        GROUPS TAB
     ══════════════════════════════════════════════════════════════ */
     const G_REFRESH = 30;
-    let allGroups = [], gPage = 1;
+    let allGroups = [],
+      gPage = 1;
     const G_PER = 10;
-    let editingGroupId = null, pendingDelGrpId = null, gDebounce = null;
-    let gCountdownLeft = G_REFRESH, gTick = null, gRefreshTimer = null;
+    let editingGroupId = null,
+      pendingDelGrpId = null,
+      gDebounce = null;
+    let gCountdownLeft = G_REFRESH,
+      gTick = null,
+      gRefreshTimer = null;
 
     function startGroupsCountdown() {
-      stopGroupsCountdown(); gCountdownLeft = G_REFRESH; updateGroupsCountdownUI();
-      gTick = setInterval(() => { if (!anyModalOpen) { gCountdownLeft = Math.max(0, gCountdownLeft-1); updateGroupsCountdownUI(); } }, 1000);
-      gRefreshTimer = setTimeout(async () => { if (!anyModalOpen) await loadGroups(true); startGroupsCountdown(); }, G_REFRESH * 1000);
+      stopGroupsCountdown();
+      gCountdownLeft = G_REFRESH;
+      updateGroupsCountdownUI();
+      gTick = setInterval(() => {
+        if (!anyModalOpen) {
+          gCountdownLeft = Math.max(0, gCountdownLeft - 1);
+          updateGroupsCountdownUI();
+        }
+      }, 1000);
+      gRefreshTimer = setTimeout(async () => {
+        if (!anyModalOpen) await loadGroups(true);
+        startGroupsCountdown();
+      }, G_REFRESH * 1000);
     }
-    function stopGroupsCountdown() { clearInterval(gTick); clearTimeout(gRefreshTimer); }
+
+    function stopGroupsCountdown() {
+      clearInterval(gTick);
+      clearTimeout(gRefreshTimer);
+    }
+
     function updateGroupsCountdownUI() {
       const bar = document.getElementById('gCountdownBar');
       if (bar) bar.style.width = ((gCountdownLeft / G_REFRESH) * 100) + '%';
@@ -1806,20 +2634,22 @@ $MENU_PAGES = [
 
     async function loadGroups(silent = false) {
       const s = document.getElementById('groupSearchInput').value.trim();
-      const params = new URLSearchParams({ action:'fetch_groups' });
+      const params = new URLSearchParams({
+        action: 'fetch_groups'
+      });
       if (s) params.append('search_group', s);
 
       if (!silent) document.getElementById('groupTableBody').innerHTML =
         `<tr class="empty-row"><td colspan="7"><span class="spinner"></span> Loading…</td></tr>`;
       try {
-        const res  = await fetch('?' + params.toString());
+        const res = await fetch('?' + params.toString());
         const data = await res.json();
         if (!data.success) throw new Error(data.message || 'Fetch failed');
         allGroups = data.groups;
         document.getElementById('tabBadgeGroup').textContent = data.stats.total ?? 0;
-        document.getElementById('gStatTotal').textContent    = data.stats.total ?? 0;
+        document.getElementById('gStatTotal').textContent = data.stats.total ?? 0;
         renderGroupsTable();
-      } catch(err) {
+      } catch (err) {
         if (!silent) {
           showToast('Failed to load groups: ' + err.message, true);
           document.getElementById('groupTableBody').innerHTML =
@@ -1830,7 +2660,11 @@ $MENU_PAGES = [
 
     function renderGroupsTable() {
       const tbody = document.getElementById('groupTableBody');
-      const { slice, pages, page } = paginate(allGroups, gPage, G_PER);
+      const {
+        slice,
+        pages,
+        page
+      } = paginate(allGroups, gPage, G_PER);
       gPage = page;
       if (!slice.length) {
         tbody.innerHTML = `<tr class="empty-row"><td colspan="7"><i class="fas fa-layer-group" style="font-size:24px;display:block;margin-bottom:6px;opacity:.4"></i>No groups found.</td></tr>`;
@@ -1838,12 +2672,12 @@ $MENU_PAGES = [
         return;
       }
       tbody.innerHTML = slice.map((g, i) => {
-        const idx   = (gPage - 1) * G_PER + i;
+        const idx = (gPage - 1) * G_PER + i;
         const color = COLORS[(g.id - 1) % COLORS.length];
-        const init  = (g.group_name[0] || '?').toUpperCase();
-        const badge = g.is_enabled
-          ? `<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">Enabled</span>`
-          : `<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">Disabled</span>`;
+        const init = (g.group_name[0] || '?').toUpperCase();
+        const badge = g.is_enabled ?
+          `<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">Enabled</span>` :
+          `<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">Disabled</span>`;
 
         return `<tr>
           <td style="color:#aaa">${idx+1}</td>
@@ -1871,15 +2705,25 @@ $MENU_PAGES = [
       document.getElementById('gPaginationWrap').innerHTML = paginationHTML(allGroups.length, pages, gPage, 'gGoPage');
     }
 
-    function gGoPage(p) { gPage = p; renderGroupsTable(); }
+    function gGoPage(p) {
+      gPage = p;
+      renderGroupsTable();
+    }
 
     function debounceGroups() {
       clearTimeout(gDebounce);
-      gDebounce = setTimeout(() => { gPage=1; stopGroupsCountdown(); loadGroups().then(startGroupsCountdown); }, 380);
+      gDebounce = setTimeout(() => {
+        gPage = 1;
+        stopGroupsCountdown();
+        loadGroups().then(startGroupsCountdown);
+      }, 380);
     }
+
     function clearGroupsSearch() {
       document.getElementById('groupSearchInput').value = '';
-      gPage=1; stopGroupsCountdown(); loadGroups().then(startGroupsCountdown);
+      gPage = 1;
+      stopGroupsCountdown();
+      loadGroups().then(startGroupsCountdown);
     }
 
     /* ── View bound users ── */
@@ -1890,11 +2734,11 @@ $MENU_PAGES = [
         `<tr><td colspan="3" style="text-align:center;padding:20px"><span class="spinner"></span> Loading…</td></tr>`;
       openModal('viewGroupUsersModal');
       try {
-        const res  = await fetch(`?action=fetch_group_users&group_name=${encodeURIComponent(groupName)}`);
+        const res = await fetch(`?action=fetch_group_users&group_name=${encodeURIComponent(groupName)}`);
         const data = await res.json();
         if (!data.success) throw new Error(data.message);
-        document.getElementById('viewGroupUsersBody').innerHTML = data.users.length
-          ? data.users.map((u,i) => `<tr>
+        document.getElementById('viewGroupUsersBody').innerHTML = data.users.length ?
+          data.users.map((u, i) => `<tr>
               <td style="color:#aaa">${i+1}</td>
               <td><div class="user-cell">
                 <div class="avatar" style="background:${COLORS[(u.id-1)%COLORS.length]}">${(u.username[0]||'?').toUpperCase()}</div>
@@ -1904,9 +2748,9 @@ $MENU_PAGES = [
                 </div>
               </div></td>
               <td style="color:#6b7280">${escHtml(u.email)}</td>
-            </tr>`).join('')
-          : `<tr><td colspan="3" style="text-align:center;padding:20px;color:#adb5bd">No users in this group.</td></tr>`;
-      } catch(err) {
+            </tr>`).join('') :
+          `<tr><td colspan="3" style="text-align:center;padding:20px;color:#adb5bd">No users in this group.</td></tr>`;
+      } catch (err) {
         document.getElementById('viewGroupUsersBody').innerHTML =
           `<tr><td colspan="3" style="text-align:center;color:#ef4444">${escHtml(err.message)}</td></tr>`;
       }
@@ -1914,78 +2758,119 @@ $MENU_PAGES = [
 
     /* ── Group form ── */
     function clearGroupForm() {
-      document.getElementById('gGroupName').value   = '';
+      document.getElementById('gGroupName').value = '';
       document.getElementById('gDescription').value = '';
       document.getElementById('gIsEnabled').checked = true;
       const eb = document.getElementById('groupFormErr');
-      eb.style.display = 'none'; eb.innerHTML = '';
+      eb.style.display = 'none';
+      eb.innerHTML = '';
       setPermissionsToForm(null); // reset all to Allow
-      switchGroupTab('basic');   // always open on Basic Info
+      switchGroupTab('basic'); // always open on Basic Info
     }
 
     function openAddGroup() {
-      if (!IS_ADMIN) { showToast('Access denied. Administrators only.', true); return; }
-      editingGroupId = null; clearGroupForm();
+      if (!IS_ADMIN) {
+        showToast('Access denied. Administrators only.', true);
+        return;
+      }
+      editingGroupId = null;
+      clearGroupForm();
       document.getElementById('gModalTitle').textContent = 'Add New Group';
-      document.getElementById('gBtnLabel').textContent   = 'Create Group';
+      document.getElementById('gBtnLabel').textContent = 'Create Group';
       openModal('groupFormModal');
     }
 
     async function openEditGroup(id) {
-      if (!IS_ADMIN) { showToast('Access denied. Administrators only.', true); return; }
-      editingGroupId = id; clearGroupForm();
+      if (!IS_ADMIN) {
+        showToast('Access denied. Administrators only.', true);
+        return;
+      }
+      editingGroupId = id;
+      clearGroupForm();
       document.getElementById('gModalTitle').textContent = 'Edit Group';
-      document.getElementById('gBtnLabel').textContent   = 'Save Changes';
+      document.getElementById('gBtnLabel').textContent = 'Save Changes';
       const btn = document.getElementById('btnGroupFormSubmit');
-      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Loading…';
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Loading…';
       openModal('groupFormModal');
       try {
-        const res  = await fetch(`?action=fetch_group&id=${id}`);
+        const res = await fetch(`?action=fetch_group&id=${id}`);
         const data = await res.json();
         if (!data.success) throw new Error(data.message);
         const g = data.group;
-        document.getElementById('gGroupName').value   = g.group_name  || '';
+        document.getElementById('gGroupName').value = g.group_name || '';
         document.getElementById('gDescription').value = g.description || '';
         document.getElementById('gIsEnabled').checked = !!+g.is_enabled;
         // Load saved permissions
         let perms = null;
-        try { perms = g.permissions ? JSON.parse(g.permissions) : null; } catch(e) {}
+        try {
+          perms = g.permissions ? JSON.parse(g.permissions) : null;
+        } catch (e) {}
         setPermissionsToForm(perms);
         btn.innerHTML = '<i class="fas fa-save"></i> <span id="gBtnLabel">Save Changes</span>';
-        btn.disabled  = false;
-      } catch(err) { showToast('Failed to load group: ' + err.message, true); closeModal('groupFormModal'); }
+        btn.disabled = false;
+      } catch (err) {
+        showToast('Failed to load group: ' + err.message, true);
+        closeModal('groupFormModal');
+      }
     }
 
     async function submitGroupForm() {
-      if (!IS_ADMIN) { showToast('Access denied.', true); return; }
+      if (!IS_ADMIN) {
+        showToast('Access denied.', true);
+        return;
+      }
       const payload = {
-        group_name:  document.getElementById('gGroupName').value.trim(),
+        group_name: document.getElementById('gGroupName').value.trim(),
         description: document.getElementById('gDescription').value.trim(),
-        is_enabled:  document.getElementById('gIsEnabled').checked,
+        is_enabled: document.getElementById('gIsEnabled').checked,
         permissions: getPermissionsFromForm(),
       };
       const errBox = document.getElementById('groupFormErr');
       errBox.style.display = 'none';
-      if (!payload.group_name) { errBox.style.display='block'; errBox.textContent='Group name is required.'; return; }
+      if (!payload.group_name) {
+        errBox.style.display = 'block';
+        errBox.textContent = 'Group name is required.';
+        return;
+      }
 
       const btn = document.getElementById('btnGroupFormSubmit');
-      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…';
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Saving…';
       const url = editingGroupId ? `?action=update_group&id=${editingGroupId}` : `?action=add_group`;
       try {
-        const res  = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
         const data = await res.json();
-        if (!data.success) { errBox.style.display='block'; errBox.textContent=(data.errors||[data.message]).join('\n'); return; }
-        closeModal('groupFormModal'); showToast(data.message);
-        gPage=1; stopGroupsCountdown(); await loadGroups(); startGroupsCountdown();
-      } catch(err) { showToast('Error: ' + err.message, true); }
-      finally {
+        if (!data.success) {
+          errBox.style.display = 'block';
+          errBox.textContent = (data.errors || [data.message]).join('\n');
+          return;
+        }
+        closeModal('groupFormModal');
+        showToast(data.message);
+        gPage = 1;
+        stopGroupsCountdown();
+        await loadGroups();
+        startGroupsCountdown();
+      } catch (err) {
+        showToast('Error: ' + err.message, true);
+      } finally {
         btn.disabled = false;
         btn.innerHTML = `<i class="fas fa-save"></i> <span id="gBtnLabel">${editingGroupId ? 'Save Changes' : 'Create Group'}</span>`;
       }
     }
 
     function openDeleteGroup(id, name, boundCount) {
-      if (!IS_ADMIN) { showToast('Access denied. Administrators only.', true); return; }
+      if (!IS_ADMIN) {
+        showToast('Access denied. Administrators only.', true);
+        return;
+      }
       pendingDelGrpId = id;
       const msg = document.getElementById('deleteGroupMsg');
       if (+boundCount > 0) {
@@ -2001,34 +2886,62 @@ $MENU_PAGES = [
     async function confirmDeleteGroup() {
       if (!IS_ADMIN || !pendingDelGrpId) return;
       const btn = document.getElementById('btnConfirmDeleteGroup');
-      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Deleting…';
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Deleting…';
       try {
-        const res  = await fetch(`?action=delete_group&id=${pendingDelGrpId}`);
+        const res = await fetch(`?action=delete_group&id=${pendingDelGrpId}`);
         const data = await res.json();
         if (!data.success) throw new Error(data.message);
-        pendingDelGrpId = null; closeModal('deleteGroupModal'); showToast(data.message);
-        stopGroupsCountdown(); await loadGroups(); startGroupsCountdown();
-      } catch(err) { showToast('Error: ' + err.message, true); }
-      finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-trash"></i> Delete'; }
+        pendingDelGrpId = null;
+        closeModal('deleteGroupModal');
+        showToast(data.message);
+        stopGroupsCountdown();
+        await loadGroups();
+        startGroupsCountdown();
+      } catch (err) {
+        showToast('Error: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-trash"></i> Delete';
+      }
     }
 
     /* ══════════════════════════════════════════════════════════════
        LOGS TAB
     ══════════════════════════════════════════════════════════════ */
     const L_REFRESH = 10;
-    let allLogs = [], lPage = 1;
+    let allLogs = [],
+      lPage = 1;
     const L_PER = 10;
-    let pendingDelLogId = null, lDebounce = null;
-    let lCountdownLeft = L_REFRESH, lTick = null, lRefreshTimer = null;
+    let pendingDelLogId = null,
+      lDebounce = null;
+    let lCountdownLeft = L_REFRESH,
+      lTick = null,
+      lRefreshTimer = null;
 
     function startLogsCountdown() {
-      stopLogsCountdown(); lCountdownLeft = L_REFRESH; updateLogsCountdownUI();
-      lTick = setInterval(() => { if (!anyModalOpen) { lCountdownLeft=Math.max(0,lCountdownLeft-1); updateLogsCountdownUI(); } }, 1000);
-      lRefreshTimer = setTimeout(async () => { if (!anyModalOpen) await loadLogs(true); startLogsCountdown(); }, L_REFRESH*1000);
+      stopLogsCountdown();
+      lCountdownLeft = L_REFRESH;
+      updateLogsCountdownUI();
+      lTick = setInterval(() => {
+        if (!anyModalOpen) {
+          lCountdownLeft = Math.max(0, lCountdownLeft - 1);
+          updateLogsCountdownUI();
+        }
+      }, 1000);
+      lRefreshTimer = setTimeout(async () => {
+        if (!anyModalOpen) await loadLogs(true);
+        startLogsCountdown();
+      }, L_REFRESH * 1000);
     }
-    function stopLogsCountdown() { clearInterval(lTick); clearTimeout(lRefreshTimer); }
+
+    function stopLogsCountdown() {
+      clearInterval(lTick);
+      clearTimeout(lRefreshTimer);
+    }
+
     function updateLogsCountdownUI() {
-      document.getElementById('lCountdownBar').style.width = ((lCountdownLeft/L_REFRESH)*100) + '%';
+      document.getElementById('lCountdownBar').style.width = ((lCountdownLeft / L_REFRESH) * 100) + '%';
       const dot = document.getElementById('lPulseDot');
       if (dot) dot.classList.toggle('paused', anyModalOpen);
     }
@@ -2046,20 +2959,23 @@ $MENU_PAGES = [
     async function loadLogs(silent = false) {
       const search = document.getElementById('logSearchInput').value.trim();
       const action = document.getElementById('logActionFilter').value;
-      const params = new URLSearchParams({ action:'fetch_logs' });
+      const params = new URLSearchParams({
+        action: 'fetch_logs'
+      });
       if (search) params.append('search', search);
       if (action) params.append('action_filter', action);
 
       if (!silent) document.getElementById('logTableBody').innerHTML =
         `<tr class="empty-row"><td colspan="8"><span class="spinner"></span> Loading…</td></tr>`;
       try {
-        const res  = await fetch('?' + params.toString());
+        const res = await fetch('?' + params.toString());
         const data = await res.json();
-        if (!data.success) throw new Error(data.message||'Fetch failed');
+        if (!data.success) throw new Error(data.message || 'Fetch failed');
         allLogs = data.logs;
         document.getElementById('tabBadgeLogs').textContent = data.stats.total ?? 0;
-        renderLogsTable(); updateLogsStats(data.stats);
-      } catch(err) {
+        renderLogsTable();
+        updateLogsStats(data.stats);
+      } catch (err) {
         if (!silent) {
           showToast('Failed to load logs: ' + err.message, true);
           document.getElementById('logTableBody').innerHTML =
@@ -2070,7 +2986,11 @@ $MENU_PAGES = [
 
     function renderLogsTable() {
       const tbody = document.getElementById('logTableBody');
-      const { slice, pages, page } = paginate(allLogs, lPage, L_PER);
+      const {
+        slice,
+        pages,
+        page
+      } = paginate(allLogs, lPage, L_PER);
       lPage = page;
       if (!slice.length) {
         tbody.innerHTML = `<tr class="empty-row"><td colspan="8"><i class="fas fa-inbox" style="font-size:24px;display:block;margin-bottom:6px;opacity:.4"></i>No log records found.</td></tr>`;
@@ -2078,10 +2998,10 @@ $MENU_PAGES = [
         return;
       }
       tbody.innerHTML = slice.map((log, i) => {
-        const idx      = (lPage-1)*L_PER + i;
+        const idx = (lPage - 1) * L_PER + i;
         const colorKey = log.user_id ? log.user_id : log.username;
-        const color    = COLORS[Math.abs(hashStr(String(colorKey))) % COLORS.length];
-        const init     = (log.username[0] || '?').toUpperCase();
+        const color = COLORS[Math.abs(hashStr(String(colorKey))) % COLORS.length];
+        const init = (log.username[0] || '?').toUpperCase();
         return `<tr>
           <td>${idx+1}</td>
           <td><div class="user-cell">
@@ -2102,21 +3022,33 @@ $MENU_PAGES = [
       document.getElementById('lPaginationWrap').innerHTML = paginationHTML(allLogs.length, pages, lPage, 'lGoPage');
     }
 
-    function lGoPage(p) { lPage = p; renderLogsTable(); }
+    function lGoPage(p) {
+      lPage = p;
+      renderLogsTable();
+    }
+
     function updateLogsStats(s) {
-      document.getElementById('lStatTotal').textContent   = s.total   ?? 0;
-      document.getElementById('lStatLogins').textContent  = s.logins  ?? 0;
+      document.getElementById('lStatTotal').textContent = s.total ?? 0;
+      document.getElementById('lStatLogins').textContent = s.logins ?? 0;
       document.getElementById('lStatUpdates').textContent = s.updates ?? 0;
       document.getElementById('lStatDeletes').textContent = s.deletes ?? 0;
     }
+
     function debounceLogs() {
       clearTimeout(lDebounce);
-      lDebounce = setTimeout(() => { lPage=1; stopLogsCountdown(); loadLogs().then(startLogsCountdown); }, 400);
+      lDebounce = setTimeout(() => {
+        lPage = 1;
+        stopLogsCountdown();
+        loadLogs().then(startLogsCountdown);
+      }, 400);
     }
+
     function clearLogsSearch() {
-      document.getElementById('logSearchInput').value  = '';
+      document.getElementById('logSearchInput').value = '';
       document.getElementById('logActionFilter').value = '';
-      lPage=1; stopLogsCountdown(); loadLogs().then(startLogsCountdown);
+      lPage = 1;
+      stopLogsCountdown();
+      loadLogs().then(startLogsCountdown);
     }
 
     function viewLog(id) {
@@ -2144,42 +3076,68 @@ $MENU_PAGES = [
     async function deleteSingleLog() {
       if (!pendingDelLogId) return;
       const btn = document.getElementById('btnConfirmDeleteLog');
-      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Deleting…';
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Deleting…';
       try {
-        const res  = await fetch(`?action=delete_log&id=${pendingDelLogId}`);
+        const res = await fetch(`?action=delete_log&id=${pendingDelLogId}`);
         const data = await res.json();
-        if (!data.success) throw new Error(data.message||'Delete failed');
-        pendingDelLogId = null; closeModal('deleteSingleLogModal'); showToast('Log entry deleted successfully.');
-        stopLogsCountdown(); await loadLogs(); loadLogActionOptions(); startLogsCountdown();
-      } catch(err) { showToast('Error: ' + err.message, true); }
-      finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-trash"></i> Delete'; }
+        if (!data.success) throw new Error(data.message || 'Delete failed');
+        pendingDelLogId = null;
+        closeModal('deleteSingleLogModal');
+        showToast('Log entry deleted successfully.');
+        stopLogsCountdown();
+        await loadLogs();
+        loadLogActionOptions();
+        startLogsCountdown();
+      } catch (err) {
+        showToast('Error: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-trash"></i> Delete';
+      }
     }
 
-    function confirmDeleteAllLogs() { openModal('deleteAllLogsModal'); }
+    function confirmDeleteAllLogs() {
+      openModal('deleteAllLogsModal');
+    }
 
     async function deleteAllLogs() {
       const btn = document.getElementById('btnConfirmDeleteAllLogs');
-      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Deleting…';
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Deleting…';
       try {
-        const res  = await fetch(`?action=delete_all_logs`);
+        const res = await fetch(`?action=delete_all_logs`);
         const data = await res.json();
-        if (!data.success) throw new Error(data.message||'Delete all failed');
-        closeModal('deleteAllLogsModal'); showToast(`All log records deleted (${data.deleted} total).`);
-        stopLogsCountdown(); await loadLogs(); loadLogActionOptions(); startLogsCountdown();
-      } catch(err) { showToast('Error: ' + err.message, true); }
-      finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-trash"></i> Yes, Delete All'; }
+        if (!data.success) throw new Error(data.message || 'Delete all failed');
+        closeModal('deleteAllLogsModal');
+        showToast(`All log records deleted (${data.deleted} total).`);
+        stopLogsCountdown();
+        await loadLogs();
+        loadLogActionOptions();
+        startLogsCountdown();
+      } catch (err) {
+        showToast('Error: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-trash"></i> Yes, Delete All';
+      }
     }
 
     /* ══════════════════════════════════════════════════════════════
        EXPORT DATABASE
     ══════════════════════════════════════════════════════════════ */
     function exportDatabase() {
-      const mode   = document.querySelector('input[name="exportMode"]:checked')?.value || 'full';
+      const mode = document.querySelector('input[name="exportMode"]:checked')?.value || 'full';
       const status = document.getElementById('exportStatus');
-      status.style.display = 'flex'; status.style.alignItems = 'center'; status.style.gap = '8px';
+      status.style.display = 'flex';
+      status.style.alignItems = 'center';
+      status.style.gap = '8px';
       const link = document.createElement('a');
-      link.href = `?action=export_db&mode=${mode}`; link.click();
-      setTimeout(() => { status.style.display = 'none'; }, 3000);
+      link.href = `?action=export_db&mode=${mode}`;
+      link.click();
+      setTimeout(() => {
+        status.style.display = 'none';
+      }, 3000);
     }
 
     /* ══════════════════════════════════════════════════════════════
@@ -2187,21 +3145,25 @@ $MENU_PAGES = [
     ══════════════════════════════════════════════════════════════ */
     async function loadLogActionOptions() {
       try {
-        const res  = await fetch('?action=fetch_log_actions');
+        const res = await fetch('?action=fetch_log_actions');
         const data = await res.json();
         if (!data.success) return;
         const sel = document.getElementById('logActionFilter');
         sel.innerHTML = '<option value="">All Actions</option>';
         data.actions.forEach(action => {
           const opt = document.createElement('option');
-          opt.value = action; opt.textContent = action;
+          opt.value = action;
+          opt.textContent = action;
           sel.appendChild(opt);
         });
-      } catch(err) { console.warn('Could not load log action options:', err); }
+      } catch (err) {
+        console.warn('Could not load log action options:', err);
+      }
     }
 
     loadUsers().then(startUsersCountdown);
     // Groups and Logs load lazily on first tab visit
   </script>
 </body>
+
 </html>

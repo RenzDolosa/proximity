@@ -1,8 +1,8 @@
 <?php
 // test.php
 
-require_once 'config.php';
-require_once 'req.php';
+require_once '../cnfg/config.php';
+require_once '../cnfg/db.php';
 
 requireAccess('test', '../iframe/main/php');
 

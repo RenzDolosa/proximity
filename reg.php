@@ -2,6 +2,7 @@
 // register.php
 
 require_once 'res/cnfg/config.php';
+require_once 'res/cnfg/db.php';
 
 requireAccess('register', 'index.php');
 

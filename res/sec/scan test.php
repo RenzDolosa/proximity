@@ -3,6 +3,7 @@
 
 require_once '../cnfg/config.php';
 require_once '../cnfg/manpower_backend.php';
+require_once '../cnfg/db.php';
 
 requireAccess('scan test', '../iframe/main.php');
 

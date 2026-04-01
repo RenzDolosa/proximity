@@ -2,6 +2,7 @@
 // qr proximity.php
 
 require_once '../cnfg/config.php';
+require_once '../cnfg/db.php';
 
 requireAccess('qr proximity', '/index.php');
 

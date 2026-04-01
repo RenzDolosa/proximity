@@ -2,6 +2,7 @@
 // f-pass.php
 
 require_once 'res/cnfg/config.php';
+require_once 'res/cnfg/db.php';
 
 // Redirect if already logged in
 if (isset($_SESSION['user_id'])) {

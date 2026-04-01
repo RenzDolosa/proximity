@@ -2,9 +2,10 @@
 // portal.php
 
 require_once 'res/cnfg/config.php';
+require_once 'res/cnfg/db.php';
 require_once 'res/cnfg/req.php';
 
-requireAccess('portal', 'index.php');
+requireAccess('portal', 'proximity.php', true);
 
 try {
   $userDb = getUserDBConnection($userId);
