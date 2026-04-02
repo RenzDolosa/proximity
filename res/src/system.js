@@ -1091,7 +1091,7 @@ async function handleFormSubmit(e) {
         "image/webp",
       ];
       if (!allowedTypes.includes(file.type)) {
-        showAlert("Only image files (JPEG, PNG, GIF, WebP) are allowed", "error");
+        showAlert("Only image files (JPEG, JPG, PNG, GIF, WebP) are allowed", "error");
         return;
       }
     }
@@ -1226,7 +1226,7 @@ function setupFileUploadHandler() {
       "image/webp",
     ];
     if (!allowedTypes.includes(file.type)) {
-      showAlert("Only image files are allowed (JPEG, PNG, GIF, WebP)", "error");
+      showAlert("Only image files are allowed (JPEG, JPG, PNG, GIF, WebP)", "error");
       e.target.value = "";
       label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
       return;
@@ -1331,7 +1331,7 @@ async function deleteAllEmployees(employeeId) {
     }
   } catch (error) {
     console.error("Error:", error);
-    showAlert("Delete all employee data", "success");
+    showAlert("Failed to delete all employee data", "error");
     currentPage = 1;
     clearSearch();
   } finally {

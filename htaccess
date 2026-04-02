@@ -16,8 +16,8 @@ RewriteEngine On
 RewriteBase /
 
 # Force HTTPS (uncomment when SSL is available)
-RewriteCond %{HTTPS} off
-RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# RewriteCond %{HTTPS} off
+# RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
 # ------------------------------
 # 3. FRONT-CONTROLLER ROUTING

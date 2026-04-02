@@ -6,14 +6,14 @@ require_once '../cnfg/db.php';
 
 $permissions = getUserGroupPermissions();
 if (!canAccess($permissions, 'users') && !canAccess($permissions, 'groups') && !canAccess($permissions, 'system logs') && !canAccess($permissions, 'phpmyadmin')) {
-    echo '<!DOCTYPE html><html><body><script>
+  echo '<!DOCTYPE html><html><body><script>
         if (window.top !== window.self) {
             window.top.history.back();
         } else {
             window.history.back();
         }
     </script></body></html>';
-    exit;
+  exit;
 }
 
 requireAccess('admin panel', '../iframe/main.php');
@@ -537,65 +537,9 @@ if (isset($_GET['action'])) {
 }
 
 // ── Define menu pages for Bind Access ────────────────────────────────────────
-$MENU_PAGES = [
-  [
-    'key' => 'request',
-    'label' => 'Portal Access',
-    'icon' => 'fa-door-open',
-    'children' => [],
-  ],
-  [
-    'key' => 'portal',
-    'label' => 'Portal',
-    'icon' => 'fa-th-large',
-    'children' => [
-      ['key' => 'main',               'label' => 'Main',               'icon' => 'fa-home'],
-      ['key' => 'scan test',          'label' => 'Test Search',        'icon' => 'fa-search'],
-      ['key' => 'm-i v2',             'label' => 'Manual Input v2',    'icon' => 'fa-keyboard'],
-      ['key' => 'test',               'label' => 'Test',               'icon' => 'fa-flask'],
-    ],
-  ],
-  [
-    'key' => 'proximity',
-    'label' => 'Proximity',
-    'icon' => 'fa-th-large',
-    'children' => [
-      ['key' => 'manual input',       'label' => 'Manual Input',       'icon' => 'fa-keyboard'],
-      ['key' => 'qr proximity',       'label' => 'Live Search',        'icon' => 'fa-qrcode'],
-    ],
-  ],
-  [
-    'key'   => 'settings',
-    'label' => 'Settings',
-    'icon' => 'fa-cog',
-    'children' => [
-      ['key' => 'account info',       'label' => 'Account',            'icon' => 'fa-user-circle'],
-      ['key' => 'employee dashboard', 'label' => 'Employee Dashboard', 'icon' => 'fa-tachometer-alt'],
-      [
-        'key' => 'admin panel',
-        'label' => 'Admin Panel',
-        'icon' => 'fa-user-shield',
-        'children' => [
-          ['key' => 'users',          'label' => 'Manage Users',       'icon' => 'fa-users'],
-          ['key' => 'groups',         'label' => 'User Groups',        'icon' => 'fa-users-cog'],
-          ['key' => 'system logs',    'label' => 'System Logs',        'icon' => 'fa-clipboard-list'],
-          ['key' => 'phpmyadmin',     'label' => 'PHP MyAdmin',        'icon' => 'fa-database'],
-        ],
-      ],
-      ['key' => 'reg',                'label' => 'Register',           'icon' => 'fa-user-plus'],
-    ],
-  ],
-  [
-    'key' => 'table panel',
-    'label' => 'Table Panel',
-    'icon' => 'fa-table',
-    'children' => [
-      ['key' => 'system',             'label' => 'Manage Employees',   'icon' => 'fa-users-cog'],
-      ['key' => 'datalog',            'label' => 'Scanned Log',        'icon' => 'fa-clipboard-list'],
-      ['key' => 'proximity code',     'label' => 'Proximity Codes',    'icon' => 'fa-barcode'],
-    ],
-  ],
-];
+$MENU_PAGES = scanPortalPages();
+$MENU_PAGES = applyIconHints($MENU_PAGES);
+
 function renderBindRows(array $pages, int $depth = 0): void
 {
   foreach ($pages as $page):

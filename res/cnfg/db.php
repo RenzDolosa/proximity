@@ -1,5 +1,53 @@
 <?php
-//db.php - handles database connection for user sessions and portal access
+//db.php
+
+const PAGE_ICONS = [
+  'main'               => 'fa-home',
+  'admin panel'        => 'fa-user-shield',
+  'users'              => 'fa-users',
+  'groups'             => 'fa-users-cog',
+  'system logs'        => 'fa-clipboard-list',
+  'system'             => 'fa-users-cog',
+  'datalog'            => 'fa-clipboard-list',
+  'settings'           => 'fa-cog',
+  'phpmyadmin'         => 'fa-database',
+  'proximity'          => 'fa-th-large',
+  'proximity code'     => 'fa-barcode',
+  'qr proximity'       => 'fa-qrcode',
+  'manual input'       => 'fa-keyboard',
+  'portal'             => 'fa-th-large',
+  'table panel'        => 'fa-table',
+  'request'            => 'fa-door-open',
+  'account info'       => 'fa-user-circle',
+  'employee dashboard' => 'fa-tachometer-alt',
+  'reg'                => 'fa-user-plus',
+  'scan test'          => 'fa-search',
+  'm-i v2'             => 'fa-keyboard',
+  'test'               => 'fa-flask',
+];
+
+const PAGE_KEY_OVERRIDES = [
+  'account'            => 'account info',       // account.php → key "account info"
+  'employee dashboard' => 'employee dashboard',
+  'admin panel'        => 'admin panel',
+  'proximity code'     => 'proximity code',
+  'scan test'          => 'scan test',
+  'm-i v2'             => 'm-i v2',
+  'manual input'       => 'manual input',
+  'qr proximity'       => 'qr proximity',
+  'table panel'        => 'table panel',
+];
+
+function applyIconHints(array $pages): array
+{
+  foreach ($pages as &$page) {
+    $page['icon'] = PAGE_ICONS[$page['key']] ?? 'fa-file';
+    if (!empty($page['children'])) {
+      $page['children'] = applyIconHints($page['children']);
+    }
+  }
+  return $pages;
+}
 
 require_once 'config.php';
 
@@ -308,36 +356,259 @@ function requireAccess(string $pageKey, string $redirectUrl = '../index.php'): v
  *   if ($access['datalog'])  echo '<a href="datalog.php">Datalog</a>';
  *   if ($access['proxcode']) echo '<a href="proxcode.php">Proxcode</a>';
  */
+function scanPortalPages(
+  array $baseDirs = [],
+  array $exclude = [
+    'index.php',
+    'database.php',
+    'f-pass.php',
+    'add_to_log.php',
+    'config.php',
+    'ea-dtl.php',
+    'eas.php',
+    'export_proxcode.php',
+    'get_user_id.php',
+    'ip.php',
+    'login.php',
+    'manpower_backend.php',
+    'migrate_to_webp.php',
+    'proxcode_backend.php',
+    'qr_search_backend.php',
+    'req.php',
+    'scanTest_search_backend.php',
+    'settings.php',
+    'admin panel.php',
+    'table panel.php',
+    'reg.php',
+  ]
+): array {
+
+  // ── Define which folders are GROUPED (children under a parent) ────────────
+  $groupedFolders = [
+    'portal' => [
+      'folder'   => __DIR__ . '/../iframe',
+      'children' => [],
+    ],
+    'main' => [
+      'folder'   => __DIR__ . '/../udev',
+      'children' => [
+        [
+            'key'      => 'settings',
+            'label'    => 'Settings',
+            'icon'     => 'fa-cog',
+            'children' => [],
+        ],
+        [
+            'key'      => 'table panel',
+            'label'    => 'Table Panel',
+            'icon'     => 'fa-table',
+            'children' => [],
+        ],
+      ],
+    ],
+    'settings' => [
+      'folder'   => __DIR__ . '/../stat',
+      'children' => [
+        [
+            'key'      => 'reg',
+            'label'    => 'Register',
+            'icon'     => 'fa-user-plus',
+            'children' => [],
+        ],
+        [
+            'key'      => 'admin panel',
+            'label'    => 'Admin Panel',
+            'icon'     => 'fa-user-shield',
+            'children' => [
+                ['key' => 'users',       'label' => 'Manage Users', 'icon' => 'fa-users',         'children' => []],
+                ['key' => 'groups',      'label' => 'User Groups',  'icon' => 'fa-users-cog',      'children' => []],
+                ['key' => 'system logs', 'label' => 'System Logs',  'icon' => 'fa-clipboard-list', 'children' => []],
+                ['key' => 'phpmyadmin',  'label' => 'PHP MyAdmin',  'icon' => 'fa-database',       'children' => []],
+            ],
+        ],
+      ],
+    ],
+    'table panel' => [
+      'folder'   => __DIR__ . '/../tb',
+      'children' => [],
+    ],
+    'proximity' => [
+      'folder'   => __DIR__ . '/../sec',
+      'children' => [],
+    ],
+  ];
+
+  // Build a quick lookup of which real paths are "owned" by a grouped folder
+  $groupedPaths = [];
+  foreach ($groupedFolders as $config) {
+    if (!empty($config['folder'])) {
+      $groupedPaths[] = realpath($config['folder']);
+    }
+  }
+
+  // ── STEP 1: Flat folders (iframe, udev, root) ─────────────────────────────
+  if (empty($baseDirs)) {
+    $baseDirs = [
+      __DIR__ . '/../iframe',
+      __DIR__ . '/../udev',
+    ];
+  }
+
+  $pages    = [];
+  $seenKeys = [];
+
+  foreach ($baseDirs as $baseDir) {
+    $realBase = realpath($baseDir);
+    if (!$realBase || !is_dir($realBase)) continue;
+
+    // Skip if this folder is owned by a grouped parent
+    if (in_array($realBase, $groupedPaths, true)) continue;
+
+    foreach (glob($baseDir . '/*.php') ?: [] as $file) {
+      $name        = basename($file, '.php');
+      $resolvedKey = PAGE_KEY_OVERRIDES[$name] ?? $name;
+
+      if (in_array(basename($file), $exclude, true)) continue;
+      if (isset($seenKeys[$resolvedKey])) continue;
+      $seenKeys[$resolvedKey] = true;
+
+      $pages[] = [
+        'key'      => $resolvedKey,
+        'label'    => ucwords(str_replace(['-', '_'], ' ', $name)),
+        'icon'     => PAGE_ICONS[$resolvedKey] ?? 'fa-file',
+        'children' => [],
+      ];
+    }
+  }
+
+  // ── STEP 2: Root-level .php files ────────────────────────────────────────
+  $rootDir = __DIR__ . '/../..';
+  foreach (glob($rootDir . '/*.php') ?: [] as $file) {
+    $name        = basename($file, '.php');
+    $resolvedKey = PAGE_KEY_OVERRIDES[$name] ?? $name;
+
+    if (in_array(basename($file), $exclude, true)) continue;
+    if (isset($seenKeys[$resolvedKey])) continue;
+    $seenKeys[$resolvedKey] = true;
+
+    $pages[] = [
+      'key'      => $resolvedKey,
+      'label'    => ucwords(str_replace(['-', '_'], ' ', $name)),
+      'icon'     => PAGE_ICONS[$resolvedKey] ?? 'fa-file',
+      'children' => [],
+    ];
+  }
+
+  // ── STEP 3: Grouped folders → parent with children ───────────────────────
+  foreach ($groupedFolders as $parentKey => $config) {
+
+    $children = $config['children'];  // start with any hardcoded children
+
+    // Auto-scan the folder if provided
+    if (!empty($config['folder']) && is_dir($config['folder'])) {
+      foreach (glob($config['folder'] . '/*.php') ?: [] as $file) {
+        $name        = basename($file, '.php');
+        $resolvedKey = PAGE_KEY_OVERRIDES[$name] ?? $name;
+
+        if (in_array(basename($file), $exclude, true)) continue;
+        if (isset($seenKeys[$resolvedKey])) continue;
+        $seenKeys[$resolvedKey] = true;
+
+        $children[] = [
+          'key'      => $resolvedKey,
+          'label'    => ucwords(str_replace(['-', '_'], ' ', $name)),
+          'icon'     => PAGE_ICONS[$resolvedKey] ?? 'fa-file',
+          'children' => [],
+        ];
+      }
+    }
+
+    if (empty($children)) continue;
+
+    // Find if the parent page itself already exists (e.g. admin panel.php was in iframe/)
+    $attached = attachChildrenByKey($pages, $parentKey, $children);
+    if (!$attached) {
+      $seenKeys[$parentKey] = true;
+      $pages[] = [
+        'key'      => $parentKey,
+        'label'    => ucwords(str_replace(['-', '_'], ' ', $parentKey)),
+        'icon'     => PAGE_ICONS[$parentKey] ?? 'fa-folder',
+        'children' => $children,
+      ];
+    }
+  }
+
+  return $pages;
+}
+
+function findPageByKey(array &$pages, string $key): ?array
+{
+  foreach ($pages as &$page) {
+    if ($page['key'] === $key) return $page;
+    if (!empty($page['children'])) {
+      $found = findPageByKey($page['children'], $key);
+      if ($found !== null) return $found;
+    }
+  }
+  return null;
+}
+
+function attachChildrenByKey(array &$pages, string $parentKey, array $children): bool
+{
+  foreach ($pages as &$page) {
+    if ($page['key'] === $parentKey) {
+      $existingKeys = array_column($page['children'], 'key');
+      foreach ($children as $child) {
+        if (!in_array($child['key'], $existingKeys, true)) {
+          $page['children'][] = $child;
+        }
+      }
+      return true;
+    }
+    if (!empty($page['children'])) {
+      if (attachChildrenByKey($page['children'], $parentKey, $children)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function flattenPageKeys(array $pages): array
+{
+  $keys = [];
+  foreach ($pages as $page) {
+    $keys[] = $page['key'];
+    if (!empty($page['children'])) {
+      $keys = array_merge($keys, flattenPageKeys($page['children']));
+    }
+  }
+  return $keys;
+}
+
 function getMenuAccess(): array
 {
   $permissions = getUserGroupPermissions();
-  $pages = [
-    'request',
-    'portal',
-    'main',
-    'scan test',
-    'm-i v2',
-    'test',
-    'proximity',
-    'manual input',
-    'qr proximity',
-    'settings',
-    'account info',
-    'employee dashboard',
-    'admin panel',
+  $pages       = scanPortalPages();
+  $access      = [];
+
+  // Keys derived from actual .php files
+  foreach (flattenPageKeys($pages) as $key) {
+    $access[$key] = canAccess($permissions, $key);
+  }
+
+  // ── Virtual keys (not files, but used in permission checks) ──────────────
+  $virtualKeys = [
     'users',
     'groups',
     'system logs',
     'phpmyadmin',
-    'reg',
-    'table panel',
-    'system',
-    'datalog',
-    'proximity code'
   ];
-  $access = [];
-  foreach ($pages as $key) {
-    $access[$key] = canAccess($permissions, $key);
+  foreach ($virtualKeys as $key) {
+    if (!isset($access[$key])) {   // don't overwrite if a file happens to match
+      $access[$key] = canAccess($permissions, $key);
+    }
   }
+
   return $access;
 }

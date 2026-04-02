@@ -1,5 +1,5 @@
 <?php
-//acct.php
+//account.php
 
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';

@@ -6,7 +6,7 @@ ob_start();
 
 // ── Session before anything else ───────────────────────────
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+  session_start();
 }
 
 // ── Suppress display_errors — log to file, never to output ─
@@ -91,7 +91,6 @@ class Database
           PDO::ATTR_EMULATE_PREPARES => false
         ]
       );
-      
     } catch (PDOException $e) {
       error_log("User DB Connection error: " . $e->getMessage());
       return null;
@@ -198,7 +197,6 @@ class LiveSearchHandler
       $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
       return $results;
-
     } catch (PDOException $e) {
       error_log("Search error: " . $e->getMessage());
       return [];
@@ -212,14 +210,13 @@ class LiveSearchHandler
   {
     try {
       $query = "SELECT * FROM " . $this->table . " WHERE qr_code = :qr_code";
-      
+
       $stmt = $this->conn->prepare($query);
       $stmt->bindParam(':qr_code', $qr_code);
       $stmt->execute();
       $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
       return $result;
-
     } catch (PDOException $e) {
       error_log("Get employee by QR error: " . $e->getMessage());
       return null;
@@ -231,14 +228,13 @@ class LiveSearchHandler
   {
     try {
       $query = "SELECT * FROM " . $this->table . " WHERE id = :id";
-      
+
       $stmt = $this->conn->prepare($query);
       $stmt->bindParam(':id', $id);
       $stmt->execute();
       $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
       return $result;
-
     } catch (PDOException $e) {
       error_log("Get employee error: " . $e->getMessage());
       return null;
@@ -248,130 +244,136 @@ class LiveSearchHandler
 
 // Main execution
 try {
-    $database = new Database($currentUserId);
-    $db = $database->connect();
+  $database = new Database($currentUserId);
+  $db = $database->connect();
 
-    if (!$db) {
-        throw new Exception("Failed to connect to user database. Please try again.");
+  if (!$db) {
+    throw new Exception("Failed to connect to user database. Please try again.");
+  }
+
+  $searchHandler = new LiveSearchHandler($db, $currentUserId);
+  $response = ['success' => false, 'message' => '', 'data' => [], 'debug' => []];
+
+  $response['debug'] = [
+    'user_id' => $currentUserId,
+    'database' => $database->getDatabaseName(),
+    'request_method' => $_SERVER['REQUEST_METHOD'],
+    'timestamp' => date('Y-m-d H:i:s')
+  ];
+
+  if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    $searchParams = [];
+
+    // Unified single param — JS sends ?q= instead of repeating all 6 fields
+    $q = isset($_GET['q']) ? trim($_GET['q']) : '';
+
+    // Legacy individual params still supported as fallback
+    if ($q === '') {
+      foreach (['fullname', 'position', 'brand', 'status', 'shift', 'qr_code'] as $p) {
+        $v = isset($_GET[$p]) ? trim($_GET[$p]) : '';
+        if ($v !== '') {
+          $q = $v;
+          break;
+        }
+      }
     }
 
-    $searchHandler = new LiveSearchHandler($db, $currentUserId);
-    $response = ['success' => false, 'message' => '', 'data' => [], 'debug' => []];
+    if ($q !== '') {
+      $searchParams['qr_code'] = $q; // searchEmployees fans this out to all fields
+    }
 
-    $response['debug'] = [
-        'user_id' => $currentUserId,
-        'database' => $database->getDatabaseName(),
-        'request_method' => $_SERVER['REQUEST_METHOD'],
-        'timestamp' => date('Y-m-d H:i:s')
-    ];
+    $response['debug']['search_params'] = $searchParams;
 
-    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-        $searchParams = [];
-        $allowedParams = ['fullname', 'position', 'brand', 'status', 'shift', 'qr_code'];
-        
-        foreach ($allowedParams as $param) {
-            $value = isset($_GET[$param]) ? trim($_GET[$param]) : '';
-            if ($value !== '') {
-                $searchParams[$param] = $value;
-            }
+    if (empty($searchParams)) {
+      $response['message'] = 'No search parameters provided';
+      $response['data'] = [];
+    } else {
+      $employees = $searchHandler->searchEmployees($searchParams);
+
+      $response['success'] = true;
+      $response['data'] = $employees;
+      $response['count'] = count($employees);
+
+      if (empty($employees)) {
+        $response['message'] = 'No employees found matching your search criteria.';
+      } else {
+        $response['message'] = count($employees) . ' employee(s) found.';
+      }
+    }
+  } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (!$input) {
+      $input = $_POST;
+    }
+
+    $action = $input['action'] ?? '';
+    $response['debug']['action'] = $action;
+
+    switch ($action) {
+      case 'get_by_qr':
+        $qr_code = trim($input['qr_code'] ?? '');
+
+        if (empty($qr_code)) {
+          $response['message'] = 'QR code is required';
+          break;
         }
 
-        $response['debug']['search_params'] = $searchParams;
-
-        if (empty($searchParams)) {
-            $response['message'] = 'No search parameters provided';
-            $response['data'] = [];
+        $employee = $searchHandler->getEmployeeByQR($qr_code);
+        if ($employee) {
+          $response['success'] = true;
+          $response['data'] = $employee;
+          $response['message'] = 'Employee found';
         } else {
-            $employees = $searchHandler->searchEmployees($searchParams);
-
-            $response['success'] = true;
-            $response['data'] = $employees;
-            $response['count'] = count($employees);
-
-            if (empty($employees)) {
-                $response['message'] = 'No employees found matching your search criteria.';
-            } else {
-                $response['message'] = count($employees) . ' employee(s) found.';
-            }
+          $response['message'] = 'No employee found with QR code: ' . $qr_code;
         }
-    }
-    elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        $input = json_decode(file_get_contents('php://input'), true);
-        if (!$input) {
-            $input = $_POST;
+        break;
+
+      case 'get_by_id':
+        $employee_id = intval($input['id'] ?? 0);
+        if ($employee_id <= 0) {
+          $response['message'] = 'Valid Employee ID is required';
+          break;
         }
-        
-        $action = $input['action'] ?? '';
-        $response['debug']['action'] = $action;
 
-        switch ($action) {
-            case 'get_by_qr':
-                $qr_code = trim($input['qr_code'] ?? '');
-                
-                if (empty($qr_code)) {
-                    $response['message'] = 'QR code is required';
-                    break;
-                }
-
-                $employee = $searchHandler->getEmployeeByQR($qr_code);
-                if ($employee) {
-                    $response['success'] = true;
-                    $response['data'] = $employee;
-                    $response['message'] = 'Employee found';
-                } else {
-                    $response['message'] = 'No employee found with QR code: ' . $qr_code;
-                }
-                break;
-
-            case 'get_by_id':
-                $employee_id = intval($input['id'] ?? 0);
-                if ($employee_id <= 0) {
-                    $response['message'] = 'Valid Employee ID is required';
-                    break;
-                }
-
-                $employee = $searchHandler->getEmployee($employee_id);
-                if ($employee) {
-                    $response['success'] = true;
-                    $response['data'] = $employee;
-                    $response['message'] = 'Employee found';
-                } else {
-                    $response['message'] = 'Employee not found with ID: ' . $employee_id;
-                }
-                break;
-
-            default:
-                $response['message'] = 'Invalid or missing action parameter: ' . $action;
-                break;
+        $employee = $searchHandler->getEmployee($employee_id);
+        if ($employee) {
+          $response['success'] = true;
+          $response['data'] = $employee;
+          $response['message'] = 'Employee found';
+        } else {
+          $response['message'] = 'Employee not found with ID: ' . $employee_id;
         }
-    }
-    else {
-        $response['message'] = 'Invalid request method: ' . $_SERVER['REQUEST_METHOD'];
-    }
+        break;
 
+      default:
+        $response['message'] = 'Invalid or missing action parameter: ' . $action;
+        break;
+    }
+  } else {
+    $response['message'] = 'Invalid request method: ' . $_SERVER['REQUEST_METHOD'];
+  }
 } catch (Exception $e) {
-    $response = [
-        'success' => false,
-        'message' => 'Server error: ' . $e->getMessage(),
-        'data' => [],
-        'error_details' => [
-            'file' => $e->getFile(),
-            'line' => $e->getLine(),
-            'trace' => $e->getTraceAsString()
-        ]
-    ];
-    error_log("Critical server error: " . $e->getMessage());
-    http_response_code(500);
+  $response = [
+    'success' => false,
+    'message' => 'Server error: ' . $e->getMessage(),
+    'data' => [],
+    'error_details' => [
+      'file' => $e->getFile(),
+      'line' => $e->getLine(),
+      'trace' => $e->getTraceAsString()
+    ]
+  ];
+  error_log("Critical server error: " . $e->getMessage());
+  http_response_code(500);
 }
 
 // Remove debug info in production
 if (isset($_GET['debug']) || isset($_POST['debug'])) {
-    // Keep debug info
+  // Keep debug info
 } else {
-    unset($response['debug']);
-    unset($response['error_details']);
+  unset($response['debug']);
+  unset($response['error_details']);
 }
 
 echo json_encode($response, JSON_PRETTY_PRINT);
 exit;
-?>

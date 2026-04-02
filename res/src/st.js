@@ -1,91 +1,74 @@
-// qp.js
+// st.js
 
-// QR Pass Employee Filter System
 const searchInput = document.getElementById("searchInput");
 const body = document.body;
 
-// Global variables
 let searchTimeout;
 let currentResults = [];
 let displayTimeout;
-let currentFilter = "all";
 let currentAudio = null;
+let activeController = null;          // ← AbortController for in-flight fetches
 
-document.getElementById("message").innerHTML = '<img src="../logo/proximity-logo.svg" alt="Proximity Code" loading="lazy" style="width: 100%; height: 90vh;">';
+// ── Cached user-id (eliminates the synchronous XHR on every render) ──────────
+let cachedUserId = null;
+async function fetchUserId() {
+  try {
+    const r = await fetch("../cnfg/get_user_id.php");
+    if (r.ok) {
+      const j = await r.json();
+      cachedUserId = j.user_id || "default";
+    }
+  } catch { cachedUserId = "default"; }
+}
 
-// Setup event listeners
+document.getElementById("message").innerHTML =
+  '<img src="../logo/proximity-logo.svg" alt="Proximity Code" loading="lazy" style="width:100%;height:90vh;">';
+
 function setupEventListeners() {
-  // Live search with debounce
   searchInput.addEventListener("input", function (e) {
     clearTimeout(searchTimeout);
     const query = e.target.value.trim();
 
-    // Auto-clear after user stops typing
-    if (query !== "") {
-      clearTimeout(searchInput.autoClearTimeout);
-      searchInput.autoClearTimeout = setTimeout(() => {
-        searchInput.value = "";
-        // background();
-        searchInput.focus();
-      }, 300); // 30 seconds timeout
-    }
+    if (query === "") return;
 
-    // Hide results when search is empty
-    if (query === "") {
-      // background();
-      return;
-    }
+    // Auto-clear after 30 s of inactivity (reset on every keystroke)
+    clearTimeout(searchInput.autoClearTimeout);
+    searchInput.autoClearTimeout = setTimeout(() => {
+      searchInput.value = "";
+      searchInput.focus();
+    }, 30000);
 
-    searchTimeout = setTimeout(() => {
-      searchEmployees(query);
-    }, 300); // 300ms debounce
+    searchTimeout = setTimeout(() => searchEmployees(query), 200); // 200 ms debounce
   });
 
-  // Handle Enter key
   searchInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter") {
       clearTimeout(searchTimeout);
       const query = e.target.value.trim();
-
-      if (query === "") {
-        // background();
-        return;
-      }
-
-      searchEmployees(query);
+      if (query !== "") searchEmployees(query);
     }
   });
 
-  // Focus on click anywhere on the page
   document.addEventListener("click", function (e) {
-    if (!e.target.matches("input, button, select, textarea, a")) {
-      searchInput.focus();
-    }
+    if (!e.target.matches("input,button,select,textarea,a")) searchInput.focus();
   });
 
-  // Focus on any keydown event
   document.addEventListener("keydown", function (e) {
     if (
       document.activeElement.tagName !== "INPUT" &&
       document.activeElement.tagName !== "TEXTAREA" &&
       !e.target.classList.contains("filter-btn")
-    ) {
-      searchInput.focus();
-    }
+    ) searchInput.focus();
   });
 
-  // Initialize with focus and background
-  setTimeout(() => {
-    searchInput.value = "";
-    searchInput.focus();
-  }, 300);
+  setTimeout(() => { searchInput.value = ""; searchInput.focus(); }, 300);
 }
 
 function background() {
-  document.getElementById("message").innerHTML = '<img src="../logo/proximity-logo.svg" alt="Proximity Code" loading="lazy" style="width: 100%; height: 90vh;">';
+  document.getElementById("message").innerHTML =
+    '<img src="../logo/proximity-logo.svg" alt="Proximity Code" loading="lazy" style="width:100%;height:90vh;">';
 }
 
-// Function to stop any currently playing audio
 function stopCurrentAudio() {
   if (currentAudio && !currentAudio.paused) {
     currentAudio.pause();
@@ -100,17 +83,14 @@ function playSound(id) {
   if (!sound) return;
   currentAudio = sound;
   sound.currentTime = 0;
-  sound.play().catch((e) => console.log("Audio play error:", e));
+  sound.play().catch(e => console.log("Audio play error:", e));
 }
 
-const playSuccessSound = () => playSound("successSound");
+const playSuccessSound  = () => playSound("successSound");
 const playInactiveSound = () => playSound("inactiveSound");
 const playNoResultSound = () => playSound("noResultSound");
-const playWarningSound = () => playSound("warningSound");
+const playWarningSound  = () => playSound("warningSound");
 
-// ─────────────────────────────────────────────────────────────────
-//  Input-block helper (prevents double-scans)
-// ─────────────────────────────────────────────────────────────────
 function blockSearchInput(durationMs = 1000) {
   searchInput.disabled = true;
   searchInput.style.opacity = "0.7";
@@ -127,271 +107,164 @@ function blockSearchInput(durationMs = 1000) {
   }, durationMs);
 }
 
-// Search employees function with QR code priority
+// ── Tighter QR pattern: uppercase letters + digits, 8-20 chars, no spaces ────
+const QR_PATTERN = /^[A-Z0-9\-_]{8,20}$/;
+
 async function searchEmployees(query) {
+  // Cancel any in-flight request immediately
+  if (activeController) activeController.abort();
+  activeController = new AbortController();
+  const signal = activeController.signal;
+
   try {
     showLoading(true);
 
-    // Check if query looks like a QR code (modify pattern as needed)
-    const isQRCode = /^[A-Z0-9\-_]{6,}$/i.test(query) || query.includes("QR");
-
-    let url, method, body;
+    const isQRCode = QR_PATTERN.test(query);
+    let url, method, bodyContent;
 
     if (isQRCode) {
-      // For QR codes, use POST method with specific action
-      url = "../cnfg/scanTest_search_backend.php";
+      url    = "../cnfg/scanTest_search_backend.php";
       method = "POST";
-      body = JSON.stringify({
-        action: "get_by_qr",
-        qr_code: query,
-      });
+      bodyContent = JSON.stringify({ action: "get_by_qr", qr_code: query });
     } else {
-      // For general search, use GET method
-      const params = new URLSearchParams();
-      params.append("fullname", query);
-      params.append("position", query);
-      params.append("qr_code", query);
-      params.append("brand", query);
-      params.append("shift", query);
-      params.append("status", query);
-      params.append("check_status", query);
-
-      url = `../cnfg/scanTest_search_backend.php?${params.toString()}`;
+      // Send a single `q` parameter; backend fans it out to all fields
+      url    = `../cnfg/scanTest_search_backend.php?q=${encodeURIComponent(query)}`;
       method = "GET";
     }
 
-    const fetchOptions = {
-      method: method,
+    const response = await fetch(url, {
+      method,
+      signal,
       headers: {
         "X-Requested-With": "XMLHttpRequest",
-        "Content-Type":
-          method === "POST"
-            ? "application/json"
-            : "application/x-www-form-urlencoded",
+        ...(method === "POST" ? { "Content-Type": "application/json" } : {})
       },
-    };
+      ...(method === "POST" ? { body: bodyContent } : {})
+    });
 
-    if (method === "POST") {
-      fetchOptions.body = body;
-    }
-
-    const response = await fetch(url, fetchOptions);
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const data = await response.json();
-    console.log("Backend response:", data);
 
     if (data.success) {
-      // Handle single employee result (QR code search) vs multiple results
       currentResults = Array.isArray(data.data) ? data.data : [data.data];
       renderResults(currentResults, query);
 
       if (currentResults.length === 0) {
-        message.innerHTML = `
-            <p class="no-results-message" id="no-results-message">
-                No results found. 🔍
-            </p>
-        `;
+        document.getElementById("message").innerHTML =
+          '<p class="no-results-message">No results found. 🔍</p>';
         playNoResultSound();
         background();
         blockSearchInput();
       }
     } else {
-      console.error("Backend error:", data.message);
       showMessage(data.message || "Error loading search results", "error");
-      message.innerHTML = `
-            <p class="no-results-message" id="no-results-message">
-                No results found. 🔍
-            </p>
-        `;
+      document.getElementById("message").innerHTML =
+        '<p class="no-results-message">No results found. 🔍</p>';
       playNoResultSound();
       background();
       blockSearchInput();
     }
   } catch (error) {
+    if (error.name === "AbortError") return; // superseded by newer query — silent
     console.error("Search error:", error);
-    showMessage(
-      "Failed to search employees. Please check your connection.",
-      "error"
-    );
+    showMessage("Failed to search. Please check your connection.", "error");
     currentResults = [];
   } finally {
     showLoading(false);
   }
 }
 
-// Filter results based on current filter
-function filterResults(results) {
-  if (currentFilter === "all") return results;
-}
-
-// Render search results with filtering
 function renderResults(results, query) {
-  // Stop any currently playing audio when rendering new results
   stopCurrentAudio();
 
   const resultsTable = document.getElementById("resultsTable");
-  const resultsBody = document.getElementById("resultsBody");
-  const message = document.getElementById("message");
+  const resultsBody  = document.getElementById("resultsBody");
+  const message      = document.getElementById("message");
 
-  // Clear any existing display timeout
-  if (displayTimeout) {
-    clearTimeout(displayTimeout);
-    displayTimeout = null;
-  }
+  if (displayTimeout) { clearTimeout(displayTimeout); displayTimeout = null; }
 
-  // Apply current filter
-  const filteredResults = filterResults(results);
-
-  // Show results
   message.innerHTML = "";
   resultsTable.style.display = "block";
 
-  // Check for violations in results to determine sound to play
-  const hasViolations = filteredResults.some(
-    (employee) => employee.violation && employee.violation.trim() !== ""
-  );
+  const hasViolations = results.some(e => e.violation && e.violation.trim() !== "");
+  const hasInactive   = results.some(e => e.status.toLowerCase() === "inactive");
 
-  const hasInactive = filteredResults.some(
-    (employee) => employee.status.toLowerCase() === "inactive"
-  );
+  // Use cachedUserId (already fetched at page load — no blocking XHR)
+  const userId    = cachedUserId || "default";
 
-  // Render employee cards
-  resultsBody.innerHTML = filteredResults
-    .map((employee) => {
-      const fullname = escapeHtml(employee.fullname || "Unknown");
-      const position = escapeHtml(employee.position || "unknown");
-      const brand = escapeHtml(employee.brand || "N/A");
-      const status = escapeHtml(employee.status || "unknown");
-      const shift = escapeHtml(employee.shift || "N/A");
-      const violation = employee.violation
-        ? escapeHtml(employee.violation)
-        : null;
-      const image = employee.image ? escapeHtml(employee.image) : null;
-      const qrCode = escapeHtml(employee.qr_code || "N/A");
-      const check_status = escapeHtml(employee.check_status || "N/A");
-      const currentUserId = getCurrentUserId();
-      const checkStatus = check_status === "IN" ? "Test Scan" : "Test Scan";
+  resultsBody.innerHTML = results.map(employee => {
+    const fullname    = escapeHtml(employee.fullname    || "Unknown");
+    const position    = escapeHtml(employee.position    || "unknown");
+    const brand       = escapeHtml(employee.brand       || "N/A");
+    const status      = escapeHtml(employee.status      || "unknown");
+    const shift       = escapeHtml(employee.shift       || "N/A");
+    const violation   = employee.violation ? escapeHtml(employee.violation) : null;
+    const image       = employee.image     ? escapeHtml(employee.image)     : null;
+    const checkStatus = "Test Scan";
 
-      // Generate initials for placeholder
-      const fullnameInitials = (employee.fullname || "UN")
-        .split(" ")
-        .map((name) => name.charAt(0))
-        .join("")
-        .substring(0, 2)
-        .toUpperCase();
+    const initials = (employee.fullname || "UN")
+      .split(" ").map(n => n.charAt(0)).join("").substring(0, 2).toUpperCase();
 
-      return `
-            <div class="${violation ? "div-with-violation" : "div-container"}">
-                <div class="div-position">
-                    <p>${fullname}</p>
-                    <p>${position}</p>
-                        ${
-                          image
-                            ? `<img src="${window.location.origin}/uploads/user/${image}" alt="${fullname}" class="employee-image" loading="lazy">`
-                            : `<div class="ph-container"><div class="employee-placeholder">${fullnameInitials}</div></div>`
-                        }
-                </div>
-                <div class="div-side-${status.toLowerCase()}">
-                    <div class="div-padding">
-                        <p>Brand: ${brand}</p>
-                        <p>Status: ${status}</p>
-                        <p>Shift: ${shift}</p>
-                        <p class="check-status-${checkStatus
-                          .toLowerCase()
-                          .replace(/\s+/g, "-")}">Check: ${checkStatus}</p>
-                    </div>
-                </div>
-                <div class="${
-                  violation ? "with-violation" : "without-violation"
-                }">
-                    <div class="div-padding">
-                        <p>Violation: ${violation || "None"}</p>
-                    </div>
-                </div>
-            </div>
-        `;
-    })
-    .join("");
+    return `
+      <div class="${violation ? "div-with-violation" : "div-container"}">
+        <div class="div-position">
+          <p>${fullname}</p>
+          <p>${position}</p>
+          ${image
+            ? `<img src="${window.location.origin}/uploads/user/${image}" alt="${fullname}" class="employee-image" loading="lazy">`
+            : `<div class="ph-container"><div class="employee-placeholder">${initials}</div></div>`}
+        </div>
+        <div class="div-side-${status.toLowerCase()}">
+          <div class="div-padding">
+            <p>Brand: ${brand}</p>
+            <p>Status: ${status}</p>
+            <p>Shift: ${shift}</p>
+            <p class="check-status-test-scan">Check: ${checkStatus}</p>
+          </div>
+        </div>
+        <div class="${violation ? "with-violation" : "without-violation"}">
+          <div class="div-padding"><p>Violation: ${violation || "None"}</p></div>
+        </div>
+      </div>`;
+  }).join("");
 
-  // Set new timeout to clear results after 10 seconds
   displayTimeout = setTimeout(() => {
-    // Clear results
     resultsTable.style.display = "none";
     resultsBody.innerHTML = "";
-
-    // Show background
     background();
+  }, 10000);
 
-    // Apply cleanup
-  }, 10000); // 10 seconds
-
-  // Play sound based on violation status (moved outside the map function)
-  if (hasViolations) {
-    playWarningSound();
-  } else if (hasInactive) {
-    playInactiveSound();
-  } else {
-    playSuccessSound();
-  }
+  if      (hasViolations) playWarningSound();
+  else if (hasInactive)   playInactiveSound();
+  else                    playSuccessSound();
 
   blockSearchInput();
 }
 
-function getCurrentUserId() {
-  try {
-    const xhr = new XMLHttpRequest();
-    xhr.open("GET", "../cnfg/get_user_id.php", false); // synchronous
-    xhr.send();
-    if (xhr.status === 200) {
-      const response = JSON.parse(xhr.responseText);
-      return response.user_id || "default";
-    }
-  } catch (error) {
-    console.error("Error getting user ID:", error);
-  }
-
-  return "default"; // fallback
-}
-
-// Helper function to escape HTML
 function escapeHtml(text) {
   if (typeof text !== "string") return text;
-
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
+  const d = document.createElement("div");
+  d.textContent = text;
+  return d.innerHTML;
 }
 
-// Show loading state
 function showLoading(show) {
-  const message = document.getElementById("message");
+  const message      = document.getElementById("message");
   const resultsTable = document.getElementById("resultsTable");
-
   if (show) {
     resultsTable.style.display = "none";
-    message.innerHTML = '<div class="loading">Searching employees...</div>';
+    // message.innerHTML = '<div class="loading">Searching employees...</div>';
   }
 }
 
-// Show message
 function showMessage(text, type = "info") {
-  const message = document.getElementById("message");
   const className = type === "error" ? "error-message" : "info-message";
-  message.innerHTML = `<div class="${className}">${text}</div>`;
-
-  // Auto-hide success messages
-  if (type === "success") {
-    setTimeout(() => {
-      message.innerHTML = "";
-    }, 1000);
-  }
+  document.getElementById("message").innerHTML = `<div class="${className}">${text}</div>`;
+  if (type === "success") setTimeout(() => { document.getElementById("message").innerHTML = ""; }, 1000);
 }
 
-// Initialize the application
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", () => {
+  fetchUserId();        // async, cached for all future renders
   setupEventListeners();
 });

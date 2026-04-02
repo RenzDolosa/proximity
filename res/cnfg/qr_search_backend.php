@@ -6,7 +6,7 @@ ob_start();
 
 // ── Session before anything else ───────────────────────────
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+  session_start();
 }
 
 // ── Suppress display_errors — log to file, never to output ─
@@ -31,73 +31,55 @@ if (isset($_GET['serve_file'])) {
 ob_clean();
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
+  http_response_code(200);
+  exit();
 }
 
 if (!isset($_SESSION['user_id'])) {
-    http_response_code(401);
-    echo json_encode([
-        'success'    => false,
-        'message'    => 'Authentication required. Please log in to access this service.',
-        'error_code' => 'AUTH_REQUIRED',
-        'data'       => []
-    ]);
-    exit();
+  http_response_code(401);
+  echo json_encode([
+    'success'    => false,
+    'message'    => 'Authentication required. Please log in to access this service.',
+    'error_code' => 'AUTH_REQUIRED',
+    'data'       => []
+  ]);
+  exit();
 }
 
 $currentUserId = $_SESSION['user_id'];
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
 //  IMAGE PATH HELPER
-//  Normalizes whatever is stored in the DB:
-//    - null / empty   → null  (no image)
-//    - "abc123.webp"  → "abc123.webp"   (already clean)
-//    - "/uploads/user/abc123.webp" → "abc123.webp"  (strip path)
-//    - "uploads/user/abc123.webp"  → "abc123.webp"  (strip path)
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
 function normalizeImageFilename(?string $image): ?string
 {
-    if ($image === null || trim($image) === '') {
-        return null;
-    }
+  if ($image === null || trim($image) === '') {
+    return null;
+  }
 
-    $image = trim($image);
+  $image = trim($image);
+  $image = basename($image);
 
-    // Strip any leading path so only the bare filename remains.
-    // This covers stored values like:
-    //   /uploads/user/file.webp
-    //   uploads/user/file.webp
-    //   ../../uploads/user/file.webp
-    $image = basename($image);
+  if ($image === '' || $image === '.' || $image === '..') {
+    return null;
+  }
 
-    // Safety: reject obviously invalid values
-    if ($image === '' || $image === '.' || $image === '..') {
-        return null;
-    }
-
-    return $image;
+  return $image;
 }
 
-// ─────────────────────────────────────────────
-//  Verify the image file actually exists on disk
-//  Returns the filename if found, null otherwise.
-// ─────────────────────────────────────────────
 function verifyImageExists(?string $filename): ?string
 {
-    if ($filename === null) return null;
+  if ($filename === null) return null;
 
-    // __DIR__ is the cnfg/ folder; uploads/user/ is two levels up
-    $uploadDir = __DIR__ . '/../../uploads/user/';
-    $fullPath  = $uploadDir . $filename;
+  $uploadDir = __DIR__ . '/../../uploads/user/';
+  $fullPath  = $uploadDir . $filename;
 
-    return file_exists($fullPath) ? $filename : null;
+  return file_exists($fullPath) ? $filename : null;
 }
 
-// Combine both helpers
 function resolveImage(?string $raw): ?string
 {
-    return verifyImageExists(normalizeImageFilename($raw));
+  return verifyImageExists(normalizeImageFilename($raw));
 }
 
 class Database
@@ -151,8 +133,8 @@ class Database
     }
   }
 
-  public function getUserId()     { return $this->userId; }
-  public function getConnection() { return $this->conn; }
+  public function getUserId()    { return $this->userId; }
+  public function getConnection(){ return $this->conn;   }
 }
 
 class QueryLogger
@@ -250,19 +232,19 @@ class QueryLogger
 
       $stmt = $this->conn->prepare($sql);
       $stmt->execute([
-        ':employee_id' => $employeeData['id']           ?? null,
-        ':fullname'    => $employeeData['fullname']      ?? null,
-        ':position'    => $employeeData['position']      ?? null,
-        ':brand'       => $employeeData['brand']         ?? null,
-        ':status'      => $employeeData['status']        ?? null,
-        ':shift'       => $employeeData['shift']         ?? null,
-        ':violation'   => $employeeData['violation']     ?? null,
-        ':image'       => $employeeData['image']         ?? null,  // stored as clean filename
-        ':qr_code'     => $employeeData['qr_code']       ?? null,
-        ':check_status'=> $employeeData['check_status']  ?? null,
-        ':access_type' => $accessType,
-        ':ip_address'  => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-        ':user_agent'  => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
+        ':employee_id'  => $employeeData['id']           ?? null,
+        ':fullname'     => $employeeData['fullname']      ?? null,
+        ':position'     => $employeeData['position']      ?? null,
+        ':brand'        => $employeeData['brand']         ?? null,
+        ':status'       => $employeeData['status']        ?? null,
+        ':shift'        => $employeeData['shift']         ?? null,
+        ':violation'    => $employeeData['violation']     ?? null,
+        ':image'        => $employeeData['image']         ?? null,
+        ':qr_code'      => $employeeData['qr_code']       ?? null,
+        ':check_status' => $employeeData['check_status']  ?? null,
+        ':access_type'  => $accessType,
+        ':ip_address'   => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+        ':user_agent'   => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
       ]);
 
       return true;
@@ -273,9 +255,14 @@ class QueryLogger
   }
 
   public function logSearchQuery(
-    $queryType, $searchTerm, $searchParams,
-    $resultsCount, $resultsData, $executionTime,
-    $success, $errorMessage = null
+    $queryType,
+    $searchTerm,
+    $searchParams,
+    $resultsCount,
+    $resultsData,
+    $executionTime,
+    $success,
+    $errorMessage = null
   ) {
     if (!$this->conn) return false;
 
@@ -330,54 +317,91 @@ class LiveSearchHandler
     $this->userId = $userId;
   }
 
-  // ── Normalize image on every employee row that leaves this class ──
   private function cleanEmployee(array $employee): array
   {
     $employee['image'] = resolveImage($employee['image'] ?? null);
     return $employee;
   }
 
-  private function attachCheckStatus(array $employee): array
+  // ─────────────────────────────────────────────────────────────────
+  //  FIX 1: batchCheckStatuses — now correctly handles BOTH an array
+  //  of employee rows AND a single employee row (associative array).
+  //  Uses ROW_NUMBER() window function instead of a correlated subquery
+  //  for better performance at scale.
+  // ─────────────────────────────────────────────────────────────────
+  private function batchCheckStatuses(array $employees): array
   {
-    if (!$this->conn) {
-      $employee['check_status'] = 'OUT';
-      return $employee;
+    if (empty($employees) || !$this->conn) {
+      // Single row (associative): has string keys, not numeric outer keys
+      if (isset($employees['id'])) {
+        $employees['check_status'] = 'OUT';
+        return $employees;
+      }
+      foreach ($employees as &$e) $e['check_status'] = 'OUT';
+      unset($e);
+      return $employees;
     }
+
+    // Detect single-row call: associative array with an 'id' key at the top level
+    $isSingleRow = isset($employees['id']);
+    $rows        = $isSingleRow ? [$employees] : $employees;
 
     try {
-      $sql = "SELECT check_type
-              FROM check_in_out
-              WHERE employee_id = :employee_id OR qr_code = :qr_code
-              ORDER BY scan_timestamp DESC, id DESC
-              LIMIT 1";
+      $ids = array_column($rows, 'id');
+
+      if (empty($ids)) {
+        foreach ($rows as &$r) $r['check_status'] = 'OUT';
+        unset($r);
+        return $isSingleRow ? $rows[0] : $rows;
+      }
+
+      // ── FIX: ROW_NUMBER() window function replaces correlated subquery ──
+      $placeholders = implode(',', array_fill(0, count($ids), '?'));
+      $sql = "SELECT employee_id, check_type
+                FROM (
+                  SELECT employee_id, check_type,
+                         ROW_NUMBER() OVER (
+                           PARTITION BY employee_id ORDER BY id DESC
+                         ) AS rn
+                  FROM check_in_out
+                  WHERE employee_id IN ($placeholders)
+                ) ranked
+                WHERE rn = 1";
 
       $stmt = $this->conn->prepare($sql);
-      $stmt->execute([
-        ':employee_id' => $employee['id'],
-        ':qr_code'     => $employee['qr_code'],
-      ]);
+      $stmt->execute($ids);
+      $statusRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      $row = $stmt->fetch(PDO::FETCH_ASSOC);
-      $employee['check_status'] = $row ? $row['check_type'] : 'OUT';
+      $statusMap = [];
+      foreach ($statusRows as $row) {
+        $statusMap[(string)$row['employee_id']] = $row['check_type'];
+      }
+
+      foreach ($rows as &$row) {
+        $row['check_status'] = $statusMap[(string)$row['id']] ?? 'OUT';
+      }
+      unset($row);
     } catch (PDOException $e) {
-      error_log("attachCheckStatus error: " . $e->getMessage());
-      $employee['check_status'] = 'OUT';
+      error_log("batchCheckStatuses error: " . $e->getMessage());
+      foreach ($rows as &$r) $r['check_status'] = 'OUT';
+      unset($r);
     }
 
-    return $employee;
+    return $isSingleRow ? $rows[0] : $rows;
   }
 
   public function searchEmployees($searchParams = [])
   {
     $startTime    = microtime(true);
-    $queryType    = 'live_search';
     $searchTerm   = '';
     $results      = [];
     $success      = true;
     $errorMessage = null;
 
     try {
-      $sql    = "SELECT * FROM {$this->employeesTable} WHERE 1=1";
+      $sql    = "SELECT id, fullname, position, brand, status, shift,
+                          violation, image, qr_code
+                   FROM {$this->employeesTable} WHERE 1=1";
       $params = [];
 
       $searchableFields = ['qr_code', 'fullname', 'position', 'brand', 'shift', 'status'];
@@ -389,46 +413,35 @@ class LiveSearchHandler
       }
 
       if ($searchTerm !== '') {
-        $likeFields = [
-          'fullname', 'position', 'qr_code',
-          'brand', 'shift', 'status', 'violation', 'id'
-        ];
-        $conditions = [];
-        foreach ($likeFields as $f) {
-          $conditions[] = "$f LIKE :search_term";
-        }
+        $likeFields = ['fullname', 'position', 'qr_code', 'brand', 'shift', 'status', 'violation'];
+        $conditions = array_map(fn($f) => "$f LIKE :search_term", $likeFields);
 
         $sql .= " AND (" . implode(' OR ', $conditions) . ")";
         $params[':search_term'] = '%' . $searchTerm . '%';
 
         $sql .= " ORDER BY
-                    CASE
-                      WHEN qr_code  = :exact_term THEN 1
-                      WHEN fullname = :exact_term THEN 2
-                      WHEN qr_code  LIKE :starts_term THEN 3
-                      WHEN fullname LIKE :starts_term THEN 4
-                      ELSE 5
-                    END,
-                    fullname ASC";
+                        CASE
+                          WHEN qr_code  = :exact_term THEN 1
+                          WHEN fullname = :exact_term THEN 2
+                          WHEN qr_code  LIKE :starts_term THEN 3
+                          WHEN fullname LIKE :starts_term THEN 4
+                          ELSE 5
+                        END,
+                        fullname ASC";
 
         $params[':exact_term']  = $searchTerm;
         $params[':starts_term'] = $searchTerm . '%';
       } else {
-        if (!empty($searchParams['status'])) {
-          $sql .= " AND status = :status";
-          $params[':status'] = $searchParams['status'];
+        foreach (['status', 'shift', 'brand'] as $f) {
+          if (!empty($searchParams[$f])) {
+            $sql .= " AND $f = :$f";
+            $params[":$f"] = $searchParams[$f];
+          }
         }
-        if (!empty($searchParams['shift'])) {
-          $sql .= " AND shift = :shift";
-          $params[':shift'] = $searchParams['shift'];
-        }
-        if (!empty($searchParams['brand'])) {
-          $sql .= " AND brand = :brand";
-          $params[':brand'] = $searchParams['brand'];
-        }
-
         $sql .= " ORDER BY fullname ASC";
       }
+
+      $sql .= " LIMIT 100";
 
       $stmt = $this->conn->prepare($sql);
       foreach ($params as $key => $value) {
@@ -437,11 +450,16 @@ class LiveSearchHandler
       $stmt->execute();
       $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      foreach ($rows as $employee) {
-        $employee = $this->attachCheckStatus($employee);
-        $employee = $this->cleanEmployee($employee);  // ← normalize image
-        $results[] = $employee;
+      foreach ($rows as &$row) {
+        $row = $this->cleanEmployee($row);
+      }
+      unset($row);
 
+      // batchCheckStatuses now correctly handles an array of rows
+      $rows = $this->batchCheckStatuses($rows);
+
+      foreach ($rows as $employee) {
+        $results[] = $employee;
         if ($this->logger) {
           $this->logger->logEmployeeAccess($employee, 'search_result');
         }
@@ -450,21 +468,24 @@ class LiveSearchHandler
       $success      = false;
       $errorMessage = $e->getMessage();
       error_log("Search error: " . $e->getMessage());
-      $results = [];
     } catch (Exception $e) {
       $success      = false;
       $errorMessage = $e->getMessage();
       error_log("General search error: " . $e->getMessage());
-      $results = [];
     }
 
     $executionTime = (microtime(true) - $startTime) * 1000;
 
     if ($this->logger) {
       $this->logger->logSearchQuery(
-        $queryType, $searchTerm, $searchParams,
-        count($results), [], $executionTime,
-        $success, $errorMessage
+        'live_search',
+        $searchTerm,
+        $searchParams,
+        count($results),
+        [],
+        $executionTime,
+        $success,
+        $errorMessage
       );
     }
 
@@ -487,16 +508,18 @@ class LiveSearchHandler
       $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
       if ($result) {
-        // ── Normalize image BEFORE anything else ──
         $result = $this->cleanEmployee($result);
 
         if ($autoToggle && $this->logger) {
           $previousStatus = $this->logger->getEmployeeCheckStatus(
-            $result['id'], $result['qr_code']
+            $result['id'],
+            $result['qr_code']
           );
 
           $newStatus = $this->logger->toggleEmployeeStatus(
-            $result['id'], $result['qr_code'], $result['fullname']
+            $result['id'],
+            $result['qr_code'],
+            $result['fullname']
           );
 
           if ($newStatus !== false) {
@@ -504,11 +527,13 @@ class LiveSearchHandler
             $result['previous_status'] = $previousStatus;
             $result['status_changed']  = true;
           } else {
-            $result = $this->attachCheckStatus($result);
+            // ── FIX 2: wrap single row correctly for batchCheckStatuses ──
+            $result = $this->batchCheckStatuses($result);
             $result['status_changed'] = false;
           }
         } else {
-          $result = $this->attachCheckStatus($result);
+          // ── FIX 2: same fix here ──
+          $result = $this->batchCheckStatuses($result);
           $result['status_changed'] = false;
         }
 
@@ -526,9 +551,14 @@ class LiveSearchHandler
 
     if ($this->logger) {
       $this->logger->logSearchQuery(
-        $queryType, $qr_code, ['qr_code' => $qr_code],
-        $result ? 1 : 0, $result ? [$result] : [],
-        $executionTime, $success, $errorMessage
+        $queryType,
+        $qr_code,
+        ['qr_code' => $qr_code],
+        $result ? 1 : 0,
+        $result ? [$result] : [],
+        $executionTime,
+        $success,
+        $errorMessage
       );
     }
 
@@ -551,8 +581,9 @@ class LiveSearchHandler
       $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
       if ($result) {
-        $result = $this->cleanEmployee($result);  // ← normalize image
-        $result = $this->attachCheckStatus($result);
+        $result = $this->cleanEmployee($result);
+        // ── FIX 2: single-row call now handled correctly ──
+        $result = $this->batchCheckStatuses($result);
 
         if ($this->logger) {
           $this->logger->logEmployeeAccess($result, 'direct_access_by_id');
@@ -568,9 +599,14 @@ class LiveSearchHandler
 
     if ($this->logger) {
       $this->logger->logSearchQuery(
-        $queryType, (string)$id, ['id' => $id],
-        $result ? 1 : 0, $result ? [$result] : [],
-        $executionTime, $success, $errorMessage
+        $queryType,
+        (string)$id,
+        ['id' => $id],
+        $result ? 1 : 0,
+        $result ? [$result] : [],
+        $executionTime,
+        $success,
+        $errorMessage
       );
     }
 
@@ -578,9 +614,9 @@ class LiveSearchHandler
   }
 }
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
 //  Main request handler
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
 try {
   $database = new Database($currentUserId);
   $db       = $database->connect();
@@ -594,14 +630,22 @@ try {
   $response      = ['success' => false, 'message' => '', 'data' => []];
 
   if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    $searchParams  = [];
-    $allowedParams = ['fullname', 'position', 'brand', 'status', 'shift', 'qr_code'];
+    $searchParams = [];
 
-    foreach ($allowedParams as $param) {
-      $value = isset($_GET[$param]) ? trim($_GET[$param]) : '';
-      if ($value !== '') {
-        $searchParams[$param] = $value;
+    $q = isset($_GET['q']) ? trim($_GET['q']) : '';
+
+    if ($q === '') {
+      foreach (['fullname', 'position', 'brand', 'status', 'shift', 'qr_code'] as $p) {
+        $v = isset($_GET[$p]) ? trim($_GET[$p]) : '';
+        if ($v !== '') {
+          $q = $v;
+          break;
+        }
       }
+    }
+
+    if ($q !== '') {
+      $searchParams['qr_code'] = $q;
     }
 
     if (empty($searchParams)) {
@@ -609,7 +653,6 @@ try {
       $response['data']    = [];
     } else {
       $employees = $searchHandler->searchEmployees($searchParams);
-
       $response['success'] = true;
       $response['data']    = $employees;
       $response['count']   = count($employees);

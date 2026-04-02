@@ -6,29 +6,19 @@ const body = document.body;
 let searchTimeout;
 let currentResults = [];
 let displayTimeout;
-let currentFilter = "all";
 let currentAudio = null;
+let activeController = null;
 
 document.getElementById("message").innerHTML =
-  '<img src="../logo/proximity-logo.svg" loading="lazy" alt="Proximity Code" style="width: 100%; height: 90vh;">';
+  '<img src="../logo/proximity-logo.svg" loading="lazy" alt="Proximity Code" style="width:100%;height:90vh;">';
 
 // ─────────────────────────────────────────────────────────────────
 //  IMAGE URL HELPER
-//  Accepts the raw value from employee.image (bare filename, or null)
-//  and returns a fully-qualified URL the browser can load.
-//
-//  The uploads folder lives at /uploads/user/ from the web root,
-//  regardless of which subfolder this page is served from.
 // ─────────────────────────────────────────────────────────────────
 function imageUrl(filename) {
-  if (!filename || filename.trim() === "") return null;
-
-  // Strip any accidental path prefix stored in the DB
+  if (!filename || !filename.trim()) return null;
   const bare = filename.trim().replace(/^.*[\\/]/, "");
-  if (!bare) return null;
-
-  // Always build from origin so subfolder pages resolve correctly
-  return `${window.location.origin}/uploads/user/${bare}`;
+  return bare ? `${window.location.origin}/uploads/user/${bare}` : null;
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -37,36 +27,28 @@ function imageUrl(filename) {
 function setupEventListeners() {
   searchInput.addEventListener("input", function (e) {
     clearTimeout(searchTimeout);
+    clearTimeout(searchInput.autoClearTimeout);
     const query = e.target.value.trim();
-
-    if (query !== "") {
-      clearTimeout(searchInput.autoClearTimeout);
-      searchInput.autoClearTimeout = setTimeout(() => {
-        searchInput.value = "";
-        searchInput.focus();
-      }, 300);
-    }
-
     if (query === "") return;
 
-    searchTimeout = setTimeout(() => {
-      searchEmployees(query);
-    }, 300);
+    searchInput.autoClearTimeout = setTimeout(() => {
+      searchInput.value = "";
+      searchInput.focus();
+    }, 30000);
+
+    searchTimeout = setTimeout(() => searchEmployees(query), 200); // 200 ms debounce
   });
 
   searchInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter") {
       clearTimeout(searchTimeout);
       const query = e.target.value.trim();
-      if (query === "") return;
-      searchEmployees(query);
+      if (query !== "") searchEmployees(query);
     }
   });
 
   document.addEventListener("click", function (e) {
-    if (!e.target.matches("input, button, select, textarea, a")) {
-      searchInput.focus();
-    }
+    if (!e.target.matches("input,button,select,textarea,a")) searchInput.focus();
   });
 
   document.addEventListener("keydown", function (e) {
@@ -74,15 +56,10 @@ function setupEventListeners() {
       document.activeElement.tagName !== "INPUT" &&
       document.activeElement.tagName !== "TEXTAREA" &&
       !e.target.classList.contains("filter-btn")
-    ) {
-      searchInput.focus();
-    }
+    ) searchInput.focus();
   });
 
-  setTimeout(() => {
-    searchInput.value = "";
-    searchInput.focus();
-  }, 300);
+  setTimeout(() => { searchInput.value = ""; searchInput.focus(); }, 300);
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -90,7 +67,7 @@ function setupEventListeners() {
 // ─────────────────────────────────────────────────────────────────
 function background() {
   document.getElementById("message").innerHTML =
-    '<img src="../logo/proximity-logo.svg" alt="Proximity Code" loading="lazy" style="width: 100%; height: 90vh;">';
+    '<img src="../logo/proximity-logo.svg" alt="Proximity Code" loading="lazy" style="width:100%;height:90vh;">';
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -110,7 +87,7 @@ function playSound(id) {
   if (!sound) return;
   currentAudio = sound;
   sound.currentTime = 0;
-  sound.play().catch((e) => console.log("Audio play error:", e));
+  sound.play().catch(e => console.log("Audio play error:", e));
 }
 
 const playSuccessSound  = () => playSound("successSound");
@@ -119,7 +96,7 @@ const playNoResultSound = () => playSound("noResultSound");
 const playWarningSound  = () => playSound("warningSound");
 
 // ─────────────────────────────────────────────────────────────────
-//  Input-block helper (prevents double-scans)
+//  Input-block helper
 // ─────────────────────────────────────────────────────────────────
 function blockSearchInput(durationMs = 1000) {
   searchInput.disabled = true;
@@ -138,123 +115,108 @@ function blockSearchInput(durationMs = 1000) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  QR code detection
+//  FIX 1: Tightened QR pattern — requires at least one digit AND
+//  a hyphen/underscore OR a minimum length of 12 to avoid colliding
+//  with long plain names like "ALEJANDRO" or "CHRISTOPHER".
+//
+//  A QR code from a physical scanner typically:
+//    - is 12+ characters long, OR
+//    - contains digits mixed with separators (hyphens/underscores)
+//
+//  Plain name searches typed by hand are usually all-alpha and
+//  shorter, so the two rules below safely separate the paths.
 // ─────────────────────────────────────────────────────────────────
 function looksLikeQRCode(query) {
-  return /^[A-Z0-9\-_]{6,}$/i.test(query) || query.toUpperCase().includes("QR");
+  if (query.length < 8) return false;
+
+  // Must contain at least one digit — human names are all-alpha
+  const hasDigit = /\d/.test(query);
+  if (!hasDigit) return false;
+
+  // Either long enough (12+) to be a scanner token,
+  // OR contains a separator character typical of QR payloads
+  const isLong      = query.length >= 10;
+  const hasSeparator = /[-_]/.test(query);
+
+  return isLong || hasSeparator;
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  Fetch last log entry for an employee
-// ─────────────────────────────────────────────────────────────────
-async function fetchLastLog(qrCode, fullname) {
-  try {
-    const params = qrCode
-      ? new URLSearchParams({ action: "get", qr_code: qrCode })
-      : new URLSearchParams({ action: "get", fullname: fullname });
-
-    const response = await fetch(
-      `../cnfg/datalog_backend.php?${params.toString()}`,
-      { headers: { "X-Requested-With": "XMLHttpRequest" } },
-    );
-
-    if (!response.ok) return null;
-
-    const data = await response.json();
-
-    if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-      return data.data[0];
-    }
-  } catch (e) {
-    console.warn("fetchLastLog error:", e);
-  }
-  return null;
-}
-
-// ─────────────────────────────────────────────────────────────────
-//  Core search function
+//  Core search — check_status comes back embedded in each employee
 // ─────────────────────────────────────────────────────────────────
 async function searchEmployees(query) {
+  // Cancel any in-flight request immediately
+  if (activeController) activeController.abort();
+  activeController = new AbortController();
+  const { signal } = activeController;
+
   const messageEl    = document.getElementById("message");
   const resultsTable = document.getElementById("resultsTable");
   const resultsBody  = document.getElementById("resultsBody");
 
   try {
     resultsTable.style.display = "none";
-    messageEl.innerHTML = '<div class="loading">Searching employees…</div>';
+    // messageEl.innerHTML = '<div class="loading">Searching employees…</div>';
 
     let url, method, fetchBody;
 
     if (looksLikeQRCode(query)) {
-      url        = "../cnfg/qr_search_backend.php";
-      method     = "POST";
-      fetchBody  = JSON.stringify({ action: "get_by_qr", qr_code: query });
+      // Physical scanner path — auto-toggles check-in/out status
+      url       = "../cnfg/qr_search_backend.php";
+      method    = "POST";
+      fetchBody = JSON.stringify({ action: "get_by_qr", qr_code: query });
     } else {
-      const params = new URLSearchParams({ fullname: query });
-      url    = `../cnfg/qr_search_backend.php?${params.toString()}`;
+      // Manual text search path — read-only, no status toggle
+      url    = `../cnfg/qr_search_backend.php?q=${encodeURIComponent(query)}`;
       method = "GET";
     }
 
-    const fetchOptions = {
+    const response = await fetch(url, {
       method,
-      headers: { "X-Requested-With": "XMLHttpRequest" },
-    };
-
-    if (method === "POST") {
-      fetchOptions.headers["Content-Type"] = "application/json";
-      fetchOptions.body = fetchBody;
-    }
-
-    const [response] = await Promise.all([fetch(url, fetchOptions)]);
+      signal,
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        ...(method === "POST" ? { "Content-Type": "application/json" } : {})
+      },
+      ...(method === "POST" ? { body: fetchBody } : {})
+    });
 
     if (response.status === 401) {
-      messageEl.innerHTML =
-        '<p class="no-results-message">Session expired. Please log in again.</p>';
+      messageEl.innerHTML = '<p class="no-results-message">Session expired. Please log in again.</p>';
       playNoResultSound();
       blockSearchInput();
       return;
     }
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const data = await response.json();
 
     if (data.success) {
-      const rawResults = Array.isArray(data.data) ? data.data : [data.data];
+      currentResults = Array.isArray(data.data) ? data.data : [data.data];
 
-      if (rawResults.length === 0) {
+      if (currentResults.length === 0) {
         messageEl.innerHTML = `
           <p class="no-results-message">No results found. 🔍</p>
           <img src="../logo/proximity-logo.svg" alt="Proximity Code" loading="lazy"
-               style="width: 100%; height: 90vh;">`;
+               style="width:100%;height:90vh;">`;
         playNoResultSound();
         blockSearchInput();
         return;
       }
 
-      const enriched = await Promise.all(
-        rawResults.map(async (employee) => {
-          const lastLog = await fetchLastLog(
-            employee.qr_code || null,
-            employee.fullname || null,
-          );
-          return { ...employee, lastLog };
-        }),
-      );
-
-      currentResults = enriched;
       renderResults(currentResults);
     } else {
-      messageEl.innerHTML =
-        '<p class="no-results-message">No results found. 🔍</p>';
+      messageEl.innerHTML = `
+          <p class="no-results-message">No results found. 🔍</p>
+          <img src="../logo/proximity-logo.svg" alt="Proximity Code" loading="lazy"
+               style="width:100%;height:90vh;">`;
       playNoResultSound();
       blockSearchInput();
     }
   } catch (error) {
+    if (error.name === "AbortError") return; // superseded — silent
     console.error("Search error:", error);
-    document.getElementById("message").innerHTML =
-      '<div class="error-message">Failed to search employees. Please check your connection.</div>';
+    messageEl.innerHTML = '<div class="error-message">Failed to search. Please check your connection.</div>';
     currentResults = [];
   }
 }
@@ -269,22 +231,15 @@ function renderResults(results) {
   const resultsTable = document.getElementById("resultsTable");
   const resultsBody  = document.getElementById("resultsBody");
 
-  if (displayTimeout) {
-    clearTimeout(displayTimeout);
-    displayTimeout = null;
-  }
+  if (displayTimeout) { clearTimeout(displayTimeout); displayTimeout = null; }
 
   messageEl.innerHTML = "";
   resultsTable.style.display = "block";
 
-  const hasViolations = results.some(
-    (e) => e.violation && e.violation.trim() !== "",
-  );
-  const hasInactive = results.some(
-    (e) => (e.status || "").toLowerCase() === "inactive",
-  );
+  const hasViolations = results.some(e => e.violation && e.violation.trim() !== "");
+  const hasInactive   = results.some(e => (e.status || "").toLowerCase() === "inactive");
 
-  resultsBody.innerHTML = results.map((employee) => buildCard(employee)).join("");
+  resultsBody.innerHTML = results.map(buildCard).join("");
 
   displayTimeout = setTimeout(() => {
     resultsTable.style.display = "none";
@@ -292,9 +247,9 @@ function renderResults(results) {
     background();
   }, 10000);
 
-  if (hasViolations)    playWarningSound();
-  else if (hasInactive) playInactiveSound();
-  else                  playSuccessSound();
+  if      (hasViolations) playWarningSound();
+  else if (hasInactive)   playInactiveSound();
+  else                    playSuccessSound();
 
   blockSearchInput();
 }
@@ -305,8 +260,7 @@ function renderResults(results) {
 function formatTimestamp(ts) {
   if (!ts) return "—";
   const d = new Date(ts);
-  if (isNaN(d)) return ts;
-  return d.toLocaleString(undefined, {
+  return isNaN(d) ? ts : d.toLocaleString(undefined, {
     year: "numeric", month: "short", day: "numeric",
     hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
@@ -316,46 +270,30 @@ function formatTimestamp(ts) {
 //  Card builder
 // ─────────────────────────────────────────────────────────────────
 function buildCard(employee) {
-  const fullname   = escapeHtml(employee.fullname  || "Unknown");
-  const position   = escapeHtml(employee.position  || "Unknown");
-  const brand      = escapeHtml(employee.brand     || "N/A");
-  const status     = escapeHtml(employee.status    || "unknown");
-  const shift      = escapeHtml(employee.shift     || "N/A");
-  const violation  = employee.violation ? escapeHtml(employee.violation) : null;
+  const fullname    = escapeHtml(employee.fullname  || "Unknown");
+  const position    = escapeHtml(employee.position  || "Unknown");
+  const brand       = escapeHtml(employee.brand     || "N/A");
+  const status      = escapeHtml(employee.status    || "unknown");
+  const shift       = escapeHtml(employee.shift     || "N/A");
+  const violation   = employee.violation ? escapeHtml(employee.violation) : null;
   const checkStatus = escapeHtml((employee.check_status || "OUT").toUpperCase());
 
-  // Initials placeholder
   const initials = (employee.fullname || "UN")
-    .split(" ")
-    .map((n) => n.charAt(0))
-    .join("")
-    .substring(0, 2)
-    .toUpperCase();
+    .split(" ").map(n => n.charAt(0)).join("").substring(0, 2).toUpperCase();
 
-  // ── Image HTML ──────────────────────────────────────────────────
-  // employee.image is now always a bare filename (e.g. "abc123.webp")
-  // or null, thanks to the backend normalizer.
   const src = imageUrl(employee.image);
-
   const imageHtml = src
-    ? `<img
-         src="${src}"
-         alt="${fullname}"
-         class="employee-image"
-         loading="lazy"
-         onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+    ? `<img src="${src}" alt="${fullname}" class="employee-image" loading="lazy"
+            onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
        <div class="ph-container" style="display:none;">
          <div class="employee-placeholder">${initials}</div>
        </div>`
-    : `<div class="ph-container">
-         <div class="employee-placeholder">${initials}</div>
-       </div>`;
+    : `<div class="ph-container"><div class="employee-placeholder">${initials}</div></div>`;
 
   return `
     <div class="${violation ? "div-with-violation" : "div-container"}">
       <div class="div-position">
-        <p>${fullname}</p>
-        <p>${position}</p>
+        <p>${fullname}</p><p>${position}</p>
         ${imageHtml}
       </div>
       <div class="div-side-${status.toLowerCase()}">
@@ -367,12 +305,9 @@ function buildCard(employee) {
         </div>
       </div>
       <div class="${violation ? "with-violation" : "without-violation"}">
-        <div class="div-padding">
-          <p>Violation: ${violation || "None"}</p>
-        </div>
+        <div class="div-padding"><p>Violation: ${violation || "None"}</p></div>
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -380,14 +315,14 @@ function buildCard(employee) {
 // ─────────────────────────────────────────────────────────────────
 function escapeHtml(text) {
   if (typeof text !== "string") return String(text ?? "");
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
+  const d = document.createElement("div");
+  d.textContent = text;
+  return d.innerHTML;
 }
 
 // ─────────────────────────────────────────────────────────────────
 //  Boot
 // ─────────────────────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", () => {
   setupEventListeners();
 });

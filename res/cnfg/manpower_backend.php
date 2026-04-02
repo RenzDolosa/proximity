@@ -416,7 +416,7 @@ class FileUploader
     $allowed_types  = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
     if (!in_array($file_extension, $allowed_types)) {
-      throw new Exception("Invalid file type. Only JPG, JPEG, PNG, GIF and WEBP allowed.");
+      throw new Exception("Invalid file type. Only JPG, JPEG, PNG, GIF and WebP allowed.");
     }
 
     if ($file['size'] > $this->max_size) {
@@ -1106,7 +1106,9 @@ try {
         if (!empty($_GET['brand']))          $filters['brand']          = $_GET['brand'];
         if (!empty($_GET['brand_none']))     $filters['brand_none']     = '1';
         if (!empty($_GET['status']))         $filters['status']         = $_GET['status'];
+        if (!empty($_GET['status_none']))    $filters['status_none']    = '1';
         if (!empty($_GET['shift']))          $filters['shift']          = $_GET['shift'];
+        if (!empty($_GET['shift_none']))     $filters['shift_none']     = '1';
         if (!empty($_GET['violation']))      $filters['violation']      = $_GET['violation'];
         if (!empty($_GET['violation_none'])) $filters['violation_none'] = '1';
         if (!empty($_GET['qr_code']))        $filters['qr_code']        = $_GET['qr_code'];
@@ -1250,6 +1252,7 @@ function serveFile($filepath, $filename = null)
     'jpeg' => 'image/jpeg',
     'png'  => 'image/png',
     'gif'  => 'image/gif',
+    'webp' => 'image/webp',
     'pdf'  => 'application/pdf',
     'csv'  => 'text/csv',
     'xls'  => 'application/vnd.ms-excel',
