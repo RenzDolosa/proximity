@@ -447,6 +447,7 @@ async function renderEmployeeTable() {
                   <button class="btn btn-success btn-sm2" onclick="addToLog(${employee.id}, 'IN', this)"  title="Check: IN">🟢\nIN</button>
                   <button class="btn btn-danger btn-sm2"  onclick="addToLog(${employee.id}, 'OUT', this)" title="Check: OUT">🔴\nOUT</button>
                 </div>
+                <button class="btn btn-info btn-sm" onclick="openLogsModal('${employee.id}', '${employee.fullname.replace(/'/g, "\\'")}')" title="VIEW LOGS"><i class="fas fa-history"></i>\nLogs</button>
                 <button class="btn btn-primary btn-sm" onclick="openModal('edit', ${employee.id})" title="EDIT"><i class="fas fa-edit"></i>\nEdit</button>
                 <button class="btn btn-danger btn-sm" onclick="openDeleteModal('${employee.id}', false)" title="DELETE"><i class="fas fa-trash-alt"></i>\nDelete</button>
               </div>
@@ -833,6 +834,59 @@ async function deleteFilteredEmployees() {
   }
 }
 
+async function openLogsModal(employeeId, fullname) {
+  const modal = document.getElementById('logsModal');
+  const title = document.getElementById('logsModalTitle');
+  const tbody = document.getElementById('logsTableBody');
+
+  document.getElementById('logCountIn').textContent = '—';
+  document.getElementById('logCountOut').textContent = '—';
+  document.getElementById('logCountTotal').textContent = '—';
+  title.innerHTML = `<i class="fas fa-history"></i> Access Logs — ${fullname}`;
+  tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>`;
+  modal.style.display = 'block';
+
+  try {
+    const res = await fetch(`../cnfg/manpower_backend.php?action=get_access_logs&id=${employeeId}`, {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      const logs = data.logs;
+      const inCount  = logs.filter(l => l.check_status === 'IN').length;
+      const outCount = logs.filter(l => l.check_status === 'OUT').length;
+
+      document.getElementById('logCountIn').textContent    = inCount;
+      document.getElementById('logCountOut').textContent   = outCount;
+      document.getElementById('logCountTotal').textContent = logs.length;
+
+      tbody.innerHTML = logs.length ? logs.map((log, i) => `
+        <tr style="border-bottom:1px solid #f0f0f0;">
+          <td style="padding:9px 12px;color:#aaa;">${i + 1}</td>
+          <td style="padding:9px 12px;">
+            <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
+              background:${log.check_status === 'IN' ? '#d1fae5' : '#fee2e2'};
+              color:${log.check_status === 'IN' ? '#065f46' : '#991b1b'};">
+              ${log.check_status}
+            </span>
+          </td>
+          <td style="padding:9px 12px;color:#555;">${log.access_timestamp}</td>
+        </tr>`).join('') :
+        `<tr><td colspan="3" style="text-align:center;padding:24px;color:#aaa;">No log records found.</td></tr>`;
+    } else {
+      tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:#ef4444;padding:24px;">${data.message || 'Failed to load logs.'}</td></tr>`;
+    }
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:#ef4444;padding:24px;">Error loading logs.</td></tr>`;
+  }
+
+  // ── Close when clicking outside ──────────────────────────
+  modal.onclick = (e) => {
+    if (e.target === modal) closeModal();
+  };
+}
+
 function updateSelectColor(select) {
   if (!select) return;
   const isPlaceholder = select.selectedIndex === 0;
@@ -1000,11 +1054,13 @@ function closeModal() {
   const employeeModal = document.getElementById("employeeModal");
   const deleteModal = document.getElementById("deleteModal");
   const importModal = document.getElementById("importModal");
-  if (!employeeModal || !deleteModal || !importModal) return;
+  const logsModal = document.getElementById('logsModal');
+  if (!employeeModal || !deleteModal || !importModal || !logsModal) return;
 
   employeeModal.style.display = "none";
   deleteModal.style.display = "none";
   importModal.style.display = "none";
+  logsModal.style.display = "none";
 
   const form = document.getElementById("employeeForm");
   if (form) form.reset();

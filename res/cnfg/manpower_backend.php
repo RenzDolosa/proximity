@@ -927,7 +927,6 @@ try {
         }
         break;
 
-      // FIX #4: bulk_status_update — updateEmployee() already calls
       // logSystemAction per employee.  We suppress that per-row call by using
       // a direct SQL UPDATE here instead of going through updateEmployee(),
       // then emit one summary-level logSystemAction at the end.
@@ -1152,6 +1151,28 @@ try {
           }
         } else {
           $response['message'] = 'Employee ID is required';
+        }
+        break;
+
+      case 'get_access_logs':
+        $employee_id = $_GET['id'] ?? 0;
+        if (!$employee_id) {
+          $response['message'] = 'Employee ID is required';
+          break;
+        }
+        try {
+          $conn = $database->getUserConnection();
+          $stmt = $conn->prepare(
+            "SELECT check_status, access_timestamp
+             FROM employee_access_log
+             WHERE employee_id = :id
+             ORDER BY access_timestamp DESC"
+          );
+          $stmt->execute([':id' => $employee_id]);
+          $response['success'] = true;
+          $response['logs']    = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+          $response['message'] = 'Error fetching logs: ' . $e->getMessage();
         }
         break;
 

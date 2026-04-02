@@ -477,6 +477,48 @@ if ($databaseConnected) {
     </div>
   </div>
 
+  <!-- Employee Logs Modal -->
+  <div id="logsModal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width:700px;">
+      <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
+      <h2 id="logsModalTitle"><i class="fas fa-history"></i> Access Logs</h2>
+
+      <!-- Summary cards -->
+      <div style="display:flex;gap:16px;margin:16px 0;">
+        <div style="flex:1;background:#d1fae5;border-radius:8px;padding:16px;text-align:center;">
+          <div style="font-size:28px;font-weight:700;color:#065f46;" id="logCountIn">—</div>
+          <div style="font-size:13px;color:#065f46;font-weight:600;">Total IN</div>
+        </div>
+        <div style="flex:1;background:#fee2e2;border-radius:8px;padding:16px;text-align:center;">
+          <div style="font-size:28px;font-weight:700;color:#991b1b;" id="logCountOut">—</div>
+          <div style="font-size:13px;color:#991b1b;font-weight:600;">Total OUT</div>
+        </div>
+        <div style="flex:1;background:#ede9fe;border-radius:8px;padding:16px;text-align:center;">
+          <div style="font-size:28px;font-weight:700;color:#5b21b6;" id="logCountTotal">—</div>
+          <div style="font-size:13px;color:#5b21b6;font-weight:600;">Total Scans</div>
+        </div>
+      </div>
+
+      <!-- Logs table -->
+      <div style="max-height:360px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr style="background:#f8f9fa;border-bottom:2px solid #e9ecef;">
+              <th style="padding:10px 12px;text-align:left;">SN</th>
+              <th style="padding:10px 12px;text-align:left;">Status</th>
+              <th style="padding:10px 12px;text-align:left;">Timestamp</th>
+            </tr>
+          </thead>
+          <tbody id="logsTableBody">
+            <tr>
+              <td colspan="3" style="text-align:center;padding:24px;color:#aaa;">Loading…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <audio id="successSound" src="../sounds/success.mp3" preload="auto"></audio>
   <audio id="noResultSound" src="../sounds/noResultsFound.mp3" preload="auto"></audio>
   <audio id="warningSound" src="../sounds/ohh-ow.mp3" preload="auto"></audio>

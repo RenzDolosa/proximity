@@ -2183,7 +2183,6 @@ function renderBindRows(array $pages, int $depth = 0): void
     <span id="toastMsg">Done</span>
   </div>
 
-  <script src="../src/btn.js"></script>
   <script src="../src/req.js"></script>
   <script>
     const IS_USERS = <?= $access['users'] ? 'true' : 'false' ?>;
@@ -2455,8 +2454,24 @@ function renderBindRows(array $pages, int $depth = 0): void
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
         const open = document.querySelector('.modal-overlay.show');
-        if (open) closeModal(open.id);
+        if (open) {
+          e.stopImmediatePropagation();
+          closeModal(open.id);
+        } else {
+          // No modal open — bubble up to parent
+          if (window.self !== window.top) {
+            window.parent.document.dispatchEvent(
+              new KeyboardEvent('keydown', {
+                key: 'Escape',
+                bubbles: true
+              })
+            );
+          } else {
+            window.history.back();
+          }
+        }
       }
+
       if (e.key === 'Enter') {
         const open = document.querySelector('.modal-overlay.show');
         if (!open) return;
@@ -3412,8 +3427,32 @@ function renderBindRows(array $pages, int $depth = 0): void
     }
 
     loadUsers().then(startUsersCountdown);
-    // Groups and Logs load lazily on first tab visit
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          btn.blur();
+          // If no modal is open, bubble up to parent
+          const open = document.querySelector('.modal-overlay.show');
+          if (!open) {
+            if (window.self !== window.top) {
+              window.parent.document.dispatchEvent(
+                new KeyboardEvent('keydown', {
+                  key: 'Escape',
+                  bubbles: true
+                })
+              );
+            } else {
+              window.history.back();
+            }
+          }
+        }
+      });
+    });
   </script>
+  <script src="../src/btn.js"></script>
 </body>
 
 </html>

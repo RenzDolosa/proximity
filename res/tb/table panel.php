@@ -169,8 +169,17 @@ elseif ($access['proximity code']) $firstTab = 'proximity';
         if (e.key === 'Escape') {
           e.preventDefault();
           e.stopPropagation();
+          btn.blur(); // remove focus outline
+          window.history.back(); // forward the intent
         }
       });
+    });
+
+    // Also catch Escape on the parent document itself
+    document.addEventListener("keydown", function(e) {
+      if (e.key === "Escape") {
+        window.history.back();
+      }
     });
 
     // Guard: if the main iframe navigates to login, redirect the whole top window

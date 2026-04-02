@@ -106,7 +106,6 @@ if (isset($_POST['portal_password'])) {
   }
 }
 
-// SECURITY: If portal access not granted, show password form and stop execution
 if (!$portalAccessGranted) {
 ?>
   <!DOCTYPE html>
