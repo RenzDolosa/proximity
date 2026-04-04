@@ -5,7 +5,7 @@ require_once '../../config/config.php';
 require_once '../../config/db.php';
 require_once '../../app/services/manpower_backend.php';
 
-requireAccess('employee dashboard', 'iframe/main.php');
+requireAccess('employee dashboard', '/portal');
 $access = getMenuAccess();
 
 // Get dashboard statistics

@@ -4,7 +4,7 @@
 require_once '../../config/config.php';
 require_once '../../config/db.php';
 
-requireAccess('account info', '../iframe/main.php');
+requireAccess('account info', '/portal');
 $access = getMenuAccess();
 
 $user = getCurrentUser();

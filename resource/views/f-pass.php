@@ -6,7 +6,7 @@ require_once '../../config/config.php';
 
 // Redirect if already logged in
 if (isset($_SESSION['user_id'])) {
-  header('Location: ../../portal.php');
+  header('Location: /portal');
   exit();
 }
 
@@ -140,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </form>
 
     <div class="login-link">
-      <a href="../../index.php">← Back to Login</a>
+      <a href="/proximity3pl">← Back to Login</a>
     </div>
   </div>
 

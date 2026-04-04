@@ -16,7 +16,7 @@ if (!canAccess($permissions, 'users') && !canAccess($permissions, 'groups') && !
   exit;
 }
 
-requireAccess('admin panel', 'iframe/main.php');
+requireAccess('admin panel', '/portal');
 $access = getMenuAccess();
 
 // ════════════════════════════════════════════════════════════════════════════

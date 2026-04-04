@@ -121,7 +121,7 @@ require_once 'app/http/auth/login.php';
     </form>
 
     <div class="forgot-password">
-      <a href="resource/views/f-pass.php">Forgot your password?</a>
+      <a href="/resource/views/f-pass.php">Forgot your password?</a>
     </div>
 
     <div class="register-link">

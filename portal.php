@@ -125,9 +125,9 @@ try {
       </div>
     </header>
 
-    <portal class="main-content">
-      <iframe src="resource/views/iframe/main.php" class="frames" frameborder="0" allowfullscreen="allowfullscreen"></iframe>
-    </portal>
+    <div class="main-content">
+      <iframe src="/resource/views/iframe/main.php" class="frames" frameborder="0" allowfullscreen="allowfullscreen"></iframe>
+    </div>
   </main>
 
   <script src="resource/js/req.js"></script>
