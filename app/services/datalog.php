@@ -88,7 +88,7 @@ if ($databaseConnected) {
   <title><?php echo htmlspecialchars($myDatabase); ?> - Scanned Log</title>
   <link rel="preload" href="../../resource/assets/icon/database-icon.png" as="image">
   <link rel="preconnect" href="https://filemanager.ai">
-  <link rel="prefetch" href="https://filemanager.ai/new3/index.php?home=%2Fhtdocs%2Fuploads%2Fuser">
+  <!-- <link rel="prefetch" href="https://filemanager.ai/new3/index.php?home=%2Fhtdocs%2Fuploads%2Fuser"> -->
   <link rel="icon" href="../../resource/assets/icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../../resource/css/system.css">
   <link rel="stylesheet" href="../../resource/css/ptl.css">

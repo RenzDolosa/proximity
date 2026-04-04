@@ -314,7 +314,7 @@ try {
         // Handle employee image display
         let avatarContent;
         if (employee.image && employee.image.trim() !== '') {
-          avatarContent = `<img src="../../../public/uploads/user/${employee.image}" alt="${employee.fullname}" class="employee-image" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          avatarContent = `<img src="/../../../public/uploads/user/${employee.image}" alt="${employee.fullname}" class="employee-image" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                       <div class="avatar-fallback" style="display:none;">${getInitials(employee.fullname)}</div>`;
         } else {
           avatarContent = `<div class="avatar-fallback">${getInitials(employee.fullname)}</div>`;

@@ -518,8 +518,8 @@ function resolveEmployeeImageUrl(employee, tableRow) {
   }
   // 2. Fallback: construct URL from employee ID (adjust path to match your setup)
   const basePaths = [
-    `../../public/uploads/user/${employee.id}.jpg`,
-    `../../public/uploads/user/${employee.id}.png`,
+    `${window.location.origin}/public/uploads/user/${employee.id}.jpg`,
+    `${window.location.origin}/public/uploads/user/${employee.id}.png`,
   ];
   return basePaths[0]; // primary guess; others tried inside fetchImageBase64
 }
