@@ -2,8 +2,8 @@
 // index.php
 
 
-require_once 'res/cnfg/config.php';
-require_once 'res/cnfg/login.php';
+require_once 'config/config.php';
+require_once 'app/http/auth/login.php';
 
 if (isLoggedIn()) {
     header('Location: portal.php');
@@ -18,13 +18,13 @@ switch ($url) {
     include 'portal.php';
     break;
   case 'register':
-    include 'reg.php';
+    include 'resource/views/reg.php';
     break;
   case 'proximity3pl':
     include 'proximity.php';
     break;
   default:
-    // show home/dashboard
+
     break;
 }
 ?>
@@ -43,10 +43,10 @@ switch ($url) {
   <meta http-equiv="X-XSS-Protection" content="1; mode=block">
   <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
   <title>Login</title>
-  <link rel="preload" href="../icon/database-icon.png" as="image">
-  <link rel="preload" href="../logo/database.svg" as="image">
-  <link rel="icon" href="res/icon/database-icon.png" type="image/png">
-  <link rel="stylesheet" href="res/css/r-l.css">
+  <link rel="preload" href="resource/assets/icon/database-icon.png" as="image">
+  <link rel="preload" href="resource/assets/logo/database.svg" as="image">
+  <link rel="icon" href="resource/assets/icon/database-icon.png" type="image/png">
+  <link rel="stylesheet" href="resource/css/r-l.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
@@ -58,7 +58,7 @@ switch ($url) {
 
   <div class="container">
     <div class="header">
-      <div><img src="res/logo/database.svg" alt="My Database Logo" class="logo" loading="lazy"></div>
+      <div><img src="resource/assets/logo/database.svg" alt="My Database Logo" class="logo" loading="lazy"></div>
       <h2>Proximity Data</h2>
       <p class="subtitle">Sign in to your Proximity Database</p>
     </div>
@@ -122,7 +122,7 @@ switch ($url) {
     </form>
 
     <div class="forgot-password">
-      <a href="f-pass.php">Forgot your password?</a>
+      <a href="resource/views/f-pass.php">Forgot your password?</a>
     </div>
 
     <div class="register-link">
@@ -130,9 +130,9 @@ switch ($url) {
     </div>
   </div>
 
-  <script src="res/src/li.js"></script>
-  <script src="res/src/req.js"></script>
-  <script src="res/src/ver.js"></script>
+  <script src="resource/js/li.js"></script>
+  <script src="resource/js/req.js"></script>
+  <script src="resource/js/ver.js"></script>
 </body>
 
 </html>

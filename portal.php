@@ -1,9 +1,9 @@
 <?php
 // portal.php
 
-require_once 'res/cnfg/config.php';
-require_once 'res/cnfg/db.php';
-require_once 'res/cnfg/req.php';
+require_once 'config/config.php';
+require_once 'config/db.php';
+require_once 'config/req.php';
 
 requireAccess('portal', 'proximity.php', true);
 $access = getMenuAccess();
@@ -49,12 +49,12 @@ try {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($myDatabase ?? 'My Database'); ?> - Portal</title>
-  <link rel="preload" href="../icon/database-icon.png" as="image">
-  <link rel="icon" href="res/icon/database-icon.png" type="image/png">
-  <link rel="stylesheet" href="res/css/system.css">
-  <link rel="stylesheet" href="res/css/ptl.css">
-  <link rel="stylesheet" href="res/css/sbar.css">
-  <link rel="stylesheet" href="res/css/btn.css">
+  <link rel="preload" href="resource/icon/database-icon.png" as="image">
+  <link rel="icon" href="resource/assets/icon/database-icon.png" type="image/png">
+  <link rel="stylesheet" href="resource/css/system.css">
+  <link rel="stylesheet" href="resource/css/ptl.css">
+  <link rel="stylesheet" href="resource/css/sbar.css">
+  <link rel="stylesheet" href="resource/css/btn.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
     /* Add a subtle indicator that portal is secured */
@@ -93,7 +93,7 @@ try {
             <h1>Proximity</h1>
           </div>
           <div class="s-search-section">
-            <img src="res/icon/nfc-icon.svg" alt="NFC Icon" loading="lazy">
+            <img src="resource/assets/icon/nfc-icon.svg" alt="NFC Icon" loading="lazy">
             <div>
               <h3>Live Search</h3>
               <p>Web pass verifier application</p>
@@ -109,7 +109,7 @@ try {
     <header class="header">
       <div class="myDatabase-logo">
         <a href="portal.php" class="link">
-          <img src="res/logo/mysql.svg" alt="MySql Logo" class="header-logo" loading="lazy">
+          <img src="resource/assets/logo/mysql.svg" alt="MySql Logo" class="header-logo" loading="lazy">
           <h1 style="padding-left: 50px; margin: 0;"><?= htmlspecialchars($myDatabase ?? 'My Database'); ?></h1>
         </a>
       </div>
@@ -127,12 +127,12 @@ try {
     </header>
 
     <portal class="main-content">
-      <iframe src="res/iframe/main.php" class="frames" frameborder="0" allowfullscreen="allowfullscreen"></iframe>
+      <iframe src="resource/views/iframe/main.php" class="frames" frameborder="0" allowfullscreen="allowfullscreen"></iframe>
     </portal>
   </main>
 
-  <script src="res/src/req.js"></script>
-  <script src="res/src/ver.js"></script>
+  <script src="resource/js/req.js"></script>
+  <script src="resource/js/ver.js"></script>
   <script>
     // Guard: if the main iframe navigates to login, redirect the whole top window
     const mainFrame = document.querySelector('.frames');

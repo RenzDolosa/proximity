@@ -1,8 +1,8 @@
 <?php
 // proximity.php
 
-require_once 'res/cnfg/config.php';
-require_once 'res/cnfg/db.php';
+require_once 'config/config.php';
+require_once 'config/db.php';
 
 requireAccess('proximity', 'index.php');
 $access = getMenuAccess();
@@ -15,24 +15,24 @@ $access = getMenuAccess();
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Proximity Pass</title>
-  <link rel="preload" href="../icon/database-icon.png" as="image">
-  <link rel="icon" href="res/logo/nfc-logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="res/css/qp.css">
-  <link rel="stylesheet" href="res/css/ptl.css">
-  <link rel="stylesheet" href="res/css/sbar.css">
+  <link rel="preload" href="resource/assets/icon/database-icon.png" as="image">
+  <link rel="icon" href="resource/assets/logo/nfc-logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="resource/css/qp.css">
+  <link rel="stylesheet" href="resource/css/ptl.css">
+  <link rel="stylesheet" href="resource/css/sbar.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
 <body>
 
   <main class="main-content">
-    <iframe src="res/sec/qr proximity.php" class="sec-frames" frameborder="0" allowfullscreen="allowfullscreen"></iframe>
+    <iframe src="app/http/controllers/qr proximity.php" class="sec-frames" frameborder="0" allowfullscreen="allowfullscreen"></iframe>
   </main>
 
   <div id="portalButton"></div>
 
-  <script src="res/src/btn.js"></script>
-  <script src="res/src/req.js"></script>
+  <script src="resource/js/btn.js"></script>
+  <script src="resource/js/req.js"></script>
   <script>
     // Guard: if the main iframe navigates to login, redirect the whole top window
     const mainFrame = document.querySelector('.frames');
