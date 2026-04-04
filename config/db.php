@@ -54,7 +54,7 @@ require_once 'config.php';
 // ── Auth guard FIRST (before anything else) ───────────────────────────────────
 if (!isset($_SESSION['user_id']) || !isLoggedIn()) {
   $rootUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
-           . '://' . $_SERVER['HTTP_HOST'] . '/index.php';
+           . '://' . $_SERVER['HTTP_HOST'] . '/proximity3pl';
 
   $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
          && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
@@ -106,7 +106,7 @@ if (isset($_GET['logout'])) {
   session_destroy();
 
   $rootUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
-           . '://' . $_SERVER['HTTP_HOST'] . '/index.php';
+           . '://' . $_SERVER['HTTP_HOST'] . '/proximity3pl';
 
   $isEmbedded = isset($_SERVER['HTTP_SEC_FETCH_DEST'])
              && $_SERVER['HTTP_SEC_FETCH_DEST'] === 'iframe';
@@ -205,7 +205,7 @@ function canAccess(array $permissions, string $pageKey): bool
  * @param string $pageKey     Matches the 'key' in $MENU_PAGES: 'system', 'datalog', 'proxcode'
  * @param string $redirectUrl Back-link shown on the access-denied page
  */
-function requireAccess(string $pageKey, string $redirectUrl = '../index.php'): void
+function requireAccess(string $pageKey, string $redirectUrl = '/proximity3pl'): void
 {
   $permissions = getUserGroupPermissions();
 

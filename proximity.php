@@ -4,7 +4,7 @@
 require_once 'config/config.php';
 require_once 'config/db.php';
 
-requireAccess('proximity', 'index.php');
+requireAccess('proximity', '/proximity3pl');
 $access = getMenuAccess();
 ?>
 <!DOCTYPE html>
@@ -40,12 +40,12 @@ $access = getMenuAccess();
       mainFrame.addEventListener('load', function() {
         try {
           const frameUrl = this.contentWindow.location.href;
-          if (frameUrl.includes('index.php') || frameUrl.includes('login')) {
+          if (frameUrl.includes('proximity3pl') || frameUrl.includes('login')) {
             window.top.location.href = frameUrl;
           }
         } catch (e) {
           // Cross-origin means a real redirect happened — go to login
-          window.top.location.href = 'index.php';
+          window.top.location.href = '/proximity3pl';
         }
       });
     }

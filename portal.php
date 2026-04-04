@@ -5,7 +5,6 @@ require_once 'config/config.php';
 require_once 'config/db.php';
 require_once 'config/req.php';
 
-requireAccess('portal', 'proximity.php', true);
 $access = getMenuAccess();
 
 try {
@@ -88,7 +87,7 @@ try {
 
     <div class="side-bar" style="top: 64px;">
       <?php if ($access['proximity']): ?>
-        <div onclick="window.location.href='proximity.php';" class="side-btn">
+        <div onclick="window.location.href='/proximity';" class="side-btn">
           <div class="s-header">
             <h1>Proximity</h1>
           </div>
@@ -108,7 +107,7 @@ try {
 
     <header class="header">
       <div class="myDatabase-logo">
-        <a href="portal.php" class="link">
+        <a href="/portal" class="link">
           <img src="resource/assets/logo/mysql.svg" alt="MySql Logo" class="header-logo" loading="lazy">
           <h1 style="padding-left: 50px; margin: 0;"><?= htmlspecialchars($myDatabase ?? 'My Database'); ?></h1>
         </a>
@@ -140,12 +139,12 @@ try {
       mainFrame.addEventListener('load', function() {
         try {
           const frameUrl = this.contentWindow.location.href;
-          if (frameUrl.includes('index.php') || frameUrl.includes('login')) {
+          if (frameUrl.includes('proximity3pl') || frameUrl.includes('login')) {
             window.top.location.href = frameUrl;
           }
         } catch (e) {
           // Cross-origin means a real redirect happened — go to login
-          window.top.location.href = 'index.php';
+          window.top.location.href = '/proximity3pl';
         }
       });
     }
