@@ -1,6 +1,3 @@
 RewriteEngine On
-
-# Map clean URLs → actual PHP files
-RewriteRule ^proximity3pl$  index.php     [L]
-RewriteRule ^portal$        portal.php    [L]
-RewriteRule ^proximity$     proximity.php [L]
+RewriteCond %{proximity3pl} !-f
+RewriteRule ^([^\.]+)$ $1.php [NC,L]
