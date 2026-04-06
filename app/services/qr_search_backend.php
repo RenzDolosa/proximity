@@ -232,14 +232,16 @@ class QueryLogger
     if (!$this->conn) return false;
 
     try {
+      $now = date('Y-m-d H:i:s');  // add this line
+
       $sql = "INSERT INTO employee_access_log
-                (employee_id, fullname, position, brand, status, shift,
-                 violation, image, qr_code, check_status,
-                 access_type, ip_address, user_agent, access_timestamp)
-              VALUES
-                (:employee_id, :fullname, :position, :brand, :status, :shift,
-                 :violation, :image, :qr_code, :check_status,
-                 :access_type, :ip_address, :user_agent, NOW())";
+          (employee_id, fullname, position, brand, status, shift,
+           violation, image, qr_code, check_status,
+           access_type, ip_address, user_agent, access_timestamp)
+        VALUES
+          (:employee_id, :fullname, :position, :brand, :status, :shift,
+           :violation, :image, :qr_code, :check_status,
+           :access_type, :ip_address, :user_agent, :access_timestamp)";
 
       $stmt = $this->conn->prepare($sql);
       $stmt->execute([
@@ -254,6 +256,7 @@ class QueryLogger
         ':qr_code'      => $employeeData['qr_code']       ?? null,
         ':check_status' => $employeeData['check_status']  ?? null,
         ':access_type'  => $accessType,
+        ':access_timestamp' => $now,
         ':ip_address'   => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
         ':user_agent'   => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
       ]);

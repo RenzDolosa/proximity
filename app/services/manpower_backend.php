@@ -221,7 +221,7 @@ class EmployeeManager
       $query = "UPDATE " . $this->table . "
                 SET id = :id, fullname = :fullname, position = :position, brand = :brand,
                     status = :status, shift = :shift, violation = :violation,
-                    image = :image, qr_code = :qr_code, updated_at = NOW()
+                    image = :image, qr_code = :qr_code, updated_at = :updated_at
                 WHERE id = :where_id";
 
       $stmt = $this->conn->prepare($query);
@@ -235,6 +235,7 @@ class EmployeeManager
         ':violation' => $data['violation'],
         ':image'     => $data['image'],
         ':qr_code'   => $data['qr_code'],
+        ':updated_at' => date('Y-m-d H:i:s'),
         ':where_id'  => $old_id,
       ]);
     }
@@ -294,8 +295,8 @@ class EmployeeManager
   public function logStatusChange($employeeId, $oldStatus, $newStatus, $reason = null)
   {
     try {
-      $query = "INSERT INTO status_history (employee_id, old_status, new_status, changed_by, change_reason)
-                VALUES (:employee_id, :old_status, :new_status, :changed_by, :change_reason)";
+      $query = "INSERT INTO status_history (employee_id, old_status, new_status, changed_by, change_reason, created_at)
+          VALUES (:employee_id, :old_status, :new_status, :changed_by, :change_reason, :created_at)";
 
       $stmt = $this->conn->prepare($query);
       $stmt->execute([
@@ -304,6 +305,7 @@ class EmployeeManager
         ':new_status'    => $newStatus,
         ':changed_by'    => $_SESSION['username'] ?? 'System',
         ':change_reason' => $reason,
+        ':created_at' => date('Y-m-d H:i:s'),
       ]);
     } catch (Exception $e) {
       error_log("Failed to log status change: " . $e->getMessage());
@@ -964,9 +966,13 @@ try {
 
               // Direct UPDATE avoids the per-row logSystemAction inside updateEmployee()
               $stmt = $db->prepare(
-                "UPDATE employees SET status = :status, updated_at = NOW() WHERE id = :id"
+                "UPDATE employees SET status = :status, updated_at = :updated_at WHERE id = :id"
               );
-              $stmt->execute([':status' => $new_status, ':id' => $employee_id]);
+              $stmt->execute([
+                ':status'     => $new_status,
+                ':updated_at' => date('Y-m-d H:i:s'),
+                ':id'         => $employee_id,
+              ]);
 
               $employeeManager->logStatusChange($employee_id, $old_status, $new_status, $reason);
               $updated_count++;

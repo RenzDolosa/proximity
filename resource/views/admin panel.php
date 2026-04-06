@@ -112,11 +112,11 @@ if (isset($_GET['action'])) {
         }
 
         $hashed = password_hash($password, PASSWORD_DEFAULT);
-        $stmt   = $pdo->prepare("
+        $stmt = $pdo->prepare("
           INSERT INTO users (username,email,password,first_name,last_name,phone,my_database,user_group,created_at)
-          VALUES (?,?,?,?,?,?,?,?,NOW())
+          VALUES (?,?,?,?,?,?,?,?,?)
         ");
-        $stmt->execute([$username, $email, $hashed, $first_name, $last_name, $phone ?: null, $my_db, $user_group]);
+        $stmt->execute([$username, $email, $hashed, $first_name, $last_name, $phone ?: null, $my_db, $user_group, date('Y-m-d H:i:s')]);
         $newId = $pdo->lastInsertId();
 
         createUserDatabase($newId);
@@ -183,11 +183,11 @@ if (isset($_GET['action'])) {
 
         if ($password) {
           $hashed = password_hash($password, PASSWORD_DEFAULT);
-          $stmt   = $pdo->prepare("UPDATE users SET username=?,email=?,password=?,first_name=?,last_name=?,phone=?,my_database=?,user_group=?,updated_at=NOW() WHERE id=?");
-          $stmt->execute([$username, $email, $hashed, $first_name, $last_name, $phone ?: null, $my_db, $user_group, $id]);
+          $stmt = $pdo->prepare("UPDATE users SET username=?,email=?,password=?,first_name=?,last_name=?,phone=?,my_database=?,user_group=?,updated_at=? WHERE id=?");
+          $stmt->execute([$username, $email, $hashed, $first_name, $last_name, $phone ?: null, $my_db, $user_group, date('Y-m-d H:i:s'), $id]);
         } else {
-          $stmt = $pdo->prepare("UPDATE users SET username=?,email=?,first_name=?,last_name=?,phone=?,my_database=?,user_group=?,updated_at=NOW() WHERE id=?");
-          $stmt->execute([$username, $email, $first_name, $last_name, $phone ?: null, $my_db, $user_group, $id]);
+          $stmt = $pdo->prepare("UPDATE users SET username=?,email=?,first_name=?,last_name=?,phone=?,my_database=?,user_group=?,updated_at=? WHERE id=?");
+          $stmt->execute([$username, $email, $first_name, $last_name, $phone ?: null, $my_db, $user_group, date('Y-m-d H:i:s'), $id]);
         }
 
         logSystemAction($_SESSION['user_id'] ?? null, 'USER_UPDATED', "Updated user ID: $id ($username)");
@@ -399,9 +399,9 @@ if (isset($_GET['action'])) {
 
         $stmt = $pdo->prepare("
           INSERT INTO user_groups (group_number, group_name, description, is_enabled, permissions, created_at)
-          VALUES (?, ?, ?, ?, ?, NOW())
+          VALUES (?, ?, ?, ?, ?, ?)
         ");
-        $stmt->execute([$group_number, $group_name, $description ?: null, $is_enabled, $permJson]);
+        $stmt->execute([$group_number, $group_name, $description ?: null, $is_enabled, $permJson, date('Y-m-d H:i:s')]);
         $newId = $pdo->lastInsertId();
 
         logSystemAction($_SESSION['user_id'] ?? null, 'GROUP_CREATED', "Created group: $group_name (ID: $newId)");
@@ -438,10 +438,10 @@ if (isset($_GET['action'])) {
 
         $stmt = $pdo->prepare("
           UPDATE user_groups
-          SET group_name = ?, description = ?, is_enabled = ?, permissions = ?, updated_at = NOW()
+          SET group_name = ?, description = ?, is_enabled = ?, permissions = ?, updated_at = ?
           WHERE id = ?
         ");
-        $stmt->execute([$group_name, $description ?: null, $is_enabled, $permJson, $id]);
+        $stmt->execute([$group_name, $description ?: null, $is_enabled, $permJson, date('Y-m-d H:i:s'), $id]);
 
         if ($oldName && $oldName !== $group_name) {
           $upd = $pdo->prepare("UPDATE users SET user_group = ? WHERE user_group = ?");
