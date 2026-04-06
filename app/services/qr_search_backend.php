@@ -133,8 +133,14 @@ class Database
     }
   }
 
-  public function getUserId()    { return $this->userId; }
-  public function getConnection(){ return $this->conn;   }
+  public function getUserId()
+  {
+    return $this->userId;
+  }
+  public function getConnection()
+  {
+    return $this->conn;
+  }
 }
 
 class QueryLogger
@@ -182,10 +188,14 @@ class QueryLogger
     if (!$this->conn) return false;
 
     try {
+      $now = date('Y-m-d H:i:s');
+
       $sql = "INSERT INTO check_in_out
-                (employee_id, qr_code, fullname, check_type, ip_address, user_agent)
-              VALUES
-                (:employee_id, :qr_code, :fullname, :check_type, :ip_address, :user_agent)";
+              (employee_id, qr_code, fullname, check_type, scan_timestamp,
+               ip_address, user_agent)
+            VALUES
+              (:employee_id, :qr_code, :fullname, :check_type, :scan_timestamp,
+               :ip_address, :user_agent)";
 
       $stmt = $this->conn->prepare($sql);
       $stmt->execute([
@@ -193,6 +203,7 @@ class QueryLogger
         ':qr_code'     => $qrCode,
         ':fullname'    => $fullname,
         ':check_type'  => $checkType,
+        ':scan_timestamp' => $now,
         ':ip_address'  => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
         ':user_agent'  => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
       ]);

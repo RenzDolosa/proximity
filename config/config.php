@@ -26,6 +26,8 @@ define('USER_DB_PASS', DB_PASS);
 // Maximum database name length for MySQL
 define('MAX_DB_NAME_LENGTH', 64);
 
+date_default_timezone_set('Asia/Manila');
+
 // Create main database
 function createDatabase()
 {
@@ -125,6 +127,7 @@ function createDatabase()
     $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `last_login` TIMESTAMP NULL DEFAULT NULL");
     $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `session_token` VARCHAR(255) DEFAULT NULL");
     $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `my_database` VARCHAR(50) NOT NULL DEFAULT ''");
+    $dbPdo->exec("ALTER TABLE check_in_out MODIFY COLUMN scan_timestamp DATETIME NOT NULL;");
 
     $adminHash = '$2y$10$/nqdViJv2DWyfjHhfS8ZDOPT.6QwxO3DWK1ocCwDFPUYvEE20Lkga';
     $dbPdo->exec("INSERT INTO `users` (`id`, `username`, `email`, `password`, `first_name`, `last_name`, `phone`, `my_database`, `user_group`)
