@@ -3,6 +3,15 @@
 
 require_once __DIR__ . '/../../config/config.php';
 
+// Safety-net: re-assert PHP timezone in case this file is ever bootstrapped
+// without config.php. config.php already defines APP_TIMEZONE / APP_TIMEZONE_TZ
+// and calls date_default_timezone_set(), so this is a no-op in normal operation.
+if (!defined('APP_TIMEZONE')) {
+  define('APP_TIMEZONE',    'Asia/Manila');
+  define('APP_TIMEZONE_TZ', '+08:00');
+}
+date_default_timezone_set(APP_TIMEZONE);
+
 if (isset($_GET['serve_file'])) {
   header('Content-Type: ' . $content_type);
   header('Content-Disposition: inline; filename="' . $filename . '"');
@@ -244,8 +253,6 @@ class EmployeeManager
       $this->logStatusChange($new_id, $currentEmployee['status'], $data['status'], 'Status updated via edit');
     }
 
-    // FIX #4: log here only for non-bulk paths.
-    // bulk_status_update handles its own top-level logSystemAction call.
     if ($this->userId) {
       logSystemAction(
         $this->userId,
@@ -305,7 +312,7 @@ class EmployeeManager
         ':new_status'    => $newStatus,
         ':changed_by'    => $_SESSION['username'] ?? 'System',
         ':change_reason' => $reason,
-        ':created_at' => date('Y-m-d H:i:s'),
+        ':created_at'    => date('Y-m-d H:i:s'),
       ]);
     } catch (Exception $e) {
       error_log("Failed to log status change: " . $e->getMessage());
@@ -400,8 +407,6 @@ class FileUploader
 
   public function __construct($userId = null)
   {
-    // FIX #8: never fall back to '0' — use a clearly distinct default so
-    // unauthenticated edge-cases don't produce colliding QR prefixes.
     $this->upload_dir = '../../public/uploads/user/';
     if (!file_exists($this->upload_dir)) {
       mkdir($this->upload_dir, 0777, true);
@@ -427,13 +432,11 @@ class FileUploader
 
     // Always save as .webp
     if ($existingFilename && !empty($existingFilename)) {
-      // Keep same base name but force .webp extension
       $filename = preg_replace('/\.[^.]+$/', '.webp', $existingFilename);
       $filepath = $this->upload_dir . $filename;
       if (file_exists($filepath)) {
         @unlink($filepath);
       }
-      // Also delete old non-webp file if extension changed
       $oldPath = $this->upload_dir . $existingFilename;
       if ($oldPath !== $filepath && file_exists($oldPath)) {
         @unlink($oldPath);
@@ -443,11 +446,9 @@ class FileUploader
       $filepath = $this->upload_dir . $filename;
     }
 
-    // Convert to WebP using GD
     $converted = $this->convertToWebP($file['tmp_name'], $file_extension, $filepath);
 
     if (!$converted) {
-      // GD conversion failed — fall back to original format
       $fallbackName = preg_replace('/\.webp$/', '.' . $file_extension, $filename);
       $fallbackPath = $this->upload_dir . $fallbackName;
       if (move_uploaded_file($file['tmp_name'], $fallbackPath)) {
@@ -457,7 +458,6 @@ class FileUploader
     }
 
     if ($converted) {
-      // Generate thumb_<filename> at 80px wide for table display
       $thumbPath = $this->upload_dir . 'thumb_' . $filename;
       $this->convertToWebP($file['tmp_name'], $file_extension, $thumbPath, 75, 80);
     }
@@ -465,15 +465,10 @@ class FileUploader
     return $filename;
   }
 
-  /**
-   * Convert any supported image to WebP via GD.
-   * Quality 82 is a good balance between size and sharpness.
-   * Images wider than $maxWidth are resized proportionally.
-   */
   private function convertToWebP($tmpPath, $srcExtension, $destPath, $quality = 82, $maxWidth = 800)
   {
     if (!function_exists('imagewebp')) {
-      return false; // GD WebP support not compiled in
+      return false;
     }
 
     switch ($srcExtension) {
@@ -496,13 +491,11 @@ class FileUploader
     $origW = imagesx($src);
     $origH = imagesy($src);
 
-    // Resize if wider than $maxWidth
     if ($origW > $maxWidth) {
       $newW  = $maxWidth;
       $newH  = (int) round($origH * ($maxWidth / $origW));
       $resized = imagecreatetruecolor($newW, $newH);
 
-      // Preserve transparency for PNG/GIF
       imagealphablending($resized, false);
       imagesavealpha($resized, true);
       $transparent = imagecolorallocatealpha($resized, 0, 0, 0, 127);
@@ -537,14 +530,17 @@ class FileUploader
 
     return $deleted;
   }
+
+  public function getImagePath($filename)
+  {
+    return $this->upload_dir . basename($filename);
+  }
 }
 
 class QRCodeGenerator
 {
   const QR_CODE_LENGTH = 41;
 
-  // FIX #8: guard against null/empty/zero userId so generated codes
-  // always carry a unique user prefix and never collide across sessions.
   public static function generateQRCode($userId = null, $length = self::QR_CODE_LENGTH)
   {
     $userId = ($userId !== null && $userId !== '' && $userId !== '0' && $userId !== 0)
@@ -590,11 +586,7 @@ try {
 
   $response = ['success' => false, 'message' => '', 'data' => null];
 
-  // ── Special non-JSON responses that must exit before the JSON block ────────
-
-  // FIX #7: backup_data — send headers and stream then exit BEFORE the main
-  // try/catch can write anything else.  Moved to a top-level guard so no PHP
-  // configuration can let the JSON block fire afterwards.
+  // ── backup_data: stream JSON and exit before anything else fires ──────────
   if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'backup_data') {
     $employees   = $employeeManager->getEmployees();
     $stats       = $employeeManager->getEmployeeStats();
@@ -787,9 +779,9 @@ try {
             }
             $filterStr = implode(', ', $filterParts) ?: 'All';
 
-            $response['success']       = true;
-            $response['message']       = "Deleted $deleted_count employee(s) matching filters: $filterStr. Removed $deleted_images image(s).";
-            $response['deleted_count'] = $deleted_count;
+            $response['success']        = true;
+            $response['message']        = "Deleted $deleted_count employee(s) matching filters: $filterStr. Removed $deleted_images image(s).";
+            $response['deleted_count']  = $deleted_count;
             $response['deleted_images'] = $deleted_images;
 
             logSystemAction($database->getCurrentUserId(), 'FILTERED_EMPLOYEES_DELETED', "Deleted $deleted_count employees with filters: $filterStr");
@@ -929,9 +921,6 @@ try {
         }
         break;
 
-      // logSystemAction per employee.  We suppress that per-row call by using
-      // a direct SQL UPDATE here instead of going through updateEmployee(),
-      // then emit one summary-level logSystemAction at the end.
       case 'bulk_status_update':
         $employee_ids = $_POST['employee_ids'] ?? [];
         $new_status   = $_POST['new_status']   ?? '';
@@ -964,7 +953,6 @@ try {
             try {
               $old_status = $current_employee['status'];
 
-              // Direct UPDATE avoids the per-row logSystemAction inside updateEmployee()
               $stmt = $db->prepare(
                 "UPDATE employees SET status = :status, updated_at = :updated_at WHERE id = :id"
               );
@@ -992,7 +980,6 @@ try {
             $response['message'] .= '. ' . count($errors) . ' records had errors.';
           }
 
-          // Single summary audit entry instead of N duplicate entries
           logSystemAction(
             $database->getCurrentUserId(),
             'BULK_STATUS_UPDATE',
@@ -1300,6 +1287,8 @@ function serveFile($filepath, $filename = null)
     header('Expires: 0');
   }
 
+  header('Content-Type: ' . $content_type);
+  header('Content-Length: ' . filesize($filepath));
   readfile($filepath);
   exit;
 }
@@ -1336,6 +1325,7 @@ if (isset($_GET['health_check'])) {
   $health = [
     'status'              => 'OK',
     'timestamp'           => date('Y-m-d H:i:s'),
+    'timezone'            => date_default_timezone_get(),
     'user_authenticated'  => isset($_SESSION['user_id']),
     'user_id'             => $_SESSION['user_id'] ?? null,
     'database_connection' => 'OK',

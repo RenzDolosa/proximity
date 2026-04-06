@@ -3,6 +3,16 @@
 
 require_once __DIR__ . '/../../config/config.php';
 
+// Safety-net: re-assert PHP timezone in case this file is ever bootstrapped
+// without config.php (e.g. direct CLI invocation or a future refactor).
+// config.php already calls date_default_timezone_set(APP_TIMEZONE) and sets
+// APP_TIMEZONE / APP_TIMEZONE_TZ, so this is a no-op in normal operation.
+if (!defined('APP_TIMEZONE')) {
+  define('APP_TIMEZONE',    'Asia/Manila');
+  define('APP_TIMEZONE_TZ', '+08:00');
+}
+date_default_timezone_set(APP_TIMEZONE);
+
 if (isset($_GET['serve_file'])) {
   header('Content-Type: ' . $content_type);
   header('Content-Disposition: inline; filename="' . $filename . '"');
@@ -44,6 +54,12 @@ class Database
         }
       }
       $this->userConn = getUserDBConnection($this->currentUserId);
+
+      // ── Explicitly sync MySQL session timezone with PHP/app timezone ──
+      // getUserDBConnection() already does this, but we set it again here
+      // to guarantee correct CURRENT_TIMESTAMP behaviour for every query
+      // made through this connection (access_timestamp, scan_timestamp, etc.)
+      $this->userConn->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
     }
     return $this->userConn;
   }
@@ -863,6 +879,7 @@ if (isset($_GET['health_check'])) {
   $health = [
     'status'             => 'OK',
     'timestamp'          => date('Y-m-d H:i:s'),
+    'timezone'           => date_default_timezone_get(),
     'user_authenticated' => isset($_SESSION['user_id']),
     'user_id'            => $_SESSION['user_id'] ?? null,
   ];

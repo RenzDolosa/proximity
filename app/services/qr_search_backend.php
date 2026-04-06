@@ -23,6 +23,15 @@ header('Access-Control-Max-Age: 86400');
 
 require_once __DIR__ . '/../../config/config.php';
 
+// Safety-net: re-assert PHP timezone in case this file is ever bootstrapped
+// without config.php. config.php already defines APP_TIMEZONE / APP_TIMEZONE_TZ
+// and calls date_default_timezone_set(), so this is a no-op in normal operation.
+if (!defined('APP_TIMEZONE')) {
+  define('APP_TIMEZONE',    'Asia/Manila');
+  define('APP_TIMEZONE_TZ', '+08:00');
+}
+date_default_timezone_set(APP_TIMEZONE);
+
 if (isset($_GET['serve_file'])) {
   header('Cache-Control: public, max-age=3600');
   header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 3600) . ' GMT');
@@ -102,6 +111,13 @@ class Database
       }
 
       $this->conn = getUserDBConnection($this->userId);
+
+      // ── Explicitly sync MySQL session timezone with PHP/app timezone ──
+      // getUserDBConnection() already does this, but we set it again here
+      // to guarantee correct CURRENT_TIMESTAMP behaviour for every INSERT
+      // made through this connection (scan_timestamp, access_timestamp, etc.)
+      $this->conn->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
+
       $this->createCheckInOutTable();
       return $this->conn;
     } catch (Exception $e) {
@@ -137,6 +153,7 @@ class Database
   {
     return $this->userId;
   }
+
   public function getConnection()
   {
     return $this->conn;
@@ -199,13 +216,13 @@ class QueryLogger
 
       $stmt = $this->conn->prepare($sql);
       $stmt->execute([
-        ':employee_id' => $employeeId,
-        ':qr_code'     => $qrCode,
-        ':fullname'    => $fullname,
-        ':check_type'  => $checkType,
-        ':scan_timestamp' => $now,
-        ':ip_address'  => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-        ':user_agent'  => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
+        ':employee_id'     => $employeeId,
+        ':qr_code'         => $qrCode,
+        ':fullname'        => $fullname,
+        ':check_type'      => $checkType,
+        ':scan_timestamp'  => $now,
+        ':ip_address'      => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+        ':user_agent'      => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
       ]);
 
       return true;
@@ -232,7 +249,7 @@ class QueryLogger
     if (!$this->conn) return false;
 
     try {
-      $now = date('Y-m-d H:i:s');  // add this line
+      $now = date('Y-m-d H:i:s');
 
       $sql = "INSERT INTO employee_access_log
           (employee_id, fullname, position, brand, status, shift,
@@ -245,20 +262,20 @@ class QueryLogger
 
       $stmt = $this->conn->prepare($sql);
       $stmt->execute([
-        ':employee_id'  => $employeeData['id']           ?? null,
-        ':fullname'     => $employeeData['fullname']      ?? null,
-        ':position'     => $employeeData['position']      ?? null,
-        ':brand'        => $employeeData['brand']         ?? null,
-        ':status'       => $employeeData['status']        ?? null,
-        ':shift'        => $employeeData['shift']         ?? null,
-        ':violation'    => $employeeData['violation']     ?? null,
-        ':image'        => $employeeData['image']         ?? null,
-        ':qr_code'      => $employeeData['qr_code']       ?? null,
-        ':check_status' => $employeeData['check_status']  ?? null,
-        ':access_type'  => $accessType,
+        ':employee_id'      => $employeeData['id']           ?? null,
+        ':fullname'         => $employeeData['fullname']      ?? null,
+        ':position'         => $employeeData['position']      ?? null,
+        ':brand'            => $employeeData['brand']         ?? null,
+        ':status'           => $employeeData['status']        ?? null,
+        ':shift'            => $employeeData['shift']         ?? null,
+        ':violation'        => $employeeData['violation']     ?? null,
+        ':image'            => $employeeData['image']         ?? null,
+        ':qr_code'          => $employeeData['qr_code']       ?? null,
+        ':check_status'     => $employeeData['check_status']  ?? null,
+        ':access_type'      => $accessType,
         ':access_timestamp' => $now,
-        ':ip_address'   => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-        ':user_agent'   => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
+        ':ip_address'       => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+        ':user_agent'       => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
       ]);
 
       return true;
@@ -337,16 +354,9 @@ class LiveSearchHandler
     return $employee;
   }
 
-  // ─────────────────────────────────────────────────────────────────
-  //  FIX 1: batchCheckStatuses — now correctly handles BOTH an array
-  //  of employee rows AND a single employee row (associative array).
-  //  Uses ROW_NUMBER() window function instead of a correlated subquery
-  //  for better performance at scale.
-  // ─────────────────────────────────────────────────────────────────
   private function batchCheckStatuses(array $employees): array
   {
     if (empty($employees) || !$this->conn) {
-      // Single row (associative): has string keys, not numeric outer keys
       if (isset($employees['id'])) {
         $employees['check_status'] = 'OUT';
         return $employees;
@@ -356,7 +366,6 @@ class LiveSearchHandler
       return $employees;
     }
 
-    // Detect single-row call: associative array with an 'id' key at the top level
     $isSingleRow = isset($employees['id']);
     $rows        = $isSingleRow ? [$employees] : $employees;
 
@@ -369,7 +378,6 @@ class LiveSearchHandler
         return $isSingleRow ? $rows[0] : $rows;
       }
 
-      // ── FIX: ROW_NUMBER() window function replaces correlated subquery ──
       $placeholders = implode(',', array_fill(0, count($ids), '?'));
       $sql = "SELECT employee_id, check_type
                 FROM (
@@ -469,7 +477,6 @@ class LiveSearchHandler
       }
       unset($row);
 
-      // batchCheckStatuses now correctly handles an array of rows
       $rows = $this->batchCheckStatuses($rows);
 
       foreach ($rows as $employee) {
@@ -541,12 +548,10 @@ class LiveSearchHandler
             $result['previous_status'] = $previousStatus;
             $result['status_changed']  = true;
           } else {
-            // ── FIX 2: wrap single row correctly for batchCheckStatuses ──
             $result = $this->batchCheckStatuses($result);
             $result['status_changed'] = false;
           }
         } else {
-          // ── FIX 2: same fix here ──
           $result = $this->batchCheckStatuses($result);
           $result['status_changed'] = false;
         }
@@ -596,7 +601,6 @@ class LiveSearchHandler
 
       if ($result) {
         $result = $this->cleanEmployee($result);
-        // ── FIX 2: single-row call now handled correctly ──
         $result = $this->batchCheckStatuses($result);
 
         if ($this->logger) {
@@ -666,7 +670,7 @@ try {
       $response['message'] = 'No search parameters provided';
       $response['data']    = [];
     } else {
-      $employees = $searchHandler->searchEmployees($searchParams);
+      $employees           = $searchHandler->searchEmployees($searchParams);
       $response['success'] = true;
       $response['data']    = $employees;
       $response['count']   = count($employees);

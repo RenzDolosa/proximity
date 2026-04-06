@@ -309,7 +309,7 @@ async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
       image: employee.image || "",
       qr_code: employee.qr_code,
       check_status: checkStatus,
-      access_timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
+      access_timestamp: new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }),
     };
 
     const response = await fetch("../http/middleware/add_to_log.php", {

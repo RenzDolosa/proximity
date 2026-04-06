@@ -7,15 +7,15 @@ $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->load();
 
 if ($_ENV['APP_ENV'] === 'local') {
-    define('DB_HOST', '127.0.0.1:3307');
-    define('DB_NAME', 'if0_41430152_proximity3pl');
-    define('DB_USER', 'root');
-    define('DB_PASS', '');
+  define('DB_HOST', '127.0.0.1:3307');
+  define('DB_NAME', 'if0_41430152_proximity3pl');
+  define('DB_USER', 'root');
+  define('DB_PASS', '');
 } else {
-    define('DB_HOST', $_ENV['DB_HOST']);
-    define('DB_NAME', $_ENV['DB_NAME']);
-    define('DB_USER', $_ENV['DB_USER']);
-    define('DB_PASS', $_ENV['DB_PASS']);
+  define('DB_HOST', $_ENV['DB_HOST']);
+  define('DB_NAME', $_ENV['DB_NAME']);
+  define('DB_USER', $_ENV['DB_USER']);
+  define('DB_PASS', $_ENV['DB_PASS']);
 }
 
 define('USER_DB_PREFIX', DB_NAME);
@@ -26,7 +26,13 @@ define('USER_DB_PASS', DB_PASS);
 // Maximum database name length for MySQL
 define('MAX_DB_NAME_LENGTH', 64);
 
-date_default_timezone_set('Asia/Manila');
+// ── Timezone ──────────────────────────────────────────────────────────────────
+// Set PHP timezone; every new PDO connection will also sync MySQL's session tz.
+define('APP_TIMEZONE',    'Asia/Manila');
+define('APP_TIMEZONE_TZ', '+08:00');       // MySQL offset equivalent
+
+date_default_timezone_set(APP_TIMEZONE);
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Create main database
 function createDatabase()
@@ -47,6 +53,7 @@ function createDatabase()
       DB_PASS,
       [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
+    $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
 
     // Check if database already exists
     $stmt = $pdo->prepare("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?");
@@ -69,6 +76,7 @@ function createDatabase()
       DB_PASS,
       [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
+    $dbPdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
 
     // Create tables one by one to avoid multi-statement failures
     $dbPdo->exec("CREATE TABLE IF NOT EXISTS `users` (
@@ -165,6 +173,8 @@ function getDBConnection()
         PDO::ATTR_EMULATE_PREPARES => false
       ]
     );
+    // Sync MySQL session timezone with PHP timezone
+    $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
     return $pdo;
   } catch (PDOException $e) {
     // error_log("Database connection failed: " . $e->getMessage());
@@ -198,6 +208,8 @@ function getUserDBConnection($userId)
         PDO::ATTR_EMULATE_PREPARES => false
       ]
     );
+    // Sync MySQL session timezone with PHP timezone
+    $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
     return $pdo;
   } catch (PDOException $e) {
     // error_log("User database connection failed for user $userId: " . $e->getMessage());
@@ -221,6 +233,7 @@ function userDatabaseExists($userId)
       USER_DB_PASS,
       [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
+    $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
 
     $stmt = $pdo->prepare("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?");
     $stmt->execute([$dbName]);
@@ -259,6 +272,7 @@ function createUserDatabase($userId)
       USER_DB_PASS,
       [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
+    $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
 
     // Create database with backticks and proper escaping
     $createDbQuery = "CREATE DATABASE IF NOT EXISTS `" . str_replace("`", "``", $dbName) . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
@@ -274,6 +288,7 @@ function createUserDatabase($userId)
       USER_DB_PASS,
       [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
+    $userPdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
 
     // error_log("Connected to new database: $dbName");
 
@@ -567,6 +582,7 @@ function deleteUserDatabase($userId)
       USER_DB_PASS,
       [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
+    $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
 
     $pdo->exec("DROP DATABASE IF EXISTS `" . str_replace("`", "``", $dbName) . "`");
     return true;
@@ -620,6 +636,7 @@ function customDatabaseExists($dbName)
       DB_PASS,
       [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
+    $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
 
     $stmt = $pdo->prepare("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?");
     $stmt->execute([$dbName]);
@@ -699,8 +716,8 @@ function registerUser($username, $email, $password, $firstName, $lastName, $user
 
     // Insert new user with my_database as metadata
     $stmt = $pdo->prepare("
-        INSERT INTO users (username, email, password, first_name, last_name, my_database, phone, user_group, created_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+      INSERT INTO users (username, email, password, first_name, last_name, my_database, phone, user_group, created_at) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
 
     $stmt->execute([
@@ -711,7 +728,8 @@ function registerUser($username, $email, $password, $firstName, $lastName, $user
       sanitizeInput($lastName),
       sanitizeInput($myDatabase ?? ''),
       $phoneNum ? sanitizeInput($phoneNum) : null,
-      sanitizeInput($user_group)
+      sanitizeInput($user_group),
+      date('Y-m-d H:i:s'),
     ]);
 
     $userId = $pdo->lastInsertId();
@@ -800,8 +818,8 @@ function loginUser($username, $password)
       $_SESSION['user_group'] = $user['user_group'];
 
       // Update last login
-      $updateStmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
-      $updateStmt->execute([$user['id']]);
+      $updateStmt = $pdo->prepare("UPDATE users SET last_login = ? WHERE id = ?");
+      $updateStmt->execute([date('Y-m-d H:i:s'), $user['id']]);
 
       return ['success' => true, 'user' => $user, 'database_ready' => true];
     } else {
@@ -906,8 +924,8 @@ function logSystemAction($userId, $action, $details = null)
   try {
     $pdo = getMainDBConnection();
     $stmt = $pdo->prepare("
-        INSERT INTO system_logs (user_id, action, details, ip_address, user_agent) 
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO system_logs (user_id, action, details, ip_address, user_agent, created_at) 
+        VALUES (?, ?, ?, ?, ?, ?)
     ");
 
     $stmt->execute([
@@ -915,7 +933,8 @@ function logSystemAction($userId, $action, $details = null)
       $action,
       $details,
       $_SERVER['REMOTE_ADDR'] ?? null,
-      $_SERVER['HTTP_USER_AGENT'] ?? null
+      $_SERVER['HTTP_USER_AGENT'] ?? null,
+      date('Y-m-d H:i:s'),
     ]);
   } catch (PDOException $e) {
     // error_log("Error logging system action: " . $e->getMessage());

@@ -3,6 +3,15 @@
 
 require_once __DIR__ . '/../../config/config.php';
 
+// Safety-net: re-assert PHP timezone in case this file is ever bootstrapped
+// without config.php. config.php already defines APP_TIMEZONE / APP_TIMEZONE_TZ
+// and calls date_default_timezone_set(), so this is a no-op in normal operation.
+if (!defined('APP_TIMEZONE')) {
+  define('APP_TIMEZONE',    'Asia/Manila');
+  define('APP_TIMEZONE_TZ', '+08:00');
+}
+date_default_timezone_set(APP_TIMEZONE);
+
 if (isset($_GET['serve_file'])) {
   header('Content-Type: ' . $content_type);
   header('Content-Disposition: inline; filename="' . $filename . '"');
@@ -12,7 +21,6 @@ if (isset($_GET['serve_file'])) {
   header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($filepath)) . ' GMT');
 }
 
-// Database management class
 class Database
 {
   private $mainConn;
@@ -21,7 +29,6 @@ class Database
 
   public function __construct()
   {
-    // Check if user is logged in
     if (!isset($_SESSION['user_id'])) {
       throw new Exception("User not authenticated. Please log in.");
     }
@@ -29,7 +36,6 @@ class Database
     $this->currentUserId = $_SESSION['user_id'];
   }
 
-  // Get main database connection (for user management)
   public function getMainConnection()
   {
     if (!$this->mainConn) {
@@ -38,11 +44,9 @@ class Database
     return $this->mainConn;
   }
 
-  // Get user-specific database connection
   public function getUserConnection()
   {
     if (!$this->userConn) {
-      // Check if user database exists, create if not
       if (!userDatabaseExists($this->currentUserId)) {
         if (!createUserDatabase($this->currentUserId)) {
           throw new Exception("Failed to initialize user database");
@@ -54,7 +58,6 @@ class Database
     return $this->userConn;
   }
 
-  // Legacy method for backward compatibility
   public function connect()
   {
     return $this->getUserConnection();
@@ -66,7 +69,6 @@ class Database
   }
 }
 
-// Proximity Management Class with user-specific database support
 class EmployeeManager
 {
   private $conn;
@@ -76,16 +78,14 @@ class EmployeeManager
   public function __construct($db)
   {
     if ($db instanceof Database) {
-      $this->conn = $db->getUserConnection();
+      $this->conn   = $db->getUserConnection();
       $this->userId = $db->getCurrentUserId();
     } else {
-      // Legacy support for direct PDO connection
-      $this->conn = $db;
+      $this->conn   = $db;
       $this->userId = $_SESSION['user_id'] ?? null;
     }
   }
 
-  // Create new employee
   public function createEmployee($data)
   {
     $query = "INSERT INTO " . $this->table . " 
@@ -93,14 +93,11 @@ class EmployeeManager
                       VALUES (:qr_code)";
 
     $stmt = $this->conn->prepare($query);
-
-    // Bind parameters
     $stmt->bindParam(':qr_code', $data['qr_code']);
 
     if ($stmt->execute()) {
       $employeeId = $this->conn->lastInsertId();
 
-      // Log the action
       if ($this->userId) {
         logSystemAction($this->userId, 'EMPLOYEE_CREATED', "Created employee: " . $data['qr_code']);
       }
@@ -110,10 +107,9 @@ class EmployeeManager
     return false;
   }
 
-  // Read all proximity codes with filters
   public function getEmployees($filters = [])
   {
-    $query = "SELECT * FROM " . $this->table . " WHERE 1=1";
+    $query  = "SELECT * FROM " . $this->table . " WHERE 1=1";
     $params = [];
 
     if (!empty($filters['qr_code'])) {
@@ -142,18 +138,18 @@ class EmployeeManager
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
   }
 
-  // Update employee
   public function updateEmployee($id, $data)
   {
-
+    // Use date() instead of NOW() so the PHP timezone (Asia/Manila) is respected
     $query = "UPDATE " . $this->table . " 
-                      SET qr_code = :qr_code, updated_at = NOW()
+                      SET qr_code = :qr_code, updated_at = :updated_at
                       WHERE id = :id";
 
     $stmt = $this->conn->prepare($query);
 
-    $stmt->bindParam(':id', $id);
-    $stmt->bindParam(':qr_code', $data['qr_code']);
+    $stmt->bindParam(':id',         $id);
+    $stmt->bindParam(':qr_code',    $data['qr_code']);
+    $stmt->bindValue(':updated_at', date('Y-m-d H:i:s'));
 
     $result = $stmt->execute();
 
@@ -164,13 +160,12 @@ class EmployeeManager
     return $result;
   }
 
-  // Delete employee
   public function deleteEmployee($id)
   {
     $employee = $this->getEmployee($id);
 
     $query = "DELETE FROM " . $this->table . " WHERE id = :id";
-    $stmt = $this->conn->prepare($query);
+    $stmt  = $this->conn->prepare($query);
     $stmt->bindParam(':id', $id);
     $result = $stmt->execute();
 
@@ -181,43 +176,37 @@ class EmployeeManager
     return $result;
   }
 
-  // Get single employee
   public function getEmployee($id)
   {
     $query = "SELECT * FROM " . $this->table . " WHERE id = :id";
-    $stmt = $this->conn->prepare($query);
+    $stmt  = $this->conn->prepare($query);
     $stmt->bindParam(':id', $id);
     $stmt->execute();
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
-  // Get proximity by code
   public function getEmployeeByQR($qr_code)
   {
     $query = "SELECT * FROM " . $this->table . " WHERE qr_code = :qr_code";
-    $stmt = $this->conn->prepare($query);
+    $stmt  = $this->conn->prepare($query);
     $stmt->bindParam(':qr_code', $qr_code);
     $stmt->execute();
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
-  // Delete all proximity codes (enhanced with logging)
   public function deleteAllEmployees()
   {
     try {
-      // Get count for logging
       $countQuery = "SELECT COUNT(*) as total FROM " . $this->table;
-      $countStmt = $this->conn->prepare($countQuery);
+      $countStmt  = $this->conn->prepare($countQuery);
       $countStmt->execute();
       $count = $countStmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-      // Delete all records
       $query = "DELETE FROM " . $this->table;
-      $stmt = $this->conn->prepare($query);
+      $stmt  = $this->conn->prepare($query);
       $result = $stmt->execute();
 
       if ($result) {
-        // Reset auto increment
         $resetQuery = "ALTER TABLE " . $this->table . " AUTO_INCREMENT = 1";
         $this->conn->prepare($resetQuery)->execute();
 
@@ -233,7 +222,6 @@ class EmployeeManager
     }
   }
 
-  // 🆕 NEW FUNCTION - Delete employees by specific IDs
   public function deleteEmployeesByIds($employeeIds)
   {
     if (!is_array($employeeIds) || empty($employeeIds)) {
@@ -243,7 +231,7 @@ class EmployeeManager
     try {
       $placeholders = implode(',', array_fill(0, count($employeeIds), '?'));
       $query = "DELETE FROM " . $this->table . " WHERE id IN ($placeholders)";
-      $stmt = $this->conn->prepare($query);
+      $stmt  = $this->conn->prepare($query);
       $stmt->execute($employeeIds);
 
       return $stmt->rowCount();
@@ -253,20 +241,17 @@ class EmployeeManager
     }
   }
 
-  // Get table name (helper method for delete all functionality)
   public function getTableName()
   {
     return $this->table;
   }
 
-  // Get proximity code statistics
   public function getProxcodeStats()
   {
     $stats = [];
 
-    // Total proximity codes
     $query = "SELECT COUNT(*) as total FROM " . $this->table;
-    $stmt = $this->conn->prepare($query);
+    $stmt  = $this->conn->prepare($query);
     $stmt->execute();
     $stats['total'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
@@ -274,18 +259,17 @@ class EmployeeManager
   }
 }
 
-// File Upload Handler with user-specific directories
 class FileUploader
 {
   private $upload_dir;
   private $allowed_types = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-  private $max_size = 5 * 1024 * 1024; // 5MB
+  private $max_size = 5 * 1024 * 1024;
   private $userId;
 
   public function __construct($userId = null)
   {
-    $this->userId = $userId ?? $_SESSION['user_id'] ?? 'default';
-    $this->upload_dir = '../../public/uploads/user/'; // _' . $this->userId . '/';
+    $this->userId     = $userId ?? $_SESSION['user_id'] ?? 'default';
+    $this->upload_dir = '../../public/uploads/user/';
 
     if (!file_exists($this->upload_dir)) {
       mkdir($this->upload_dir, 0777, true);
@@ -332,7 +316,6 @@ class FileUploader
   }
 }
 
-// QR Code Generator (enhanced with user-specific prefixes)
 class QRCodeGenerator
 {
   const QR_CODE_LENGTH = 41;
@@ -340,28 +323,26 @@ class QRCodeGenerator
   public static function generateQRCode($userId = null, $length = self::QR_CODE_LENGTH)
   {
     $userId = $userId ?? $_SESSION['user_id'] ?? '0';
-    $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    $chars  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
-    // Start with user ID prefix to ensure uniqueness across users
-    $result = '1' . $userId . '_';
-
-    // Add random alphanumeric characters
+    $result          = '1' . $userId . '_';
     $remainingLength = $length - strlen($result) - 8;
+
     for ($i = 0; $i < $remainingLength; $i++) {
       $result .= $chars[rand(0, strlen($chars) - 1)];
     }
 
-    // Add timestamp-based number to ensure uniqueness
     $uniquePart = str_pad((time() % 100000000), 8, '0', STR_PAD_LEFT);
-    $result .= $uniquePart;
+    $result    .= $uniquePart;
 
     return $result;
   }
 }
 
-// Main Application Handler
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN REQUEST HANDLER
+// ─────────────────────────────────────────────────────────────────────────────
 try {
-  // Check authentication
   if (!isset($_SESSION['user_id'])) {
     $response = ['success' => false, 'message' => 'Authentication required. Please log in.'];
 
@@ -371,18 +352,16 @@ try {
       exit;
     }
 
-    // Redirect to login page
     header('Location: ../../index.php');
     exit;
   }
 
-  $database = new Database();
+  $database        = new Database();
   $employeeManager = new EmployeeManager($database);
-  $fileUploader = new FileUploader($database->getCurrentUserId());
+  $fileUploader    = new FileUploader($database->getCurrentUserId());
 
   $response = ['success' => false, 'message' => '', 'data' => null];
 
-  // Handle different actions
   if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -391,7 +370,6 @@ try {
       case 'create':
         $image_filename = null;
 
-        // Handle image upload
         if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
           try {
             $image_filename = $fileUploader->uploadImage($_FILES['image']);
@@ -401,14 +379,12 @@ try {
           }
         }
 
-        // Use provided QR code or generate one
         $qr_code = !empty($_POST['qr_code'])
           ? sanitizeInput($_POST['qr_code'])
           : QRCodeGenerator::generateQRCode($database->getCurrentUserId());
 
         $employee_data = ['qr_code' => $qr_code];
 
-        // Validate required fields
         if (empty($employee_data['qr_code'])) {
           $response['message'] = 'Please fill in all required fields (Proximity code is required)';
           break;
@@ -419,7 +395,7 @@ try {
         if ($employee_id) {
           $response['success'] = true;
           $response['message'] = 'Proximity code created successfully';
-          $response['data'] = ['id' => $employee_id, 'qr_code' => $qr_code];
+          $response['data']    = ['id' => $employee_id, 'qr_code' => $qr_code];
         } else {
           $response['message'] = 'Failed to create proximity code. Please check your input data.';
         }
@@ -427,7 +403,7 @@ try {
 
       case 'edit':
       case 'update':
-        $employee_id = $_POST['id'] ?? 0;
+        $employee_id      = $_POST['id'] ?? 0;
         $current_employee = $employeeManager->getEmployee($employee_id);
 
         if (!$current_employee) {
@@ -437,12 +413,10 @@ try {
 
         $image_filename = $current_employee['image'] ?? null;
 
-        // Handle new image upload
         if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
           try {
             $new_image = $fileUploader->uploadImage($_FILES['image']);
 
-            // Delete old image if upload successful
             if ($new_image && $current_employee['image']) {
               $fileUploader->deleteImage($current_employee['image']);
             }
@@ -454,7 +428,6 @@ try {
           }
         }
 
-        // Use provided QR code or keep existing
         $qr_code = !empty($_POST['qr_code'])
           ? sanitizeInput($_POST['qr_code'])
           : $current_employee['qr_code'];
@@ -469,16 +442,13 @@ try {
         }
         break;
 
-      // 🆕 NEW ACTION - Delete filtered employees
       case 'delete_filtered':
         try {
           $employee_ids_json = $_POST['employee_ids'] ?? '[]';
-          $filters_json = $_POST['filters'] ?? '{}';
+          $filters_json      = $_POST['filters']      ?? '{}';
 
-          $raw_ids = json_decode($employee_ids_json, true) ?: [];
-          $filters = json_decode($filters_json, true) ?: [];
-
-          // BUG FIX: cast all IDs to int to prevent SQL type mismatch
+          $raw_ids      = json_decode($employee_ids_json, true) ?: [];
+          $filters      = json_decode($filters_json, true)      ?: [];
           $employee_ids = array_values(array_filter(array_map('intval', $raw_ids)));
 
           if (empty($employee_ids)) {
@@ -489,11 +459,10 @@ try {
           $db = $database->getUserConnection();
           $db->beginTransaction();
 
-          // BUG FIX: guard against getEmployee() returning false before accessing ['image']
           $all_employees_to_delete = [];
           foreach ($employee_ids as $id) {
             $emp = $employeeManager->getEmployee($id);
-            if ($emp && is_array($emp)) {          // FIXED: was missing the is_array guard
+            if ($emp && is_array($emp)) {
               $all_employees_to_delete[] = $emp;
             }
           }
@@ -516,9 +485,9 @@ try {
             }
             $filterStr = implode(', ', $filterDescriptions) ?: 'All';
 
-            $response['success'] = true;
-            $response['message'] = "Deleted $deleted_count code(s) matching filters: $filterStr.";
-            $response['deleted_count'] = $deleted_count;
+            $response['success']        = true;
+            $response['message']        = "Deleted $deleted_count code(s) matching filters: $filterStr.";
+            $response['deleted_count']  = $deleted_count;
             $response['deleted_images'] = $deleted_images;
 
             logSystemAction($database->getCurrentUserId(), 'FILTERED_CODE_DELETED', "Deleted $deleted_count proximity codes with filters: $filterStr");
@@ -534,10 +503,9 @@ try {
 
       case 'delete':
         $employee_id = $_POST['id'] ?? 0;
-        $employee = $employeeManager->getEmployee($employee_id);
+        $employee    = $employeeManager->getEmployee($employee_id);
 
         if ($employee && $employeeManager->deleteEmployee($employee_id)) {
-          // Delete associated image
           if (!empty($employee['image'])) {
             $fileUploader->deleteImage($employee['image']);
           }
@@ -551,19 +519,16 @@ try {
 
       case 'delete_all':
         try {
-          // Get all proximity codes first to delete their images
-          $all_employees = $employeeManager->getEmployees($employee_id);
+          $all_employees = $employeeManager->getEmployees([]);
 
-          // Start transaction
           $db = $database->getUserConnection();
           $db->beginTransaction();
 
           if ($employeeManager->deleteAllEmployees()) {
-
             $db->commit();
 
             $response['success'] = true;
-            $response['message'] = 'All proximity code deleted successfully. ' . count($all_employees) . ' proximity codes ';
+            $response['message'] = 'All proximity code deleted successfully. ' . count($all_employees) . ' proximity codes removed.';
           } else {
             $db->rollBack();
             $response['message'] = 'Failed to delete proximity code';
@@ -577,7 +542,6 @@ try {
         break;
 
       case 'import':
-        // ✅ FIXED: Now expecting 'code' parameter instead of 'proximity_code' for import to avoid confusion with single record creation
         $employees_json = $_POST['code'] ?? '';
 
         if (empty($employees_json)) {
@@ -592,49 +556,40 @@ try {
           break;
         }
 
-        $imported_count = 0;
+        $imported_count  = 0;
         $duplicate_count = 0;
-        $errors = [];
+        $errors          = [];
 
         try {
-          // Start transaction
           $db = $database->getUserConnection();
           $db->beginTransaction();
 
           foreach ($employees_data as $index => $employee_data) {
             try {
-              // Extract QR code from the data
-              // ✅ FIXED: Handle 'qr_code' field properly
               $qr_code = '';
               if (!empty($employee_data['qr_code']) && trim($employee_data['qr_code']) !== '') {
                 $qr_code = trim($employee_data['qr_code']);
-              } else if (!empty($employee_data['qr']) && trim($employee_data['qr']) !== '') {
+              } elseif (!empty($employee_data['qr']) && trim($employee_data['qr']) !== '') {
                 $qr_code = trim($employee_data['qr']);
               } else {
-                // Auto-generate if not provided
                 $qr_code = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
               }
 
-              // ✅ FIXED: Validate QR code is not empty
               if (empty($qr_code)) {
                 $errors[] = "Row " . ($index + 1) . ": Could not generate proximity code";
                 continue;
               }
 
-              // Check for duplicates
               $existingEmployee = $employeeManager->getEmployeeByQR($qr_code);
               if ($existingEmployee) {
                 $duplicate_count++;
-                // Skip this record as it already exists
                 continue;
               }
 
-              // Prepare proximity code with sanitization
               $employee_record = [
                 'qr_code' => sanitizeInput(trim($employee_data['qr_code'] ?? $qr_code))
               ];
 
-              // Validate required fields
               if (empty($employee_record['qr_code'])) {
                 $errors[] = "Row " . ($index + 1) . ": Missing required fields";
                 continue;
@@ -654,9 +609,9 @@ try {
 
           if ($imported_count > 0 || $duplicate_count > 0) {
             $db->commit();
-            $response['success'] = true;
-            $response['message'] = "Import completed successfully. $imported_count proximity codes imported.";
-            $response['imported_count'] = $imported_count;
+            $response['success']          = true;
+            $response['message']          = "Import completed successfully. $imported_count proximity codes imported.";
+            $response['imported_count']   = $imported_count;
             $response['duplicates_count'] = $duplicate_count;
 
             if ($duplicate_count > 0) {
@@ -664,16 +619,16 @@ try {
             }
 
             if (!empty($errors)) {
-              $response['message'] .= " " . count($errors) . " records had errors.";
-              $response['errors'] = array_slice($errors, 0, 10); // Return first 10 errors
-              $response['warnings'] = array_slice($errors, 0, 5); // For compatibility
+              $response['message']  .= " " . count($errors) . " records had errors.";
+              $response['errors']    = array_slice($errors, 0, 10);
+              $response['warnings']  = array_slice($errors, 0, 5);
             }
 
             logSystemAction($database->getCurrentUserId(), 'DATA_IMPORTED', "Imported $imported_count proximity codes. $duplicate_count duplicates skipped.");
           } else {
             $db->rollBack();
             $response['message'] = 'Import failed. No valid proximity code records were processed.';
-            $response['errors'] = $errors;
+            $response['errors']  = $errors;
           }
         } catch (Exception $e) {
           if (isset($db)) {
@@ -697,10 +652,9 @@ try {
 
           if ($employee) {
             $response['success'] = true;
-            $response['data'] = $employee;
+            $response['data']    = $employee;
             $response['message'] = 'Proximity code found';
 
-            // Log QR scan
             logSystemAction($database->getCurrentUserId(), 'PROXIMITY_SCAN', "Proximity scan for proximity code: " . $employee['qr_code']);
           } else {
             $response['message'] = 'No proximity code found with this code';
@@ -722,30 +676,31 @@ try {
       case 'list':
         $filters = [];
 
-        // Strip client-only fields that have no DB column
         unset($filters['remarks']);
 
         if (!empty($_GET['qr_code'])) {
           $filters['qr_code'] = $_GET['qr_code'];
         }
-        
-        if (!empty($_GET['created_at'])) { $filters['created_at'] = $_GET['created_at']; }
-         elseif (!empty($_GET['created_from']) && !empty($_GET['created_to'])) {
+
+        if (!empty($_GET['created_at'])) {
+          $filters['created_at'] = $_GET['created_at'];
+        } elseif (!empty($_GET['created_from']) && !empty($_GET['created_to'])) {
           $filters['created_from'] = $_GET['created_from'];
           $filters['created_to']   = $_GET['created_to'];
         }
 
-         if (!empty($_GET['updated_at'])) { $filters['updated_at'] = $_GET['updated_at']; }
-         elseif (!empty($_GET['updated_from']) && !empty($_GET['updated_to'])) {
+        if (!empty($_GET['updated_at'])) {
+          $filters['updated_at'] = $_GET['updated_at'];
+        } elseif (!empty($_GET['updated_from']) && !empty($_GET['updated_to'])) {
           $filters['updated_from'] = $_GET['updated_from'];
           $filters['updated_to']   = $_GET['updated_to'];
         }
 
         try {
-          $employees = $employeeManager->getEmployees($filters);
+          $employees           = $employeeManager->getEmployees($filters);
           $response['success'] = true;
-          $response['data'] = $employees;
-          $response['total'] = count($employees);
+          $response['data']    = $employees;
+          $response['total']   = count($employees);
         } catch (Exception $e) {
           $response['message'] = 'Error retrieving proximity codes.';
         }
@@ -760,7 +715,7 @@ try {
 
             if ($employee) {
               $response['success'] = true;
-              $response['data'] = $employee;
+              $response['data']    = $employee;
             } else {
               $response['message'] = 'Proximity code not found';
             }
@@ -781,11 +736,11 @@ try {
 
             if ($employee) {
               $response['success'] = true;
-              $response['data'] = $employee;
-              $response['exists'] = true;
+              $response['data']    = $employee;
+              $response['exists']  = true;
             } else {
               $response['success'] = true;
-              $response['exists'] = false;
+              $response['exists']  = false;
               $response['message'] = 'Proximity code available';
             }
           } catch (Exception $e) {
@@ -798,9 +753,9 @@ try {
 
       case 'stats':
         try {
-          $stats = $employeeManager->getProxcodeStats();
+          $stats               = $employeeManager->getProxcodeStats();
           $response['success'] = true;
-          $response['data'] = $stats;
+          $response['data']    = $stats;
         } catch (Exception $e) {
           $response['message'] = 'Error getting statistics: ' . $e->getMessage();
         }
@@ -808,12 +763,12 @@ try {
 
       case 'user_info':
         $response['success'] = true;
-        $response['data'] = [
-          'user_id' => $database->getCurrentUserId(),
-          'username' => $_SESSION['username'] ?? 'Unknown',
-          'email' => $_SESSION['email'] ?? '',
-          'first_name' => $_SESSION['first_name'] ?? '',
-          'last_name' => $_SESSION['last_name'] ?? ''
+        $response['data']    = [
+          'user_id'    => $database->getCurrentUserId(),
+          'username'   => $_SESSION['username']   ?? 'Unknown',
+          'email'      => $_SESSION['email']       ?? '',
+          'first_name' => $_SESSION['first_name']  ?? '',
+          'last_name'  => $_SESSION['last_name']   ?? '',
         ];
         break;
 
@@ -825,14 +780,12 @@ try {
     $response['message'] = 'Invalid request method. Use GET or POST.';
   }
 
-  // Output JSON response for AJAX requests
   if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
     header('Content-Type: application/json');
     echo json_encode($response);
     exit;
   }
 
-  // For non-AJAX requests, redirect or handle differently
   if ($response['success']) {
     $_SESSION['success_message'] = $response['message'];
   } else {
@@ -844,7 +797,6 @@ try {
     'message' => 'System error: ' . $e->getMessage()
   ];
 
-  // Log system error
   error_log("Proximity Management System Error: " . $e->getMessage());
 
   if (isset($_SESSION['user_id'])) {
@@ -860,53 +812,51 @@ try {
   $_SESSION['error_message'] = $error_response['message'];
 }
 
-// API endpoint information
 function getAPIInfo()
 {
   return [
-    'version' => '2.2',
-    'name' => 'Proximity Management System',
+    'version'     => '2.2',
+    'name'        => 'Proximity Management System',
     'description' => 'Multi-user proximity management system with user-specific databases',
-    'features' => [
+    'features'    => [
       'Transaction Support' => 'Database transactions for critical operations',
-      'Audit Logging' => 'Complete audit trail of all operations',
-      'Filtered Delete' => 'Delete employees based on active search filters'
+      'Audit Logging'       => 'Complete audit trail of all operations',
+      'Filtered Delete'     => 'Delete employees based on active search filters',
     ],
     'endpoints' => [
       'POST' => [
-        'add/create' => 'Create new proximity code',
-        'edit/update' => 'Update existing proximity code',
-        'delete' => 'Delete proximity code',
-        'delete_all' => 'Delete all proximity codes',
-        'search_qr' => 'Search proximity code by Proximity code'
+        'add/create'     => 'Create new proximity code',
+        'edit/update'    => 'Update existing proximity code',
+        'delete'         => 'Delete proximity code',
+        'delete_all'     => 'Delete all proximity codes',
+        'search_qr'      => 'Search proximity code by Proximity code',
       ],
       'GET' => [
-        'get/list' => 'Get proximity codes with optional filters',
+        'get/list'   => 'Get proximity codes with optional filters',
         'get_single' => 'Get single proximity code by ID',
-        'check_qr' => 'Check if Proximity code exists',
-        'stats' => 'Get proximity code statistics',
-        'user_info' => 'Get current user information'
-      ]
+        'check_qr'   => 'Check if Proximity code exists',
+        'stats'      => 'Get proximity code statistics',
+        'user_info'  => 'Get current user information',
+      ],
     ],
     'authentication' => 'Session-based (user must be logged in)',
-    'database' => 'User-specific databases'
+    'database'       => 'User-specific databases',
   ];
 }
 
-// API info endpoint
 if (isset($_GET['api_info'])) {
   header('Content-Type: application/json');
   echo json_encode(getAPIInfo(), JSON_PRETTY_PRINT);
   exit;
 }
 
-// Health check endpoint
 if (isset($_GET['health_check'])) {
   $health = [
-    'status' => 'OK',
-    'timestamp' => date('Y-m-d H:i:s'),
+    'status'             => 'OK',
+    'timestamp'          => date('Y-m-d H:i:s'),
+    'timezone'           => date_default_timezone_get(),
     'user_authenticated' => isset($_SESSION['user_id']),
-    'user_id' => $_SESSION['user_id'] ?? null,
+    'user_id'            => $_SESSION['user_id'] ?? null,
   ];
 
   try {
@@ -915,7 +865,7 @@ if (isset($_GET['health_check'])) {
     $database->getUserConnection();
     $health['user_database'] = 'OK';
   } catch (Exception $e) {
-    $health['status'] = 'ERROR';
+    $health['status']        = 'ERROR';
     $health['user_database'] = 'ERROR: ' . $e->getMessage();
   }
 

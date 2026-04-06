@@ -81,6 +81,9 @@ class EmployeeLogManager
         ]
       );
 
+      // Sync MySQL session timezone with PHP/app timezone (Asia/Manila, +08:00)
+      $this->conn->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
+
       // Create necessary tables if they don't exist
       $this->createTables();
     } catch (PDOException $e) {
