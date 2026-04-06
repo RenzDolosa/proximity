@@ -1,13 +1,24 @@
 <?php
 // config.php
 
-// Database configuration 
-define('DB_HOST', '127.0.0.1:3307'); // localhost // sql212.infinityfree.com
-define('DB_NAME', 'if0_41430152_proximity3pl'); // system_database // if0_41430152_proximity3pl
-define('DB_USER', 'root'); // root // if0_41430152
-define('DB_PASS', ''); // empty for local development // kGq47fPWAS41
+require_once __DIR__ . '/../vendor/autoload.php';
 
-define('USER_DB_PREFIX', DB_NAME); // 'if0_41430152' . '_'
+$dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
+$dotenv->load();
+
+if ($_ENV['APP_ENV'] === 'local') {
+    define('DB_HOST', '127.0.0.1:3307');
+    define('DB_NAME', 'if0_41430152_proximity3pl');
+    define('DB_USER', 'root');
+    define('DB_PASS', '');
+} else {
+    define('DB_HOST', $_ENV['DB_HOST']);
+    define('DB_NAME', $_ENV['DB_NAME']);
+    define('DB_USER', $_ENV['DB_USER']);
+    define('DB_PASS', $_ENV['DB_PASS']);
+}
+
+define('USER_DB_PREFIX', DB_NAME);
 define('USER_DB_HOST', DB_HOST);
 define('USER_DB_USER', DB_USER);
 define('USER_DB_PASS', DB_PASS);
