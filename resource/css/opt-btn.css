@@ -88,3 +88,29 @@
   outline: none;
   background-color: #e3f2fd;
 }
+
+.actions-panel {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  width: 160px;
+  background: #fff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.13);
+  display: none;
+  flex-direction: column;
+}
+
+.actions-panel.actions-open {
+  display: flex !important;
+}
+
+.actions-active {
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+  color: #475569 !important;
+}

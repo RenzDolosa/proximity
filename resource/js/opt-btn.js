@@ -91,3 +91,10 @@ function exportClickOutside(event) {
     hideExportOptions();
   }
 }
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.actions-toggle-btn') && !e.target.closest('.actions-panel')) {
+    document.querySelectorAll('.actions-panel').forEach(p => p.classList.remove('actions-open'));
+    document.querySelectorAll('.actions-toggle-btn').forEach(b => b.classList.remove('actions-active'));
+  }
+});

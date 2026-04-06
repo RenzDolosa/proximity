@@ -500,10 +500,71 @@ async function renderEmployeeTable() {
             <td><span class="remarks-${displayRemarks.toLowerCase()}">${displayRemarks}</span></td>
             <td><small>${employee.created_at || ""}</small></td>
             <td><small>${employee.updated_at || ""}</small></td>
-            <td>
-              <div style="display: flex; gap: 0.5rem;">
-                <button class="btn btn-primary btn-sm" onclick="openModal('edit', ${employee.id})" title="EDIT"><i class="fas fa-edit"></i>\nEdit</button>
-                <button class="btn btn-danger btn-sm" onclick="openDeleteModal('${employee.id}', false)" title="DELETE"><i class="fas fa-trash-alt"></i>\nDelete</button>
+            <td style="position: relative; width: 160px;">
+
+              <!-- ACTIONS TOGGLE -->
+              <button
+                onclick="
+                  const panel = this.parentElement.querySelector('.actions-panel');
+                  const allPanels = document.querySelectorAll('.actions-panel');
+                  const allBtns = document.querySelectorAll('.actions-toggle-btn');
+
+                  // Close all other open panels first
+                  allPanels.forEach(p => { if (p !== panel) p.classList.remove('actions-open'); });
+                  allBtns.forEach(b => { if (b !== this) b.classList.remove('actions-active'); });
+
+                  // Toggle current
+                  panel.classList.toggle('actions-open');
+                  this.classList.toggle('actions-active');
+                "
+                class="actions-toggle-btn"
+                style="
+                  width: 100%;
+                  padding: 6px 12px;
+                  font-size: 12px;
+                  font-weight: 700;
+                  letter-spacing: 1px;
+                  border: 1.5px solid #cbd5e1;
+                  border-radius: 10px;
+                  background: #fff;
+                  color: #1e293b;
+                  cursor: pointer;
+                  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+                  white-space: nowrap;
+                "
+              >
+                ACTIONS
+              </button>
+
+              <!-- FLOATING PANEL (positioned relative to td/tr) -->
+              <div class="actions-panel">
+
+                <!-- EDIT -->
+                <button
+                  onclick="openModal('edit', ${employee.id})"
+                  style="
+                    width:100%; padding: 7px;
+                    font-size: 12px; font-weight: 700;
+                    background: #fff; color: #6366f1;
+                    border: none; border-bottom: 1px solid #e2e8f0;
+                    cursor: pointer; text-align: center;
+                  ">
+                  <i class="fas fa-edit"></i> EDIT
+                </button>
+
+                <!-- DELETE -->
+                <button
+                  onclick="openDeleteModal('${employee.id}', false)"
+                  style="
+                    width:100%; padding: 7px;
+                    font-size: 12px; font-weight: 700;
+                    background: #fff; color: #ef4444;
+                    border: none;
+                    cursor: pointer; text-align: center;
+                  ">
+                  <i class="fas fa-trash-alt"></i> DELETE
+                </button>
+
               </div>
             </td>
         </tr>
