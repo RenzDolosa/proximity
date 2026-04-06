@@ -1,12 +1,12 @@
 <?php
-// login.php
+// login.php - Handles user login logic
 
 $errors = [];
 $success = '';
 
 // Redirect if already logged in
 if (isset($_SESSION['user_id'])) {
-  header('Location: /portal');
+  header('Location: ../../../portal.php');
   exit;
 }
 
@@ -86,7 +86,7 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST' &
         );
 
         // Redirect to dashboard
-        header('Location: /portal');
+        header('Location: portal.php');
         exit;
       } else {
         $errors = $result['errors'] ?? ['Invalid username/email or password.'];

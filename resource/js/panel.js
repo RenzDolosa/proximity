@@ -347,7 +347,7 @@ async function _sys_renderTable() {
   const slice = SYS.employees.slice(start, start + SYS.itemsPerPage);
   tbody.innerHTML = slice.map((emp, i) => {
     const initials = (emp.fullname || "UN").split(" ").map((n) => n[0]).join("").substring(0, 2).toUpperCase();
-    const imgSrc   = `${window.location.origin}/public/uploads/user/${emp.image}?t=${Date.now()}`;
+    const imgSrc   = `../../uploads/user/${emp.image}?t=${Date.now()}`;
     // FIX #1: coerce emp.id to String in onclick so it always matches
     return `<tr>
       <td>${start + i + 1}</td>
@@ -490,7 +490,7 @@ async function _sys_loadEmployeeData(id) {
       document.getElementById("sys-qr_code").value     = e.qr_code   || "";
       const lbl = document.querySelector(".sys-file-upload-label");
       if (e.image) {
-        const src = `${window.location.origin}/public/uploads/user/${e.image}?t=${Date.now()}`;
+        const src = `../../uploads/user/${e.image}?t=${Date.now()}`;
         lbl.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:8px">
           <img src="${src}" alt="Current" loading="lazy" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover">
           </div>`;
@@ -937,7 +937,7 @@ async function _dtl_renderTable() {
   const qrMap = await _dtl_buildQRMap();
   tbody.innerHTML = slice.map((emp, i) => {
     const matched  = qrMap[(emp.qr_code || "").trim().toLowerCase()];
-    const imgUrl   = matched && matched.image ? `${window.location.origin}/public/uploads/user/${matched.image}` : emp.image ? `${window.location.origin}/public/uploads/user/${emp.image}` : null;
+    const imgUrl   = matched && matched.image ? `../../uploads/user/${matched.image}` : emp.image ? `../../uploads/user/${emp.image}` : null;
     const display  = matched ? matched.fullname : emp.fullname || "N/A";
     const empId    = matched ? matched.id : "";
     const initials = (display || "UN").split(" ").map((n) => n[0]).join("").substring(0, 2).toUpperCase();
@@ -1286,7 +1286,7 @@ async function _prx_renderTable() {
     const isOcc   = systemQRs.includes(key);
     const remarks = isOcc ? "Occupied" : "Available";
     const matched = qrMap[key];
-    const imgUrl  = matched && matched.image ? `${window.location.origin}/public/uploads/user/${matched.image}` : emp.image ? `${window.location.origin}/public/uploads/user/${emp.image}` : null;
+    const imgUrl  = matched && matched.image ? `../../uploads/user/${matched.image}` : emp.image ? `../../uploads/user/${emp.image}` : null;
     const display = matched ? matched.fullname : emp.qr_code || "";
     const empId   = matched ? matched.id : "";
     const initials= (display || "UN").split(" ").map((n) => n[0]).join("").substring(0, 2).toUpperCase();

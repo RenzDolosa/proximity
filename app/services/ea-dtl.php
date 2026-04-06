@@ -138,8 +138,8 @@ try {
     }
 
     // Handle image path
-    if ($employee['image'] && file_exists('../public/uploads/user' . $employee['image'])) {
-      $employee['image_url'] = '../public/uploads/user' . $employee['image'];
+    if ($employee['image'] && file_exists('../uploads/' . $employee['image'])) {
+      $employee['image_url'] = '../uploads/' . $employee['image'];
     } else {
       $employee['image_url'] = null;
     }

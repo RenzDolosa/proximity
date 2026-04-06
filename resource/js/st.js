@@ -32,7 +32,7 @@ function imageUrl(filename) {
   if (!filename || !filename.trim()) return null;
   const bare = filename.trim().replace(/^.*[\\/]/, "");
   return bare
-    ? `${window.location.origin}/public/uploads/user/${bare}`
+    ? `${window.location.origin}/../../public/uploads/user/${bare}`
     : null;
 }
 

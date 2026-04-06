@@ -6,7 +6,7 @@ require_once '../../../config/config.php';
 header('Content-Type: application/json');
 
 $rootUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
-         . '://' . $_SERVER['HTTP_HOST'] . '/proximity3pl';
+         . '://' . $_SERVER['HTTP_HOST'] . '/index.php';
 
 if (!isset($_SESSION['user_id']) || !isLoggedIn()) {
   http_response_code(401);

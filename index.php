@@ -1,31 +1,32 @@
 <?php
 // index.php
 
+
 require_once 'config/config.php';
 require_once 'app/http/auth/login.php';
 
-// if (isLoggedIn()) {
-//     header('Location: portal.php');
-//     exit;
-// }
+if (isLoggedIn()) {
+    header('Location: portal.php');
+    exit;
+}
 
-// $url = $_GET['url'] ?? 'home';
-// $url = rtrim($url, '/');
+$url = $_GET['url'] ?? 'home';
+$url = rtrim($url, '/');
 
-// switch ($url) {
-//   case 'portal':
-//     include 'portal.php';
-//     break;
-//   case 'register':
-//     include 'resource/views/reg.php';
-//     break;
-//   case 'proximity3pl':
-//     include 'proximity.php';
-//     break;
-//   default:
+switch ($url) {
+  case 'portal':
+    include 'portal.php';
+    break;
+  case 'register':
+    include 'resource/views/reg.php';
+    break;
+  case 'proximity3pl':
+    include 'proximity.php';
+    break;
+  default:
 
-//     break;
-// }
+    break;
+}
 ?>
 
 <!DOCTYPE html>
@@ -121,7 +122,7 @@ require_once 'app/http/auth/login.php';
     </form>
 
     <div class="forgot-password">
-      <a href="/resource/views/f-pass.php">Forgot your password?</a>
+      <a href="resource/views/f-pass.php">Forgot your password?</a>
     </div>
 
     <div class="register-link">

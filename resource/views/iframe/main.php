@@ -4,13 +4,13 @@
 require_once '../../../config/config.php';
 require_once '../../../config/db.php';
 
-// requireAccess('main', '/proximity');
+requireAccess('main', '../../../proximity.php', true);
 $access = getMenuAccess();
 
 $userGroup = $_SESSION['user_group'] ?? '';
 
 if (!isset($_SESSION['user_id'])) {
-  header('Location: /proximity3pl');
+  header('Location: ../../../index.php');
   exit();
 }
 
@@ -206,11 +206,11 @@ try {
       frame.addEventListener('load', function() {
         try {
           const frameUrl = this.contentWindow.location.href;
-          if (frameUrl.includes('proximity3pl') || frameUrl.includes('login')) {
+          if (frameUrl.includes('index.php') || frameUrl.includes('login')) {
             window.top.location.href = frameUrl;
           }
         } catch (e) {
-          window.top.location.href = '/proximity3pl';
+          window.top.location.href = 'index.php';
         }
       });
     }

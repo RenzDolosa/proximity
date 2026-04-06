@@ -4,6 +4,7 @@
 require_once 'config.php';
 require_once 'db.php';
 
+requireAccess('main', '../proximity.php', true);
 $access = getMenuAccess();
 
 $portalAccessGranted = isset($_SESSION['portal_access_granted']) && $_SESSION['portal_access_granted'] === true;
@@ -47,7 +48,7 @@ function isPortalSecure()
 function redirectToPortalIfNotSecure()
 {
   if (!isPortalSecure()) {
-    header('Location: /portal');
+    header('Location: ../portal.php');
     exit();
   }
 }
@@ -92,7 +93,7 @@ if (isset($_POST['portal_password'])) {
         unset($_SESSION[$rateLimitKey]); // Clear failed attempts
         unset($_SESSION[$rateLimitKey . '_time']);
         logSystemAction($userId, 'PORTAL_ACCESS_GRANTED', 'Portal access granted using user password');
-        header('Location: /portal'); // Redirect to prevent form resubmission
+        header('Location: ../portal.php'); // Redirect to prevent form resubmission
         exit();
       } else {
         $attempts++;
@@ -146,7 +147,7 @@ if (!$portalAccessGranted) {
 
     <div class="side-bar" style="top: 0;">
       <?php if ($access['proximity']): ?>
-        <div onclick="window.location.href='/proximity';" class="side-btn">
+        <div onclick="window.location.href='proximity.php';" class="side-btn">
           <div class="s-header">
             <h1>Proximity</h1>
           </div>

@@ -1,14 +1,14 @@
 <?php
 // settings.php
 
-require_once '../../config/config.php';
-require_once '../../config/db.php';
+require_once '../cnfg/config.php';
+require_once '../cnfg/db.php';
 
-requireAccess('settings', '/portal');
+requireAccess('settings', '../iframe/main.php');
 $access = getMenuAccess();
 
 if (!isLoggedIn()) {
-  header('Location: /proximity3pl');
+  header('Location: ../index.php');
   exit;
 }
 

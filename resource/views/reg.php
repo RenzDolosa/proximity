@@ -1,10 +1,10 @@
 <?php
 // register.php
 
-require_once '../../config/config.php';
-require_once '../../config/db.php';
+require_once 'res/cnfg/config.php';
+require_once 'res/cnfg/db.php';
 
-requireAccess('register', '/proximity3pl');
+requireAccess('register', 'index.php');
 $access = getMenuAccess();
 
 $errors = [];
