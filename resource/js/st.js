@@ -1,4 +1,4 @@
-// scantest.js
+// resource/js/st.js --> qr proximity scanner tester
 
 const searchInput = document.getElementById("searchInput");
 const body = document.body;

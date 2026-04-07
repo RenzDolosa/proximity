@@ -1,3 +1,5 @@
+// resource/js/btn.js --> buttons
+
 document.addEventListener("keydown", function (e) {
   if (e.key !== "Escape") return;
 

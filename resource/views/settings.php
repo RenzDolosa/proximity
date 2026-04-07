@@ -1,5 +1,5 @@
 <?php
-// settings.php
+// resource/views/settings.php --> settings
 
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';

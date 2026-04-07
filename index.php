@@ -1,5 +1,5 @@
 <?php
-// index.php
+// index.php --> main login
 
 
 require_once 'config/config.php';

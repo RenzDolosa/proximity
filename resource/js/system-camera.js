@@ -1,4 +1,4 @@
-// system-camera.js
+// resource/js/system-camera.js --> camera
 
 "use strict";
 

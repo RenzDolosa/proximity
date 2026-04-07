@@ -1,8 +1,7 @@
 <?php
-// migrate_to_webp.php
-// Place this file in your /cnfg/ folder (same level as config.php)
-// Run once via browser: https://proximity3pl.page.gd/res/cnfg/migrate_to_webp.php?secret=AdminAdmin123
-// Then DELETE this file after migration is complete.
+// config/migrate_to_webp.php --> image migration image type to webp
+// Place this file in your /config/ folder (same level as config.php)
+// Run once via browser: https://proximity3pl.page.gd/config/migrate_to_webp.php?secret=AdminAdmin123
 
 // ─── SECURITY ────────────────────────────────────────────────────────────────
 define('MIGRATION_SECRET', 'AdminAdmin123'); // <-- Change before running!

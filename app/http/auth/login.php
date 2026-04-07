@@ -1,5 +1,5 @@
 <?php
-// login.php - Handles user login logic
+// app/http/auth/login.php --> login logic
 
 $errors = [];
 $success = '';

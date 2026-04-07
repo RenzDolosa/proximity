@@ -1,5 +1,5 @@
 <?php
-// req.php - Modified security section to use current user's password
+// config/req.php --> portal access
 
 require_once 'config.php';
 require_once 'db.php';

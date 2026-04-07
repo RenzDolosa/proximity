@@ -1,5 +1,5 @@
 <?php
-// session_check.php
+// app/http/auth/session_check.php --> login sessions checker
 
 require_once '../../../config/config.php';
 

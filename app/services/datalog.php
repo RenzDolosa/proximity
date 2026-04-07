@@ -1,5 +1,5 @@
 <?php
-// datalog.php
+// app/services/datalog.php --> datalog table
 
 require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../config/db.php';

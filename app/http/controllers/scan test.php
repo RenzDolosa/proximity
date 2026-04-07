@@ -1,5 +1,5 @@
 <?php
-// scan test.php
+// app/http/controller/scan test.php --> qr proximity scanner tester
 
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);

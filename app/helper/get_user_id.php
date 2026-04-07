@@ -1,5 +1,5 @@
 <?php
-// get_user_id.php
+// app/helper/get_user_id.php --> get user id
 
 session_start();
 header('Content-Type: application/json');

@@ -1,5 +1,5 @@
 <?php
-// main.php
+// resource/views/iframe/main.php --> main panel controller
 
 require_once '../../../config/config.php';
 require_once '../../../config/db.php';

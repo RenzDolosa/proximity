@@ -1,18 +1,4 @@
-/**
- * aud.js  — Audio Settings Manager
- *
- * Priority order for each audio type:
- *   1. File uploaded by the user (stored in DB, path in window.AUDIO_SETTINGS)
- *   2. Generated tone fallback (so the system always makes a sound)
- *
- * window.AUDIO_SETTINGS is injected by settings.php / any page that includes
- * the get_audio_settings.php endpoint result.
- *
- * Public API (attached to window):
- *   window.playSystemAudio(audioType)  — play a sound by type
- *   window.isAudioMuted(audioType)     — check mute state
- *   window.getAudioStates()            — get all mute states
- */
+// resource/js/aud.js  — audio settings manager
 
 // ─── Mute state ────────────────────────────────────────────────────────────
 

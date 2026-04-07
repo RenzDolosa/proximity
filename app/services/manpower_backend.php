@@ -1,5 +1,5 @@
 <?php
-// manpower_backend.php
+// app/services/manpower_backend.php --> system table backend
 
 require_once __DIR__ . '/../../config/config.php';
 

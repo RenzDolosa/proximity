@@ -1,4 +1,4 @@
-// import-datalog.js
+// resource/js/i-dtl.js --> datalog table import
 
 // Open import modal
 function openImportModal() {

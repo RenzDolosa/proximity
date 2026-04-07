@@ -1,5 +1,5 @@
 <?php
-// export_proxcode.php - Updated to support export functionality
+// app/services/export_proxcode.php --> proximity table export all
 
 require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../config/db.php';

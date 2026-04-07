@@ -1,5 +1,5 @@
 <?php
-// admin panel.php
+// resource/views/admin panel.php --> admin panel system
 
 require_once '../../config/config.php';
 require_once '../../config/db.php';

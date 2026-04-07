@@ -1,4 +1,4 @@
-// req.js — global session expiry handler + fetch/XHR interceptor
+// resource/js/req.js --> portal access + global session expiry handler + fetch/XHR interceptor
 
 (function () {
   "use strict";

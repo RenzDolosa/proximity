@@ -1,5 +1,5 @@
 <?php
-// exportAll-datalog.php - Updated to support export functionality
+// app/services/exportAll-datalog.php --> datalog table export all
 
 require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../config/db.php';

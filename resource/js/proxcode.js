@@ -1,4 +1,4 @@
-//proximitycode.js - Proximity Management System (ENHANCED WITH EMPLOYEE IMAGE MATCHING)
+// resource/js/proxcode.js --> proximity table
 
 // Global variables
 let currentAction = "add";

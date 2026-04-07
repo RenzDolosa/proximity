@@ -1,5 +1,5 @@
 <?php
-// manual input.php
+// app/http/controller/manual input.php --> manual employee input in/out
 
 require_once __DIR__ . '/../../../config/config.php';
 require_once __DIR__ . '/../../services/manpower_backend.php';

@@ -1,4 +1,4 @@
-//datalog.js
+// resource/js/dtl.js --> datalog table
 
 // Global variables
 let currentAction = "add";

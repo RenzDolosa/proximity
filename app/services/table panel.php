@@ -1,5 +1,5 @@
 <?php
-// table panel.php
+// app/services/table panel.php --> table tab panel
 
 require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../config/db.php';

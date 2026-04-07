@@ -1,5 +1,5 @@
 <?php
-// f-pass.php
+// resource/views/f-pass.php --> forget password
 
 require_once '../../config/config.php';
 // require_once '../../config/db.php';

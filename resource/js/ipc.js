@@ -1,4 +1,4 @@
-// import-proximityCode.js
+// resource/js/ipc.js --> proximity table import
 
 // Configuration
 const CONFIG = {

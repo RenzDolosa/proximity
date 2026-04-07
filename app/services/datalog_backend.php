@@ -1,5 +1,5 @@
 <?php
-// datalog_backend.php
+// app/services/datalog_backend.php --> datalog table backend
 
 require_once __DIR__ . '/../../config/config.php';
 

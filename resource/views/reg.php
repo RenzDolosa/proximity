@@ -1,5 +1,5 @@
 <?php
-// register.php
+// resource/views/reg.php --> register
 
 require_once 'res/cnfg/config.php';
 require_once 'res/cnfg/db.php';

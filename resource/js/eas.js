@@ -1,4 +1,4 @@
-// exportAll-system.js
+// resource/js/exportAll-system.js --> system table export all
 
 async function fetchAllEmployeesForExport() {
   try {

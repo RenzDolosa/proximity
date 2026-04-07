@@ -1,4 +1,4 @@
-// qrproximity.js
+// resource/js/qp.js --> qr proximity scanner/viewer
 
 const searchInput = document.getElementById("searchInput");
 const body = document.body;

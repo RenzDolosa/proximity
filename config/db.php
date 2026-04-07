@@ -1,5 +1,5 @@
 <?php
-//db.php
+// config/db.php --> database bridge
 
 const PAGE_ICONS = [
   'main'               => 'fa-home',

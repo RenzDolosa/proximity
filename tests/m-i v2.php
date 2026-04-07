@@ -1,5 +1,5 @@
 <?php
-// m-i v2.php
+// tests/m-i v2.php --> test project
 
 require_once '../config/config.php';
 require_once '../config/db.php';

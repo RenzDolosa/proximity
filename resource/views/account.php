@@ -1,5 +1,5 @@
 <?php
-//account.php
+// resource/views/account.php --> account
 
 require_once '../../config/config.php';
 require_once '../../config/db.php';

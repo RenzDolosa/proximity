@@ -1,4 +1,4 @@
-// import-system.js
+// resource/js/is.js --> system table import
 
 // Open import modal
 function openImportModal() {

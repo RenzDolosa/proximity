@@ -1,4 +1,4 @@
-// login.js
+// resource/js/li.js --> login logic
 
 document.addEventListener("DOMContentLoaded", function () {
   const usernameField = document.getElementById("username");

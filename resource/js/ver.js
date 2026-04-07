@@ -1,3 +1,5 @@
+// resource/js/ver.js --> grobal version system
+
 const ver = document.getElementById('version');
 ver.innerHTML = `<i class="fas fa-code-branch"></i> Version: 2.2.7`;
 ver.style.display = 'block';

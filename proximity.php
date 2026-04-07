@@ -1,5 +1,5 @@
 <?php
-// proximity.php
+// proximity.php --> proximity iframe for qr proximity.php
 
 require_once 'config/config.php';
 require_once 'config/db.php';

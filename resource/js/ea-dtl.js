@@ -1,3 +1,5 @@
+// resource/js/exportAll-datalog.js --> datalog table export all
+
 // Function to fetch all employees data bypassing pagination
 async function fetchAllEmployeesForExport() {
   try {

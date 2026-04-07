@@ -1,5 +1,5 @@
 <?php
-// session_logout.php
+// app/http/auth/session_logout.php --> logout sessions
 
 require_once '../../../config/config.php';
 

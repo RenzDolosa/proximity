@@ -1,4 +1,5 @@
-// Enhanced Loading Screen Functions for System.php
+// resource/js/loading.js --> loading UI
+
 function showLoadingScreen() {
   const loadingScreen = document.getElementById("loading-screen");
   const mainContainer = document.querySelector(".container");

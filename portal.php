@@ -1,5 +1,5 @@
 <?php
-// portal.php
+// portal.php --> portal iframe for main.php
 
 require_once 'config/config.php';
 require_once 'config/db.php';

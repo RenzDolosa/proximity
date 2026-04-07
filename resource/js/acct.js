@@ -1,3 +1,5 @@
+// resource/js/acct.js --> account
+
 // Form validation
 document.addEventListener("DOMContentLoaded", function () {
   const passwordForm = document.querySelector(

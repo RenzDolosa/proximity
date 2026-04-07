@@ -1,5 +1,5 @@
 <?php
-// test.php
+// tests/test.php --> test project
 
 require_once '../cnfg/config.php';
 require_once '../cnfg/db.php';

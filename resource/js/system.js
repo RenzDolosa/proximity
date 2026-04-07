@@ -1,4 +1,4 @@
-//system.js
+// resource/js/system.js --> system table
 
 // Global variables
 let currentAction = "add";

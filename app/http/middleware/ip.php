@@ -1,4 +1,6 @@
 <?php
+// app/http/middleware/ip.php
+
 $servername = "192.168.1.50"; // IP address of XAMPP server
 $username = "remote_user";
 $password = "";

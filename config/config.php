@@ -1,5 +1,5 @@
 <?php
-// config.php
+// config/config.php --> database configuration
 
 require_once __DIR__ . '/../vendor/autoload.php';
 

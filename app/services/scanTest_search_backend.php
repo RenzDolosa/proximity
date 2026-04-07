@@ -1,5 +1,5 @@
 <?php
-// scanTest_search_backend.php
+// app/services/scanTest_search_backend.php --> qr proximity scanner tester backend
 
 // ── Buffer output so stray warnings never corrupt JSON ──────
 ob_start();

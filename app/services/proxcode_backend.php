@@ -1,5 +1,5 @@
 <?php
-// proxcode_backend.php
+// app/services/proxcode_backend.php --> proximity table backend
 
 require_once __DIR__ . '/../../config/config.php';
 

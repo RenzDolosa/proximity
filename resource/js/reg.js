@@ -1,4 +1,5 @@
-// Enhanced reg.js with improved error handling and validation
+// resource/js/reg.js --> register
+
 document.addEventListener("DOMContentLoaded", function () {
   addPasswordToggle();
   enhanceFormValidation();

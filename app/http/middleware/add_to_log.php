@@ -1,5 +1,5 @@
 <?php
-// add_to_log.php - Employee Access Log Integration with QR Search Backend
+// app/http/middleware/add_to_log.php --> manual input log in/out trigger
 
 // ── Buffer output so stray warnings never corrupt JSON ──────
 ob_start();
