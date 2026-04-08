@@ -1,0 +1,400 @@
+/* resource/css/system-camera.css --> camera */
+
+/* ── Overlay ──────────────────────────────────────────────── */
+.camera-modal {
+  display: none;
+  position: fixed;
+  z-index: 2000;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.92);
+  /* flex centering — JS sets display:flex when open */
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+/* ── Modal card ───────────────────────────────────────────── */
+.camera-modal-content {
+  background-color: #161616;
+  width: 100%;
+  max-width: 900px;
+  border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  /* no fixed height — grows with content */
+  overflow: hidden;
+  /* keep it inside viewport on small screens */
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+.camera-modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #2a2a2a;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 14px 14px 0 0;
+  color: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.camera-modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.camera-modal-header .close-camera {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: #fff;
+  cursor: pointer;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.camera-modal-header .close-camera:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* ── Body ─────────────────────────────────────────────────── */
+.camera-modal-body {
+  padding: 16px;
+  background-color: #161616;
+  color: #fff;
+  border-radius: 0 0 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Selector + status row ────────────────────────────────── */
+.camera-selextor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+@media (max-width: 540px) {
+  .camera-selextor-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.camera-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background-color: #242424;
+  border-radius: 8px;
+  border: 1px solid #333;
+}
+
+.camera-selector-container label {
+  font-weight: 600;
+  color: #aaa;
+  margin: 0;
+  white-space: nowrap;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#cameraSelector {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  background-color: #161616;
+  color: #fff;
+  border: 1px solid #667eea;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+#cameraSelector:hover:not(:disabled) {
+  border-color: #764ba2;
+  background-color: #1e1e1e;
+}
+#cameraSelector:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.25);
+}
+#cameraSelector:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+#cameraSelector option {
+  background-color: #1a1a1a;
+  color: #fff;
+}
+
+/* ── Status banner ────────────────────────────────────────── */
+.camera-status {
+  padding: 10px 14px;
+  background-color: #242424;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #aaa;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border: 1px solid transparent;
+  transition: background 0.25s, color 0.25s, border-color 0.25s;
+  line-height: 1.4;
+}
+.camera-status.success {
+  background-color: rgba(81, 207, 102, 0.08);
+  color: #51cf66;
+  border-color: rgba(81, 207, 102, 0.35);
+}
+.camera-status.error {
+  background-color: rgba(255, 107, 107, 0.08);
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.35);
+}
+.camera-status.info {
+  background-color: rgba(102, 126, 234, 0.08);
+  color: #8fa6f8;
+  border-color: rgba(102, 126, 234, 0.25);
+}
+
+/* ── Camera / Crop view area ──────────────────────────────── */
+.camera-container {
+  position: relative;
+  width: 100%;
+  /* 16:9 min so the card doesn't collapse before stream loads */
+  min-height: 240px;
+  background: #000;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#cameraStream {
+  width: 100%;
+  height: auto;
+  display: block;
+  transform: scaleX(-1);  /* mirror like a selfie camera */
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+/* Final preview after crop applied */
+#cameraPreview {
+  width: 100%;
+  height: auto;
+  display: none;
+  border-radius: 10px;
+  background: #000;
+  object-fit: contain;
+}
+
+/* ── Crop container ───────────────────────────────────────── */
+#cropContainer {
+  display: none;
+  width: 100%;
+  height: 55vh;
+  max-height: 55vh;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #0d0d0d;
+  align-items: center;
+  justify-content: center;
+}
+
+#cropImage {
+  display: block;
+  max-width: 100%;
+  max-height: 55vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+/* Cropper.js theme tweaks for dark UI */
+.cropper-view-box,
+.cropper-face {
+  outline-color: #667eea;
+}
+.cropper-point {
+  background-color: #764ba2;
+}
+.cropper-line {
+  background-color: rgba(102, 126, 234, 0.5);
+}
+.cropper-dashed {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* ── Controls row ─────────────────────────────────────────── */
+.camera-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
+.camera-btn {
+  padding: 11px 20px;
+  font-size: 14px;
+  min-width: 120px;
+  flex: 1 1 120px;
+  max-width: 180px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: transform 0.18s, box-shadow 0.18s, background 0.18s, opacity 0.18s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+/* Capture */
+.camera-btn.capture {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+}
+.camera-btn.capture:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.45);
+}
+.camera-btn.capture:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Apply crop */
+.camera-btn.apply-crop {
+  background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+  color: #1a1a1a;
+}
+.camera-btn.apply-crop:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(247, 151, 30, 0.45);
+}
+
+/* Retake */
+.camera-btn.retake {
+  background-color: #ff6b6b;
+  color: #fff;
+}
+.camera-btn.retake:hover {
+  background-color: #ff5252;
+  transform: translateY(-1px);
+}
+
+/* Use Photo */
+.camera-btn.upload {
+  background-color: #51cf66;
+  color: #fff;
+}
+.camera-btn.upload:hover {
+  background-color: #40c057;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(81, 207, 102, 0.35);
+}
+
+/* Cancel */
+.camera-btn.cancel {
+  background-color: #3a3a3a;
+  color: #ccc;
+}
+.camera-btn.cancel:hover {
+  background-color: #444;
+}
+
+/* ── File-upload wrapper (in employee form) ───────────────── */
+.file-upload-wrapper {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.file-upload {
+  flex: 1;
+}
+
+.camera-toggle-btn {
+  padding: 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  width: 48px;
+  flex-shrink: 0;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.camera-toggle-btn:hover {
+  transform: scale(1.06);
+  box-shadow: 0 4px 14px rgba(102, 126, 234, 0.4);
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .camera-modal-content {
+    border-radius: 10px;
+  }
+
+  .camera-modal-body {
+    padding: 12px;
+  }
+
+  .camera-btn {
+    max-width: 100%;
+    flex: 1 1 45%;
+  }
+
+  .camera-selector-container {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  #cameraSelector {
+    width: 100%;
+  }
+
+  #cropContainer {
+    max-height: 42vh;
+  }
+  #cropImage {
+    max-height: 42vh;
+  }
+}
+
+@media (max-width: 380px) {
+  .camera-btn {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+}

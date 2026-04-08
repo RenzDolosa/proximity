@@ -1,0 +1,181 @@
+/* resource/css/is.css --> import system */
+
+.import-instructions {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border: 1px solid #dee2e6;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  cursor: default;
+}
+
+.import-instructions h4 {
+  color: #495057;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+  border-bottom: 2px solid #dee2e6;
+  padding-bottom: 0.5rem;
+  cursor: default;
+}
+
+.import-instructions p {
+  margin: 0.5rem 0;
+  line-height: 1.5;
+  cursor: default;
+}
+
+.import-instructions ul {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+}
+
+.import-instructions li {
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+  cursor: default;
+}
+
+.import-instructions strong {
+  color: #2c3e50;
+  font-weight: 600;
+  cursor: default;
+}
+
+.download-label {
+  display: flex;
+  align-items: center;
+  gap: 15rem;
+  font-weight: 600;
+}
+
+/* Preview table styling */
+.preview-table {
+  max-height: 350px;
+  overflow: auto;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.preview-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  background: white;
+}
+
+.preview-table th,
+.preview-table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #dee2e6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.preview-table th {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  color: #495057;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.preview-table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+/* Progress bar styling */
+.progress-bar {
+  width: 100%;
+  height: 24px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 1rem 0;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #28a745 0%, #20c997 50%, #17a2b8 100%);
+  width: 0%;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  align-content: center;
+}
+
+.progress-fill::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+#importStatus {
+  font-weight: 600;
+  color: #495057;
+  text-align: center;
+  padding: 0.5rem;
+  background: rgba(40, 167, 69, 0.1);
+  border-radius: 6px;
+  border-left: 4px solid #28a745;
+}
+
+#importProgress {
+  position: absolute;
+  width: 520px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+  border: 1px solid #dee2e6;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  z-index: 1000;
+}
+
+#importProgress h4 {
+  color: #495057;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .import-instructions {
+    padding: 1rem;
+    cursor: default;
+  }
+
+  .preview-table th,
+  .preview-table td {
+    padding: 0.5rem;
+    font-size: 0.8rem;
+    max-width: 100px;
+  }
+}

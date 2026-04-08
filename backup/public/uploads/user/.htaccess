@@ -1,0 +1,22 @@
+# Disable directory listing
+
+Options -Indexes
+
+# Block execution of server-side scripts
+
+Require all denied
+
+# Optional: Only allow safe file types (whitelist approach - more secure)
+
+<FilesMatch "(?i)\.(jpg|jpeg|png|gif|webp|pdf|txt|zip)$">
+Require all granted
+</FilesMatch>
+
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType image/webp "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/jpg  "access plus 1 year"
+  ExpiresByType image/png  "access plus 1 year"
+  ExpiresByType image/gif  "access plus 1 year"
+</IfModule>

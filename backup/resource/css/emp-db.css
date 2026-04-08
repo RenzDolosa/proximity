@@ -1,0 +1,73 @@
+/* resource/css/emp-db --> employee dashboard */
+
+/* Additional styles for employee dashboard */
+.activity-container {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.activity-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #e1e5e9;
+}
+
+.activity-item:last-child {
+  border-bottom: none;
+}
+
+.activity-icon {
+  height: 40px;
+  width: 40px;
+  background: white;
+  border-radius: 50%;
+  margin-right: 100px;
+  object-fit: cover;
+}
+
+.activity-icon:hover {
+  position: absolute;
+  border-radius: 10%;
+  transform: scale3d(4, 4, 1);
+  transform-origin: left center;
+  transition: all 0.3s ease-in-out;
+}
+
+.activity-details {
+  flex: 1;
+}
+
+.activity-name {
+  font-weight: 500;
+  color: #2c3e50;
+  margin-bottom: 4px;
+}
+
+.activity-time {
+  font-size: 0.7rem;
+  color: #6c757d;
+}
+
+.activity-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+.status-badge,
+.check-badge {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.6rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.no-activity {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6c757d;
+}
