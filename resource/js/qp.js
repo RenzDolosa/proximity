@@ -317,7 +317,7 @@ function buildCard(employee) {
         </div>
       </div>
       <div class="${violation ? "with-violation" : "without-violation"}">
-        <div class="div-padding"><p>Violation: ${violation || "None"}</p></div>
+        <div class="div-padding"><p>Remarks: ${violation || "None"}</p></div> <!-- Violation is any -->
       </div>
     </div>`;
 }

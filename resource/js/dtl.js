@@ -23,7 +23,8 @@ let activeFilters = {};
 // Setup event listeners
 function setupEventListeners() {
   // Form submission
-  document.getElementById("employeeForm")
+  document
+    .getElementById("employeeForm")
     ?.addEventListener("submit", handleFormSubmit);
 
   // File upload handler
@@ -313,15 +314,12 @@ async function loadEmployeesAuto(filters = {}) {
       ...filters,
     });
 
-    const response = await fetch(
-      `datalog_backend.php?${params.toString()}`,
-      {
-        headers: {
-          "X-Requested-With": "XMLHttpRequest",
-        },
-        signal: AbortSignal.timeout(10000), // 10 second timeout
+    const response = await fetch(`datalog_backend.php?${params.toString()}`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
       },
-    );
+      signal: AbortSignal.timeout(10000), // 10 second timeout
+    });
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -438,6 +436,10 @@ function getActiveFilters() {
   // Convert special none value so backend can match empty/null violation
   if (filters.violation === "__none__") {
     filters.violation = "__none__"; // handled separately in loadEmployees
+  }
+
+  if (filters.user_id === "__none__") {
+    filters.user_id = "__none__"; // handled separately in loadEmployees
   }
 
   return filters;
@@ -568,6 +570,7 @@ async function buildQRToImageMap() {
         brand: emp.brand,
         status: emp.status,
         shift: emp.shift,
+        user_id: emp.user_id,
       };
     }
   });
@@ -602,6 +605,7 @@ async function loadEmployeeData(employeeId) {
         shift: employee.shift || "",
         violation: employee.violation || "",
         check_status: employee.check_status || "",
+        user_id: employee.user_id || "",
         access_timestamp: employee.access_timestamp || "",
       };
 
@@ -766,6 +770,7 @@ async function renderEmployeeTable() {
               <td><div class="check-status-${(employee.check_status || "").toLowerCase()}"><div class="employee-ph">${
                 employee.check_status || "N/A"
               }</div></div></td>
+              <td>${employee.gate_name || employee.user_id || "N/A"}</td>
           </tr>
       `;
     })
@@ -1209,6 +1214,7 @@ function updateColor() {
     document.getElementById("search_shift"),
     document.getElementById("search_violation"),
     document.getElementById("search_in-out"),
+    document.getElementById("search_user_id"),
   ];
 
   selects.forEach(updateSelectColor);
@@ -1221,7 +1227,17 @@ function populateFilter(employeeList) {
   const shift = document.getElementById("search_shift");
   const violation = document.getElementById("search_violation");
   const inOut = document.getElementById("search_in-out");
-  if (!position || !brand || !status || !shift || !violation || !inOut) return;
+  const userId = document.getElementById("search_user_id");
+  if (
+    !position ||
+    !brand ||
+    !status ||
+    !shift ||
+    !violation ||
+    !inOut ||
+    !userId
+  )
+    return;
 
   // Convert a string to Proper Case
   function toProperCase(str) {
@@ -1265,6 +1281,7 @@ function populateFilter(employeeList) {
   const shiftMap = new Map();
   const violationMap = new Map();
   const inOutMap = new Map();
+  const userIdMap = new Map();
 
   for (const emp of employeeList) {
     const add = (map, raw) => {
@@ -1281,6 +1298,7 @@ function populateFilter(employeeList) {
     add(shiftMap, emp.shift);
     add(violationMap, emp.violation);
     add(inOutMap, emp.check_status);
+    add(userIdMap, emp.gate_name || emp.user_id);
   }
 
   buildSelect(position, "Position", "No Position", positionMap);
@@ -1289,6 +1307,7 @@ function populateFilter(employeeList) {
   buildSelect(shift, "Shift", "No Shift", shiftMap);
   buildSelect(violation, "Violation", "No Violation", violationMap);
   buildSelect(inOut, "In/Out Status", "No In/Out Status", inOutMap);
+  buildSelect(userId, "Gate", "No Gate", userIdMap);
 
   updateColor();
 }
@@ -1320,19 +1339,20 @@ async function loadEmployees(filters = {}, preservePage = false) {
         params.append("shift_none", "1");
       } else if (key === "violation" && value === "__none__") {
         params.append("violation_none", "1");
+      } else if (key === "user_id" && value === "__none__") {
+        params.append("user_id_none", "1");
+      } else if (key === "user_id") {
+        params.append("gate_name", value);
       } else {
         params.append(key, value);
       }
     }
 
-    const response = await fetch(
-      `datalog_backend.php?${params.toString()}`,
-      {
-        headers: {
-          "X-Requested-With": "XMLHttpRequest",
-        },
+    const response = await fetch(`datalog_backend.php?${params.toString()}`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
       },
-    );
+    });
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);

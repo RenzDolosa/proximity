@@ -115,44 +115,49 @@ if ($databaseConnected) {
     <!-- Search and Filter Controls -->
     <div class="controls">
       <form id="searchForm">
-        <div class="form-row">
-          <div class="form-group">
+        <div class="search-row">
+          <div class="search-group">
             <input type="text" id="search_fullname" name="fullname" placeholder="Fullname">
           </div>
-          <div class="form-group">
+          <div class="search-group">
             <select id="search_position" name="position">
               <option value="">Default: ALL</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="search-group">
             <select id="search_brand" name="brand">
               <option value="">Default: ALL</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="search-group">
             <select id="search_status" name="status">
               <option value="">Default: ALL</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="search-group">
             <select id="search_shift" name="shift">
               <option value="">Default: ALL</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="search-group">
             <select id="search_violation" name="violation">
               <option value="">Default: ALL</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="search-group">
             <select id="search_in-out" name="check_status">
               <option value="">Default: ALL</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="search-group">
+            <select id="search_user_id" name="user_id">
+              <option value="">Default: ALL</option>
+            </select>
+          </div>
+          <div class="search-group">
             <input type="text" id="search_date" name="access_timestamp" placeholder="Date">
           </div>
-          <div class="form-group" style="position: fixed; left: 0; top: 0; opacity: 0;">
+          <div class="search-group" style="position: fixed; left: 0; top: 0; opacity: 0;">
             <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; width: 8px; cursor: default;" autocomplete="off">
           </div>
         </div>
@@ -257,6 +262,7 @@ if ($databaseConnected) {
             <th class="Col9">Proximity Code</th>
             <th>Timestamp</th>
             <th>Check Status</th>
+            <th>Gate</th>
           </tr>
         </thead>
         <tbody id="employeeTableBody">

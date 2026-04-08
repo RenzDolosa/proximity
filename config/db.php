@@ -403,6 +403,7 @@ function scanPortalPages(
     'config.php',
     'db.php',
     'req.php',
+    'migrate_to_webp.php',
     // 'ea-dtl.php',
     // 'eas.php',
     // 'export_proxcode.php',
@@ -545,7 +546,7 @@ function scanPortalPages(
   if (empty($baseDirs)) {
     $baseDirs = [
       __DIR__ . '/resource/views/iframe',
-      __DIR__ . 'app/services',
+      __DIR__ . '/app/services',
       __DIR__ . '/../tests',
     ];
   }

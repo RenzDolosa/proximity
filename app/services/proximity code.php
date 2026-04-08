@@ -90,18 +90,18 @@ if ($databaseConnected) {
     <!-- Search and Filter Controls -->
     <div class="controls">
       <form id="searchForm">
-        <div class="form-row">
-          <div class="form-group">
+        <div class="search-row">
+          <div class="search-group">
             <select id="search_remarks" name="remarks">
               <option value="">Default: ALL</option>
               <option value="Available">Available</option>
               <option value="Occupied">Occupied</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="search-group">
             <input type="text" id="search_date" name="created_at" placeholder="Date">
           </div>
-          <div class="form-group" style="position: fixed; left: 0; top: 0; opacity: 0;">
+          <div class="search-group" style="position: fixed; left: 0; top: 0; opacity: 0;">
             <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; width: 8px; cursor: default;" autocomplete="off">
           </div>
         </div>

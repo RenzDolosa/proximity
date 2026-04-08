@@ -7,6 +7,34 @@ require_once '../../../config/db.php';
 requireAccess('main', '../../../proximity.php', true);
 $access = getMenuAccess();
 
+// ── Page router ──
+$page = $_GET['page'] ?? null;
+
+// Pages that are full standalone HTML — render them in an iframe wrapper, not included directly
+$iframePages = ['admin panel'];
+
+// Pages safe to include directly (they output only a fragment, no full HTML shell)
+$includedPages = ['account', 'employee dashboard', 'f-pass', 'reg', 'settings'];
+
+if ($page && in_array($page, $iframePages)) {
+  // Output a bare iframe that fills the viewport, pointing back to the same page
+  // but loaded as a direct request (not via include), so its full HTML renders correctly.
+  // We pass a `_standalone=1` flag so the target page knows it's being iframed.
+  $safePageName = htmlspecialchars($page, ENT_QUOTES);
+  $iframeSrc    = '../' . rawurlencode($page) . '.php?_standalone=1';
+  echo '<!DOCTYPE html><html><head><meta charset="UTF-8">';
+  echo '<style>*{margin:0;padding:0;box-sizing:border-box;}html,body{height:100%;overflow:hidden;}';
+  echo 'iframe{width:100%;height:100%;border:none;display:block;}</style></head><body>';
+  echo '<iframe src="' . $iframeSrc . '" allowfullscreen></iframe>';
+  echo '</body></html>';
+  exit();
+}
+
+if ($page && in_array($page, $includedPages)) {
+  include __DIR__ . '/../' . $page . '.php';
+  exit();
+}
+
 $userGroup = $_SESSION['user_group'] ?? '';
 
 if (!isset($_SESSION['user_id'])) {
@@ -32,7 +60,6 @@ try {
           $missingTables[] = $table;
         }
       }
-
       if (!empty($missingTables)) {
         $databaseConnected = false;
       }
@@ -45,7 +72,6 @@ try {
   $databaseConnected = false;
   $dbError = $e->getMessage();
 }
-
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -54,15 +80,384 @@ try {
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?= htmlspecialchars($myDatabase ?? 'My Database'); ?> - Portal</title>
-  <link rel="preload" href="../../assets/icon/database-icon.png" as="image">
+  <title><?= htmlspecialchars($myDatabase ?? 'My Database'); ?> - Dashboard</title>
   <link rel="icon" href="../../assets/icon/database-icon.png" type="image/png">
-  <link rel="stylesheet" href="../../css/system.css">
-  <!-- <link rel="stylesheet" href="../../css/main.css"> -->
-  <link rel="stylesheet" href="../../css/ptl.css">
-  <link rel="stylesheet" href="../../css/btn.css">
-  <link rel="stylesheet" href="../../css/loading.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="../../css/loading.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --accent: #2563eb;
+      --accent-light: #eff6ff;
+      --bg: #f0f2f5;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --radius: 8px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      overflow-y: auto;
+    }
+
+    /* ── Top nav shortcuts bar ── */
+    .shortcut-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+      min-height: 46px;
+    }
+
+    .shortcut-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 6px 14px;
+      cursor: pointer;
+      border-radius: 6px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      transition: background 0.15s, color 0.15s;
+      font-size: 12px;
+      min-width: 64px;
+    }
+
+    .shortcut-item i {
+      font-size: 15px;
+    }
+
+    .shortcut-item:hover {
+      background: var(--bg);
+      color: var(--accent);
+    }
+
+    .shortcut-item.new-badge {
+      position: relative;
+    }
+
+    .shortcut-item .badge {
+      position: absolute;
+      top: 4px;
+      right: 8px;
+      background: #ef4444;
+      color: white;
+      font-size: 9px;
+      padding: 1px 4px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    /* ── Page body ── */
+    .page-body {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* ── Status summary row ── */
+    .status-row {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+
+    .status-item {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 16px;
+      border-right: 1px solid var(--border);
+    }
+
+    .status-item:first-child {
+      padding-left: 0;
+    }
+
+    .status-item:last-child {
+      border-right: none;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .status-dot.blue   { background: #3b82f6; }
+    .status-dot.pink   { background: #ec4899; }
+    .status-dot.purple { background: #8b5cf6; }
+    .status-dot.red    { background: #ef4444; }
+    .status-dot.orange { background: #f97316; }
+    .status-dot.green  { background: #22c55e; }
+
+    .status-info {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .status-label {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .status-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.1;
+    }
+
+    /* ── Two-column layout ── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    /* ── Section cards ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .card-body {
+      padding: 16px;
+    }
+
+    /* ── Shortcuts grid ── */
+    .shortcuts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: 12px;
+    }
+
+    .sc-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 7px;
+      padding: 14px 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+      background: var(--surface);
+      text-decoration: none;
+      color: var(--text);
+    }
+
+    .sc-card:hover {
+      background: var(--accent-light);
+      border-color: #bfdbfe;
+      transform: translateY(-1px);
+    }
+
+    .sc-card .sc-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      color: var(--accent);
+    }
+
+    .sc-card .sc-label {
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.3;
+      color: var(--text);
+    }
+
+    /* ── Menu cards (large) ── */
+    .menu-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .menu-card {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      background: var(--surface);
+      text-decoration: none;
+      color: var(--text);
+    }
+
+    .menu-card:hover {
+      background: var(--accent-light);
+      border-color: #bfdbfe;
+    }
+
+    .menu-card .mc-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 20px;
+    }
+
+    .menu-card.disabled {
+      opacity: 0.55;
+      cursor: default;
+      background: #f8fafc;
+    }
+
+    .menu-card.disabled:hover {
+      background: #f8fafc;
+      border-color: var(--border);
+    }
+
+    .mc-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .mc-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .mc-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .mc-action {
+      flex-shrink: 0;
+      font-size: 12px;
+      color: var(--accent);
+      background: var(--accent-light);
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-weight: 500;
+      white-space: nowrap;
+      border: 1px solid #bfdbfe;
+      transition: background 0.15s;
+    }
+
+    .menu-card:hover .mc-action {
+      background: #dbeafe;
+    }
+
+    .mc-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: #fef9c3;
+      color: #92400e;
+      border: 1px solid #fde68a;
+    }
+
+    /* ── Welcome banner ── */
+    .welcome-banner {
+      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .wb-left h2 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .wb-left p {
+      font-size: 13px;
+      opacity: 0.85;
+    }
+
+    .wb-right {
+      font-size: 12px;
+      opacity: 0.8;
+      text-align: right;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 12px;
+      font-weight: 500;
+      margin-top: 6px;
+    }
+
+    .status-pill.ok {
+      background: rgba(255, 255, 255, 0.2);
+      color: #bbf7d0;
+    }
+
+    .status-pill.err {
+      background: rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+    }
+
+    .status-pill i {
+      font-size: 9px;
+    }
+  </style>
 </head>
 
 <body>
@@ -75,133 +470,239 @@ try {
     </div>
   </div>
 
-  <main class="db-cont">
-    <section class="welcome-card" style="height: 160px;">
-      <h1><i class="fas fa-server"></i> Management Panel</h1>
-      <p>Welcome to your portal, <?= htmlspecialchars($username ?? 'User'); ?>
+  <!-- Top shortcut nav -->
+  <div class="shortcut-bar">
+    <?php if ($access['table panel']): ?>
+      <div class="shortcut-item" onclick="navigateWithLoading('../../../app/services/table panel.php');">
+        <i class="fas fa-users"></i>
+        <span>Employees</span>
+      </div>
+    <?php endif; ?>
+    <?php if ($access['scan test']): ?>
+      <div class="shortcut-item" onclick="navigateWithLoading('../../../app/http/controllers/scan test.php');">
+        <i class="fas fa-qrcode"></i>
+        <span>Scan Test</span>
+      </div>
+    <?php endif; ?>
+    <?php if ($access['employee dashboard']): ?>
+      <div class="shortcut-item" onclick="window.location.href='../employee dashboard.php';">
+        <i class="fas fa-chart-bar"></i>
+        <span>Insights</span>
+      </div>
+    <?php endif; ?>
+    <?php if ($access['account info']): ?>
+      <div class="shortcut-item" onclick="window.location.href='../account.php';">
+        <i class="fas fa-user-circle"></i>
+        <span>Account</span>
+      </div>
+    <?php endif; ?>
+    <?php if ($access['admin panel']): ?>
+      <div class="shortcut-item" onclick="window.location.href='../admin panel.php';">
+        <i class="fas fa-user-shield"></i>
+        <span>Admin Panel</span>
+      </div>
+    <?php endif; ?>
+  </div>
+
+  <div class="page-body">
+
+    <!-- Welcome banner -->
+    <div class="welcome-banner">
+      <div class="wb-left">
+        <h2><i class="fas fa-server" style="margin-right:8px;opacity:.8;"></i>Management Panel</h2>
+        <p>Welcome back, <strong><?= htmlspecialchars($username ?? 'User'); ?></strong> &nbsp;&middot;&nbsp; <?= htmlspecialchars($email ?? ''); ?></p>
         <?php if ($databaseConnected): ?>
-          <span style="color: #28a745;">You're successfully logged in.</span>
+          <div class="status-pill ok"><i class="fas fa-circle"></i> Database connected</div>
         <?php else: ?>
-          <span style="color: #dc3545;"><i class="fas fa-exclamation"></i> Network connection error.</span>
-          <?php if (!empty($missingTables)): ?>
-          <?php endif; ?>
+          <div class="status-pill err"><i class="fas fa-exclamation-circle"></i> Network connection error</div>
         <?php endif; ?>
-      </p>
-      <p><strong>Email:</strong> <?= htmlspecialchars($email ?? ''); ?></p>
-    </section>
+      </div>
+      <div class="wb-right">
+        <i class="fas fa-clock" style="margin-right:4px;"></i>
+        <span id="wb-time"></span><br>
+        <span id="wb-date" style="margin-top:3px;display:block;"></span>
+      </div>
+    </div>
 
-
-    <section class="stats-grid">
-      <?php if ($access['account info']): ?>
-        <div class="stat-card" onclick="window.location.href='../account.php';">
-          <div class="icon">👤</div>
-          <h3>Account Info</h3>
-          <p>Manage your account settings and personal information</p>
+    <!-- Status summary row -->
+    <div class="status-row">
+      <div class="status-item">
+        <div class="status-dot blue"></div>
+        <div class="status-info">
+          <div class="status-label">Total Employees</div>
+          <div class="status-value" id="stat-total">—</div>
         </div>
-      <?php endif; ?>
-
-      <?php if ($access['employee dashboard']): ?>
-        <div class="stat-card" onclick="window.location.href='../employee dashboard.php';">
-          <div class="icon">📊</div>
-          <h3>Insights</h3>
-          <p>View your activity statistics and insights</p>
+      </div>
+      <div class="status-item">
+        <div class="status-dot green"></div>
+        <div class="status-info">
+          <div class="status-label">Checked In</div>
+          <div class="status-value" id="stat-in">—</div>
         </div>
-      <?php endif; ?>
-
-      <?php if ($access['proximity code']): ?>
-        <div class="stat-card" onclick="navigateWithLoading('../../../app/services/proximity code.php');">
-          <div class="icon"><img src="../../../resource/assets/logo/nfc-logo.svg" alt="NFC Icon" loading="lazy" style="width: 36px; height: 36px; margin: 8px 0 -12px 0;"></div>
-          <h3>Proximity Center</h3>
-          <p>Check your proximity code status</p>
+      </div>
+      <div class="status-item">
+        <div class="status-dot orange"></div>
+        <div class="status-info">
+          <div class="status-label">Checked Out</div>
+          <div class="status-value" id="stat-out">—</div>
         </div>
-      <?php endif; ?>
-
-      <?php if ($access['settings']): ?>
-        <div class="stat-card" onclick="window.location.href='../admin panel.php';">
-          <div class="icon">⚙️</div>
-          <h3>Settings</h3>
-          <p>Configure your application preferences</p>
+      </div>
+      <div class="status-item">
+        <div class="status-dot purple"></div>
+        <div class="status-info">
+          <div class="status-label">Active Codes</div>
+          <div class="status-value" id="stat-codes">—</div>
         </div>
-      <?php endif; ?>
-    </section>
+      </div>
+      <div class="status-item">
+        <div class="status-dot <?= $databaseConnected ? 'green' : 'red'; ?>"></div>
+        <div class="status-info">
+          <div class="status-label">DB Status</div>
+          <div class="status-value" style="font-size:14px;margin-top:2px;">
+            <?= $databaseConnected ? 'Online' : 'Offline'; ?>
+          </div>
+        </div>
+      </div>
+    </div>
 
-    <section class="menu-grid">
-      <?php if ($access['table panel']): ?>
-        <div class="menu-card" onclick="navigateWithLoading('../../../app/services/table panel.php');">
-          <a href="../../../app/services/table panel.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../../../app/services/table panel.php');">Input Employee</a>
-          <div class="favi">
-            <img src="../../assets/logo/mysql-logo.svg" alt="MySql Logo" loading="lazy" style="width: 125px; height: 100px;">
-            <div>
-              <h3>Employee Manager</h3>
-              <p>Manage your employee information</p>
+    <!-- Two-column: shortcuts + menu -->
+    <div class="two-col">
+
+      <!-- Left: Quick access -->
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i class="fas fa-bolt" style="color:#f59e0b;margin-right:6px;"></i>Quick Access</span>
+          </div>
+          <div class="card-body">
+            <div class="shortcuts-grid">
+
+              <?php if ($access['table panel']): ?>
+                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php');">
+                  <div class="sc-icon"><i class="fas fa-user-plus"></i></div>
+                  <div class="sc-label">Input Employee</div>
+                </div>
+              <?php endif; ?>
+
+              <?php if ($access['proximity code']): ?>
+                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/proximity code.php');">
+                  <div class="sc-icon"><img src="../../../resource/assets/logo/nfc-logo.svg" alt="NFC" style="width:18px;height:18px;"></div>
+                  <div class="sc-label">Proximity Center</div>
+                </div>
+              <?php endif; ?>
+
+              <?php if ($access['scan test']): ?>
+                <div class="sc-card" onclick="navigateWithLoading('../../../app/http/controllers/scan test.php');">
+                  <div class="sc-icon"><i class="fas fa-qrcode"></i></div>
+                  <div class="sc-label">Test Live Search</div>
+                </div>
+              <?php endif; ?>
+
+              <?php if ($access['employee dashboard']): ?>
+                <div class="sc-card" onclick="window.location.href='../employee dashboard.php';">
+                  <div class="sc-icon"><i class="fas fa-chart-line"></i></div>
+                  <div class="sc-label">Insights</div>
+                </div>
+              <?php endif; ?>
+
+              <?php if ($access['account info']): ?>
+                <div class="sc-card" onclick="window.location.href='../account.php';">
+                  <div class="sc-icon"><i class="fas fa-id-card"></i></div>
+                  <div class="sc-label">Account Info</div>
+                </div>
+              <?php endif; ?>
+
+              <?php if ($access['admin panel']): ?>
+                <div class="sc-card" onclick="window.location.href='../admin panel.php';">
+                  <div class="sc-icon"><i class="fas fa-user-shield"></i></div>
+                  <div class="sc-label">Admin Panel</div>
+                </div>
+              <?php endif; ?>
+
             </div>
           </div>
         </div>
-      <?php endif; ?>
+      </div>
 
-      <!-- <?php if ($access['datalog']): ?>
-        <div class="menu-card" onclick="navigateWithLoading('../tb/datalog.php');">
-          <a href="../tb/datalog.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../tb/datalog.php');">Scanned Log</a>
-          <div class="favi">
-            <img src="../logo/database.svg" alt="Database" loading="lazy" style="width: 100px; height: 100px;">
-            <div>
-              <h3>Scan History</h3>
-              <p>View employee activity</p>
-            </div>
+      <!-- Right: Module cards -->
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i class="fas fa-th-large" style="color:#6366f1;margin-right:6px;"></i>Modules</span>
           </div>
-        </div> 
-      <?php endif; ?> -->
+          <div class="card-body">
+            <div class="menu-list">
 
-      <?php if ($access['scan test']): ?>
-        <div class="menu-card" onclick="navigateWithLoading('../../../app/http/controllers/scan test.php');" disabled>
-          <a href="../../../app/http/controllers/scan test.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../../../app/http/controllers/scan test.php');">Test QR or Proximity Code</a>
-          <div class="favi">
-            <img src="../../assets/icon/nfc-icon.svg" alt="NFC Icon" loading="lazy" style="width: 100px; height: 100px;">
-            <div>
-              <h3>Test Live Search</h3>
-              <p>Web Proximity verifier application</p>
+              <?php if ($access['table panel']): ?>
+                <div class="menu-card" onclick="navigateWithLoading('../../../app/services/table panel.php');">
+                  <div class="mc-icon" style="background:#eff6ff; color:#2563eb;">
+                    <img src="../../assets/logo/mysql-logo.svg" alt="MySQL" style="width:26px;height:26px;object-fit:contain;">
+                  </div>
+                  <div class="mc-info">
+                    <div class="mc-title">Employee Manager</div>
+                    <div class="mc-desc">Manage employee records and information</div>
+                  </div>
+                  <div class="mc-action"><i class="fas fa-arrow-right"></i> Open</div>
+                </div>
+              <?php endif; ?>
+
+              <?php if ($access['scan test']): ?>
+                <div class="menu-card" onclick="navigateWithLoading('../../../app/http/controllers/scan test.php');">
+                  <div class="mc-icon" style="background:#f0fdf4; color:#16a34a;">
+                    <img src="../../assets/icon/nfc-icon.svg" alt="NFC" style="width:26px;height:26px;object-fit:contain;">
+                  </div>
+                  <div class="mc-info">
+                    <div class="mc-title">Test Live Search</div>
+                    <div class="mc-desc">Web Proximity verifier application</div>
+                  </div>
+                  <div class="mc-action"><i class="fas fa-arrow-right"></i> Open</div>
+                </div>
+              <?php endif; ?>
+
+              <?php if ($access['m-i v2']): ?>
+                <div class="menu-card disabled">
+                  <div class="mc-icon" style="background:#f8fafc; color:#94a3b8;">
+                    <img src="../../assets/logo/coming-soon.svg" alt="Coming Soon" style="width:26px;height:26px;object-fit:contain;">
+                  </div>
+                  <div class="mc-info">
+                    <div class="mc-title">Under Development</div>
+                    <div class="mc-desc">This area is reserved for future development</div>
+                  </div>
+                  <div class="mc-badge">Coming Soon</div>
+                </div>
+              <?php endif; ?>
+
             </div>
           </div>
         </div>
-      <?php endif; ?>
+      </div>
 
-      <?php if ($access['m-i v2']): ?>
-        <div class="menu-card" onclick="navigateWithLoading('../../../tests/m-i v2.php');" style="background: linear-gradient(to right, rgb(183, 183, 183), rgb(147, 147, 147)); transform: scale(1);">
-          <a href="../../../tests/m-i v2.php" class="action-btn" style="margin-bottom: 10px" onclick="event.preventDefault(); navigateWithLoading('../../../tests/m-i v2.php');">Coming Soon</a>
-          <div class="favi">
-            <img src="../../assets/logo/coming-soon.svg" alt="Coming Soon" loading="lazy" style="width: 125px; height: 100px;">
-            <div>
-              <h3>Under Development</h3>
-              <p>This area is reserved for future Development</p>
-            </div>
-          </div>
-        </div>
-      <?php endif; ?>
-    </section>
-  </main>
+    </div><!-- /.two-col -->
+
+  </div><!-- /.page-body -->
 
   <script src="../../js/req.js"></script>
   <script src="../../js/loading.js"></script>
   <script>
-    const srcs = {
-      employees: 'system.php',
-      scanned: 'datalog.php',
-      proximity: 'proximity code.php',
-    };
-
-    function switchTab(name, btn) {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-frame').forEach(f => f.classList.remove('active'));
-      btn.classList.add('active');
-
-      const frame = document.getElementById('frame-' + name);
-      if (!frame.src || frame.src === window.location.href) {
-        frame.src = srcs[name];
-      }
-      frame.classList.add('active');
+    // Live clock
+    function updateTime() {
+      const now = new Date();
+      document.getElementById('wb-time').textContent = now.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      document.getElementById('wb-date').textContent = now.toLocaleDateString([], {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
     }
+    updateTime();
+    setInterval(updateTime, 1000);
 
-    // Guard: catch session expiry inside nested iframes
+    // Frame guard
     function attachFrameGuard(frame) {
       frame.addEventListener('load', function() {
         try {
@@ -214,7 +715,6 @@ try {
         }
       });
     }
-
     document.querySelectorAll('.tab-frame').forEach(attachFrameGuard);
   </script>
 </body>

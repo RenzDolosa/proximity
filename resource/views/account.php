@@ -1,8 +1,8 @@
 <?php
 // resource/views/account.php --> account
 
-require_once '../../config/config.php';
-require_once '../../config/db.php';
+require_once __DIR__ . '/../../config/config.php';
+require_once __DIR__ . '/../../config/db.php';
 
 requireAccess('account info', '../iframe/main.php');
 $access = getMenuAccess();
@@ -10,6 +10,10 @@ $access = getMenuAccess();
 $user = getCurrentUser();
 $message = '';
 $messageType = '';
+
+function formatLocalTime(string $timestamp, string $format = 'F j, Y g:i A'): string {
+    return (new DateTime($timestamp, new DateTimeZone(APP_TIMEZONE)))->format($format);
+}
 
 try {
   $userDb = getUserDBConnection($userId);
@@ -287,13 +291,13 @@ try {
           <div class="info-item">
             <div class="info-label">Account Created</div>
             <div class="info-value">
-              <?php echo $accountInfo['created_at'] ? date('F j, Y g:i A', strtotime($accountInfo['created_at'])) : 'N/A'; ?>
+              <?php echo $accountInfo['created_at'] ? formatLocalTime($accountInfo['created_at']) : 'N/A'; ?>
             </div>
           </div>
           <div class="info-item">
             <div class="info-label">Last Login</div>
             <div class="info-value">
-              <?php echo $accountInfo['last_login'] ? date('F j, Y g:i A', strtotime($accountInfo['last_login'])) : 'Network error. Please try again.'; ?>
+              <?php echo $accountInfo['last_login']  ? formatLocalTime($accountInfo['last_login'])  : 'Network error. Please try again.'; ?>
             </div>
           </div>
         </div>

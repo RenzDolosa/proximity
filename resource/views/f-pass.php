@@ -1,7 +1,7 @@
 <?php
 // resource/views/f-pass.php --> forget password
 
-require_once '../../config/config.php';
+require_once __DIR__ . '/../../config/config.php';
 // require_once '../../config/db.php';
 
 // Redirect if already logged in

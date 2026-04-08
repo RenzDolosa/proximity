@@ -1,8 +1,8 @@
 <?php
 // resource/views/admin panel.php --> admin panel system
 
-require_once '../../config/config.php';
-require_once '../../config/db.php';
+require_once __DIR__ . '/../../config/config.php';
+require_once __DIR__ . '/../../config/db.php';
 
 $permissions = getUserGroupPermissions();
 if (!canAccess($permissions, 'users') && !canAccess($permissions, 'groups') && !canAccess($permissions, 'system logs') && !canAccess($permissions, 'phpmyadmin')) {
@@ -16,7 +16,7 @@ if (!canAccess($permissions, 'users') && !canAccess($permissions, 'groups') && !
   exit;
 }
 
-requireAccess('admin panel', 'iframe/main.php');
+requireAccess('admin panel', 'settings.php');
 $access = getMenuAccess();
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -2183,7 +2183,7 @@ function renderBindRows(array $pages, int $depth = 0): void
     <span id="toastMsg">Done</span>
   </div>
 
-  <script src="../js/req.js"></script>
+  <script src="../../js/req.js"></script>
   <script>
     const IS_USERS = <?= $access['users'] ? 'true' : 'false' ?>;
     const IS_GROUPS = <?= $access['groups'] ? 'true' : 'false' ?>;

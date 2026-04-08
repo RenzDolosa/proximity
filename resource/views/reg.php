@@ -1,8 +1,8 @@
 <?php
 // resource/views/reg.php --> register
 
-require_once 'res/cnfg/config.php';
-require_once 'res/cnfg/db.php';
+require_once __DIR__ . '/../../config/config.php';
+require_once __DIR__ . '/../../config/db.php';
 
 requireAccess('register', 'index.php');
 $access = getMenuAccess();

@@ -136,6 +136,9 @@ function createDatabase()
     $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `session_token` VARCHAR(255) DEFAULT NULL");
     $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `my_database` VARCHAR(50) NOT NULL DEFAULT ''");
 
+    $dbPdo->exec("ALTER TABLE employee_access_log ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL");
+    $dbPdo->exec("ALTER TABLE check_in_out ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL");
+
     $adminHash = '$2y$10$/nqdViJv2DWyfjHhfS8ZDOPT.6QwxO3DWK1ocCwDFPUYvEE20Lkga';
     $dbPdo->exec("INSERT INTO `users` (`id`, `username`, `email`, `password`, `first_name`, `last_name`, `phone`, `my_database`, `user_group`)
       VALUES (1, 'Admin', 'administrator@gmail.com', '$adminHash', 'Renz', 'Admin', '09196398247', 'AdminServer', 'Administrator')
@@ -363,6 +366,7 @@ function createUserDatabase($userId)
         CREATE TABLE
           IF NOT EXISTS employee_access_log (
             id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id int(11) DEFAULT NULL,
             employee_id INT DEFAULT NULL,
             fullname VARCHAR(100) DEFAULT NULL,
             position VARCHAR(50) DEFAULT NULL,
@@ -386,6 +390,7 @@ function createUserDatabase($userId)
         CREATE TABLE
           IF NOT EXISTS check_in_out (
             id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id int(11) DEFAULT NULL,
             employee_id INT NOT NULL,
             qr_code VARCHAR(255) NOT NULL,
             fullname VARCHAR(255) NOT NULL,
@@ -507,6 +512,7 @@ function ensureUserTablesExist($userId)
         CREATE TABLE
           IF NOT EXISTS employee_access_log (
             id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id int(11) DEFAULT NULL,
             employee_id INT DEFAULT NULL,
             fullname VARCHAR(100) DEFAULT NULL,
             position VARCHAR(50) DEFAULT NULL,
@@ -530,6 +536,7 @@ function ensureUserTablesExist($userId)
         CREATE TABLE
           IF NOT EXISTS check_in_out (
             id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id int(11) DEFAULT NULL,
             employee_id INT NOT NULL,
             qr_code VARCHAR(255) NOT NULL,
             fullname VARCHAR(255) NOT NULL,

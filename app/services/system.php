@@ -85,39 +85,39 @@ if ($databaseConnected) {
     <!-- Search and Filter Controls -->
     <div class="controls">
       <form id="searchForm">
-        <div class="form-row">
-          <div class="form-group">
+        <div class="search-row">
+          <div class="search-group">
             <input type="text" id="search_fullname" name="fullname" placeholder="Fullname">
           </div>
-          <div class="form-group">
+          <div class="search-group">
             <select id="search_position" name="position">
               <option value="">Default: ALL</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="search-group">
             <select id="search_brand" name="brand">
               <option value="">Default: ALL</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="search-group">
             <select id="search_status" name="status">
               <option value="">Default: ALL</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="search-group">
             <select id="search_shift" name="shift">
               <option value="">Default: ALL</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="search-group">
             <select id="search_violation" name="violation">
               <option value="">Default: ALL</option>
             </select>
           </div>
-          <!-- <div class="form-group">
+          <!-- <div class="search-group">
             <input type="text" id="search_date" name="created_at" placeholder="Date">
           </div> -->
-          <div class="form-group" style="position: relative;">
+          <div class="search-group" style="position: relative;">
             <input type="date"
               id="search_date"
               name="created_at"
@@ -131,7 +131,7 @@ if ($databaseConnected) {
                  background:none; border:none; cursor:pointer; font-size:14px;
                  color:var(--color-text-secondary); padding:0; line-height:1;">✕</button>
           </div>
-          <div class="form-group" style="position: fixed; left: 0; top: 0; opacity: 0;">
+          <div class="search-group" style="position: fixed; left: 0; top: 0; opacity: 0;">
             <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; width: 8px; cursor: default;" autocomplete="off">
           </div>
         </div>
@@ -211,7 +211,7 @@ if ($databaseConnected) {
             <th>Brand</th>
             <th>Status</th>
             <th>Shift</th>
-            <th class="Col7">Violation</th>
+            <th class="Col7">Remarks</th> <!-- Violation if any -->
             <th class="Col8">Image</th>
             <th class="Col9">Proximity Code</th>
             <th>Register</th>
@@ -507,11 +507,12 @@ if ($databaseConnected) {
               <th style="padding:10px 12px;text-align:left;">SN</th>
               <th style="padding:10px 12px;text-align:left;">Status</th>
               <th style="padding:10px 12px;text-align:left;">Timestamp</th>
+              <th style="padding:10px 12px;text-align:left;">Gate</th>
             </tr>
           </thead>
           <tbody id="logsTableBody">
             <tr>
-              <td colspan="3" style="text-align:center;padding:24px;color:#aaa;">Loading…</td>
+              <td colspan="4" style="text-align:center;padding:24px;color:#aaa;">Loading…</td>
             </tr>
           </tbody>
         </table>

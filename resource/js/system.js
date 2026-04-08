@@ -942,7 +942,7 @@ async function openLogsModal(employeeId, fullname) {
   document.getElementById('logCountOut').textContent = '—';
   document.getElementById('logCountTotal').textContent = '—';
   title.innerHTML = `<i class="fas fa-history"></i> Access Logs — ${fullname}`;
-  tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>`;
   modal.style.display = 'block';
 
   try {
@@ -971,13 +971,14 @@ async function openLogsModal(employeeId, fullname) {
             </span>
           </td>
           <td style="padding:9px 12px;color:#555;">${log.access_timestamp}</td>
+          <td style="padding:9px 12px;">${log.gate_name || log.user_id || "N/A"}</td>
         </tr>`).join('') :
-        `<tr><td colspan="3" style="text-align:center;padding:24px;color:#aaa;">No log records found.</td></tr>`;
+        `<tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;">No log records found.</td></tr>`;
     } else {
-      tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:#ef4444;padding:24px;">${data.message || 'Failed to load logs.'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:24px;">${data.message || 'Failed to load logs.'}</td></tr>`;
     }
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:#ef4444;padding:24px;">Error loading logs.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:24px;">Error loading logs.</td></tr>`;
   }
 
   // ── Close when clicking outside ──────────────────────────

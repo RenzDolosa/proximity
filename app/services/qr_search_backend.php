@@ -131,6 +131,7 @@ class Database
     try {
       $sql = "CREATE TABLE IF NOT EXISTS check_in_out (
                 id            INT AUTO_INCREMENT PRIMARY KEY,
+                user_id       int(11) DEFAULT NULL,
                 employee_id   VARCHAR(100) NOT NULL,
                 qr_code       VARCHAR(255) NOT NULL,
                 fullname      VARCHAR(255) NOT NULL,
@@ -208,14 +209,15 @@ class QueryLogger
       $now = date('Y-m-d H:i:s');
 
       $sql = "INSERT INTO check_in_out
-              (employee_id, qr_code, fullname, check_type, scan_timestamp,
+              (employee_id, qr_code, fullname, check_type, scan_timestamp, user_id,
                ip_address, user_agent)
             VALUES
-              (:employee_id, :qr_code, :fullname, :check_type, :scan_timestamp,
+              (:employee_id, :qr_code, :fullname, :check_type, :scan_timestamp, :user_id,
                :ip_address, :user_agent)";
 
       $stmt = $this->conn->prepare($sql);
       $stmt->execute([
+        ':user_id'        => $this->userId,
         ':employee_id'     => $employeeId,
         ':qr_code'         => $qrCode,
         ':fullname'        => $fullname,
@@ -253,15 +255,16 @@ class QueryLogger
 
       $sql = "INSERT INTO employee_access_log
           (employee_id, fullname, position, brand, status, shift,
-           violation, image, qr_code, check_status,
+           violation, image, qr_code, check_status, user_id,
            access_type, ip_address, user_agent, access_timestamp)
         VALUES
           (:employee_id, :fullname, :position, :brand, :status, :shift,
-           :violation, :image, :qr_code, :check_status,
+           :violation, :image, :qr_code, :check_status, :user_id,
            :access_type, :ip_address, :user_agent, :access_timestamp)";
 
       $stmt = $this->conn->prepare($sql);
       $stmt->execute([
+        ':user_id'          => $this->userId,
         ':employee_id'      => $employeeData['id']           ?? null,
         ':fullname'         => $employeeData['fullname']      ?? null,
         ':position'         => $employeeData['position']      ?? null,

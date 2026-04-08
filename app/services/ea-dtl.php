@@ -93,6 +93,11 @@ try {
     $searchParams[':qr_code'] = '%' . $_GET['qr_code'] . '%';
   }
 
+  if (!empty($_GET['user_id'])) {
+    $searchConditions[] = "user_id LIKE :user_id";
+    $searchParams[':user_id'] = '%' . $_GET['user_id'] . '%';
+  }
+
   // Build WHERE clause
   $whereClause = '';
   if (!empty($searchConditions)) {
@@ -110,7 +115,7 @@ try {
 
   // Get paginated results
   $sql = "SELECT id, employee_id, fullname, position, brand, status, shift, violation, qr_code, 
-                   image, access_timestamp, check_status
+                   image, access_timestamp, check_status, user_id,
             FROM employee_access_log
             $whereClause 
             ORDER BY access_timestamp DESC 

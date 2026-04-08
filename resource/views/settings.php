@@ -1,10 +1,10 @@
 <?php
 // resource/views/settings.php --> settings
 
-require_once '../cnfg/config.php';
-require_once '../cnfg/db.php';
+require_once __DIR__ . '/../../config/config.php';
+require_once __DIR__ . '/../../config/db.php';
 
-requireAccess('settings', '../iframe/main.php');
+requireAccess('settings', 'iframe/main.php');
 $access = getMenuAccess();
 
 if (!isLoggedIn()) {
@@ -345,13 +345,13 @@ function audioCard(string $label, string $inputName, string $dbKey, array $curre
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($user['my_database'] ?? 'System', ENT_QUOTES) ?> – Settings</title>
-  <link rel="preload" href="../icon/database-icon.png" as="image">
-  <link rel="icon" href="../icon/database-icon.png" type="image/png">
-  <link rel="stylesheet" href="../css/system.css">
-  <link rel="stylesheet" href="../css/ptl.css">
-  <link rel="stylesheet" href="../css/sett.css">
-  <link rel="stylesheet" href="../css/btn.css">
-  <link rel="stylesheet" href="../css/acct.css">
+  <link rel="preload" href="../../icon/database-icon.png" as="image">
+  <link rel="icon" href="../../icon/database-icon.png" type="image/png">
+  <link rel="stylesheet" href="../../css/system.css">
+  <link rel="stylesheet" href="../../css/ptl.css">
+  <link rel="stylesheet" href="../../css/sett.css">
+  <link rel="stylesheet" href="../../css/btn.css">
+  <link rel="stylesheet" href="../../css/acct.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
     /* ── Audio preview row ───────────────────────────────────── */
@@ -471,7 +471,7 @@ function audioCard(string $label, string $inputName, string $dbKey, array $curre
       <div class="menu-card">
         <h2><i class="fas fa-database"></i> Database Information</h2>
         <div class="database-info">
-          <img src="../icon/database-icon.png" alt="MySQL Logo" class="database-logo" loading="lazy">
+          <img src="../../assets/icon/database-icon.png" alt="MySQL Logo" class="database-logo" loading="lazy">
           <p>Connected to your personal database:</p>
           <div class="database-name">
             <?php if ($databaseConnected): ?>
@@ -552,9 +552,9 @@ function audioCard(string $label, string $inputName, string $dbKey, array $curre
                             ], JSON_UNESCAPED_SLASHES) ?>;
   </script>
 
-  <script src="../src/btn.js"></script>
-  <script src="../src/aud.js"></script>
-  <script src="../src/req.js"></script>
+  <script src="../../src/btn.js"></script>
+  <script src="../../src/aud.js"></script>
+  <script src="../../src/req.js"></script>
 
   <script>
     // Show chosen filename under each file input

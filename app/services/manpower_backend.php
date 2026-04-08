@@ -1148,24 +1148,56 @@ try {
         break;
 
       case 'get_access_logs':
-        $employee_id = $_GET['id'] ?? 0;
-        if (!$employee_id) {
-          $response['message'] = 'Employee ID is required';
+        $id = intval($_GET['id'] ?? 0);
+        if (!$id) {
+          $response['message'] = 'Employee ID required';
           break;
         }
         try {
-          $conn = $database->getUserConnection();
+          $conn = getUserDBConnection($_SESSION['user_id']);
+
           $stmt = $conn->prepare(
-            "SELECT check_status, access_timestamp
-             FROM employee_access_log
-             WHERE employee_id = :id
-             ORDER BY access_timestamp DESC"
+            "SELECT * FROM employee_access_log 
+             WHERE employee_id = :id 
+             ORDER BY access_timestamp DESC 
+             LIMIT 200"
           );
-          $stmt->execute([':id' => $employee_id]);
+          $stmt->execute([':id' => $id]);
+          $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+          // Resolve user_id → first_name from main DB
+          $userIds = array_unique(array_filter(array_column($logs, 'user_id')));
+          $userNameMap = [];
+
+          if (!empty($userIds)) {
+            try {
+              $mainConn = getMainDBConnection();
+              $ph = implode(',', array_fill(0, count($userIds), '?'));
+              $uStmt = $mainConn->prepare(
+                "SELECT id, first_name FROM users WHERE id IN ($ph)"
+              );
+              $uStmt->execute(array_values($userIds));
+              foreach ($uStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $userNameMap[(int)$row['id']] = $row['first_name'];
+              }
+            } catch (Exception $e) {
+              error_log("Gate name lookup failed: " . $e->getMessage());
+            }
+          }
+
+          foreach ($logs as &$log) {
+            $uid = (int)($log['user_id'] ?? 0);
+            $log['gate_name'] = ($uid && isset($userNameMap[$uid]))
+              ? $userNameMap[$uid]
+              : null;
+          }
+          unset($log);
+
           $response['success'] = true;
-          $response['logs']    = $stmt->fetchAll(PDO::FETCH_ASSOC);
+          $response['logs']    = $logs;
         } catch (Exception $e) {
           $response['message'] = 'Error fetching logs: ' . $e->getMessage();
+          error_log("get_access_logs error: " . $e->getMessage());
         }
         break;
 

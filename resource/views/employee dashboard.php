@@ -1,9 +1,9 @@
 <?php
 // resource/views/employee dashboard.php --> employee dashboard
 
-require_once '../../config/config.php';
-require_once '../../config/db.php';
-require_once '../../app/services/manpower_backend.php';
+require_once __DIR__ . '/../../config/config.php';
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../app/services/manpower_backend.php';
 
 requireAccess('employee dashboard', 'iframe/main.php');
 $access = getMenuAccess();

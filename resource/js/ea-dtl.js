@@ -38,6 +38,7 @@ function applyCurrentFilters(employees) {
     shift: document.getElementById("search_shift")?.value || "",
     date: document.getElementById("search_date")?.value?.toLowerCase() || "",
     qr_code: document.getElementById("search_qr")?.value?.toLowerCase() || "",
+    user_id: document.getElementById("search_user_id")?.value || "",
   };
 
   return employees.filter((employee) => {
@@ -95,6 +96,14 @@ function applyCurrentFilters(employees) {
     if (
       filters.qr_code &&
       !employee.qr_code?.toLowerCase().includes(filters.qr_code)
+    ) {
+      return false;
+    }
+
+    // Apply Gate filter
+    if (
+      filters.user_id &&
+      !employee.user_id?.toLowerCase().includes(filters.user_id)
     ) {
       return false;
     }
@@ -158,6 +167,7 @@ async function exportEmployeeData(employees, type = "Data") {
       "Proximity Code",
       "Timestamp",
       "Check Status",
+      "Gate",
     ];
     data.push(headers);
 
@@ -176,6 +186,7 @@ async function exportEmployeeData(employees, type = "Data") {
         employee.qr_code || "", // Image column is skipped
         formatDate(employee.access_timestamp) || "",
         employee.check_status || "",
+        employee.user_id || "",
       ];
       data.push(rowData);
     });
@@ -197,6 +208,7 @@ async function exportEmployeeData(employees, type = "Data") {
       { wch: 15 }, // Proximity Code
       { wch: 20 }, // Timestamp
       { wch: 5 }, // Check Status
+      { wch: 10 }, // Gate
     ];
     ws["!cols"] = colWidths;
 
@@ -334,6 +346,7 @@ function exportToExcelDTL(type = "Filtered") {
       "Proximity Code", // Image column is skipped
       "Timestamp",
       "Check Status",
+      "Gate",
     ];
     data.push(headers);
 
@@ -359,6 +372,7 @@ function exportToExcelDTL(type = "Filtered") {
             })(), // Proximity Code (skip Image column)
             cells[10]?.textContent?.trim() || "", // Timestamp
             cells[11]?.textContent?.trim() || "", // Check Status
+            cells[12]?.textContent?.trim() || "", // Gate
           ];
           data.push(rowData);
         }
@@ -376,7 +390,7 @@ function exportToExcelDTL(type = "Filtered") {
 
     // Set column widths
     const colWidths = [
-      { wch: 5 }, // SN
+      { wch: 5 },  // SN
       { wch: 10 }, // EMPID
       { wch: 25 }, // Fullname
       { wch: 20 }, // Position
@@ -386,7 +400,8 @@ function exportToExcelDTL(type = "Filtered") {
       { wch: 15 }, // Violation
       { wch: 15 }, // Proximity Code
       { wch: 20 }, // Timestamp
-      { wch: 5 }, // Check Status
+      { wch: 5 },  // Check Status
+      { wch: 10 }, // Gate
     ];
     ws["!cols"] = colWidths;
 
@@ -661,6 +676,7 @@ async function exportWithImages() {
     { header: "Proximity Code", key: "qr_code",          width: 16 },
     { header: "Timestamp",      key: "access_timestamp", width: 22 },
     { header: "Check Status",   key: "check_status",     width: 14 },
+    { header: "Gate",           key: "user_id",          width: 16 },
   ];
 
   // ── Style header row ──────────────────────────────────────────────────────
@@ -715,6 +731,7 @@ async function exportWithImages() {
       qr_code:          emp.qr_code        || "",
       access_timestamp: formatDate(emp.access_timestamp),
       check_status:     emp.check_status   || "",
+      user_id:          emp.user_id        || "",
     });
 
     dataRow.height = ROW_HEIGHT;

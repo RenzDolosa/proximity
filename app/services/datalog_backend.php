@@ -109,7 +109,8 @@ class AccessLogManager
   // Each row already has check_status set by qr_search_backend.php at scan time.
   public function getLogs($filters = [])
   {
-    $query  = "SELECT * FROM {$this->logTable} WHERE 1=1";
+    // ── Step 1: fetch logs from user DB (no cross-DB JOIN) ──
+    $query  = "SELECT * FROM {$this->logTable} l WHERE 1=1";
     $params = [];
 
     if (!empty($filters['fullname'])) {
@@ -159,11 +160,24 @@ class AccessLogManager
       $query .= " AND check_status = :check_status";
       $params[':check_status'] = $filters['check_status'];
     }
+    if (!empty($filters['user_id'])) {
+      $query .= " AND user_id LIKE :user_id";
+      $params[':user_id'] = '%' . $filters['user_id'] . '%';
+    }
+    if (!empty($filters['gate_name'])) {
+      $query .= " AND user_id IN (
+        SELECT id FROM " . DB_NAME . ".users 
+        WHERE first_name LIKE :gate_name
+      )";
+      $params[':gate_name'] = '%' . $filters['gate_name'] . '%';
+    }
+    if (!empty($filters['user_id_none'])) {
+      $query .= " AND (user_id IS NULL OR TRIM(user_id) = '' OR LOWER(TRIM(user_id)) = 'none')";
+    }
     if (!empty($filters['access_type'])) {
       $query .= " AND access_type LIKE :access_type";
       $params[':access_type'] = '%' . $filters['access_type'] . '%';
     }
-    // access_timestamp filter — accepts partial date strings e.g. "2025-03"
     if (!empty($filters['access_timestamp'])) {
       $query .= " AND access_timestamp LIKE :access_timestamp";
       $params[':access_timestamp'] = '%' . $filters['access_timestamp'] . '%';
@@ -176,7 +190,38 @@ class AccessLogManager
       $stmt->bindValue($key, $value);
     }
     $stmt->execute();
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // ── Step 2: collect unique user_ids, look them up in main DB ──
+    $userIds = array_unique(array_filter(array_column($logs, 'user_id')));
+
+    $userNameMap = [];
+    if (!empty($userIds)) {
+      try {
+        $mainConn = getMainDBConnection();
+        $ph = implode(',', array_fill(0, count($userIds), '?'));
+        $uStmt = $mainConn->prepare(
+          "SELECT id, first_name FROM users WHERE id IN ($ph)"
+        );
+        $uStmt->execute(array_values($userIds));
+        foreach ($uStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+          $userNameMap[(int)$row['id']] = $row['first_name'];
+        }
+      } catch (Exception $e) {
+        error_log("Gate name lookup failed: " . $e->getMessage());
+      }
+    }
+
+    // ── Step 3: attach gate_name to each log row ──
+    foreach ($logs as &$log) {
+      $uid = (int)($log['user_id'] ?? 0);
+      $log['gate_name'] = $uid && isset($userNameMap[$uid])
+        ? $userNameMap[$uid]
+        : null;
+    }
+    unset($log);
+
+    return $logs;
   }
 
   // ── READ: single log entry ───────────────────────────────────────────────────
@@ -681,11 +726,16 @@ try {
         if (!empty($_GET['brand']))            $filters['brand']            = $_GET['brand'];
         if (!empty($_GET['brand_none']))       $filters['brand_none']       = '1';
         if (!empty($_GET['status']))           $filters['status']           = $_GET['status'];
+        if (!empty($_GET['status_none']))      $filters['status_none']      = '1';
         if (!empty($_GET['shift']))            $filters['shift']            = $_GET['shift'];
+        if (!empty($_GET['shift_none']))       $filters['shift_none']       = '1';
         if (!empty($_GET['violation']))        $filters['violation']        = $_GET['violation'];
         if (!empty($_GET['violation_none']))   $filters['violation_none']   = '1';
         if (!empty($_GET['qr_code']))          $filters['qr_code']          = $_GET['qr_code'];
         if (!empty($_GET['check_status']))     $filters['check_status']     = $_GET['check_status'];
+        if (!empty($_GET['user_id']))          $filters['user_id']          = $_GET['user_id'];
+        if (!empty($_GET['gate_name']))        $filters['gate_name']        = $_GET['gate_name'];
+        if (!empty($_GET['user_id_none']))     $filters['user_id_none']     = '1';
         if (!empty($_GET['access_type']))      $filters['access_type']      = $_GET['access_type'];
         if (!empty($_GET['access_timestamp'])) $filters['access_timestamp'] = $_GET['access_timestamp'];
 
