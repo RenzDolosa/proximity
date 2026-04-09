@@ -245,6 +245,7 @@ if ($databaseConnected) {
       <h2 id="modalTitle">Add Employee</h2>
       <form id="employeeForm" enctype="multipart/form-data">
         <input type="hidden" id="original_id" name="original_id" value="">
+        <input type="hidden" id="user_id" name="user_id" value="<?php echo htmlspecialchars($_SESSION['user_id'] ?? ''); ?>">
         <div class="form-row">
           <div class="form-group">
             <label for="employee_id">EMPID <span style="color:#e74c3c">*</span></label>

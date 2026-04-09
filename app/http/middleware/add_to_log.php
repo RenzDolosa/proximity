@@ -171,19 +171,23 @@ class EmployeeLogManager
       if (empty($logData['fullname']) || empty($logData['qr_code'])) {
         throw new Exception("Missing required fields: fullname, qr_code");
       }
+      $now = date('Y-m-d H:i:s');
 
-      $query = "INSERT INTO employee_access_log 
-                    (employee_id, fullname, position, brand, status, shift, violation, 
-                     image, qr_code, check_status, access_type, 
-                     ip_address, user_agent) 
-                    VALUES 
-                    (:employee_id, :fullname, :position, :brand, :status, :shift, 
-                     :violation, :image, :qr_code, :check_status, :access_type, 
-                     :ip_address, :user_agent)";
+      $query = "INSERT INTO employee_access_log
+            (employee_id, fullname, position, brand, status, shift,
+            violation, image, qr_code, check_status, user_id,
+            access_type, ip_address, user_agent, access_timestamp)
+          VALUES
+            (:employee_id, :fullname, :position, :brand, :status, :shift,
+            :violation, :image, :qr_code, :check_status, :user_id,
+            :access_type, :ip_address, :user_agent, :access_timestamp)";
 
-      $checkinoutTable = "INSERT INTO check_in_out 
-              (employee_id, qr_code, fullname, check_type, ip_address, user_agent) 
-              VALUES (:employee_id, :qr_code, :fullname, :check_type, :ip_address, :user_agent)";
+      $checkinoutTable = "INSERT INTO check_in_out
+              (employee_id, qr_code, fullname, check_type, scan_timestamp, user_id,
+                ip_address, user_agent)
+            VALUES
+              (:employee_id, :qr_code, :fullname, :check_type, :scan_timestamp, :user_id,
+                :ip_address, :user_agent)";
 
       // Start transaction to ensure data consistency
       $this->conn->beginTransaction();
@@ -191,19 +195,21 @@ class EmployeeLogManager
       // Prepare and execute FIRST insert
       $stmt = $this->conn->prepare($query);
       $result = $stmt->execute([
-        ':employee_id' => $logData['employee_id'] ?? null,
-        ':fullname' => $logData['fullname'],
-        ':position' => $logData['position'] ?? null,
-        ':brand' => $logData['brand'] ?? null,
-        ':status' => $logData['status'] ?? null,
-        ':shift' => $logData['shift'] ?? null,
-        ':violation' => $logData['violation'] ?? '',
-        ':image' => $logData['image'] ?? '',
-        ':qr_code' => $logData['qr_code'],
-        ':check_status' => $logData['check_status'] ?? 'IN',
-        ':access_type' => $logData['access_type'] ?? 'manual_entry',
-        ':ip_address' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-        ':user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown'
+        ':user_id'          => $this->userId,
+        ':employee_id'      => $logData['employee_id'] ?? null,
+        ':fullname'         => $logData['fullname'],
+        ':position'         => $logData['position'] ?? null,
+        ':brand'            => $logData['brand'] ?? null,
+        ':status'           => $logData['status'] ?? null,
+        ':shift'            => $logData['shift'] ?? null,
+        ':violation'        => $logData['violation'] ?? '',
+        ':image'            => $logData['image'] ?? '',
+        ':qr_code'          => $logData['qr_code'],
+        ':check_status'     => $logData['check_status'] ?? 'IN',
+        ':access_type'      => $logData['access_type'] ?? 'manual_entry',
+        ':access_timestamp' => $now,
+        ':ip_address'       => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+        ':user_agent'       => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown'
       ]);
 
       if (!$result) {
@@ -216,12 +222,14 @@ class EmployeeLogManager
       // Prepare and execute SECOND insert (different statement)
       $stmt2 = $this->conn->prepare($checkinoutTable);
       $resultCheck = $stmt2->execute([
-        ':employee_id' => $logData['employee_id'] ?? null,
-        ':qr_code' => $logData['qr_code'],
-        ':fullname' => $logData['fullname'],
-        ':check_type' => $logData['check_status'] ?? 'IN',
-        ':ip_address' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-        ':user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown'
+        ':user_id'         => $this->userId,
+        ':employee_id'     => $logData['employee_id'] ?? null,
+        ':qr_code'         => $logData['qr_code'],
+        ':fullname'        => $logData['fullname'],
+        ':check_type'      => $logData['check_status'] ?? 'IN',
+        ':scan_timestamp'  => $now,
+        ':ip_address'      => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+        ':user_agent'      => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown'
       ]);
 
       if (!$resultCheck) {
@@ -232,9 +240,9 @@ class EmployeeLogManager
       $this->conn->commit();
 
       logSystemAction($this->userId, 'MANUAL', json_encode([
-        'employee_id' => $logId,
-        'fullname' => $logData['fullname'],
-        'qr_code' => $logData['qr_code'],
+        'employee_id' => $logData['employee_id']   ?? null,
+        'fullname' => $logData['fullname']         ?? null,
+        'qr_code' => $logData['qr_code']           ?? null,
         'check_status' => $logData['check_status'] ?? 'IN'
       ]));
 

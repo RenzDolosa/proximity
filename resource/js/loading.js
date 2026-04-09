@@ -1,214 +1,326 @@
-// resource/js/loading.js --> loading UI
+// resource/js/loading.js --> improved loading UI
 
+// ── Loading State Manager ──
+const LoadingManager = {
+  isActive: false,
+  hideTimeout: null,
+  operations: new Map(),
+
+  init() {
+    this.setupEventListeners();
+  },
+
+  setupEventListeners() {
+    // Show loading on navigation
+    window.addEventListener('beforeunload', () => this.show());
+
+    // Hide loading on page ready
+    window.addEventListener('load', () => {
+      setTimeout(() => this.hide(), 500);
+    });
+
+    // Handle back/forward navigation
+    window.addEventListener('pageshow', (event) => {
+      if (event.persisted) {
+        this.hide();
+      }
+    });
+
+    // DOM ready fallback
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => this.hide(), 300);
+    });
+  },
+
+  getElements() {
+    return {
+      screen: document.getElementById('loading-screen'),
+      content: document.querySelector('.loading-content'),
+      spinner: document.querySelector('.spinner'),
+      text: document.querySelector('.loading-text'),
+      subtext: document.querySelector('.loading-subtext'),
+      container: document.querySelector('.container')
+    };
+  },
+
+  show(options = {}) {
+    const {
+      text = 'Loading',
+      subtext = 'Please wait while we prepare your content',
+      type = 'default',
+      showProgress = false
+    } = options;
+
+    const elements = this.getElements();
+    if (!elements.screen) return;
+
+    // Clear any pending hide timeout
+    if (this.hideTimeout) {
+      clearTimeout(this.hideTimeout);
+      this.hideTimeout = null;
+    }
+
+    // Update text content
+    if (elements.text) elements.text.textContent = text + '...';
+    if (elements.subtext) elements.subtext.textContent = subtext;
+
+    // Update spinner type
+    if (elements.spinner) {
+      elements.spinner.className = 'spinner';
+      if (type === 'dots') {
+        elements.spinner.classList.add('dots');
+        elements.spinner.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+      }
+    }
+
+    // Show progress bar if requested
+    this.updateProgress(showProgress);
+
+    // Add active class
+    elements.screen?.classList.add('active');
+    elements.content?.classList.remove('error', 'success');
+    elements.container?.classList.add('loading');
+
+    this.isActive = true;
+  },
+
+  hide() {
+    if (this.hideTimeout) clearTimeout(this.hideTimeout);
+
+    const elements = this.getElements();
+    if (!elements.screen) return;
+
+    // Remove active class
+    elements.screen?.classList.remove('active');
+    elements.container?.classList.remove('loading');
+
+    this.isActive = false;
+  },
+
+  showSuccess(text = 'Success', duration = 1500) {
+    const elements = this.getElements();
+    if (!elements.content) return;
+
+    elements.content.classList.add('success');
+    if (elements.text) elements.text.textContent = text;
+    if (elements.subtext) elements.subtext.textContent = 'Operation completed';
+
+    // Auto hide after duration
+    if (this.hideTimeout) clearTimeout(this.hideTimeout);
+    this.hideTimeout = setTimeout(() => this.hide(), duration);
+  },
+
+  showError(text = 'Error', duration = 2000) {
+    const elements = this.getElements();
+    if (!elements.content) return;
+
+    elements.content.classList.add('error');
+    if (elements.text) elements.text.textContent = text;
+    if (elements.subtext) elements.subtext.textContent = 'Please try again or contact support';
+
+    // Auto hide after duration
+    if (this.hideTimeout) clearTimeout(this.hideTimeout);
+    this.hideTimeout = setTimeout(() => this.hide(), duration);
+  },
+
+  updateProgress(show = false) {
+    let progressBar = document.querySelector('.loading-progress');
+
+    if (show) {
+      if (!progressBar) {
+        const content = document.querySelector('.loading-content');
+        if (content) {
+          const progress = document.createElement('div');
+          progress.className = 'loading-progress';
+          progress.innerHTML = '<div class="loading-progress-bar"></div>';
+          content.appendChild(progress);
+        }
+      }
+    } else if (progressBar) {
+      progressBar.remove();
+    }
+  },
+
+  setOperation(key, duration = 2000) {
+    this.show();
+    
+    if (this.operations.has(key)) {
+      clearTimeout(this.operations.get(key));
+    }
+
+    const timeout = setTimeout(() => {
+      this.hide();
+      this.operations.delete(key);
+    }, duration);
+
+    this.operations.set(key, timeout);
+  }
+};
+
+// ── Initialize on script load ──
+LoadingManager.init();
+
+// ── Legacy API (backward compatibility) ──
 function showLoadingScreen() {
-  const loadingScreen = document.getElementById("loading-screen");
-  const mainContainer = document.querySelector(".container");
-
-  if (loadingScreen) {
-    loadingScreen.classList.add("active");
-  }
-  if (mainContainer) {
-    mainContainer.classList.add("loading");
-  }
+  LoadingManager.show();
 }
 
 function hideLoadingScreen() {
-  const loadingScreen = document.getElementById("loading-screen");
-  const mainContainer = document.querySelector(".container");
-
-  if (loadingScreen) {
-    loadingScreen.classList.remove("active");
-  }
-  if (mainContainer) {
-    mainContainer.classList.remove("loading");
-  }
+  LoadingManager.hide();
 }
 
-// Navigation function with loading screen
 function navigateWithLoading(url) {
-  showLoadingScreen();
+  LoadingManager.show({
+    text: 'Loading',
+    subtext: 'Redirecting...'
+  });
 
-  // Add a small delay to show the loading screen
   setTimeout(() => {
     window.location.href = url;
   }, 300);
 }
 
-// Show loading screen during AJAX operations
-function showLoadingForOperation(operationName = "Processing") {
-  const loadingScreen = document.getElementById("loading-screen");
-  const loadingText = loadingScreen?.querySelector(".loading-text");
-  const loadingSubtext = loadingScreen?.querySelector(".loading-subtext");
-  
-  if (loadingText) {
-    loadingText.textContent = operationName + "...";
-  }
-  if (loadingSubtext) {
-    loadingSubtext.textContent = "Please wait while we process your request";
-  }
-  
-  showLoadingScreen();
+function showLoadingForOperation(operationName = 'Processing') {
+  LoadingManager.show({
+    text: operationName,
+    subtext: 'Please wait while we process your request'
+  });
 }
 
-// Hide loading screen and reset text
 function hideLoadingForOperation() {
-  const loadingScreen = document.getElementById("loading-screen");
-  const loadingText = loadingScreen?.querySelector(".loading-text");
-  const loadingSubtext = loadingScreen?.querySelector(".loading-subtext");
-  
-  if (loadingText) {
-    loadingText.textContent = "Loading...";
-  }
-  if (loadingSubtext) {
-    loadingSubtext.textContent = "Please wait while we prepare your content";
-  }
-  
-  hideLoadingScreen();
+  LoadingManager.hide();
 }
 
-// Show loading screen on page refresh/reload
-window.addEventListener("beforeunload", function () {
-  showLoadingScreen();
-});
-
-// Hide loading screen when page loads
-window.addEventListener("load", function () {
-  setTimeout(() => {
-    hideLoadingScreen();
-  }, 500); // Slightly longer delay for system.php
-});
-
-// Handle browser back/forward buttons
-window.addEventListener("pageshow", function (event) {
-  if (event.persisted) {
-    hideLoadingScreen();
-  }
-});
-
-// Hide loading screen on DOM ready (fallback)
-document.addEventListener("DOMContentLoaded", function () {
-  setTimeout(() => {
-    hideLoadingScreen();
-  }, 300);
-});
-
-// Enhanced functions for system.php specific operations
 function showLoadingForSearch() {
-  showLoadingForOperation("Searching");
+  LoadingManager.show({
+    text: 'Searching',
+    subtext: 'Looking for employees...'
+  });
 }
 
 function showLoadingForClear() {
-  showLoadingForOperation("Clearing Search");
+  LoadingManager.show({
+    text: 'Clearing Search',
+    subtext: 'Refreshing results...'
+  });
 }
 
 function showLoadingForExport() {
-  showLoadingForOperation("Exporting Data");
+  LoadingManager.show({
+    text: 'Exporting Data',
+    subtext: 'Preparing your download...',
+    showProgress: true
+  });
 }
 
 function showLoadingForImport() {
-  showLoadingForOperation("Importing Data");
+  LoadingManager.show({
+    text: 'Importing Data',
+    subtext: 'Processing file...',
+    showProgress: true
+  });
 }
 
 function showLoadingForDelete() {
-  showLoadingForOperation("Deleting");
+  LoadingManager.show({
+    text: 'Deleting',
+    subtext: 'Please wait...'
+  });
 }
 
 function showLoadingForSave() {
-  showLoadingForOperation("Saving");
+  LoadingManager.show({
+    text: 'Saving',
+    subtext: 'Storing information...'
+  });
 }
 
-// Override existing functions to include loading screens
-const originalSearchEmployees = window.searchEmployees;
-if (typeof originalSearchEmployees === 'function') {
-  window.searchEmployees = function() {
-    const dateInput = document.getElementById('search_date');
-    const isDatePickerOpen = dateInput === document.activeElement;
-
-    if (!isDatePickerOpen) {
-      showLoadingForSearch();
-      setTimeout(() => { hideLoadingForOperation(); }, 800);
-    }
-
-    return originalSearchEmployees.apply(this, arguments);
-  };
-}
-
-// Add loading to form submissions
-document.addEventListener('DOMContentLoaded', function() {
-  const employeeForm = document.getElementById('employeeForm');
-  // const importForm = document.getElementById('importForm');
-  
-  if (employeeForm) {
-    employeeForm.addEventListener('submit', function(e) {
-      showLoadingForSave();
-      
-      // Let the form submit naturally, loading will be hidden on page reload/response
-      setTimeout(() => {
-        hideLoadingForOperation();
-      }, 2000);
-    });
-  }
-  
-  // if (importForm) {
-  //   importForm.addEventListener('submit', function(e) {
-  //     showLoadingForImport();
-      
-  //     // Let the form submit naturally
-  //     setTimeout(() => {
-  //       hideLoadingForOperation();
-  //     }, 3000);
-  //   });
-  // }
-
-  // Add loading to export buttons
-  const clearButtons = document.querySelectorAll('[onclick*="clear"]');
-  clearButtons.forEach(button => {
-    button.addEventListener('click', function() {
-      showLoadingForClear();
-      
-      setTimeout(() => {
-        hideLoadingForOperation();
-      }, 2000);
-    });
-  });
-  
-  // Add loading to export buttons
-  const exportButtons = document.querySelectorAll('[onclick*="export"]');
-  exportButtons.forEach(button => {
-    button.addEventListener('click', function() {
-      showLoadingForExport();
-      
-      setTimeout(() => {
-        hideLoadingForOperation();
-      }, 2000);
-    });
-  });
-  
-  // Add loading to delete operations
-  const deleteButtons = document.querySelectorAll('[onclick*="delete"]');
-  deleteButtons.forEach(button => {
-    button.addEventListener('click', function() {
-      showLoadingForDelete();
-      
-      setTimeout(() => {
-        hideLoadingForOperation();
-      }, 1500);
-    });
-  });
-});
-
-// Utility function to show loading for any custom operation
 function showLoadingForCustomOperation(operationName, duration = 2000) {
-  showLoadingForOperation(operationName);
-  
+  LoadingManager.show({
+    text: operationName,
+    subtext: 'Please wait...'
+  });
+
   setTimeout(() => {
-    hideLoadingForOperation();
+    LoadingManager.hide();
   }, duration);
 }
 
+// ── Enhanced form submission handling ──
+document.addEventListener('DOMContentLoaded', function() {
+  // Handle employee form submission
+  const employeeForm = document.getElementById('employeeForm');
+  if (employeeForm) {
+    employeeForm.addEventListener('submit', function() {
+      LoadingManager.show({
+        text: 'Saving',
+        subtext: 'Storing employee information...'
+      });
+    });
+  }
+
+  // Handle export buttons
+  document.querySelectorAll('[data-action="export"]').forEach(button => {
+    button.addEventListener('click', function() {
+      showLoadingForExport();
+      setTimeout(() => LoadingManager.hide(), 2000);
+    });
+  });
+
+  // Handle import buttons
+  document.querySelectorAll('[data-action="import"]').forEach(button => {
+    button.addEventListener('click', function() {
+      showLoadingForImport();
+      setTimeout(() => LoadingManager.hide(), 3000);
+    });
+  });
+
+  // Handle delete buttons
+  document.querySelectorAll('[data-action="delete"]').forEach(button => {
+    button.addEventListener('click', function() {
+      showLoadingForDelete();
+      setTimeout(() => LoadingManager.hide(), 1500);
+    });
+  });
+
+  // Handle search input
+  const searchInput = document.getElementById('search_employee');
+  if (searchInput) {
+    let searchTimeout;
+    searchInput.addEventListener('input', function() {
+      clearTimeout(searchTimeout);
+      if (this.value.length > 0) {
+        showLoadingForSearch();
+        searchTimeout = setTimeout(() => LoadingManager.hide(), 1000);
+      }
+    });
+  }
+});
+
+// ── Hide nav in iframe mode ──
 if (window.self !== window.top) {
   document.addEventListener('DOMContentLoaded', function() {
-    const nav = document.querySelector('nav, header, .navbar');
+    const nav = document.querySelector('nav, header.navbar, .navbar');
     if (nav) nav.style.display = 'none';
   });
+}
+
+// ── AJAX request interceptor (if using fetch/xhr) ──
+const originalFetch = window.fetch;
+window.fetch = function(...args) {
+  // Optionally show loading for long requests
+  LoadingManager.show({
+    text: 'Loading',
+    type: 'dots'
+  });
+
+  return originalFetch.apply(this, args).finally(() => {
+    // Small delay before hiding
+    setTimeout(() => LoadingManager.hide(), 300);
+  });
+};
+
+// ── Export for external use ──
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = LoadingManager;
 }

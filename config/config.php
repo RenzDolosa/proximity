@@ -136,6 +136,7 @@ function createDatabase()
     $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `session_token` VARCHAR(255) DEFAULT NULL");
     $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `my_database` VARCHAR(50) NOT NULL DEFAULT ''");
 
+    $dbPdo->exec("ALTER TABLE employees ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL");
     $dbPdo->exec("ALTER TABLE employee_access_log ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL");
     $dbPdo->exec("ALTER TABLE check_in_out ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL");
 
@@ -300,6 +301,7 @@ function createUserDatabase($userId)
         CREATE TABLE
           IF NOT EXISTS employees (
             id INT NOT NULL,
+            user_id int(11) DEFAULT NULL,
             fullname VARCHAR(100) NOT NULL,
             position VARCHAR(50) NOT NULL,
             brand VARCHAR(50) NOT NULL,
@@ -446,6 +448,7 @@ function ensureUserTablesExist($userId)
         CREATE TABLE
           IF NOT EXISTS employees (
             id INT PRIMARY KEY,
+            user_id int(11) DEFAULT NULL,
             fullname VARCHAR(100) NOT NULL,
             position VARCHAR(50) NOT NULL,
             brand VARCHAR(50) NOT NULL,

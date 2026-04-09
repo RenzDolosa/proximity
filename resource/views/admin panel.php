@@ -3428,6 +3428,18 @@ function renderBindRows(array $pages, int $depth = 0): void
 
     loadUsers().then(startUsersCountdown);
 
+    // Auto-switch to tab specified in URL hash on load
+    const hashTab = window.location.hash.replace('#', '');
+    if (hashTab && TAB_IDS[hashTab]) {
+        switchTab(hashTab);
+        if (hashTab === 'logs') {
+            loadLogActionOptions();
+            loadLogs().then(startLogsCountdown);
+        } else if (hashTab === 'group') {
+            loadGroups().then(startGroupsCountdown);
+        }
+    }
+    
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('keydown', e => {
         if (e.key === 'Escape') {

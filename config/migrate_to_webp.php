@@ -22,7 +22,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-define('UPLOAD_DIR',  __DIR__ . '/../../uploads/user/');
+define('UPLOAD_DIR',  __DIR__ . '/../public/uploads/user/');
 define('WEBP_QUALITY', 82);   // 0–100, 82 is a good balance
 define('MAX_WIDTH',    800);   // Resize if wider than this (px), 0 = no resize
 define('DRY_RUN', isset($_GET['dry'])); // Append ?dry to preview without making changes

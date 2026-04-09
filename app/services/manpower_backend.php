@@ -87,10 +87,11 @@ class EmployeeManager
   public function createEmployee($data)
   {
     $query = "INSERT INTO " . $this->table . "
-                (id, fullname, position, brand, status, shift, violation, image, qr_code)
-                VALUES (:id, :fullname, :position, :brand, :status, :shift, :violation, :image, :qr_code)";
+                (id, fullname, position, brand, status, shift, violation, image, qr_code, user_id)
+                VALUES (:id, :fullname, :position, :brand, :status, :shift, :violation, :image, :qr_code, :user_id)";
 
     $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(':user_id',   $data['user_id']);
     $stmt->bindParam(':id',        $data['id']);
     $stmt->bindParam(':fullname',  $data['fullname']);
     $stmt->bindParam(':position',  $data['position']);
@@ -112,60 +113,64 @@ class EmployeeManager
     $query  = "SELECT * FROM " . $this->table . " WHERE 1=1";
     $params = [];
 
+    if (!empty($filters['user_id'])) {
+      $query .= " AND user_id LIKE :user_id";
+      $params[':user_id']     = '%' . $filters['user_id'] . '%';
+    }
     if (!empty($filters['id'])) {
       $query .= " AND id LIKE :id";
-      $params[':id']        = '%' . $filters['id'] . '%';
+      $params[':id']          = '%' . $filters['id'] . '%';
     }
     if (!empty($filters['fullname'])) {
       $query .= " AND fullname LIKE :fullname";
-      $params[':fullname']  = '%' . $filters['fullname'] . '%';
+      $params[':fullname']    = '%' . $filters['fullname'] . '%';
     }
     if (!empty($filters['position'])) {
       $query .= " AND position LIKE :position";
-      $params[':position']  = '%' . $filters['position'] . '%';
+      $params[':position']    = '%' . $filters['position'] . '%';
     }
     if (!empty($filters['position_none'])) {
       $query .= " AND (position IS NULL OR TRIM(position) = '' OR LOWER(TRIM(position)) = 'none')";
     }
     if (!empty($filters['brand'])) {
       $query .= " AND brand LIKE :brand";
-      $params[':brand']     = '%' . $filters['brand'] . '%';
+      $params[':brand']       = '%' . $filters['brand'] . '%';
     }
     if (!empty($filters['brand_none'])) {
       $query .= " AND (brand IS NULL OR TRIM(brand) = '' OR LOWER(TRIM(brand)) = 'none')";
     }
     if (!empty($filters['status'])) {
       $query .= " AND status LIKE :status";
-      $params[':status']  = '%' . $filters['status'] . '%';
+      $params[':status']      = '%' . $filters['status'] . '%';
     }
     if (!empty($filters['status_none'])) {
       $query .= " AND (status IS NULL OR TRIM(status) = '' OR LOWER(TRIM(status)) = 'none')";
     }
     if (!empty($filters['shift'])) {
       $query .= " AND shift LIKE :shift";
-      $params[':shift']     = '%' . $filters['shift'] . '%';
+      $params[':shift']       = '%' . $filters['shift'] . '%';
     }
     if (!empty($filters['shift_none'])) {
       $query .= " AND (shift IS NULL OR TRIM(shift) = '' OR LOWER(TRIM(shift)) = 'none')";
     }
     if (!empty($filters['violation'])) {
       $query .= " AND violation LIKE :violation";
-      $params[':violation'] = '%' . $filters['violation'] . '%';
+      $params[':violation']   = '%' . $filters['violation'] . '%';
     }
     if (!empty($filters['violation_none'])) {
       $query .= " AND (violation IS NULL OR TRIM(violation) = '' OR LOWER(TRIM(violation)) = 'none')";
     }
     if (!empty($filters['qr_code'])) {
       $query .= " AND qr_code LIKE :qr_code";
-      $params[':qr_code']   = '%' . $filters['qr_code'] . '%';
+      $params[':qr_code']     = '%' . $filters['qr_code'] . '%';
     }
     if (!empty($filters['created_at'])) {
       $query .= " AND DATE(created_at) = :created_at";
-      $params[':created_at'] = $filters['created_at'];
+      $params[':created_at']  = $filters['created_at'];
     }
     if (!empty($filters['updated_at'])) {
       $query .= " AND DATE(updated_at) = :updated_at";
-      $params[':updated_at'] = $filters['updated_at'];
+      $params[':updated_at']  = $filters['updated_at'];
     }
 
     $query .= " ORDER BY created_at DESC";
@@ -205,10 +210,11 @@ class EmployeeManager
 
         $insert = $this->conn->prepare(
           "INSERT INTO " . $this->table . "
-           (id, fullname, position, brand, status, shift, violation, image, qr_code, created_at)
-           VALUES (:id, :fullname, :position, :brand, :status, :shift, :violation, :image, :qr_code, :created_at)"
+           (id, fullname, position, brand, status, shift, violation, image, qr_code, user_id, created_at)
+           VALUES (:id, :fullname, :position, :brand, :status, :shift, :violation, :image, :qr_code, :user_id, :created_at)"
         );
         $insert->execute([
+          ':user_id'    => $this->userId,
           ':id'         => $new_id,
           ':fullname'   => $data['fullname'],
           ':position'   => $data['position'],
@@ -230,11 +236,12 @@ class EmployeeManager
       $query = "UPDATE " . $this->table . "
                 SET id = :id, fullname = :fullname, position = :position, brand = :brand,
                     status = :status, shift = :shift, violation = :violation,
-                    image = :image, qr_code = :qr_code, updated_at = :updated_at
+                    image = :image, qr_code = :qr_code, user_id = :user_id, updated_at = :updated_at
                 WHERE id = :where_id";
 
       $stmt = $this->conn->prepare($query);
       $stmt->execute([
+        ':user_id'   => $this->userId,
         ':id'        => $data['id'],
         ':fullname'  => $data['fullname'],
         ':position'  => $data['position'],
@@ -632,6 +639,7 @@ try {
 
         $qr_code       = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
         $employee_data = [
+          'user_id'   => $database->getCurrentUserId(),
           'id'        => sanitizeInput($_POST['id'] ?? ''),
           'fullname'  => sanitizeInput($_POST['fullname'] ?? ''),
           'position'  => sanitizeInput($_POST['position'] ?? ''),
@@ -705,6 +713,7 @@ try {
         }
 
         $employee_data = [
+          'user_id'   => $database->getCurrentUserId(),
           'id'        => $new_id,
           'fullname'  => sanitizeInput($_POST['fullname']  ?? $current_employee['fullname']),
           'position'  => sanitizeInput($_POST['position']  ?? $current_employee['position']),
@@ -847,6 +856,7 @@ try {
                 : QRCodeGenerator::generateQRCode($database->getCurrentUserId());
 
               $employee_record = [
+                'user_id'   => $database->getCurrentUserId(),
                 'id'        => sanitizeInput(trim($employee_data['id'])),
                 'fullname'  => sanitizeInput(trim($employee_data['fullname'])),
                 'position'  => sanitizeInput(trim($employee_data['position'])),
@@ -1091,6 +1101,7 @@ try {
       case 'list':
         $filters = [];
 
+        if (!empty($_GET['user_id']))        $filters['user_id']        = $_GET['user_id'];
         if (!empty($_GET['id']))             $filters['id']             = $_GET['id'];
         if (!empty($_GET['fullname']))       $filters['fullname']       = $_GET['fullname'];
         if (!empty($_GET['position']))       $filters['position']       = $_GET['position'];

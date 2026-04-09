@@ -15,10 +15,23 @@ if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') &&
 requireAccess('table panel', '../../resource/views/iframe/main.php');
 $access = getMenuAccess();
 
+$requestedTab = $_GET['tab'] ?? null;
+
 $firstTab = null;
-if ($access['system'])         $firstTab = 'employees';
-elseif ($access['datalog'])    $firstTab = 'scanned';
-elseif ($access['proximity code']) $firstTab = 'proximity';
+
+// If a specific tab was requested and user has access, use it
+if ($requestedTab === 'datalog' && $access['datalog']) {
+  $firstTab = 'scanned';
+} elseif ($requestedTab === 'proximity' && $access['proximity code']) {
+  $firstTab = 'proximity';
+} elseif ($requestedTab === 'employees' && $access['system']) {
+  $firstTab = 'employees';
+} else {
+  // Fall back to default order
+  if ($access['system'])         $firstTab = 'employees';
+  elseif ($access['datalog'])    $firstTab = 'scanned';
+  elseif ($access['proximity code']) $firstTab = 'proximity';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">

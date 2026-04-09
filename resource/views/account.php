@@ -7,12 +7,14 @@ require_once __DIR__ . '/../../config/db.php';
 requireAccess('account info', '../iframe/main.php');
 $access = getMenuAccess();
 
+$userId = $_SESSION['user_id'] ?? null;
 $user = getCurrentUser();
 $message = '';
 $messageType = '';
 
-function formatLocalTime(string $timestamp, string $format = 'F j, Y g:i A'): string {
-    return (new DateTime($timestamp, new DateTimeZone(APP_TIMEZONE)))->format($format);
+function formatLocalTime(string $timestamp, string $format = 'F j, Y g:i A'): string
+{
+  return (new DateTime($timestamp, new DateTimeZone(APP_TIMEZONE)))->format($format);
 }
 
 try {
@@ -21,26 +23,19 @@ try {
   $requiredTables = ['employees', 'code', 'employee_access_log', 'check_in_out'];
   $missingTables = [];
 
-  if ($databaseConnected) {
-    try {
-      foreach ($requiredTables as $table) {
-        $stmt = $userDb->prepare("
-        SELECT COUNT(*) FROM information_schema.TABLES 
-        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
-      ");
-        $stmt->execute([$table]);
-        if ((int)$stmt->fetchColumn() === 0) {
-          $missingTables[] = $table;
-        }
-      }
-
-      if (!empty($missingTables)) {
-        $databaseConnected = false;
-      }
-    } catch (PDOException $e) {
-      $databaseConnected = false;
-      $dbError = "Error checking tables: " . $e->getMessage();
+  foreach ($requiredTables as $table) {
+    $stmt = $userDb->prepare("
+      SELECT COUNT(*) FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+    ");
+    $stmt->execute([$table]);
+    if ((int)$stmt->fetchColumn() === 0) {
+      $missingTables[] = $table;
     }
+  }
+
+  if (!empty($missingTables)) {
+    $databaseConnected = false;
   }
 } catch (Exception $e) {
   $databaseConnected = false;
@@ -50,12 +45,10 @@ try {
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   if (isset($_POST['update_profile'])) {
-    // Update profile information
     $firstName = sanitizeInput($_POST['first_name']);
-    $lastName = sanitizeInput($_POST['last_name']);
-    $phoneNum = sanitizeInput($_POST['phone']);
-
-    $errors = [];
+    $lastName  = sanitizeInput($_POST['last_name']);
+    $phoneNum  = sanitizeInput($_POST['phone']);
+    $errors    = [];
 
     if (empty($firstName) || empty($lastName)) {
       $errors[] = "First name and last name are required";
@@ -63,90 +56,84 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
       try {
-        $pdo = getMainDBConnection();
+        $pdo  = getMainDBConnection();
         $stmt = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, phone = ?, updated_at = NOW() WHERE id = ?");
         $stmt->execute([$firstName, $lastName, $phoneNum, $user['id']]);
 
-        // Update session variables
         $_SESSION['first_name'] = $firstName;
-        $_SESSION['last_name'] = $lastName;
-        $_SESSION['phone'] = $phoneNum;
+        $_SESSION['last_name']  = $lastName;
+        $_SESSION['phone']      = $phoneNum;
 
-        // Update the current user array to reflect changes immediately
         $user['first_name'] = $firstName;
-        $user['last_name'] = $lastName;
-        $user['phone'] = $phoneNum;
+        $user['last_name']  = $lastName;
+        $user['phone']      = $phoneNum;
 
         logSystemAction($user['id'], 'PROFILE_UPDATED', 'User updated profile information');
 
-        $message = 'Profile updated successfully!';
+        $message     = 'Profile updated successfully!';
         $messageType = 'success';
       } catch (PDOException $e) {
         error_log("Profile update error: " . $e->getMessage());
-        $message = 'An error occurred while updating your profile.';
+        $message     = 'An error occurred while updating your profile.';
         $messageType = 'error';
       }
     } else {
-      $message = implode(', ', $errors);
+      $message     = implode(', ', $errors);
       $messageType = 'error';
     }
   }
 
   if (isset($_POST['change_password'])) {
-    // Change password
     $currentPassword = $_POST['current_password'];
-    $newPassword = $_POST['new_password'];
+    $newPassword     = $_POST['new_password'];
     $confirmPassword = $_POST['confirm_password'];
-
-    $errors = [];
+    $errors          = [];
 
     if (empty($currentPassword) || empty($newPassword) || empty($confirmPassword)) {
       $errors[] = "All password fields are required";
     }
-
     if ($newPassword !== $confirmPassword) {
       $errors[] = "New passwords do not match";
     }
-
     if (!isValidPassword($newPassword)) {
       $errors[] = "Password must be at least 8 characters with uppercase, lowercase, and number";
     }
 
     if (empty($errors)) {
       try {
-        $pdo = getMainDBConnection();
+        $pdo  = getMainDBConnection();
         $stmt = $pdo->prepare("SELECT password FROM users WHERE id = ?");
         $stmt->execute([$user['id']]);
         $currentHash = $stmt->fetchColumn();
 
         if (password_verify($currentPassword, $currentHash)) {
-          $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
+          $newHash    = password_hash($newPassword, PASSWORD_DEFAULT);
           $updateStmt = $pdo->prepare("UPDATE users SET password = ?, updated_at = NOW() WHERE id = ?");
           $updateStmt->execute([$newHash, $user['id']]);
 
           logSystemAction($user['id'], 'PASSWORD_CHANGED', 'User changed password');
 
-          $message = 'Password changed successfully!';
+          $message     = 'Password changed successfully!';
           $messageType = 'success';
         } else {
-          $message = 'Current password is incorrect.';
+          $message     = 'Current password is incorrect.';
           $messageType = 'error';
         }
       } catch (PDOException $e) {
         error_log("Password change error: " . $e->getMessage());
-        $message = 'An error occurred while changing your password.';
+        $message     = 'An error occurred while changing your password.';
         $messageType = 'error';
       }
     } else {
-      $message = implode(', ', $errors);
+      $message     = implode(', ', $errors);
       $messageType = 'error';
     }
   }
 }
 
-// Refresh user data from database to ensure we have the latest information
+// Refresh user data
 try {
-  $pdo = getMainDBConnection();
+  $pdo  = getMainDBConnection();
   $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
   $stmt->execute([$user['id']]);
   $refreshedUser = $stmt->fetch();
@@ -157,39 +144,29 @@ try {
   error_log("Error refreshing user data: " . $e->getMessage());
 }
 
-// Get user statistics
-$userStats = [];
+// User statistics
+$userStats = ['total_employees' => 0, 'active_employees' => 0, 'total_violations' => 0, 'recent_activity' => 0];
 try {
   $userPdo = getUserDBConnection($user['id']);
 
-  // Get employee count
-  $stmt = $userPdo->query("SELECT COUNT(*) as total_employees FROM employees");
-  $userStats['total_employees'] = $stmt->fetchColumn();
+  $stmt = $userPdo->query("SELECT COUNT(*) FROM employees");
+  $userStats['total_employees'] = (int)$stmt->fetchColumn();
 
-  // Get active employees
-  $stmt = $userPdo->query("SELECT COUNT(*) as active_employees FROM employees WHERE status = 'Active'");
-  $userStats['active_employees'] = $stmt->fetchColumn();
+  $stmt = $userPdo->query("SELECT COUNT(*) FROM employees WHERE status = 'Active'");
+  $userStats['active_employees'] = (int)$stmt->fetchColumn();
 
-  // Get total violations
-  $stmt = $userPdo->query("SELECT COUNT(*) as total_violations FROM employees WHERE violation <> ''");
-  $userStats['total_violations'] = $stmt->fetchColumn();
+  $stmt = $userPdo->query("SELECT COUNT(*) FROM employees WHERE violation <> ''");
+  $userStats['total_violations'] = (int)$stmt->fetchColumn();
 
-  // Get recent activity count (last 30 days)
-  $stmt = $userPdo->query("SELECT COUNT(*) as recent_activity FROM employee_access_log WHERE access_timestamp >= DATE_SUB(NOW(), INTERVAL 30 DAY)");
-  $userStats['recent_activity'] = $stmt->fetchColumn();
+  $stmt = $userPdo->query("SELECT COUNT(*) FROM employee_access_log WHERE access_timestamp >= DATE_SUB(NOW(), INTERVAL 30 DAY)");
+  $userStats['recent_activity'] = (int)$stmt->fetchColumn();
 } catch (Exception $e) {
   error_log("Error fetching user stats: " . $e->getMessage());
-  $userStats = [
-    'total_employees' => 0,
-    'active_employees' => 0,
-    'total_violations' => 0,
-    'recent_activity' => 0
-  ];
 }
 
-// Get account creation date and last login
+// Account timestamps
 try {
-  $pdo = getMainDBConnection();
+  $pdo  = getMainDBConnection();
   $stmt = $pdo->prepare("SELECT created_at, last_login FROM users WHERE id = ?");
   $stmt->execute([$user['id']]);
   $accountInfo = $stmt->fetch();
@@ -198,7 +175,6 @@ try {
   $accountInfo = ['created_at' => null, 'last_login' => null];
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 
@@ -206,159 +182,604 @@ try {
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?php echo htmlspecialchars($myDatabase); ?> - Account Info</title>
-  <link rel="preload" href="../assets/icon/database-icon.png" as="image">
+  <title><?= htmlspecialchars($myDatabase); ?> - Account Info</title>
   <link rel="icon" href="../assets/icon/database-icon.png" type="image/png">
-  <link rel="stylesheet" href="../css/system.css">
-  <link rel="stylesheet" href="../css/ptl.css">
-  <link rel="stylesheet" href="../css/btn.css">
-  <link rel="stylesheet" href="../css/acct.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="../css/loading.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --accent: #2563eb;
+      --accent-light: #eff6ff;
+      --bg: #f0f2f5;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --radius: 8px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Shortcut bar ── */
+    .shortcut-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+      min-height: 46px;
+      flex-shrink: 0;
+    }
+
+    .shortcut-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 6px 14px;
+      cursor: pointer;
+      border-radius: 6px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      transition: background 0.15s, color 0.15s;
+      font-size: 12px;
+      min-width: 64px;
+    }
+
+    .shortcut-item i {
+      font-size: 15px;
+    }
+
+    .shortcut-item:hover {
+      background: var(--bg);
+      color: var(--accent);
+    }
+
+    /* ── Page body ── */
+    .page-body {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    /* ── Welcome banner ── */
+    .welcome-banner {
+      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .wb-left h2 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .wb-left p {
+      font-size: 13px;
+      opacity: 0.85;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 12px;
+      font-weight: 500;
+      margin-top: 6px;
+    }
+
+    .status-pill.ok {
+      background: rgba(255, 255, 255, 0.2);
+      color: #bbf7d0;
+    }
+
+    .status-pill.err {
+      background: rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+    }
+
+    .status-pill i {
+      font-size: 9px;
+    }
+
+    /* ── Alert ── */
+    .alert {
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .alert-success {
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+
+    .alert-error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .alert button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      color: inherit;
+      opacity: 0.7;
+      flex-shrink: 0;
+    }
+
+    /* ── Stats row ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .stat-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .stat-icon-sm {
+      font-size: 18px;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* ── Two-col layout ── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .card-body {
+      padding: 16px;
+    }
+
+    /* ── Info grid ── */
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .info-item {
+      background: var(--bg);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+    }
+
+    .info-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+
+    .info-value {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    /* ── DB block ── */
+    .db-block {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: var(--bg);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      margin-bottom: 14px;
+    }
+
+    .db-block img {
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .db-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .db-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* ── Form ── */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .form-group.full {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      color: var(--text);
+      background: var(--surface);
+      transition: border-color 0.15s;
+      outline: none;
+    }
+
+    .form-control:focus {
+      border-color: var(--accent);
+    }
+
+    .form-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* ── Button ── */
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 18px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-primary:hover {
+      background: #1d4ed8;
+    }
+
+    @media (max-width: 640px) {
+      .two-col {
+        grid-template-columns: 1fr;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .info-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 </head>
 
 <body>
-
-  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.history.back();">
-    <i class="fas fa-times"></i>
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <div class="loading-content">
+      <div class="spinner"></div>
+      <div class="loading-text">Loading...</div>
+      <div class="loading-subtext">Please wait while we prepare your content</div>
+    </div>
   </div>
 
-  <!-- Alert Messages -->
-  <div class="alert-container" id="alertContainer"></div>
-
-  <main class="db-cont">
-    <section class="welcome-card">
-      <h1><i class="fas fa-user"></i> Account Information</h1>
-      <div class="breadcrumb">
-        <a onclick="window.history.back()"><i class="fas fa-home"></i> Portal</a> / Account Info
+  <!-- Top shortcut nav -->
+  <div class="shortcut-bar">
+    <div class="shortcut-item" onclick="if (window.self !== window.top) {
+        window.top.location.href = window.top.location.href.split('?')[0];
+      } else {
+        window.history.back();
+      }">
+      <i class="fas fa-arrow-left"></i>
+      <span>Back</span>
+    </div>
+    <?php if ($access['table panel']): ?>
+      <div class="shortcut-item" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=employees');">
+        <i class="fas fa-users"></i>
+        <span>Employees</span>
       </div>
-    </section>
+    <?php endif; ?>
+    <?php if ($access['scan test']): ?>
+      <div class="shortcut-item" onclick="navigateWithLoading('../../../app/http/controllers/scan test.php');">
+        <i class="fas fa-qrcode"></i>
+        <span>Scan Test</span>
+      </div>
+    <?php endif; ?>
+    <?php if ($access['admin panel']): ?>
+      <div class="shortcut-item" onclick="navigateWithLoading('admin panel.php#users');">
+        <i class="fas fa-user-shield"></i>
+        <span>Admin Panel</span>
+      </div>
+    <?php endif; ?>
+    <div class="shortcut-item" onclick="location.reload();">
+      <i class="fas fa-sync-alt"></i>
+      <span>Refresh</span>
+    </div>
+  </div>
 
+  <div class="page-body">
+
+    <!-- Welcome banner -->
+    <div class="welcome-banner">
+      <div class="wb-left">
+        <h2><i class="fas fa-user-circle" style="margin-right:8px;opacity:.8;"></i>Account Information</h2>
+        <p>Connected to <strong><?= htmlspecialchars($myDatabase); ?></strong></p>
+        <?php if ($databaseConnected): ?>
+          <div class="status-pill ok"><i class="fas fa-circle"></i> Database connected</div>
+        <?php else: ?>
+          <div class="status-pill err"><i class="fas fa-exclamation-circle"></i> Connection error</div>
+        <?php endif; ?>
+      </div>
+    </div>
+
+    <!-- Alert message -->
     <?php if ($message): ?>
-      <div class="alert alert-<?php echo $messageType; ?>">
-        <?php echo htmlspecialchars($message); ?>
-        <button onclick="this.parentElement.remove()" style="float: right; background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 5px;"><i class="fas fa-times"></i></button>
+      <div class="alert alert-<?= htmlspecialchars($messageType, ENT_QUOTES) ?>">
+        <span><?= htmlspecialchars($message, ENT_QUOTES) ?></span>
+        <button onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>
       </div>
     <?php endif; ?>
 
-    <!-- Account Statistics -->
-    <section class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-number"><?php echo number_format($userStats['total_employees']); ?></div>
-        <div class="stat-label">Total Employees</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number"><?php echo number_format($userStats['active_employees']); ?></div>
-        <div class="stat-label">Active Employees</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number"><?php echo number_format($userStats['total_violations']); ?></div>
-        <div class="stat-label">Total Violations</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number"><?php echo number_format($userStats['recent_activity']); ?></div>
-        <div class="stat-label">Recent Activity (30 days)</div>
-      </div>
-    </section>
+    <!-- Two-column: Profile + Security -->
+    <div class="two-col">
 
-    <section class="menu-grid">
-      <!-- Profile Information -->
-      <div class="menu-card">
-        <h2><i class="fas fa-user"></i> Profile Information</h2>
+      <!-- Left: Stats cards -->
+      <div style="display:flex;flex-direction:column;gap:16px;">
 
-        <div class="database-info">
-          <img src="../assets/icon/database-icon.png" alt="MySql Logo" class="database-logo" loading="lazy">
-          <p>Connected to your personal database:</p>
-          <div class="database-name">
-            <?php if ($databaseConnected): ?>
-              <span style="color: #28a745;"><?php echo htmlspecialchars($myDatabase); ?></span>
-            <?php else: ?>
-              <span style="color: #dc3545;"><?php echo htmlspecialchars($myDatabase); ?></span>
-              <?php if (!empty($missingTables)): ?>
-              <?php endif; ?>
-            <?php endif; ?>
+        <!-- Profile Information -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i class="fas fa-user" style="color:#3b82f6;margin-right:6px;"></i>Employee Stats</span>
           </div>
-        </div>
-
-        <div class="info-grid">
-          <div class="info-item">
-            <div class="info-label">Username</div>
-            <div class="info-value"><?php echo htmlspecialchars($user['username']); ?></div>
-          </div>
-          <div class="info-item">
-            <div class="info-label">Email</div>
-            <div class="info-value"><?php echo htmlspecialchars($user['email']); ?></div>
-          </div>
-          <div class="info-item">
-            <div class="info-label">Account Created</div>
-            <div class="info-value">
-              <?php echo $accountInfo['created_at'] ? formatLocalTime($accountInfo['created_at']) : 'N/A'; ?>
-            </div>
-          </div>
-          <div class="info-item">
-            <div class="info-label">Last Login</div>
-            <div class="info-value">
-              <?php echo $accountInfo['last_login']  ? formatLocalTime($accountInfo['last_login'])  : 'Network error. Please try again.'; ?>
+          <div class="card-body">
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#3b82f6;"><i class="fas fa-users"></i></div>
+                  <div class="stat-value"><?= number_format($userStats['total_employees']); ?></div>
+                </div>
+                <div class="stat-label">Total Employees</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#22c55e;"><i class="fas fa-user-check"></i></div>
+                  <div class="stat-value"><?= number_format($userStats['active_employees']); ?></div>
+                </div>
+                <div class="stat-label">Active Employees</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i></div>
+                  <div class="stat-value"><?= number_format($userStats['total_violations']); ?></div>
+                </div>
+                <div class="stat-label">Total Violators</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#f59e0b;"><i class="fas fa-history"></i></div>
+                  <div class="stat-value"><?= number_format($userStats['recent_activity']); ?></div>
+                </div>
+                <div class="stat-label">Activity (30 days)</div>
+              </div>
             </div>
           </div>
         </div>
 
-        <form method="POST">
-          <div class="data-grid">
-            <div class="info-item">
-              <label for="first_name">First Name</label>
-              <input type="text" id="first_name" name="first_name" class="form-control"
-                value="<?php echo htmlspecialchars($user['first_name'] ?? ''); ?>">
-            </div>
-
-            <div class="info-item">
-              <label for="last_name">Last Name</label>
-              <input type="text" id="last_name" name="last_name" class="form-control"
-                value="<?php echo htmlspecialchars($user['last_name'] ?? ''); ?>">
-            </div>
-
-            <div class="info-item">
-              <label for="phone">Phone Number ( Optional )</label>
-              <input type="tel" id="phone" name="phone" class="form-control"
-                value="<?php echo htmlspecialchars($user['phone'] ?? ''); ?>">
-            </div>
+        <!-- Profile Information -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i class="fas fa-user" style="color:#3b82f6;margin-right:6px;"></i>Profile Information</span>
           </div>
+          <div class="card-body">
 
-          <button type="submit" name="update_profile" class="btn btn-primary">Update Profile</button>
-        </form>
+            <div class="db-block">
+              <img src="../assets/icon/database-icon.png" alt="DB">
+              <div>
+                <div class="db-name"><?= htmlspecialchars($myDatabase); ?></div>
+                <div class="db-sub">Personal database</div>
+              </div>
+            </div>
+
+
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">Connection</div>
+                <div class="info-value" style="color:<?= $databaseConnected ? '#16a34a' : '#dc2626'; ?>;">
+                  <?= $databaseConnected ? '✓ Connected' : '✗ Offline'; ?>
+                </div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Username</div>
+                <div class="info-value"><?= htmlspecialchars($user['username']); ?></div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Email</div>
+                <div class="info-value"><?= htmlspecialchars($user['email']); ?></div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Account Created</div>
+                <div class="info-value">
+                  <?= $accountInfo['created_at'] ? formatLocalTime($accountInfo['created_at']) : 'N/A'; ?>
+                </div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Last Login</div>
+                <div class="info-value">
+                  <?= $accountInfo['last_login'] ? formatLocalTime($accountInfo['last_login']) : 'N/A'; ?>
+                </div>
+              </div>
+            </div>
+
+            <form method="POST">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="first_name">First Name</label>
+                  <input type="text" id="first_name" name="first_name" class="form-control"
+                    value="<?= htmlspecialchars($user['first_name'] ?? ''); ?>">
+                </div>
+                <div class="form-group">
+                  <label for="last_name">Last Name</label>
+                  <input type="text" id="last_name" name="last_name" class="form-control"
+                    value="<?= htmlspecialchars($user['last_name'] ?? ''); ?>">
+                </div>
+                <div class="form-group full">
+                  <label for="phone">Phone Number <span style="font-weight:400;">(Optional)</span></label>
+                  <input type="tel" id="phone" name="phone" class="form-control"
+                    value="<?= htmlspecialchars($user['phone'] ?? ''); ?>">
+                </div>
+              </div>
+              <button type="submit" name="update_profile" class="btn-primary">
+                <i class="fas fa-save"></i> Update Profile
+              </button>
+            </form>
+          </div>
+        </div>
       </div>
 
-      <!-- Security Settings -->
-      <div class="menu-card">
-        <h2>Security Settings</h2>
-
-        <form method="POST">
-          <div class="pass-item">
-            <label for="current_password">Current Password</label>
-            <input type="password" id="current_password" name="current_password" class="form-control" required>
+      <!-- Right: Recent activity -->
+      <div>
+        <!-- Security Settings -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i class="fas fa-lock" style="color:#6366f1;margin-right:6px;"></i>Security Settings</span>
           </div>
-
-          <div class="pass-item">
-            <label for="new_password">New Password</label>
-            <input type="password" id="new_password" name="new_password" class="form-control" require>
-            <small style="color: #666">Password must be at least 8 characters with uppercase, lowercase, and number</small>
+          <div class="card-body">
+            <form method="POST">
+              <div class="form-grid">
+                <div class="form-group full">
+                  <label for="current_password">Current Password</label>
+                  <input type="password" id="current_password" name="current_password" class="form-control" required>
+                </div>
+                <div class="form-group full">
+                  <label for="new_password">New Password</label>
+                  <input type="password" id="new_password" name="new_password" class="form-control" required>
+                  <span class="form-hint">At least 8 characters with uppercase, lowercase, and number.</span>
+                </div>
+                <div class="form-group full">
+                  <label for="confirm_password">Confirm New Password</label>
+                  <input type="password" id="confirm_password" name="confirm_password" class="form-control" required>
+                </div>
+              </div>
+              <button type="submit" name="change_password" class="btn-primary">
+                <i class="fas fa-key"></i> Change Password
+              </button>
+            </form>
           </div>
-
-          <div class="pass-item">
-            <label for="confirm_password">Confirm New Password</label>
-            <input type="password" id="confirm_password" name="confirm_password" class="form-control" required>
-          </div>
-
-          <button type="submit" name="change_password" class="btn btn-primary">Change Password</button>
-        </form>
-
-        <hr style="margin: 30px 0; border: none; height: 1px; background: #e1e5e9;">
+        </div>
       </div>
-    </section>
-  </main>
+
+    </div><!-- /.two-col -->
+
+  </div><!-- /.page-body -->
 
   <script src="../js/btn.js"></script>
-  <script src="../js/acct.js"></script>
   <script src="../js/req.js"></script>
+  <script src="../js/loading.js"></script>
+
 </body>
 
 </html>

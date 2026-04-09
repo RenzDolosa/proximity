@@ -7,6 +7,9 @@ require_once __DIR__ . '/../../config/db.php';
 requireAccess('settings', 'iframe/main.php');
 $access = getMenuAccess();
 
+$userId    = $_SESSION['user_id'] ?? null;
+$userGroup = $_SESSION['user_group'] ?? '';
+
 if (!isLoggedIn()) {
   header('Location: ../index.php');
   exit;
@@ -14,51 +17,43 @@ if (!isLoggedIn()) {
 
 $user = getCurrentUser();
 
+// ── Database connectivity check ───────────────────────────────────────────────
 try {
-  $userDb = getUserDBConnection($userId);
+  $userDb            = getUserDBConnection($userId);
   $databaseConnected = true;
-  $requiredTables = ['employees', 'code', 'employee_access_log', 'check_in_out'];
-  $missingTables = [];
+  $requiredTables    = ['employees', 'code', 'employee_access_log', 'check_in_out'];
+  $missingTables     = [];
 
-  if ($databaseConnected) {
-    try {
-      foreach ($requiredTables as $table) {
-        $stmt = $userDb->prepare("
-        SELECT COUNT(*) FROM information_schema.TABLES 
-        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
-      ");
-        $stmt->execute([$table]);
-        if ((int)$stmt->fetchColumn() === 0) {
-          $missingTables[] = $table;
-        }
-      }
-
-      if (!empty($missingTables)) {
-        $databaseConnected = false;
-      }
-    } catch (PDOException $e) {
-      $databaseConnected = false;
-      $dbError = "Error checking tables: " . $e->getMessage();
+  foreach ($requiredTables as $table) {
+    $stmt = $userDb->prepare("
+            SELECT COUNT(*) FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+        ");
+    $stmt->execute([$table]);
+    if ((int) $stmt->fetchColumn() === 0) {
+      $missingTables[] = $table;
     }
+  }
+
+  if (!empty($missingTables)) {
+    $databaseConnected = false;
   }
 } catch (Exception $e) {
   $databaseConnected = false;
-  $dbError = $e->getMessage();
+  $dbError           = $e->getMessage();
 }
 
-// ── Generate / persist delete CSRF token ─────────────────────────────────────
+// ── CSRF token for audio deletion ─────────────────────────────────────────────
 if (empty($_SESSION['delete_audio_token'])) {
   $_SESSION['delete_audio_token'] = bin2hex(random_bytes(32));
 }
 
-// ── Pick up flash messages set by delete_audio.php ───────────────────────────
+// ── Flash messages ────────────────────────────────────────────────────────────
 $message     = $_SESSION['flash_message'] ?? '';
 $messageType = $_SESSION['flash_type']    ?? '';
 unset($_SESSION['flash_message'], $_SESSION['flash_type']);
 
-// ============================================================================
-// ALLOWED AUDIO TYPES  (input key → DB column)
-// ============================================================================
+// ── Audio type map ────────────────────────────────────────────────────────────
 const AUDIO_TYPES = [
   'success'    => 'success_audio_path',
   'not_found'  => 'not_found_audio_path',
@@ -67,71 +62,64 @@ const AUDIO_TYPES = [
 ];
 
 // ============================================================================
-// HANDLE AUDIO UPLOAD FORM SUBMISSION
+// HANDLE AUDIO UPLOAD
 // ============================================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_audio'])) {
 
   $uploadDir = dirname(__DIR__) . '/uploads/audio/' . $user['id'] . '/';
-
   if (!is_dir($uploadDir)) {
     mkdir($uploadDir, 0755, true);
   }
 
   $uploadedPaths = [];
   $uploadErrors  = [];
-  $allowedMime = [
+  $allowedMime   = [
     'audio/mpeg',
     'audio/mp3',
     'audio/wav',
-    'audio/x-wav',      // ← finfo on Linux
-    'audio/wave',       // ← finfo on some systems
+    'audio/x-wav',
+    'audio/wave',
     'audio/ogg',
     'audio/mp4',
-    'audio/x-m4a',      // ← finfo for .m4a
+    'audio/x-m4a',
     'audio/webm',
     'audio/aac',
-    'audio/x-aac',      // ← finfo on Linux
+    'audio/x-aac',
   ];
-  $maxSize       = 5 * 1024 * 1024; // 5 MB
+  $maxSize = 5 * 1024 * 1024;
 
   foreach (AUDIO_TYPES as $inputKey => $dbColumn) {
     $fileKey = 'audio_' . $inputKey;
 
-    // Skip slots where no file was chosen
     if (!isset($_FILES[$fileKey]) || $_FILES[$fileKey]['error'] === UPLOAD_ERR_NO_FILE) {
       continue;
     }
 
     $file = $_FILES[$fileKey];
 
-    // ── PHP upload error ──────────────────────────────────────────────────────
     if ($file['error'] !== UPLOAD_ERR_OK) {
-      $uploadErrors[] = label($inputKey) . ': upload error (code ' . $file['error'] . ').';
+      $uploadErrors[] = audioLabel($inputKey) . ': upload error (code ' . $file['error'] . ').';
       continue;
     }
 
-    // ── Size guard ────────────────────────────────────────────────────────────
     if ($file['size'] > $maxSize) {
-      $uploadErrors[] = label($inputKey) . ' exceeds the 5 MB limit.';
+      $uploadErrors[] = audioLabel($inputKey) . ' exceeds the 5 MB limit.';
       continue;
     }
 
-    // ── MIME check (finfo on tmp file, not browser-supplied type) ─────────────
     $finfo    = finfo_open(FILEINFO_MIME_TYPE);
     $mimeType = finfo_file($finfo, $file['tmp_name']);
     finfo_close($finfo);
 
     if (!in_array($mimeType, $allowedMime, true)) {
-      $uploadErrors[] = label($inputKey) . ': not a supported audio format.';
+      $uploadErrors[] = audioLabel($inputKey) . ': not a supported audio format.';
       continue;
     }
 
-    // ── Build destination path ────────────────────────────────────────────────
     $ext      = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
     $filename = $inputKey . '_' . time() . '.' . $ext;
     $destPath = $uploadDir . $filename;
 
-    // ── Remove previous file for this slot ────────────────────────────────────
     $oldRelPath = getExistingAudioPath($user['id'], $dbColumn);
     if ($oldRelPath) {
       $oldAbs = dirname(__DIR__) . '/' . $oldRelPath;
@@ -140,40 +128,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_audio'])) {
       }
     }
 
-    // ── Move upload ───────────────────────────────────────────────────────────
     if (move_uploaded_file($file['tmp_name'], $destPath)) {
       $uploadedPaths[$dbColumn] = 'uploads/audio/' . $user['id'] . '/' . $filename;
     } else {
-      $uploadErrors[] = label($inputKey) . ': could not save file to disk.';
+      $uploadErrors[] = audioLabel($inputKey) . ': could not save file to disk.';
     }
   }
 
-  // ── Persist to DB ─────────────────────────────────────────────────────────
   if (!empty($uploadedPaths)) {
     try {
-      $userPdo = getUserDBConnection($user['id']);
-
-      /*
-       * Build a single-row upsert:
-       *   INSERT INTO user_audio_settings (user_id, col1, col2, …)
-       *   VALUES (?, ?, ?, …)
-       *   ON DUPLICATE KEY UPDATE col1 = VALUES(col1), col2 = VALUES(col2), …
-       *
-       * The UNIQUE KEY on user_id (see schema) makes the duplicate-key trigger
-       * fire on the second upload, so no separate SELECT + UPDATE is needed.
-       */
+      $userPdo      = getUserDBConnection($user['id']);
       $cols         = array_merge(['user_id'], array_keys($uploadedPaths));
       $placeholders = implode(', ', array_fill(0, count($cols), '?'));
       $updateParts  = array_map(fn($c) => "`$c` = VALUES(`$c`)", array_keys($uploadedPaths));
 
       $sql = "INSERT INTO user_audio_settings (" . implode(', ', array_map(fn($c) => "`$c`", $cols)) . ")
-              VALUES ($placeholders)
-              ON DUPLICATE KEY UPDATE " . implode(', ', $updateParts);
-
-      $params = array_merge([$user['id']], array_values($uploadedPaths));
+                    VALUES ($placeholders)
+                    ON DUPLICATE KEY UPDATE " . implode(', ', $updateParts);
 
       $stmt = $userPdo->prepare($sql);
-      $stmt->execute($params);
+      $stmt->execute(array_merge([$user['id']], array_values($uploadedPaths)));
 
       $message     = 'Audio settings saved successfully!';
       $messageType = 'success';
@@ -186,7 +160,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_audio'])) {
   }
 
   if (!empty($uploadErrors)) {
-    // Prepend any DB success note if we also had per-file errors
     $errText     = implode(' ', $uploadErrors);
     $message     = $message ? $message . ' However: ' . $errText : $errText;
     $messageType = 'error';
@@ -198,12 +171,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_audio'])) {
   }
 }
 
-// ============================================================================
-// HELPER: GET EXISTING AUDIO PATH FOR A GIVEN DB COLUMN
-// ============================================================================
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function getExistingAudioPath(int $userId, string $column): ?string
 {
-  // Whitelist column to prevent SQL injection
   $allowed = array_values(AUDIO_TYPES);
   if (!in_array($column, $allowed, true)) {
     return null;
@@ -220,17 +190,13 @@ function getExistingAudioPath(int $userId, string $column): ?string
   }
 }
 
-/** Human-readable label from an audio input key */
-function label(string $key): string
+function audioLabel(string $key): string
 {
   return ucfirst(str_replace('_', ' ', $key)) . ' sound';
 }
 
-// ============================================================================
-// LOAD CURRENT AUDIO SETTINGS
-// ============================================================================
+// ── Load current audio settings ───────────────────────────────────────────────
 $currentAudio = array_fill_keys(array_values(AUDIO_TYPES), null);
-
 try {
   $userPdo = getUserDBConnection($user['id']);
   $stmt    = $userPdo->prepare("SELECT * FROM user_audio_settings WHERE user_id = ? LIMIT 1");
@@ -243,19 +209,20 @@ try {
   error_log('Error loading audio settings: ' . $e->getMessage());
 }
 
-// ============================================================================
-// REFRESH USER + STATS
-// ============================================================================
+// ── Refresh user ──────────────────────────────────────────────────────────────
 try {
   $pdo  = getMainDBConnection();
   $stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');
   $stmt->execute([$user['id']]);
   $refreshedUser = $stmt->fetch(PDO::FETCH_ASSOC);
-  if ($refreshedUser) $user = $refreshedUser;
+  if ($refreshedUser) {
+    $user = $refreshedUser;
+  }
 } catch (PDOException $e) {
   error_log('Error refreshing user: ' . $e->getMessage());
 }
 
+// ── User stats ────────────────────────────────────────────────────────────────
 $userStats = ['total_employees' => 0, 'active_employees' => 0, 'total_violations' => 0, 'recent_activity' => 0];
 try {
   $userPdo = getUserDBConnection($user['id']);
@@ -267,6 +234,7 @@ try {
   error_log('Error fetching user stats: ' . $e->getMessage());
 }
 
+// ── Account timestamps ────────────────────────────────────────────────────────
 try {
   $pdo  = getMainDBConnection();
   $stmt = $pdo->prepare('SELECT created_at, last_login FROM users WHERE id = ?');
@@ -276,66 +244,13 @@ try {
   $accountInfo = ['created_at' => null, 'last_login' => null];
 }
 
-// ============================================================================
-// VIEW HELPER: render a single audio upload card
-// ============================================================================
-function audioCard(string $label, string $inputName, string $dbKey, array $currentAudio): void
-{
-  $hasFile  = !empty($currentAudio[$dbKey]);
-  $filename = $hasFile ? basename($currentAudio[$dbKey]) : null;
-  $webPath  = $hasFile ? '../' . htmlspecialchars($currentAudio[$dbKey], ENT_QUOTES) : null;
-
-  $iconMap = [
-    'success_audio_path'    => 'fa-check-circle text-success',
-    'not_found_audio_path'  => 'fa-search text-warning',
-    'inactive_audio_path'   => 'fa-user-slash text-secondary',
-    'violations_audio_path' => 'fa-exclamation-triangle text-danger',
-  ];
-  $icon = $iconMap[$dbKey] ?? 'fa-volume-up';
-?>
-  <div class="audio-group" data-audio-type="<?= htmlspecialchars($inputName, ENT_QUOTES) ?>">
-    <div class="audio-row">
-      <label><i class="fas <?= $icon ?>"></i> <?= htmlspecialchars($label, ENT_QUOTES) ?></label>
-      <div class="toggle-mute" onclick="toggleMute('<?= htmlspecialchars($inputName, ENT_QUOTES) ?>')">
-        <div class="toggle-switch active" id="toggle-<?= htmlspecialchars($inputName, ENT_QUOTES) ?>">
-          <div class="toggle-slider"></div>
-        </div>
-      </div>
-    </div>
-
-    <?php if ($hasFile): ?>
-      <div class="current-audio-preview">
-        <audio controls preload="none" style="width:100%;height:36px;">
-          <source src="<?= $webPath ?>">
-          Your browser does not support the audio element.
-        </audio>
-        <div class="current-file-name">
-          <i class="fas fa-file-audio"></i>
-          <?= htmlspecialchars($filename, ENT_QUOTES) ?>
-          <a href="delete_audio.php?type=<?= urlencode($dbKey) ?>&token=<?= htmlspecialchars($_SESSION['delete_audio_token'], ENT_QUOTES) ?>"
-            class="remove-audio"
-            title="Remove this audio"
-            onclick="return confirm('Remove <?= htmlspecialchars($label, ENT_QUOTES) ?>?')">
-            <i class="fas fa-times-circle"></i>
-          </a>
-        </div>
-      </div>
-    <?php endif; ?>
-
-    <div class="file-upload">
-      <input type="file"
-        id="<?= htmlspecialchars($inputName, ENT_QUOTES) ?>"
-        name="audio_<?= htmlspecialchars($inputName, ENT_QUOTES) ?>"
-        accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/webm,audio/aac">
-      <label for="<?= htmlspecialchars($inputName, ENT_QUOTES) ?>" class="file-upload-label">
-        <i class="fas fa-file-audio"></i>
-        <?= $hasFile ? 'Replace audio file' : 'Click to select audio' ?>
-      </label>
-      <span class="file-chosen-name" style="font-size:.8rem;color:#888;display:block;margin-top:4px;"></span>
-    </div>
-  </div>
-<?php
-}
+// ── Audio card icon map ───────────────────────────────────────────────────────
+$audioIconMap = [
+  'success_audio_path'    => ['icon' => 'fa-check-circle',       'color' => '#22c55e'],
+  'not_found_audio_path'  => ['icon' => 'fa-search',             'color' => '#f59e0b'],
+  'inactive_audio_path'   => ['icon' => 'fa-user-slash',         'color' => '#64748b'],
+  'violations_audio_path' => ['icon' => 'fa-exclamation-triangle', 'color' => '#ef4444'],
+];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -345,57 +260,151 @@ function audioCard(string $label, string $inputName, string $dbKey, array $curre
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($user['my_database'] ?? 'System', ENT_QUOTES) ?> – Settings</title>
-  <link rel="preload" href="../../icon/database-icon.png" as="image">
-  <link rel="icon" href="../../icon/database-icon.png" type="image/png">
-  <link rel="stylesheet" href="../../css/system.css">
-  <link rel="stylesheet" href="../../css/ptl.css">
-  <link rel="stylesheet" href="../../css/sett.css">
-  <link rel="stylesheet" href="../../css/btn.css">
-  <link rel="stylesheet" href="../../css/acct.css">
+  <link rel="icon" href="../assets/icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="../css/loading.css">
   <style>
-    /* ── Audio preview row ───────────────────────────────────── */
-    .current-audio-preview {
-      margin: 8px 0;
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
     }
 
-    .current-file-name {
+    :root {
+      --accent: #2563eb;
+      --accent-light: #eff6ff;
+      --bg: #f0f2f5;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --radius: 8px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Shortcut bar ── */
+    .shortcut-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
       display: flex;
       align-items: center;
-      gap: 6px;
-      font-size: .82rem;
-      color: #555;
-      margin-top: 4px;
+      gap: 4px;
+      min-height: 46px;
+      flex-shrink: 0;
+      overflow-x: auto;
     }
 
-    .remove-audio {
-      color: #dc3545;
-      text-decoration: none;
-      margin-left: auto;
-    }
-
-    .remove-audio:hover {
-      color: #a71d2a;
-    }
-
-    /* ── Alerts ──────────────────────────────────────────────── */
-    .alert {
-      padding: 12px 16px;
+    .shortcut-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 6px 14px;
+      cursor: pointer;
       border-radius: 6px;
-      margin-bottom: 16px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      font-size: 12px;
+      min-width: 64px;
+      transition: background .15s, color .15s;
+    }
+
+    .shortcut-item i {
+      font-size: 15px;
+    }
+
+    .shortcut-item:hover {
+      background: var(--bg);
+      color: var(--accent);
+    }
+
+    /* ── Page body ── */
+    .page-body {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    /* ── Welcome banner ── */
+    .welcome-banner {
+      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .wb-left h2 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .wb-left p {
+      font-size: 13px;
+      opacity: 0.85;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 12px;
       font-weight: 500;
+      margin-top: 6px;
+    }
+
+    .status-pill.ok {
+      background: rgba(255, 255, 255, .2);
+      color: #bbf7d0;
+    }
+
+    .status-pill.err {
+      background: rgba(239, 68, 68, .3);
+      color: #fca5a5;
+    }
+
+    /* ── Alert ── */
+    .alert {
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
     }
 
     .alert-success {
-      background: #d4edda;
-      color: #155724;
-      border: 1px solid #c3e6cb;
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #bbf7d0;
     }
 
     .alert-error {
-      background: #f8d7da;
-      color: #721c24;
-      border: 1px solid #f5c6cb;
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
     }
 
     .alert-warning {
@@ -404,145 +413,534 @@ function audioCard(string $label, string $inputName, string $dbKey, array $curre
       border: 1px solid #ffeaa7;
     }
 
-    /* ── Colour helpers ──────────────────────────────────────── */
-    .text-success {
-      color: #28a745;
+    .alert button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      color: inherit;
+      opacity: .7;
+      flex-shrink: 0;
     }
 
-    .text-warning {
-      color: #ffc107;
+    /* ── Stats ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
     }
 
-    .text-secondary {
-      color: #6c757d;
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
     }
 
-    .text-danger {
-      color: #dc3545;
+    .stat-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .stat-icon {
+      font-size: 18px;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* ── Two-col layout ── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .card-body {
+      padding: 16px;
+    }
+
+    /* ── Info grid ── */
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .info-item {
+      background: var(--bg);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+    }
+
+    .info-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+
+    .info-value {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    /* ── DB block ── */
+    .db-block {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: var(--bg);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      margin-bottom: 14px;
+    }
+
+    .db-block img {
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .db-name {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .db-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* ── Audio cards ── */
+    .audio-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .audio-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+    }
+
+    .audio-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .audio-card-label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 500;
+    }
+
+    .badge-ok {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .badge-none {
+      background: #f1f5f9;
+      color: #64748b;
+    }
+
+    audio {
+      width: 100%;
+      height: 34px;
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .audio-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .file-upload-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--text-muted);
+    }
+
+    .file-upload-label:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .remove-audio {
+      font-size: 12px;
+      color: #dc2626;
+      text-decoration: none;
+    }
+
+    .remove-audio:hover {
+      color: #991b1b;
+    }
+
+    .file-chosen {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* ── Buttons ── */
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 18px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .15s;
+    }
+
+    .btn-primary:hover {
+      background: #1d4ed8;
+    }
+
+    .btn-outline {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: border-color .15s, color .15s;
+    }
+
+    .btn-outline:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    @media(max-width:640px) {
+      .two-col {
+        grid-template-columns: 1fr;
+      }
+
+      .info-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 
 <body>
 
-  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.history.back();">
-    <i class="fas fa-times"></i>
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <div class="loading-content">
+      <div class="spinner"></div>
+      <div class="loading-text">Loading...</div>
+      <div class="loading-subtext">Please wait while we prepare your content</div>
+    </div>
   </div>
 
-  <main class="db-cont">
-
-    <section class="welcome-card">
-      <h1><i class="fas fa-cogs"></i> Settings &amp; Configuration</h1>
-      <div class="breadcrumb">
-        <a onclick="window.history.back()"><i class="fas fa-home"></i> Portal</a> / Settings
+  <!-- Top shortcut nav -->
+  <div class="shortcut-bar">
+    <div class="shortcut-item" onclick="if (window.self !== window.top) {
+        window.top.location.href = window.top.location.href.split('?')[0];
+      } else {
+        window.history.back();
+      }">
+      <i class="fas fa-arrow-left"></i>
+      <span>Back</span>
+    </div>
+    <?php if ($access['table panel']): ?>
+      <div class="shortcut-item" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=employees');">
+        <i class="fas fa-users"></i>
+        <span>Employees</span>
       </div>
-    </section>
+    <?php endif; ?>
+    <?php if ($access['scan test']): ?>
+      <div class="shortcut-item" onclick="navigateWithLoading('../../../app/http/controllers/scan test.php');">
+        <i class="fas fa-qrcode"></i>
+        <span>Scan Test</span>
+      </div>
+    <?php endif; ?>
+    <?php if ($access['admin panel']): ?>
+      <div class="shortcut-item" onclick="navigateWithLoading('admin panel.php#users');">
+        <i class="fas fa-user-shield"></i>
+        <span>Admin Panel</span>
+      </div>
+    <?php endif; ?>
+    <div class="shortcut-item" onclick="location.reload();">
+      <i class="fas fa-sync-alt"></i>
+      <span>Refresh</span>
+    </div>
+  </div>
 
+  <div class="page-body">
+
+    <!-- Welcome banner -->
+    <div class="welcome-banner">
+      <div class="wb-left">
+        <h2><i class="fas fa-cogs" style="margin-right:8px;opacity:.8;"></i>Settings &amp; Configuration</h2>
+        <p>Connected to <strong><?= htmlspecialchars($myDatabase) ?></strong></p>
+        <?php if ($databaseConnected): ?>
+          <div class="status-pill ok"><i class="fas fa-circle" style="font-size:7px;"></i> Database connected</div>
+        <?php else: ?>
+          <div class="status-pill err"><i class="fas fa-exclamation-circle" style="font-size:9px;"></i> Connection error</div>
+        <?php endif; ?>
+      </div>
+    </div>
+
+    <!-- Alert message -->
     <?php if ($message): ?>
       <div class="alert alert-<?= htmlspecialchars($messageType, ENT_QUOTES) ?>">
-        <i class="fas fa-<?= $messageType === 'success' ? 'check-circle' : ($messageType === 'warning' ? 'exclamation-circle' : 'times-circle') ?>"></i>
-        <?= htmlspecialchars($message, ENT_QUOTES) ?>
+        <span><?= htmlspecialchars($message, ENT_QUOTES) ?></span>
+        <button onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>
       </div>
     <?php endif; ?>
 
-    <!-- ── Stats ──────────────────────────────────────────────── -->
-    <section class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-number"><?= number_format($userStats['total_employees']) ?></div>
-        <div class="stat-label">Total Employees</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number"><?= number_format($userStats['active_employees']) ?></div>
-        <div class="stat-label">Active Employees</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number"><?= number_format($userStats['total_violations']) ?></div>
-        <div class="stat-label">Total Violations</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number"><?= number_format($userStats['recent_activity']) ?></div>
-        <div class="stat-label">Recent Activity (30 days)</div>
-      </div>
-    </section>
+    <!-- Two-column: Profile + Security -->
+    <div class="two-col">
 
-    <section class="menu-grid">
+      <!-- Left: Stats cards -->
+      <div style="display:flex;flex-direction:column;gap:16px;">
 
-      <!-- ── Database / Profile ──────────────────────────────── -->
-      <div class="menu-card">
-        <h2><i class="fas fa-database"></i> Database Information</h2>
-        <div class="database-info">
-          <img src="../../assets/icon/database-icon.png" alt="MySQL Logo" class="database-logo" loading="lazy">
-          <p>Connected to your personal database:</p>
-          <div class="database-name">
-            <?php if ($databaseConnected): ?>
-              <span style="color: #28a745;"><?php echo htmlspecialchars($myDatabase); ?></span>
-            <?php else: ?>
-              <span style="color: #dc3545;"><?php echo htmlspecialchars($myDatabase); ?></span>
-              <?php if (!empty($missingTables)): ?>
-              <?php endif; ?>
+        <!-- Profile Information -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i class="fas fa-user" style="color:#3b82f6;margin-right:6px;"></i>Employee Stats</span>
+          </div>
+          <div class="card-body">
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon" style="color:#3b82f6;"><i class="fas fa-users"></i></div>
+                  <div class="stat-value"><?= number_format($userStats['total_employees']) ?></div>
+                </div>
+                <div class="stat-label">Total Employees</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon" style="color:#22c55e;"><i class="fas fa-user-check"></i></div>
+                  <div class="stat-value"><?= number_format($userStats['active_employees']) ?></div>
+                </div>
+                <div class="stat-label">Active Employees</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon" style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i></div>
+                  <div class="stat-value"><?= number_format($userStats['total_violations']) ?></div>
+                </div>
+                <div class="stat-label">Total Violators</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon" style="color:#f59e0b;"><i class="fas fa-history"></i></div>
+                  <div class="stat-value"><?= number_format($userStats['recent_activity']) ?></div>
+                </div>
+                <div class="stat-label">Activity (30 days)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i class="fas fa-database" style="color:#3b82f6;margin-right:6px;"></i>Database &amp; Profile</span>
+          </div>
+          <div class="card-body">
+
+            <div class="db-block">
+              <img src="../assets/icon/database-icon.png" alt="MySQL">
+              <div>
+                <div class="db-name" style="color:<?= $databaseConnected ? '#16a34a' : '#dc2626' ?>;">
+                  <?= htmlspecialchars($myDatabase) ?>
+                </div>
+                <div class="db-sub">Personal database</div>
+              </div>
+            </div>
+
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">Username</div>
+                <div class="info-value"><?= htmlspecialchars($user['username'], ENT_QUOTES) ?></div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Email</div>
+                <div class="info-value" style="font-size:12px;"><?= htmlspecialchars($user['email'], ENT_QUOTES) ?></div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Account Created</div>
+                <div class="info-value" style="font-size:12px;">
+                  <?= $accountInfo['created_at'] ? date('M j, Y g:i A', strtotime($accountInfo['created_at'])) : 'N/A' ?>
+                </div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Last Login</div>
+                <div class="info-value" style="font-size:12px;">
+                  <?= $accountInfo['last_login'] ? date('M j, Y g:i A', strtotime($accountInfo['last_login'])) : 'N/A' ?>
+                </div>
+              </div>
+            </div>
+
+            <?php if ($access['admin panel']): ?>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button onclick="navigateWithLoading('admin panel.php#users')" class="btn-outline">
+                  <i class="fas fa-users-cog"></i> Users Management
+                </button>
+                <button onclick="navigateWithLoading('admin panel.php#group')" class="btn-outline">
+                  <i class="fas fa-layer-group"></i> Users Group
+                </button>
+                <button onclick="navigateWithLoading('admin panel.php#logs')" class="btn-outline">
+                  <i class="fas fa-history"></i> System Logs
+                </button>
+                <button onclick="navigateWithLoading('admin panel.php#myadmin')" class="btn-outline">
+                  <i class="fas fa-database"></i> PHP MyAdmin
+                </button>
+              </div>
             <?php endif; ?>
+
           </div>
         </div>
-        <div class="info-grid">
-          <div class="info-item">
-            <div class="info-label">Username</div>
-            <div class="info-value"><?= htmlspecialchars($user['username'], ENT_QUOTES) ?></div>
+      </div>
+
+      <!-- Right: Audio Settings -->
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i class="fas fa-volume-up" style="color:#6366f1;margin-right:6px;"></i>Audio Settings</span>
           </div>
-          <div class="info-item">
-            <div class="info-label">Email</div>
-            <div class="info-value"><?= htmlspecialchars($user['email'], ENT_QUOTES) ?></div>
-          </div>
-          <div class="info-item">
-            <div class="info-label">Account Created</div>
-            <div class="info-value">
-              <?= $accountInfo['created_at'] ? date('F j, Y g:i A', strtotime($accountInfo['created_at'])) : 'N/A' ?>
-            </div>
-          </div>
-          <div class="info-item">
-            <div class="info-label">Last Login</div>
-            <div class="info-value">
-              <?= $accountInfo['last_login'] ? date('F j, Y g:i A', strtotime($accountInfo['last_login'])) : 'Network error. Please try again.' ?>
-            </div>
+          <div class="card-body">
+
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">
+              Upload custom audio for each system event. Supported: MP3, WAV, OGG, AAC — max 5 MB each.
+            </p>
+
+            <form method="POST" enctype="multipart/form-data" id="audioForm">
+              <div class="audio-grid">
+                <?php foreach (AUDIO_TYPES as $inputKey => $dbColumn):
+                  $hasFile  = !empty($currentAudio[$dbColumn]);
+                  $filename = $hasFile ? basename($currentAudio[$dbColumn]) : null;
+                  $webPath  = $hasFile ? '../' . htmlspecialchars($currentAudio[$dbColumn], ENT_QUOTES) : null;
+                  $iconData = $audioIconMap[$dbColumn] ?? ['icon' => 'fa-volume-up', 'color' => '#64748b'];
+                ?>
+                  <div class="audio-card">
+                    <div class="audio-card-top">
+                      <div class="audio-card-label">
+                        <i class="fas <?= $iconData['icon'] ?>" style="color:<?= $iconData['color'] ?>;font-size:14px;"></i>
+                        <?= htmlspecialchars(audioLabel($inputKey), ENT_QUOTES) ?>
+                      </div>
+                      <?php if ($hasFile): ?>
+                        <span class="badge badge-ok">Uploaded</span>
+                      <?php else: ?>
+                        <span class="badge badge-none">None</span>
+                      <?php endif; ?>
+                    </div>
+
+                    <?php if ($hasFile): ?>
+                      <audio controls preload="none">
+                        <source src="<?= $webPath ?>">
+                      </audio>
+                      <div class="audio-actions">
+                        <label for="audio_<?= $inputKey ?>" class="file-upload-label">
+                          <i class="fas fa-file-audio"></i> Replace
+                        </label>
+                        <a href="delete_audio.php?type=<?= urlencode($dbColumn) ?>&token=<?= htmlspecialchars($_SESSION['delete_audio_token'], ENT_QUOTES) ?>"
+                          class="remove-audio"
+                          onclick="return confirm('Remove <?= htmlspecialchars(audioLabel($inputKey), ENT_QUOTES) ?>?')">
+                          <i class="fas fa-times-circle"></i> Remove
+                        </a>
+                      </div>
+                    <?php else: ?>
+                      <label for="audio_<?= $inputKey ?>" class="file-upload-label">
+                        <i class="fas fa-file-audio"></i> Select audio file
+                      </label>
+                    <?php endif; ?>
+
+                    <input type="file"
+                      id="audio_<?= $inputKey ?>"
+                      name="audio_<?= $inputKey ?>"
+                      accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/webm,audio/aac"
+                      style="display:none;">
+                    <div class="file-chosen" id="chosen_<?= $inputKey ?>"></div>
+                  </div>
+                <?php endforeach; ?>
+              </div>
+
+              <button type="submit" name="update_audio" class="btn-primary" style="margin-top:16px;" id="saveBtn">
+                <i class="fas fa-save"></i> Save Audio Settings
+              </button>
+            </form>
+
           </div>
         </div>
-        <?php if (($user['user_group'] ?? '') === 'Administrator'): ?>
-          <button onclick="window.location='users-management.php'" class="btn btn-primary" style="margin-top:20px;" id="regBtn">
-            <i class="fas fa-user-plus"></i> Register User
-          </button>
-          <button onclick="window.location='system-log.php'" class="btn btn-primary" style="margin-top:20px;" id="regBtn">
-            <i class="fas fa-file-alt"></i> System Log
-          </button>
-        <?php endif; ?>
       </div>
 
-      <!-- ── Audio Settings ──────────────────────────────────── -->
-      <div class="menu-card">
-        <h2><i class="fas fa-volume-up"></i> Audio Settings</h2>
-        <p style="color:#666;font-size:.9rem;margin-bottom:16px;">
-          Upload custom audio files for each system event.
-          Supported: MP3, WAV, OGG, AAC &mdash; max&nbsp;5&nbsp;MB each.
-        </p>
+    </div><!-- /.two-col -->
+  </div><!-- /.page-body -->
 
-        <form method="POST" enctype="multipart/form-data" id="audioForm">
-          <div class="audio-grid">
-            <?php audioCard('Success Sound',    'success',    'success_audio_path',    $currentAudio) ?>
-            <?php audioCard('Not Found Sound',  'not_found',  'not_found_audio_path',  $currentAudio) ?>
-            <?php audioCard('Inactive Sound',   'inactive',   'inactive_audio_path',   $currentAudio) ?>
-            <?php audioCard('Violations Sound', 'violations', 'violations_audio_path', $currentAudio) ?>
-          </div>
-
-          <button type="submit" name="update_audio" class="btn btn-primary" style="margin-top:20px;" id="saveBtn">
-            <i class="fas fa-save"></i> Save Audio Settings
-          </button>
-        </form>
-
-        <hr style="margin:30px 0;border:none;height:1px;background:#e1e5e9;">
-      </div>
-
-    </section>
-  </main>
-
-  <!-- Pass current audio paths to JS aud.js / req.js -->
   <script>
     window.AUDIO_SETTINGS = <?= json_encode([
                               'success'    => $currentAudio['success_audio_path']    ? '../' . $currentAudio['success_audio_path']    : null,
@@ -552,26 +950,27 @@ function audioCard(string $label, string $inputName, string $dbKey, array $curre
                             ], JSON_UNESCAPED_SLASHES) ?>;
   </script>
 
-  <script src="../../src/btn.js"></script>
-  <script src="../../src/aud.js"></script>
-  <script src="../../src/req.js"></script>
+  <script src="../js/btn.js"></script>
+  <script src="../js/aud.js"></script>
+  <script src="../js/req.js"></script>
+  <script src="../js/loading.js"></script>
 
   <script>
-    // Show chosen filename under each file input
-    document.querySelectorAll('.file-upload input[type="file"]').forEach(function(input) {
+    document.querySelectorAll('.audio-grid input[type="file"]').forEach(function(input) {
       input.addEventListener('change', function() {
-        var span = this.closest('.file-upload').querySelector('.file-chosen-name');
-        if (span) span.textContent = this.files[0] ? this.files[0].name : '';
+        var key = this.id.replace('audio_', '');
+        var shown = document.getElementById('chosen_' + key);
+        if (shown) shown.textContent = this.files[0] ? this.files[0].name : '';
       });
     });
 
-    // Disable save button while submitting to prevent double-post
     document.getElementById('audioForm').addEventListener('submit', function() {
       var btn = document.getElementById('saveBtn');
       btn.disabled = true;
       btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
     });
   </script>
+
 </body>
 
 </html>

@@ -2,8 +2,6 @@
 // app/http/controller/manual input.php --> manual employee input in/out
 
 require_once __DIR__ . '/../../../config/config.php';
-require_once __DIR__ . '/../../services/manpower_backend.php';
-
 require_once __DIR__ . '/../../../config/db.php';
 
 $permissions = getUserGroupPermissions();
@@ -21,22 +19,24 @@ if (!canAccess($permissions, 'qr proximity') && !canAccess($permissions, 'manual
 requireAccess('manual input', 'qr proximity.php');
 $access = getMenuAccess();
 
+$userId = $_SESSION['user_id'] ?? null;
+
 try {
-  // Initialize database and employee manager
-  $db = new Database();
-  $employeeManager = new EmployeeManager($db);
+  if (!$userId) throw new Exception("Not logged in");
 
-  // Get employees data
-  $employees = $employeeManager->getEmployees();
+  $userDb = getUserDBConnection($userId);
 
-  // Convert to JSON for JavaScript
+  $stmt = $userDb->prepare("SELECT * FROM employees ORDER BY fullname ASC");
+  $stmt->execute();
+  $employees = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
   $employeesJson = json_encode($employees);
 } catch (Exception $e) {
-  // Handle errors gracefully
   error_log("Error loading employees: " . $e->getMessage());
   $employees = [];
   $employeesJson = json_encode([]);
 }
+
 ?>
 
 <!DOCTYPE html>

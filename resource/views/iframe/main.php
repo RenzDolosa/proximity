@@ -1,25 +1,25 @@
 <?php
 // resource/views/iframe/main.php --> main panel controller
 
-require_once '../../../config/config.php';
-require_once '../../../config/db.php';
+require_once __DIR__ . '/../../../config/config.php';
+require_once __DIR__ . '/../../../config/db.php';
 
 requireAccess('main', '../../../proximity.php', true);
 $access = getMenuAccess();
+
+$userId = $_SESSION['user_id'] ?? null;
+$userGroup = $_SESSION['user_group'] ?? '';
 
 // ── Page router ──
 $page = $_GET['page'] ?? null;
 
 // Pages that are full standalone HTML — render them in an iframe wrapper, not included directly
-$iframePages = ['admin panel'];
+$iframePages = ['admin panel', 'account', 'employee dashboard', 'settings'];
 
 // Pages safe to include directly (they output only a fragment, no full HTML shell)
 $includedPages = ['account', 'employee dashboard', 'f-pass', 'reg', 'settings'];
 
 if ($page && in_array($page, $iframePages)) {
-  // Output a bare iframe that fills the viewport, pointing back to the same page
-  // but loaded as a direct request (not via include), so its full HTML renders correctly.
-  // We pass a `_standalone=1` flag so the target page knows it's being iframed.
   $safePageName = htmlspecialchars($page, ENT_QUOTES);
   $iframeSrc    = '../' . rawurlencode($page) . '.php?_standalone=1';
   echo '<!DOCTYPE html><html><head><meta charset="UTF-8">';
@@ -35,12 +35,24 @@ if ($page && in_array($page, $includedPages)) {
   exit();
 }
 
-$userGroup = $_SESSION['user_group'] ?? '';
-
 if (!isset($_SESSION['user_id'])) {
   header('Location: ../../../index.php');
   exit();
 }
+
+// Get dashboard statistics
+$stats = [
+  'total_employees' => 0,
+  'active_employees' => 0,
+  'inactive_employees' => 0,
+  'total_scanned' => 0,
+  'active_scan' => 0,
+  'inactive_scan' => 0,
+  'today_attendance' => 0,
+  'check_in' => 0,
+  'check_out' => 0,
+  'total_proxcode' => 0,
+];
 
 try {
   $userDb = getUserDBConnection($userId);
@@ -72,6 +84,70 @@ try {
   $databaseConnected = false;
   $dbError = $e->getMessage();
 }
+
+if ($databaseConnected) {
+  try {
+    // Employee stats
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employees");
+    $stmt->execute();
+    $stats['total_employees'] = (int)$stmt->fetchColumn();
+
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employees WHERE status = 'Active'");
+    $stmt->execute();
+    $stats['active_employees'] = (int)$stmt->fetchColumn();
+
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employees WHERE status = 'Inactive'");
+    $stmt->execute();
+    $stats['inactive_employees'] = (int)$stmt->fetchColumn();
+
+    // Access log stats
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log");
+    $stmt->execute();
+    $stats['total_scanned'] = (int)$stmt->fetchColumn();
+
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE status = 'Active'");
+    $stmt->execute();
+    $stats['active_scan'] = (int)$stmt->fetchColumn();
+
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE status = 'Inactive'");
+    $stmt->execute();
+    $stats['inactive_scan'] = (int)$stmt->fetchColumn();
+
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE DATE(access_timestamp) = CURDATE()");
+    $stmt->execute();
+    $stats['today_attendance'] = (int)$stmt->fetchColumn();
+
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'IN'");
+    $stmt->execute();
+    $stats['check_in'] = (int)$stmt->fetchColumn();
+
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'OUT'");
+    $stmt->execute();
+    $stats['check_out'] = (int)$stmt->fetchColumn();
+
+    // Proximity codes
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM code");
+    $stmt->execute();
+    $stats['total_proxcode'] = (int)$stmt->fetchColumn();
+
+    // Recent logs
+    $stmt = $userDb->prepare("
+      SELECT el.*,
+             COALESCE(NULLIF(TRIM(el.fullname), ''), e.fullname, 'Unknown Employee') AS fullname
+      FROM employee_access_log el
+      LEFT JOIN employees e ON el.employee_id = e.id
+      ORDER BY el.access_timestamp DESC
+      LIMIT 6
+    ");
+    $stmt->execute();
+    $recentLogs = $stmt->fetchAll();
+
+  } catch (PDOException $e) {
+    $dbError = "Error fetching dashboard data: " . $e->getMessage();
+    error_log($dbError);
+  }
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -109,10 +185,13 @@ try {
       background: var(--bg);
       color: var(--text);
       font-size: 14px;
-      overflow-y: auto;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
 
-    /* ── Top nav shortcuts bar ── */
+    /* ── Top nav bar ── */
     .shortcut-bar {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
@@ -122,6 +201,7 @@ try {
       gap: 4px;
       overflow-x: auto;
       min-height: 46px;
+      flex-shrink: 0;
     }
 
     .shortcut-item {
@@ -170,6 +250,8 @@ try {
       display: flex;
       flex-direction: column;
       gap: 20px;
+      overflow-y: auto;
+      flex: 1;
     }
 
     /* ── Status summary row ── */
@@ -207,12 +289,29 @@ try {
       flex-shrink: 0;
     }
 
-    .status-dot.blue   { background: #3b82f6; }
-    .status-dot.pink   { background: #ec4899; }
-    .status-dot.purple { background: #8b5cf6; }
-    .status-dot.red    { background: #ef4444; }
-    .status-dot.orange { background: #f97316; }
-    .status-dot.green  { background: #22c55e; }
+    .status-dot.blue {
+      background: #3b82f6;
+    }
+
+    .status-dot.pink {
+      background: #ec4899;
+    }
+
+    .status-dot.purple {
+      background: #8b5cf6;
+    }
+
+    .status-dot.red {
+      background: #ef4444;
+    }
+
+    .status-dot.orange {
+      background: #f97316;
+    }
+
+    .status-dot.green {
+      background: #22c55e;
+    }
 
     .status-info {
       display: flex;
@@ -473,7 +572,7 @@ try {
   <!-- Top shortcut nav -->
   <div class="shortcut-bar">
     <?php if ($access['table panel']): ?>
-      <div class="shortcut-item" onclick="navigateWithLoading('../../../app/services/table panel.php');">
+      <div class="shortcut-item" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=employees');">
         <i class="fas fa-users"></i>
         <span>Employees</span>
       </div>
@@ -484,24 +583,16 @@ try {
         <span>Scan Test</span>
       </div>
     <?php endif; ?>
-    <?php if ($access['employee dashboard']): ?>
-      <div class="shortcut-item" onclick="window.location.href='../employee dashboard.php';">
-        <i class="fas fa-chart-bar"></i>
-        <span>Insights</span>
-      </div>
-    <?php endif; ?>
-    <?php if ($access['account info']): ?>
-      <div class="shortcut-item" onclick="window.location.href='../account.php';">
-        <i class="fas fa-user-circle"></i>
-        <span>Account</span>
-      </div>
-    <?php endif; ?>
     <?php if ($access['admin panel']): ?>
-      <div class="shortcut-item" onclick="window.location.href='../admin panel.php';">
+      <div class="shortcut-item" onclick="navigateWithLoading('../admin panel.php#users');">
         <i class="fas fa-user-shield"></i>
         <span>Admin Panel</span>
       </div>
     <?php endif; ?>
+    <div class="shortcut-item" onclick="location.reload();">
+      <i class="fas fa-sync-alt"></i>
+      <span>Refresh</span>
+    </div>
   </div>
 
   <div class="page-body">
@@ -530,34 +621,34 @@ try {
         <div class="status-dot blue"></div>
         <div class="status-info">
           <div class="status-label">Total Employees</div>
-          <div class="status-value" id="stat-total">—</div>
+          <div class="status-value" id="stat-total"><?php echo number_format($stats['total_employees']); ?></div>
         </div>
       </div>
       <div class="status-item">
         <div class="status-dot green"></div>
         <div class="status-info">
-          <div class="status-label">Checked In</div>
-          <div class="status-value" id="stat-in">—</div>
+          <div class="status-label">Total Checked In</div>
+          <div class="status-value" id="stat-in"><?php echo number_format($stats['check_in']); ?></div>
         </div>
       </div>
       <div class="status-item">
         <div class="status-dot orange"></div>
         <div class="status-info">
-          <div class="status-label">Checked Out</div>
-          <div class="status-value" id="stat-out">—</div>
+          <div class="status-label">Total Checked Out</div>
+          <div class="status-value" id="stat-out"><?php echo number_format($stats['check_out']); ?></div>
         </div>
       </div>
       <div class="status-item">
         <div class="status-dot purple"></div>
         <div class="status-info">
-          <div class="status-label">Active Codes</div>
-          <div class="status-value" id="stat-codes">—</div>
+          <div class="status-label">Active Proximity Codes</div>
+          <div class="status-value" id="stat-codes"><?php echo number_format($stats['total_proxcode']); ?></div>
         </div>
       </div>
       <div class="status-item">
         <div class="status-dot <?= $databaseConnected ? 'green' : 'red'; ?>"></div>
         <div class="status-info">
-          <div class="status-label">DB Status</div>
+          <div class="status-label">Status</div>
           <div class="status-value" style="font-size:14px;margin-top:2px;">
             <?= $databaseConnected ? 'Online' : 'Offline'; ?>
           </div>
@@ -577,15 +668,22 @@ try {
           <div class="card-body">
             <div class="shortcuts-grid">
 
-              <?php if ($access['table panel']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php');">
+              <?php if ($access['system']): ?>
+                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=employees');">
                   <div class="sc-icon"><i class="fas fa-user-plus"></i></div>
                   <div class="sc-label">Input Employee</div>
                 </div>
               <?php endif; ?>
 
+              <?php if ($access['datalog']): ?>
+                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=datalog');">
+                  <div class="sc-icon"><i class="fas fa-list-check"></i></div>
+                  <div class="sc-label">Scanned Log</div>
+                </div>
+              <?php endif; ?>
+
               <?php if ($access['proximity code']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/proximity code.php');">
+                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=proximity');">
                   <div class="sc-icon"><img src="../../../resource/assets/logo/nfc-logo.svg" alt="NFC" style="width:18px;height:18px;"></div>
                   <div class="sc-label">Proximity Center</div>
                 </div>
@@ -599,23 +697,16 @@ try {
               <?php endif; ?>
 
               <?php if ($access['employee dashboard']): ?>
-                <div class="sc-card" onclick="window.location.href='../employee dashboard.php';">
+                <div class="sc-card" onclick="navigateWithLoading('../employee dashboard.php');">
                   <div class="sc-icon"><i class="fas fa-chart-line"></i></div>
                   <div class="sc-label">Insights</div>
                 </div>
               <?php endif; ?>
 
               <?php if ($access['account info']): ?>
-                <div class="sc-card" onclick="window.location.href='../account.php';">
+                <div class="sc-card" onclick="navigateWithLoading('../account.php');">
                   <div class="sc-icon"><i class="fas fa-id-card"></i></div>
                   <div class="sc-label">Account Info</div>
-                </div>
-              <?php endif; ?>
-
-              <?php if ($access['admin panel']): ?>
-                <div class="sc-card" onclick="window.location.href='../admin panel.php';">
-                  <div class="sc-icon"><i class="fas fa-user-shield"></i></div>
-                  <div class="sc-label">Admin Panel</div>
                 </div>
               <?php endif; ?>
 
@@ -634,7 +725,7 @@ try {
             <div class="menu-list">
 
               <?php if ($access['table panel']): ?>
-                <div class="menu-card" onclick="navigateWithLoading('../../../app/services/table panel.php');">
+                <div class="menu-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=employees');">
                   <div class="mc-icon" style="background:#eff6ff; color:#2563eb;">
                     <img src="../../assets/logo/mysql-logo.svg" alt="MySQL" style="width:26px;height:26px;object-fit:contain;">
                   </div>

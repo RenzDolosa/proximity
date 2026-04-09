@@ -204,6 +204,7 @@ async function loadEmployeeData(employeeId) {
     if (data.success && data.data) {
       const employee = data.data;
 
+      document.getElementById("user_id").value = employee.user_id;
       document.getElementById("employee_id").value = employee.id;
       document.getElementById("original_id").value = employee.id;
       document.getElementById("fullname").value = employee.fullname || "";
@@ -216,7 +217,7 @@ async function loadEmployeeData(employeeId) {
 
       const fileLabel = document.querySelector(".file-upload-label");
       if (employee.image) {
-        const imagePath = `${window.location.origin}/public/uploads/user/${employee.image}`;
+        const imagePath = `${window.location.origin}/../public/uploads/user/${employee.image}`;
 
         fileLabel.innerHTML = `
           <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
@@ -299,6 +300,7 @@ async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
     const hasInactive = employee.status.toLowerCase() === "inactive";
 
     const logData = {
+      user_id: employee.user_id,
       employee_id: employee.id,
       fullname: employee.fullname,
       position: employee.position,
@@ -411,8 +413,8 @@ async function renderEmployeeTable() {
       };
 
       const isAboveFold = index < 5;
-      const thumbSrc = `${window.location.origin}/public/uploads/user/thumb_${employee.image}`;
-      const imageSrc = `${window.location.origin}/public/uploads/user/${employee.image}`;
+      const thumbSrc = `${window.location.origin}/../public/uploads/user/thumb_${employee.image}`;
+      const imageSrc = `${window.location.origin}/../public/uploads/user/${employee.image}`;
 
       return `
         <tr>

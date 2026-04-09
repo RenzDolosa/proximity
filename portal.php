@@ -248,11 +248,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       color: #f1f5f9;
     }
 
-    .nav-item.active {
-      background: var(--sidebar-active);
-      color: var(--sidebar-active-text);
-    }
-
     .nav-item i {
       width: 16px;
       text-align: center;
@@ -412,6 +407,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     .dropdown-header {
       padding: 12px 14px;
       border-bottom: 1px solid var(--border);
+      cursor: pointer;
     }
 
     .dropdown-header .dh-name {
@@ -669,13 +665,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <nav class="sidebar-nav">
       <div class="nav-section-label">Main</div>
 
-      <div class="nav-item active" onclick="window.location.href='portal.php';">
+      <div class="nav-item" onclick="document.querySelector('.frames').src='resource/views/iframe/main.php';">
         <i class="fas fa-home"></i> <span class="nav-item-label">Home</span>
       </div>
 
       <?php if ($access['proximity']): ?>
         <div class="nav-item" onclick="window.location.href='proximity.php';">
           <img src="../../../resource/assets/icon/nfc-icon.svg" alt="NFC Icon" loading="lazy" style="width: 20px; filter: invert(0.8);"> <span class="nav-item-label">Proximity</span>
+        </div>
+      <?php endif; ?>
+
+      <?php if ($access['employee dashboard']): ?>
+        <div class="nav-item" onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=employee dashboard';">
+          <i class="fas fa-chart-bar"></i> <span class="nav-item-label">Employee Dashboard</span>
         </div>
       <?php endif; ?>
 
@@ -720,8 +722,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <div class="user-dropdown" id="userDropdown">
-          <div class="dropdown-header">
-            <div class="dh-name"><?= htmlspecialchars($username ?? 'User'); ?></div>
+          <div class="dropdown-header" <?php if ($access['account info']): ?> onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=account';" <?php endif; ?>>
+            <div class="dh-name"><i class="fas fa-user-circle"></i> <?= htmlspecialchars($username ?? 'User'); ?></div>
             <div class="dh-sub"><?= htmlspecialchars($user['user_group'] ?? 'User'); ?></div>
           </div>
           <div class="dropdown-item" id="changePassBtn">
@@ -788,14 +790,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <script src="resource/js/req.js"></script>
   <script src="resource/js/ver.js"></script>
   <script>
-    // ── Nav active state ──
-    document.querySelectorAll('.nav-item').forEach(item => {
-      item.addEventListener('click', function () {
-        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-        this.classList.add('active');
-      });
-    });
-
     // ── Iframe session guard ──
     const mainFrame = document.querySelector('.frames');
     if (mainFrame) {
@@ -840,44 +834,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
 
     document.addEventListener('click', closeDropdown);
-
-    // ── Change Password Modal ──
-    const cpOverlay     = document.getElementById('cpOverlay');
-    const cpClose       = document.getElementById('cpClose');
-    const cpCancel      = document.getElementById('cpCancel');
-    const cpConfirmBtn  = document.getElementById('cpConfirmBtn');
-    const cpMsg         = document.getElementById('cpMsg');
-    const changePassBtn = document.getElementById('changePassBtn');
-    const cpForm        = document.getElementById('cpForm');
-
-    // If PHP returned a message for change_password, re-open the modal automatically
-    <?php if ($message && isset($_POST['change_password'])): ?>
-      window.addEventListener('DOMContentLoaded', function () { openCP(false); });
-    <?php endif; ?>
-
-    function openCP(clearFields = true) {
-      closeDropdown();
-      cpConfirmBtn.disabled    = false;
-      cpConfirmBtn.textContent = 'Confirm';
-      cpOverlay.classList.add('open');
-    }
-
-    function closeCP() {
-      cpOverlay.classList.remove('open');
-    }
-
-    changePassBtn.addEventListener('click', function () { openCP(); });
-    cpClose.addEventListener('click', closeCP);
-    cpCancel.addEventListener('click', closeCP);
-    cpOverlay.addEventListener('click', function (e) {
-      if (e.target === cpOverlay) closeCP();
-    });
-
-    // Client-side validation before the form submits
-    cpForm.addEventListener('submit', function (e) {
-      cpConfirmBtn.disabled    = true;
-      cpConfirmBtn.textContent = 'Saving...';
-    });
   </script>
 </body>
 

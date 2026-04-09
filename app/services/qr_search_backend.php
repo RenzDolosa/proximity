@@ -210,14 +210,14 @@ class QueryLogger
 
       $sql = "INSERT INTO check_in_out
               (employee_id, qr_code, fullname, check_type, scan_timestamp, user_id,
-               ip_address, user_agent)
+                ip_address, user_agent)
             VALUES
               (:employee_id, :qr_code, :fullname, :check_type, :scan_timestamp, :user_id,
-               :ip_address, :user_agent)";
+                :ip_address, :user_agent)";
 
       $stmt = $this->conn->prepare($sql);
       $stmt->execute([
-        ':user_id'        => $this->userId,
+        ':user_id'         => $this->userId,
         ':employee_id'     => $employeeId,
         ':qr_code'         => $qrCode,
         ':fullname'        => $fullname,
@@ -322,11 +322,20 @@ class QueryLogger
         ':error_message'     => $errorMessage,
       ]);
 
+      // logSystemAction($this->userId, 'SEARCH_QUERY', json_encode([
+      //   'query_type'    => $queryType,
+      //   'search_term'   => $searchTerm,
+      //   'results_count' => $resultsCount,
+      //   'success'       => $success,
+      // ]));
+
+      $employeeData = $resultsData[0] ?? [];
+
       logSystemAction($this->userId, 'SEARCH_QUERY', json_encode([
-        'query_type'    => $queryType,
-        'search_term'   => $searchTerm,
-        'results_count' => $resultsCount,
-        'success'       => $success,
+        'employee_id'  => $employeeData['id']           ?? null,
+        'fullname'     => $employeeData['fullname']     ?? null,
+        'qr_code'      => $employeeData['qr_code']      ?? null,
+        'check_status' => $employeeData['check_status'] ?? 'IN'
       ]));
 
       return true;

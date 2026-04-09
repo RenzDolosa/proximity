@@ -8,8 +8,6 @@ error_reporting(E_ALL);
 require_once __DIR__ . '/../../../config/config.php';
 require_once __DIR__ . '/../../../config/db.php';
 
-require_once __DIR__ . '/../../services/manpower_backend.php';
-
 requireAccess('scan test', '../../../resource/views/iframe/main.php');
 $access = getMenuAccess();
 

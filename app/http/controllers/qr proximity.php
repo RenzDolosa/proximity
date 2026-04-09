@@ -19,16 +19,33 @@ if (!canAccess($permissions, 'qr proximity') && !canAccess($permissions, 'manual
 requireAccess('qr proximity', 'manual input.php');
 $access = getMenuAccess();
 
+$myDatabase = $_SESSION['my_database'] ?? 'My Database';
+$userId = $_SESSION['user_id'] ?? null;
+$userDbName = USER_DB_PREFIX . $userId;
+$username = $_SESSION['username'] ?? 'User';
+$email = $_SESSION['email'] ?? '';
+
 if (!isset($_SESSION['user_id'])) {
   header('Location: ../../../index.php');
   exit();
 }
 
-$myDatabase = $_SESSION['my_database'] ?? 'My Database';
-$userId = $_SESSION['user_id'];
-$userDbName = USER_DB_PREFIX . $userId;
-$username = $_SESSION['username'] ?? 'User';
-$email = $_SESSION['email'] ?? '';
+try {
+  if (!$userId) throw new Exception("Not logged in");
+
+  $userDb = getUserDBConnection($userId);
+
+  $stmt = $userDb->prepare("SELECT * FROM employees ORDER BY fullname ASC");
+  $stmt->execute();
+  $employees = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+  $employeesJson = json_encode($employees);
+} catch (Exception $e) {
+  error_log("Error loading employees: " . $e->getMessage());
+  $employees = [];
+  $employeesJson = json_encode([]);
+}
+
 ?>
 
 <!DOCTYPE html>
