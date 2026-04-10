@@ -257,7 +257,7 @@ if ($databaseConnected) {
             <th>Brand</th>
             <th>Status</th>
             <th>Shift</th>
-            <th class="Col7">Violation</th>
+            <th class="Col7">Remarks</th> <!-- Violation -->
             <th class="Col8">Image</th>
             <th class="Col9">Proximity Code</th>
             <th>Timestamp</th>

@@ -349,7 +349,7 @@ try {
             <span class="status-badge status-${employee.status.toLowerCase()}">${employee.status}</span>
           </div>
           <div class="detail-item">
-            <span class="detail-label">Violation</span>
+            <span class="detail-label">Remarks</span> <!-- Violation -->
             <span class="detail-value" style="height: 60px; overflow-y: auto; scrollbar-width: thin; align-content: center;">${employee.violation || 'None'}</span>
           </div>
           <div class="log-buttons" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px;">
