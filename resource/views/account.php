@@ -554,6 +554,33 @@ try {
         grid-template-columns: 1fr;
       }
     }
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-wrapper .form-control {
+      padding-right: 36px;
+    }
+
+    .toggle-pw {
+      position: absolute;
+      right: 10px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 13px;
+      padding: 0;
+      line-height: 1;
+      transition: color 0.15s;
+    }
+
+    .toggle-pw:hover {
+      color: var(--accent);
+    }
   </style>
 </head>
 
@@ -752,16 +779,31 @@ try {
               <div class="form-grid">
                 <div class="form-group full">
                   <label for="current_password">Current Password</label>
-                  <input type="password" id="current_password" name="current_password" class="form-control" required>
+                  <div class="input-wrapper">
+                    <input type="password" id="current_password" name="current_password" class="form-control" required>
+                    <button type="button" class="toggle-pw" tabindex="-1" onclick="togglePw('current_password', this)">
+                      <i class="fas fa-eye"></i>
+                    </button>
+                  </div>
                 </div>
                 <div class="form-group full">
                   <label for="new_password">New Password</label>
-                  <input type="password" id="new_password" name="new_password" class="form-control" required>
+                  <div class="input-wrapper">
+                    <input type="password" id="new_password" name="new_password" class="form-control" required>
+                    <button type="button" class="toggle-pw" tabindex="-1" onclick="togglePw('new_password', this)">
+                      <i class="fas fa-eye"></i>
+                    </button>
+                  </div>
                   <span class="form-hint">At least 8 characters with uppercase, lowercase, and number.</span>
                 </div>
                 <div class="form-group full">
                   <label for="confirm_password">Confirm New Password</label>
-                  <input type="password" id="confirm_password" name="confirm_password" class="form-control" required>
+                  <div class="input-wrapper">
+                    <input type="password" id="confirm_password" name="confirm_password" class="form-control" required>
+                    <button type="button" class="toggle-pw" tabindex="-1" onclick="togglePw('confirm_password', this)">
+                      <i class="fas fa-eye"></i>
+                    </button>
+                  </div>
                 </div>
               </div>
               <button type="submit" name="change_password" class="btn-primary">
@@ -779,6 +821,15 @@ try {
   <script src="../js/btn.js"></script>
   <script src="../js/req.js"></script>
   <script src="../js/loading.js"></script>
+  <script>
+    function togglePw(fieldId, btn) {
+      const input = document.getElementById(fieldId);
+      const icon = btn.querySelector('i');
+      const isHidden = input.type === 'password';
+      input.type = isHidden ? 'text' : 'password';
+      icon.className = isHidden ? 'fas fa-eye-slash' : 'fas fa-eye';
+    }
+  </script>
 
 </body>
 

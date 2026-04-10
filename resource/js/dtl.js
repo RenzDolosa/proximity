@@ -298,7 +298,6 @@ function showAutoUpdateNotification() {
 // Auto-load employees (silent update) - Fixed error handling
 async function loadEmployeesAuto(filters = {}) {
   try {
-    // showLoading(false);
 
     // 🆕 If no filters passed, check for active filters in form
     if (Object.keys(filters).length === 0 && hasActiveFilters()) {
@@ -937,7 +936,7 @@ function searchEmployees() {
   const filters = getActiveFilters();
 
   // Load employees with the current filters
-  loadEmployees(filters, true); // true = preserve page when filtering
+  loadEmployees(filters, true, true); // true = preserve page when filtering
 
   // ✅ AUTO-CLEAR AFTER SUCCESSFUL SEARCH
   if (searchQuery) {
@@ -965,7 +964,7 @@ function clearSearch() {
   // Reset to page 1 and load all employees
   currentPage = 1;
   activeFilters = {};
-  loadEmployees({}, false); // Load without filters
+  loadEmployees({}, false, true); // Load without filters
   updateDeleteButtonState();
 }
 
@@ -1316,9 +1315,9 @@ function populateFilter(employeeList) {
 }
 
 // Load employees with improved error handling
-async function loadEmployees(filters = {}, preservePage = false) {
+async function loadEmployees(filters = {}, preservePage = false, silent = false) {
   try {
-    showLoading(true);
+    if (!silent) showLoading(true);
 
     // 🆕 If no filters passed, check for active filters in form
     if (Object.keys(filters).length === 0 && hasActiveFilters()) {
@@ -1398,7 +1397,7 @@ async function loadEmployees(filters = {}, preservePage = false) {
       "error",
     );
   } finally {
-    showLoading(false);
+    if (!silent) showLoading(false);
   }
 }
 
@@ -1498,7 +1497,7 @@ async function handleFormSubmit(e) {
       qrImageMapCache = null;
       const preservePage = currentAction === "edit";
       const filtersToUse = hasActiveFilters() ? getActiveFilters() : {};
-      await loadEmployees(filtersToUse, preservePage);
+      await loadEmployees(filtersToUse, preservePage, true);
     } else {
       showAlert(data.message || "Failed to save employee", "error");
     }
@@ -1578,7 +1577,7 @@ async function deleteEmployee(employeeId) {
       // 🆕 Clear cache and reload
       employeeDataCache = null;
       qrImageMapCache = null;
-      await loadEmployees();
+      await loadEmployees(filters, preservePage, true);
     } else {
       showAlert(data.message, "error");
     }
@@ -1619,7 +1618,7 @@ async function deleteAllEmployees() {
       // Clear cache and reload the table (will show empty)
       employeeDataCache = null;
       qrImageMapCache = null;
-      await loadEmployees();
+      await loadEmployees(filters, preservePage, true);
     } else {
       // Show error message from backend
       showAlert(data.message, "error");

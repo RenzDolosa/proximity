@@ -105,7 +105,7 @@ switch ($url) {
             placeholder="Enter your password"
             maxlength="255"
             autocomplete="current-password">
-          <button type="button"
+          <button type="button" tabindex="-1"
             class="password-toggle-btn"
             id="togglePassword"
             aria-label="Toggle password visibility">

@@ -89,19 +89,18 @@ class EmployeeManager
   public function createEmployee($data)
   {
     $query = "INSERT INTO " . $this->table . " 
-                      (qr_code) 
-                      VALUES (:qr_code)";
+                      (qr_code, is_active) 
+                      VALUES (:qr_code, :is_active)";
 
     $stmt = $this->conn->prepare($query);
     $stmt->bindParam(':qr_code', $data['qr_code']);
+    $stmt->bindValue(':is_active', isset($data['is_active']) ? (int)$data['is_active'] : 1);
 
     if ($stmt->execute()) {
       $employeeId = $this->conn->lastInsertId();
-
       if ($this->userId) {
-        logSystemAction($this->userId, 'EMPLOYEE_CREATED', "Created employee: " . $data['qr_code']);
+        logSystemAction($this->userId, 'CODE_CREATED', "Created code: " . $data['qr_code']);
       }
-
       return $employeeId;
     }
     return false;
@@ -142,22 +141,154 @@ class EmployeeManager
   {
     // Use date() instead of NOW() so the PHP timezone (Asia/Manila) is respected
     $query = "UPDATE " . $this->table . " 
-                      SET qr_code = :qr_code, updated_at = :updated_at
+                      SET qr_code = :qr_code, is_active = :is_active, updated_at = :updated_at
                       WHERE id = :id";
 
     $stmt = $this->conn->prepare($query);
 
     $stmt->bindParam(':id',         $id);
     $stmt->bindParam(':qr_code',    $data['qr_code']);
+    $stmt->bindValue(':is_active',  isset($data['is_active']) ? (int)$data['is_active'] : 1);
+    $stmt->bindValue(':updated_at', date('Y-m-d H:i:s'));
+
+    $result = $stmt->execute();
+    if ($result && $this->userId) {
+      logSystemAction($this->userId, 'CODE_UPDATED', "Updated code: " . $data['qr_code']);
+    }
+    return $result;
+  }
+
+  public function toggleStatus($id)
+  {
+    $query = "UPDATE " . $this->table . " 
+            SET is_active = NOT is_active, updated_at = :updated_at
+            WHERE id = :id";
+
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(':id', $id);
     $stmt->bindValue(':updated_at', date('Y-m-d H:i:s'));
 
     $result = $stmt->execute();
 
-    if ($result && $this->userId) {
-      logSystemAction($this->userId, 'EMPLOYEE_UPDATED', "Updated employee: " . $data['qr_code']);
-    }
+    if ($result) {
+      $employee = $this->getEmployee($id);
+      if ($this->userId) {
+        $status = $employee['is_active'] ? 'ENABLED' : 'DISABLED';
+        logSystemAction(
+          $this->userId,
+          'PROXIMITY_STATUS_CHANGED',
+          "Proximity code {$status}: " . $employee['qr_code']
+        );
+      }
 
-    return $result;
+      if (!$employee['is_active']) {
+        $syncResult = $this->syncEmployeeStatusWithCode(
+          $employee['qr_code'],
+          $employee['is_active']
+        );
+
+        if (!$syncResult['success']) {
+          error_log("Failed to sync employee status: " . $syncResult['message']);
+        } else {
+          error_log("Employee synced: " . $syncResult['message']);
+        }
+      }
+
+      return $employee;
+    }
+    return false;
+  }
+
+  private function syncEmployeeStatusWithCode($qr_code, $codeIsActive)
+  {
+    try {
+      $mainConn = getMainDBConnection();
+      $userConn = getUserDBConnection($this->userId);
+
+      // Get employee by QR code from user's database
+      $query = "SELECT id, fullname, status, qr_code FROM employees WHERE qr_code = :qr_code";
+      $stmt = $userConn->prepare($query);
+      $stmt->execute([':qr_code' => $qr_code]);
+      $employee = $stmt->fetch(PDO::FETCH_ASSOC);
+
+      if (!$employee) {
+        return [
+          'success' => false,
+          'message' => 'Employee not found for QR code: ' . $qr_code
+        ];
+      }
+
+      // If code is disabled and employee is not already inactive, disable the employee
+      if ($codeIsActive == 0 && $employee['status'] !== 'Inactive') {
+        $oldStatus = $employee['status'];
+        $newStatus = 'Inactive';
+
+        $updateQuery = "UPDATE employees 
+                     SET status = :status, updated_at = :updated_at 
+                     WHERE qr_code = :qr_code";
+
+        $updateStmt = $userConn->prepare($updateQuery);
+        $result = $updateStmt->execute([
+          ':status' => $newStatus,
+          ':qr_code' => $qr_code,
+          ':updated_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        if ($result) {
+          // Log status change in status_history table
+          try {
+            $historyQuery = "INSERT INTO status_history (employee_id, old_status, new_status, changed_by, change_reason, created_at)
+                          VALUES (:employee_id, :old_status, :new_status, :changed_by, :change_reason, :created_at)";
+            $historyStmt = $userConn->prepare($historyQuery);
+            $historyStmt->execute([
+              ':employee_id' => $employee['id'],
+              ':old_status' => $oldStatus,
+              ':new_status' => $newStatus,
+              ':changed_by' => $_SESSION['username'] ?? 'System',
+              ':change_reason' => 'Auto-disabled: Proximity code was disabled',
+              ':created_at' => date('Y-m-d H:i:s'),
+            ]);
+          } catch (Exception $e) {
+            error_log("Failed to log status change in history: " . $e->getMessage());
+          }
+
+          // Log system action
+          logSystemAction(
+            $this->userId,
+            'EMPLOYEE_AUTO_DISABLED',
+            "Employee {$employee['fullname']} auto-disabled due to proximity code disable (QR: {$qr_code})"
+          );
+
+          return [
+            'success' => true,
+            'message' => "Employee {$employee['fullname']} auto-disabled (status: {$oldStatus} → {$newStatus})"
+          ];
+        } else {
+          return [
+            'success' => false,
+            'message' => 'Failed to update employee status'
+          ];
+        }
+      } elseif ($codeIsActive == 0) {
+        // Code is disabled but employee already inactive
+        return [
+          'success' => true,
+          'message' => "Employee {$employee['fullname']} already inactive, no sync needed"
+        ];
+      } else {
+        // Code is being enabled - don't force employee to active
+        return [
+          'success' => true,
+          'message' => "Proximity code enabled. Employee {$employee['fullname']} status unchanged (current: {$employee['status']})"
+        ];
+      }
+    } catch (Exception $e) {
+      error_log("Error syncing employee status with code: " . $e->getMessage());
+      return [
+        'success' => false,
+        'message' => 'Error syncing status: ' . $e->getMessage()
+      ];
+    }
   }
 
   public function deleteEmployee($id)
@@ -432,7 +563,10 @@ try {
           ? sanitizeInput($_POST['qr_code'])
           : $current_employee['qr_code'];
 
-        $employee_data = ['qr_code' => $qr_code];
+        $employee_data = [
+          'qr_code'   => $qr_code,
+          'is_active' => isset($_POST['is_active']) ? (int)$_POST['is_active'] : 1,
+        ];
 
         if ($employeeManager->updateEmployee($employee_id, $employee_data)) {
           $response['success'] = true;
@@ -651,16 +785,56 @@ try {
           $employee = $employeeManager->getEmployeeByQR($qr_code);
 
           if ($employee) {
+            if (!$employee['is_active']) {
+              $response['success'] = false;
+              $response['message'] = 'This proximity code is disabled';
+              $response['disabled'] = true;
+              break;
+            }
+
             $response['success'] = true;
             $response['data']    = $employee;
             $response['message'] = 'Proximity code found';
-
-            logSystemAction($database->getCurrentUserId(), 'PROXIMITY_SCAN', "Proximity scan for proximity code: " . $employee['qr_code']);
+            logSystemAction(
+              $database->getCurrentUserId(),
+              'PROXIMITY_SCAN',
+              "Proximity scan for proximity code: " . $employee['qr_code']
+            );
           } else {
             $response['message'] = 'No proximity code found with this code';
           }
         } catch (Exception $e) {
           $response['message'] = 'Proximity code search error: ' . $e->getMessage();
+        }
+        break;
+
+      case 'toggle_status':
+        $employee_id = $_POST['id'] ?? 0;
+
+        if (!$employee_id) {
+          $response['message'] = 'Proximity code ID is required';
+          break;
+        }
+
+        $result = $employeeManager->toggleStatus($employee_id);
+
+        if ($result) {
+          $statusLabel = $result['is_active'] ? 'enabled' : 'disabled';
+          $response['success'] = true;
+          $response['message'] = "Proximity code {$statusLabel} successfully";
+
+          if (!$result['is_active']) {
+            $response['message'] .= " (Employee auto-disabled)";
+            $response['employee_synced'] = true;
+          } else {
+            $response['message'] .= " (Employee status unchanged - manual control)";
+            $response['employee_synced'] = false;
+          }
+
+          $response['data'] = $result;
+          $response['is_active'] = (int)$result['is_active'];
+        } else {
+          $response['message'] = 'Failed to toggle proximity code status';
         }
         break;
 

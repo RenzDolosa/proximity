@@ -183,6 +183,7 @@ if ($databaseConnected) {
             <th>EMPID</th>
             <th class="Col9">Proximity Code</th>
             <th>Remarks</th>
+            <th>Status</th>
             <th>Register</th>
             <th>Update</th>
             <th>Actions</th>
@@ -217,6 +218,17 @@ if ($databaseConnected) {
         <div class="form-group">
           <label for="qr_code">Proximity Code</label>
           <input type="text" id="qr_code" name="qr_code" placeholder="Enter proximity code or leave blank to auto-generate" autocomplete="off">
+        </div>
+        <div class="form-group" style="padding-top: 10px;">
+          <label>Status</label>
+          <div style="display:flex; align-items:center; gap:12px; margin-top:6px;">
+            <label class="toggle-switch">
+              <input type="checkbox" id="is_active_toggle" name="is_active_toggle" checked>
+              <span class="toggle-slider"></span>
+            </label>
+            <span id="statusLabel" style="font-weight:600; color:#16a34a;">Enabled</span>
+            <input type="hidden" id="is_active" name="is_active" value="1">
+          </div>
         </div>
         <div class="form-row" style="margin-top: 2rem;">
           <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> Save Proximity Code</button>

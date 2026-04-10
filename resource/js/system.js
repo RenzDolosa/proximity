@@ -690,7 +690,7 @@ function searchEmployees() {
   if (!searchForm) return;
 
   const filters = getActiveFilters();
-  loadEmployees(filters, true);
+  loadEmployees(filters, true, true);
 
   if (searchQuery) {
     document.getElementById("search_qr").value = "";
@@ -710,7 +710,7 @@ function clearSearch() {
 
   currentPage = 1;
   activeFilters = {};
-  loadEmployees({}, false);
+  loadEmployees({}, false, true);
   updateDeleteButtonState();
 }
 
@@ -1102,9 +1102,9 @@ function populateFilter(employeeList) {
 }
 
 // LOAD EMPLOYEES - ALWAYS CHECKS FOR FILTERS
-async function loadEmployees(filters = {}, preservePage = false) {
+async function loadEmployees(filters = {}, preservePage = false, silent = false) {
   try {
-    showLoading(true);
+    if (!silent) showLoading(true);
 
     if (Object.keys(filters).length === 0 && hasActiveFilters()) {
       filters = getActiveFilters();
@@ -1165,7 +1165,7 @@ async function loadEmployees(filters = {}, preservePage = false) {
       "error",
     );
   } finally {
-    showLoading(false);
+    if (!silent) showLoading(false);
   }
 }
 
@@ -1307,7 +1307,7 @@ async function handleFormSubmit(e) {
 
       const preservePage = currentAction === "edit";
       const filtersToUse = hasActiveFilters() ? getActiveFilters() : {};
-      await loadEmployees(filtersToUse, preservePage);
+      await loadEmployees(filtersToUse, preservePage, true);
 
       await updateTotalEmployees();
       await updateActiveEmployees();
@@ -1474,7 +1474,7 @@ async function deleteEmployee(employeeId) {
 
     if (data.success) {
       showAlert(data.message, "success");
-      await loadEmployees(activeFilters, true);
+      await loadEmployees(activeFilters, true, true);
       await updateTotalEmployees();
       await updateActiveEmployees();
     } else {

@@ -1981,7 +1981,13 @@ function renderBindRows(array $pages, int $depth = 0): void
       </div>
       <div class="form-row">
         <label>Password <span id="pwHint" style="font-weight:400;color:#9ca3af">(min 8 chars, upper, lower, number)</span></label>
-        <input type="password" id="fPassword" placeholder="Password">
+        <div style="position:relative;display:flex;align-items:center;">
+          <input type="password" id="fPassword" placeholder="Password" style="padding-right:36px;width:100%;">
+          <button type="button" tabindex="-1" onclick="togglePw('fPassword',this)"
+            style="position:absolute;right:10px;background:none;border:none;cursor:pointer;color:#9ca3af;font-size:13px;padding:0;line-height:1;">
+            <i class="fas fa-eye"></i>
+          </button>
+        </div>
       </div>
       <div class="form-grid">
         <div class="form-row">
@@ -2576,6 +2582,14 @@ function renderBindRows(array $pages, int $depth = 0): void
       document.getElementById('uCountdownBar').style.width = ((uCountdownLeft / U_REFRESH) * 100) + '%';
       const dot = document.getElementById('uPulseDot');
       if (dot) dot.classList.toggle('paused', anyModalOpen);
+    }
+
+    function togglePw(fieldId, btn) {
+      const input = document.getElementById(fieldId);
+      const icon = btn.querySelector('i');
+      const isHidden = input.type === 'password';
+      input.type = isHidden ? 'text' : 'password';
+      icon.className = isHidden ? 'fas fa-eye-slash' : 'fas fa-eye';
     }
 
     async function loadUsers(silent = false) {
@@ -3431,15 +3445,15 @@ function renderBindRows(array $pages, int $depth = 0): void
     // Auto-switch to tab specified in URL hash on load
     const hashTab = window.location.hash.replace('#', '');
     if (hashTab && TAB_IDS[hashTab]) {
-        switchTab(hashTab);
-        if (hashTab === 'logs') {
-            loadLogActionOptions();
-            loadLogs().then(startLogsCountdown);
-        } else if (hashTab === 'group') {
-            loadGroups().then(startGroupsCountdown);
-        }
+      switchTab(hashTab);
+      if (hashTab === 'logs') {
+        loadLogActionOptions();
+        loadLogs().then(startLogsCountdown);
+      } else if (hashTab === 'group') {
+        loadGroups().then(startGroupsCountdown);
+      }
     }
-    
+
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('keydown', e => {
         if (e.key === 'Escape') {

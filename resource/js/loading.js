@@ -308,22 +308,24 @@ if (window.self !== window.top) {
 // ── AJAX request interceptor (if using fetch/xhr) ──
 const originalFetch = window.fetch;
 window.fetch = function(...args) {
-  // ✅ Check for opt-out header set by background requests
   const options = args[1] || {};
   const headers = options.headers || {};
+  
+  // Treat as silent if explicitly marked OR if it's a background/auto request
   const isSilent = 
     headers['X-Silent-Request'] === 'true' ||
-    typeof isAutoUpdating !== 'undefined' && isAutoUpdating;
+    (typeof isAutoUpdating !== 'undefined' && isAutoUpdating);
 
-  if (!isSilent) {
-    LoadingManager.show({
-      text: 'Loading',
-      type: 'dots'
-    });
+  // Only show loading for non-silent, non-GET requests (form submissions, deletes, etc.)
+  const method = (options.method || 'GET').toUpperCase();
+  const isWrite = method !== 'GET';
+
+  if (!isSilent && isWrite) {
+    LoadingManager.show({ text: 'Loading', type: 'dots' });
   }
 
   return originalFetch.apply(this, args).finally(() => {
-    if (!isSilent) {
+    if (!isSilent && isWrite) {
       setTimeout(() => LoadingManager.hide(), 300);
     }
   });

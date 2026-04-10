@@ -139,6 +139,7 @@ function createDatabase()
     $dbPdo->exec("ALTER TABLE employees ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL");
     $dbPdo->exec("ALTER TABLE employee_access_log ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL");
     $dbPdo->exec("ALTER TABLE check_in_out ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL");
+    $dbPdo->exec("ALTER TABLE code ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1;");
 
     $adminHash = '$2y$10$/nqdViJv2DWyfjHhfS8ZDOPT.6QwxO3DWK1ocCwDFPUYvEE20Lkga';
     $dbPdo->exec("INSERT INTO `users` (`id`, `username`, `email`, `password`, `first_name`, `last_name`, `phone`, `my_database`, `user_group`)
@@ -318,6 +319,7 @@ function createUserDatabase($userId)
         CREATE TABLE
           IF NOT EXISTS code (
             id INT AUTO_INCREMENT PRIMARY KEY,
+            is_active TINYINT(1) NOT NULL DEFAULT 1;
             qr_code VARCHAR(100) UNIQUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -465,6 +467,7 @@ function ensureUserTablesExist($userId)
         CREATE TABLE
           IF NOT EXISTS code (
             id INT AUTO_INCREMENT PRIMARY KEY,
+            is_active TINYINT(1) NOT NULL DEFAULT 1;
             qr_code VARCHAR(100) UNIQUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
