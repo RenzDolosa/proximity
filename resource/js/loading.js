@@ -308,15 +308,24 @@ if (window.self !== window.top) {
 // ── AJAX request interceptor (if using fetch/xhr) ──
 const originalFetch = window.fetch;
 window.fetch = function(...args) {
-  // Optionally show loading for long requests
-  LoadingManager.show({
-    text: 'Loading',
-    type: 'dots'
-  });
+  // ✅ Check for opt-out header set by background requests
+  const options = args[1] || {};
+  const headers = options.headers || {};
+  const isSilent = 
+    headers['X-Silent-Request'] === 'true' ||
+    typeof isAutoUpdating !== 'undefined' && isAutoUpdating;
+
+  if (!isSilent) {
+    LoadingManager.show({
+      text: 'Loading',
+      type: 'dots'
+    });
+  }
 
   return originalFetch.apply(this, args).finally(() => {
-    // Small delay before hiding
-    setTimeout(() => LoadingManager.hide(), 300);
+    if (!isSilent) {
+      setTimeout(() => LoadingManager.hide(), 300);
+    }
   });
 };
 

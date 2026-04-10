@@ -298,7 +298,7 @@ function showAutoUpdateNotification() {
 // Auto-load employees (silent update) - Fixed error handling
 async function loadEmployeesAuto(filters = {}) {
   try {
-    showLoading(false);
+    // showLoading(false);
 
     // 🆕 If no filters passed, check for active filters in form
     if (Object.keys(filters).length === 0 && hasActiveFilters()) {
@@ -317,6 +317,7 @@ async function loadEmployeesAuto(filters = {}) {
     const response = await fetch(`datalog_backend.php?${params.toString()}`, {
       headers: {
         "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
       },
       signal: AbortSignal.timeout(10000), // 10 second timeout
     });
@@ -536,6 +537,7 @@ async function getManpowerEmployeeData() {
     const response = await fetch("manpower_backend.php?action=get", {
       headers: {
         "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
       },
     });
 
@@ -798,6 +800,7 @@ async function getCurrentUserId() {
     const response = await fetch("../helper/get_user_id.php", {
       headers: {
         "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
       },
     });
 
