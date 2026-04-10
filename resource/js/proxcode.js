@@ -63,6 +63,7 @@ async function getManpowerEmployeeData() {
     const response = await fetch("manpower_backend.php?action=get", {
       headers: {
         "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
       },
     });
 
@@ -334,6 +335,7 @@ async function loadEmployeeData(employeeId) {
       {
         headers: {
           "X-Requested-With": "XMLHttpRequest",
+          "X-Silent-Request": "true",
         },
       },
     );

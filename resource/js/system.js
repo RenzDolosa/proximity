@@ -24,7 +24,8 @@ document.addEventListener("DOMContentLoaded", function () {
 // Setup event listeners
 function setupEventListeners() {
   // Form submission
-  document.getElementById("employeeForm")
+  document
+    .getElementById("employeeForm")
     ?.addEventListener("submit", handleFormSubmit);
 
   // File upload handler
@@ -196,7 +197,12 @@ async function loadEmployeeData(employeeId) {
   try {
     const response = await fetch(
       `manpower_backend.php?action=get_single&id=${employeeId}`,
-      { headers: { "X-Requested-With": "XMLHttpRequest" } },
+      {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "X-Silent-Request": "true",
+        },
+      },
     );
 
     const data = await response.json();
@@ -311,7 +317,9 @@ async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
       image: employee.image || "",
       qr_code: employee.qr_code,
       check_status: checkStatus,
-      access_timestamp: new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }),
+      access_timestamp: new Date().toLocaleString("sv-SE", {
+        timeZone: "Asia/Manila",
+      }),
     };
 
     const response = await fetch("../http/middleware/add_to_log.php", {
@@ -433,7 +441,7 @@ async function renderEmployeeTable() {
                     width="48" height="48"
                     loading="${isAboveFold ? "eager" : "lazy"}"
                     decoding="async"
-                    ${isAboveFold ? 'fetchpriority="high"' : ''}
+                    ${isAboveFold ? 'fetchpriority="high"' : ""}
                     onerror="this.src='${imageSrc}'; this.onerror=null;">
                   <span style="display:none;">📷</span>`
                 : `<div class="ph-cont"><div class="employee-ph">${fullnameInitials}</div></div>`
@@ -564,7 +572,10 @@ async function renderEmployeeTable() {
 async function getCurrentUserId() {
   try {
     const response = await fetch("../helper/get_user_id.php", {
-      headers: { "X-Requested-With": "XMLHttpRequest" },
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
+      },
     });
 
     if (response.ok) {
@@ -936,48 +947,56 @@ async function deleteFilteredEmployees() {
 }
 
 async function openLogsModal(employeeId, fullname) {
-  const modal = document.getElementById('logsModal');
-  const title = document.getElementById('logsModalTitle');
-  const tbody = document.getElementById('logsTableBody');
+  const modal = document.getElementById("logsModal");
+  const title = document.getElementById("logsModalTitle");
+  const tbody = document.getElementById("logsTableBody");
 
-  document.getElementById('logCountIn').textContent = '—';
-  document.getElementById('logCountOut').textContent = '—';
-  document.getElementById('logCountTotal').textContent = '—';
+  document.getElementById("logCountIn").textContent = "—";
+  document.getElementById("logCountOut").textContent = "—";
+  document.getElementById("logCountTotal").textContent = "—";
   title.innerHTML = `<i class="fas fa-history"></i> Access Logs — ${fullname}`;
   tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>`;
-  modal.style.display = 'block';
+  modal.style.display = "block";
 
   try {
-    const res = await fetch(`manpower_backend.php?action=get_access_logs&id=${employeeId}`, {
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    });
+    const res = await fetch(
+      `manpower_backend.php?action=get_access_logs&id=${employeeId}`,
+      {
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      },
+    );
     const data = await res.json();
 
     if (data.success) {
       const logs = data.logs;
-      const inCount  = logs.filter(l => l.check_status === 'IN').length;
-      const outCount = logs.filter(l => l.check_status === 'OUT').length;
+      const inCount = logs.filter((l) => l.check_status === "IN").length;
+      const outCount = logs.filter((l) => l.check_status === "OUT").length;
 
-      document.getElementById('logCountIn').textContent    = inCount;
-      document.getElementById('logCountOut').textContent   = outCount;
-      document.getElementById('logCountTotal').textContent = logs.length;
+      document.getElementById("logCountIn").textContent = inCount;
+      document.getElementById("logCountOut").textContent = outCount;
+      document.getElementById("logCountTotal").textContent = logs.length;
 
-      tbody.innerHTML = logs.length ? logs.map((log, i) => `
+      tbody.innerHTML = logs.length
+        ? logs
+            .map(
+              (log, i) => `
         <tr style="border-bottom:1px solid #f0f0f0;">
           <td style="padding:9px 12px;color:#aaa;">${i + 1}</td>
           <td style="padding:9px 12px;">
             <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
-              background:${log.check_status === 'IN' ? '#d1fae5' : '#fee2e2'};
-              color:${log.check_status === 'IN' ? '#065f46' : '#991b1b'};">
+              background:${log.check_status === "IN" ? "#d1fae5" : "#fee2e2"};
+              color:${log.check_status === "IN" ? "#065f46" : "#991b1b"};">
               ${log.check_status}
             </span>
           </td>
           <td style="padding:9px 12px;color:#555;">${log.access_timestamp}</td>
           <td style="padding:9px 12px;">${log.gate_name || log.user_id || "N/A"}</td>
-        </tr>`).join('') :
-        `<tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;">No log records found.</td></tr>`;
+        </tr>`,
+            )
+            .join("")
+        : `<tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;">No log records found.</td></tr>`;
     } else {
-      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:24px;">${data.message || 'Failed to load logs.'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:24px;">${data.message || "Failed to load logs."}</td></tr>`;
     }
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:24px;">Error loading logs.</td></tr>`;
@@ -1111,10 +1130,9 @@ async function loadEmployees(filters = {}, preservePage = false) {
       }
     }
 
-    const response = await fetch(
-      `manpower_backend.php?${params.toString()}`,
-      { headers: { "X-Requested-With": "XMLHttpRequest" } },
-    );
+    const response = await fetch(`manpower_backend.php?${params.toString()}`, {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
 
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
@@ -1156,7 +1174,7 @@ function closeModal() {
   const employeeModal = document.getElementById("employeeModal");
   const deleteModal = document.getElementById("deleteModal");
   const importModal = document.getElementById("importModal");
-  const logsModal = document.getElementById('logsModal');
+  const logsModal = document.getElementById("logsModal");
   if (!employeeModal || !deleteModal || !importModal || !logsModal) return;
 
   employeeModal.style.display = "none";
@@ -1249,7 +1267,10 @@ async function handleFormSubmit(e) {
         "image/webp",
       ];
       if (!allowedTypes.includes(file.type)) {
-        showAlert("Only image files (JPEG, JPG, PNG, GIF, WebP) are allowed", "error");
+        showAlert(
+          "Only image files (JPEG, JPG, PNG, GIF, WebP) are allowed",
+          "error",
+        );
         return;
       }
     }
@@ -1384,7 +1405,10 @@ function setupFileUploadHandler() {
       "image/webp",
     ];
     if (!allowedTypes.includes(file.type)) {
-      showAlert("Only image files are allowed (JPEG, JPG, PNG, GIF, WebP)", "error");
+      showAlert(
+        "Only image files are allowed (JPEG, JPG, PNG, GIF, WebP)",
+        "error",
+      );
       e.target.value = "";
       label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
       return;
@@ -1409,7 +1433,8 @@ function setupFileUploadHandler() {
       // --- Show preview from the converted WebP blob ---
       const reader = new FileReader();
       reader.onload = (event) => {
-        const isConverted = webpFile.type === "image/webp" && file.type !== "image/webp";
+        const isConverted =
+          webpFile.type === "image/webp" && file.type !== "image/webp";
         label.innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
             <img id="imagePreview" src="${event.target.result}" alt="New image preview" loading="lazy"
