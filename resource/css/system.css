@@ -447,3 +447,248 @@ tr:hover {
     padding: 0.5rem;
   }
 }
+
+@media (max-width: 480px) {
+  /* ── Floating filter toggle button ── */
+  .filter-fab {
+    display: flex;
+    position: fixed;
+    top: 8px;
+    right: 10px;
+    z-index: 999;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    gap: 5px;
+    align-items: center;
+    cursor: pointer;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s;
+  }
+
+  .filter-fab:active {
+    transform: scale(0.95);
+  }
+
+  /* ── Controls become a slide-down drawer ── */
+  .controls {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 500;
+    border-radius: 0 0 14px 14px;
+    max-height: 0;
+    overflow: hidden;
+    padding: 0 0.75rem;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      max-height 0.35s ease,
+      padding 0.35s ease,
+      opacity 0.25s ease;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+
+  .controls.drawer-open {
+    max-height: 100dvh;
+    overflow-y: auto;
+    padding: 0.75rem 0.75rem 100px;
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  /* ── Overlay backdrop ── */
+  .drawer-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 499;
+  }
+
+  .drawer-backdrop.show {
+    display: block;
+  }
+
+  /* ── Container: no top padding since controls is no longer in flow ── */
+  .container {
+    padding: 0.5rem 0.75rem 80px;
+  }
+
+  /* ── Controls inner content ── */
+  .controls .search-row {
+    gap: 6px;
+  }
+
+  .controls .search-row .search-group {
+    flex: 1 1 100%;
+    min-width: unset;
+  }
+
+  .controls form > img[alt="Proximity"] {
+    display: none;
+  }
+
+  .form-row-btn .form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .form-row-btn .form-row > div {
+    flex: 1 1 45%;
+  }
+
+  .form-row-btn .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .auto-update-controls {
+    width: 100%;
+    font-size: 12px;
+  }
+
+  .auto-update-controls select {
+    width: 100% !important;
+    height: auto !important;
+    padding: 4px 6px !important;
+    margin-top: 4px;
+  }
+
+  div#lastUpdateTime,
+  div#autoUpdateNotification {
+    position: static !important;
+    padding: 0 !important;
+    font-size: 11px;
+  }
+
+  .filter-status {
+    width: 100%;
+    font-size: 12px;
+  }
+
+  /* ── Table header ── */
+  .table-header {
+    position: sticky;
+    left: 0;
+    width: 100%;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0.75rem;
+    box-sizing: border-box;
+  }
+
+  .table-header h3 {
+    font-size: 14px;
+  }
+
+  .emp-status {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .emp-status > div {
+    gap: 6px;
+    font-size: 12px;
+  }
+
+  .emp-status p {
+    font-size: 11px;
+  }
+  .emp-status h3 {
+    font-size: 14px;
+  }
+
+  .check-in,
+  .check-out {
+    padding: 1px 6px;
+    font-size: 12px;
+  }
+
+  /* ── Table ── */
+  .data-table {
+    overflow: visible;
+    padding-bottom: 85px;
+  }
+
+  .data-table table {
+    display: table;
+    table-layout: auto;
+    min-width: 600px;
+    font-size: 12px;
+    overflow: visible;
+  }
+
+  .data-table table thead,
+  .data-table table tbody {
+    display: table;
+    width: 100%;
+  }
+
+  .data-table table thead,
+  .data-table table tbody,
+  .data-table table tr,
+  .data-table table td {
+    overflow: visible;
+  }
+
+  .table-scroll-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    overflow-y: visible;
+  }
+
+  .employee-image {
+    width: 36px;
+    height: 36px;
+    cursor: zoom-in;
+  }
+
+  .employee-image:hover {
+    transform: none;
+    box-shadow: none;
+    border-radius: 50%;
+    background: none;
+  }
+
+  .img-zoom-clone {
+    position: fixed;
+    z-index: 99999;
+    width: 130px;
+    height: 130px;
+    border-radius: 8px;
+    object-fit: cover;
+    pointer-events: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    transition: opacity 0.15s;
+  }
+
+  .no-data {
+    padding: 40px 16px;
+  }
+  .no-data-icon {
+    font-size: 3rem;
+  }
+
+  .pagination {
+    gap: 6px;
+    padding: 10px 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .alert {
+    left: 0;
+    right: 0;
+    margin: 0.5rem;
+    font-size: 12px;
+  }
+}

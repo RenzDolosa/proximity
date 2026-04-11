@@ -489,9 +489,142 @@ if ($databaseConnected) {
       opacity: 0.4;
     }
 
-    @media (max-width: 640px) {
+    @media (max-width: 480px) {
+
+      /* ── Page body ── */
+      .page-body {
+        padding: 12px;
+        gap: 14px;
+      }
+
+      /* ── Welcome banner ── */
+      .welcome-banner {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 14px 16px;
+      }
+
+      .wb-right {
+        text-align: left;
+        font-size: 12px;
+      }
+
+      .wb-left h2 {
+        font-size: 15px;
+      }
+
+      /* ── Two-col → single column ── */
       .two-col {
         grid-template-columns: 1fr;
+        gap: 14px;
+      }
+
+      /* ── Stats grid → 2 columns ── */
+      .stats-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .stat-value {
+        font-size: 18px;
+      }
+
+      .stat-label {
+        font-size: 10px;
+      }
+
+      /* ── Info grid ── */
+      .info-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .info-value {
+        font-size: 12px;
+      }
+
+      /* ── DB block ── */
+      .db-block {
+        padding: 10px;
+        gap: 10px;
+      }
+
+      .db-name {
+        font-size: 13px;
+      }
+
+      /* ── Activity list ── */
+      .card-body {
+        padding: 12px !important;
+        /* override the inline padding:0 150px */
+      }
+
+      .activity-item {
+        gap: 8px;
+        padding: 10px 0;
+      }
+
+      .activity-avatar {
+        width: 32px;
+        height: 32px;
+      }
+
+      .activity-avatar:hover {
+        transform: scale(3.8);
+        transform-origin: left center;
+      }
+
+      .card {
+        overflow: visible;
+      }
+
+      .activity-list {
+        overflow: visible;
+      }
+
+      .activity-info {
+        padding-left: 0 !important;
+        /* override inline padding-left: 50px */
+      }
+
+      .activity-name {
+        font-size: 12px;
+      }
+
+      .activity-time {
+        font-size: 11px;
+      }
+
+      .badge {
+        font-size: 9px;
+        padding: 2px 5px;
+      }
+
+      /* ── Top shortcut bar ── */
+      .shortcut-bar {
+        padding: 0 10px;
+        gap: 2px;
+      }
+
+      .shortcut-item {
+        padding: 6px 10px;
+        min-width: 52px;
+        font-size: 11px;
+      }
+
+      .shortcut-item i {
+        font-size: 14px;
+      }
+
+      /* ── Card header ── */
+      .card-header {
+        padding: 10px 12px;
+      }
+
+      .card-title {
+        font-size: 12px;
       }
     }
   </style>

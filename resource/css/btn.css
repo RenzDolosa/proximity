@@ -115,4 +115,46 @@
   flex-wrap: wrap;
 }
 
-/*<--*/
+.actions-panel {
+  position: fixed !important;
+  z-index: 9999;
+  width: 160px;
+}
+
+@media (max-width: 480px) {
+  /* ... existing rules ... */
+
+  /* ── Button row fix ── */
+  .controls .form-row-btn {
+    display: block;
+    width: 100%;
+  }
+
+  .controls .form-row-btn .form-row {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    width: 100%;
+    padding-bottom: 0;
+  }
+
+  .controls .form-row-btn .form-row .search-btn,
+  .controls .form-row-btn .form-row .clear-btn,
+  .controls .form-row-btn .form-row .dropdown {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .controls .form-row-btn .form-row .delete-all-btn,
+  .controls .form-row-btn .form-row .auto-update-controls,
+  .controls .form-row-btn .form-row .filter-status {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .controls .form-row-btn .form-row .btn {
+    width: 100%;
+    justify-content: center;
+    white-space: nowrap;
+  }
+}

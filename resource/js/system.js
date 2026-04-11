@@ -459,13 +459,33 @@ async function renderEmployeeTable() {
                   const allPanels = document.querySelectorAll('.actions-panel');
                   const allBtns = document.querySelectorAll('.actions-toggle-btn');
 
-                  // Close all other open panels first
                   allPanels.forEach(p => { if (p !== panel) p.classList.remove('actions-open'); });
                   allBtns.forEach(b => { if (b !== this) b.classList.remove('actions-active'); });
 
-                  // Toggle current
                   panel.classList.toggle('actions-open');
                   this.classList.toggle('actions-active');
+
+                  // Position panel relative to button using fixed coords
+                  if (panel.classList.contains('actions-open') && window.innerWidth <= 480) {
+                    const rect = this.getBoundingClientRect();
+                    let top = rect.bottom + 4;
+                    let left = rect.left;
+
+                    // Don't go off right edge
+                    if (left + 160 > window.innerWidth - 8) {
+                      left = window.innerWidth - 160 - 8;
+                    }
+                    // Don't go off bottom
+                    if (top + 180 > window.innerHeight) {
+                      top = rect.top - 184;
+                    }
+
+                    panel.style.top  = top  + 'px';
+                    panel.style.left = left + 'px';
+                  } else {
+                    panel.style.top  = '';
+                    panel.style.left = '';
+                  }
                 "
                 class="actions-toggle-btn"
                 style="
@@ -488,6 +508,7 @@ async function renderEmployeeTable() {
 
               <!-- FLOATING PANEL (positioned relative to td/tr) -->
               <div class="actions-panel">
+                <small style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); text-align: center; color: #fff;">${employee.fullname.toProperCase()}</small>
 
                 <!-- IN / OUT -->
                 <div style="display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #e2e8f0;">

@@ -1692,6 +1692,260 @@ function renderBindRows(array $pages, int $depth = 0): void
       border-color: #7c3aed;
       box-shadow: 0 0 0 3px rgba(124, 58, 237, .1);
     }
+
+    @media (max-width: 480px) {
+
+      /* ── Body padding ── */
+      body {
+        padding: 10px;
+      }
+
+      /* ── Tab navigation ── */
+      .tab-nav {
+        gap: 2px;
+        padding: 0 2px;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+      }
+
+      .tab-btn {
+        padding: 9px 12px 10px;
+        font-size: 11px;
+        gap: 5px;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      .tab-btn i {
+        font-size: 12px;
+      }
+
+      .tab-badge {
+        min-width: 16px;
+        height: 16px;
+        font-size: 9px;
+      }
+
+      /* ── Toolbar ── */
+      .toolbar {
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 10px 12px;
+        border-radius: 0 0 0 0;
+      }
+
+      .toolbar input,
+      .toolbar select {
+        font-size: 12px;
+        padding: 6px 10px;
+        width: 100% !important;
+        /* override inline widths */
+      }
+
+      .btn {
+        font-size: 12px;
+        padding: 7px 12px;
+        flex: 1 1 auto;
+      }
+
+      .btn-add,
+      .btn-delete-all {
+        margin-left: 0;
+        width: 100%;
+        justify-content: center;
+      }
+
+      /* ── Stats header ── */
+      .stats-header {
+        padding: 10px 14px;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .stats-title {
+        font-size: 13px;
+        width: 100%;
+        margin-right: 0;
+        margin-bottom: 2px;
+      }
+
+      .stat-item {
+        font-size: 12px;
+        gap: 5px;
+      }
+
+      .refresh-indicator {
+        width: 100%;
+        margin-left: 0;
+        font-size: 11px;
+      }
+
+      /* ── Table ── */
+      .table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      table {
+        table-layout: auto;
+        min-width: 500px;
+      }
+
+      th,
+      td {
+        padding: 8px 10px;
+        font-size: 12px;
+      }
+
+      .action-btn {
+        font-size: 11px;
+        padding: 4px 8px;
+      }
+
+      /* ── Pagination ── */
+      .pagination {
+        padding: 10px 12px;
+        gap: 4px;
+        font-size: 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .page-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 11px;
+      }
+
+      /* ── Toast ── */
+      .toast {
+        bottom: 14px;
+        right: 14px;
+        left: 14px;
+        font-size: 12px;
+        padding: 10px 14px;
+      }
+
+      /* ── User / Group modal ── */
+      .modal-box {
+        padding: 18px 16px 14px;
+        border-radius: 8px;
+        max-height: 95vh;
+      }
+
+      .modal-box h3 {
+        font-size: 14px;
+        margin-bottom: 12px;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+        /* stack side-by-side fields */
+      }
+
+      .form-row input,
+      .form-row select {
+        font-size: 13px;
+        padding: 8px 10px;
+      }
+
+      .modal-actions {
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .modal-actions button {
+        flex: 1 1 auto;
+        justify-content: center;
+        padding: 9px 14px;
+        font-size: 13px;
+      }
+
+      /* ── Group modal (tabbed) ── */
+      .gmodal-box {
+        width: 100%;
+        max-width: 100%;
+        max-height: 95vh;
+        border-radius: 10px;
+      }
+
+      .gmodal-header {
+        padding: 14px 16px 0;
+      }
+
+      .gmodal-title {
+        font-size: 14px;
+        margin-bottom: 10px;
+      }
+
+      .gmodal-body {
+        flex-direction: column;
+      }
+
+      .gmodal-sidebar {
+        width: 100%;
+        flex-direction: row;
+        padding: 8px 12px;
+        border-right: none;
+        border-bottom: 1px solid #e9ecef;
+        gap: 4px;
+      }
+
+      .gmodal-sidetab {
+        flex: 1;
+        justify-content: center;
+        border-right: none;
+        border-bottom: 3px solid transparent;
+        padding: 8px 10px;
+        font-size: 12px;
+      }
+
+      .gmodal-sidetab.active {
+        border-right-color: transparent;
+        border-bottom-color: #7c3aed;
+      }
+
+      .gmodal-content {
+        padding: 14px 14px;
+      }
+
+      .gmodal-footer {
+        padding: 12px 16px;
+        flex-wrap: wrap;
+      }
+
+      .gmodal-footer button {
+        flex: 1 1 auto;
+        justify-content: center;
+      }
+
+      /* ── Bind access rows ── */
+      .bind-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 10px 10px;
+      }
+
+      .radio-pill-group {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .radio-pill {
+        flex: 1;
+        justify-content: center;
+        font-size: 11px;
+        padding: 5px 8px;
+      }
+
+      /* ── Log detail modal ── */
+      .log-detail-row {
+        grid-template-columns: 90px 1fr;
+        font-size: 12px;
+      }
+
+    }
   </style>
 </head>
 

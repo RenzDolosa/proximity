@@ -141,7 +141,6 @@ if ($databaseConnected) {
     ");
     $stmt->execute();
     $recentLogs = $stmt->fetchAll();
-
   } catch (PDOException $e) {
     $dbError = "Error fetching dashboard data: " . $e->getMessage();
     error_log($dbError);
@@ -556,6 +555,131 @@ if ($databaseConnected) {
     .status-pill i {
       font-size: 9px;
     }
+
+    @media (max-width: 480px) {
+
+      /* ── Page body ── */
+      .page-body {
+        padding: 12px;
+        gap: 14px;
+      }
+
+      /* ── Welcome banner ── */
+      .welcome-banner {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 14px 16px;
+      }
+
+      .wb-right {
+        text-align: left;
+        font-size: 12px;
+      }
+
+      .wb-left h2 {
+        font-size: 15px;
+      }
+
+      /* ── Status row → vertical stack ── */
+      .status-row {
+        flex-direction: unset;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        padding: 12px 16px;
+        gap: 0;
+      }
+
+      .status-item {
+        width: 100%;
+        padding: 12px 0;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .status-item:nth-child(odd) {
+        border-right: 1px solid var(--border);
+        padding-right: 12px;
+      }
+
+      /* Right column items */
+      .status-item:nth-child(even) {
+        padding-left: 12px;
+      }
+
+      /* If odd total items, last item spans full width */
+      .status-item:last-child:nth-child(odd) {
+        grid-column: 1 / -1;
+        border-right: none;
+        padding-right: 0;
+        border-bottom: none;
+      }
+
+      .status-value {
+        font-size: 18px;
+      }
+
+      /* ── Two-col → single column ── */
+      .two-col {
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+
+      /* ── Shortcuts grid ── */
+      .shortcuts-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+
+      .sc-card {
+        padding: 12px 6px;
+      }
+
+      .sc-card .sc-label {
+        font-size: 11px;
+      }
+
+      /* ── Module cards ── */
+      .menu-card {
+        padding: 12px;
+        gap: 10px;
+      }
+
+      .mc-icon {
+        width: 38px;
+        height: 38px;
+        font-size: 17px;
+      }
+
+      .mc-title {
+        font-size: 13px;
+      }
+
+      .mc-desc {
+        font-size: 11px;
+      }
+
+      .mc-action {
+        font-size: 11px;
+        padding: 4px 10px;
+      }
+
+      /* ── Top shortcut bar ── */
+      .shortcut-bar {
+        padding: 0 10px;
+        gap: 2px;
+      }
+
+      .shortcut-item {
+        padding: 6px 10px;
+        min-width: 52px;
+        font-size: 11px;
+      }
+
+      .shortcut-item i {
+        font-size: 14px;
+      }
+    }
   </style>
 </head>
 
@@ -625,6 +749,13 @@ if ($databaseConnected) {
         </div>
       </div>
       <div class="status-item">
+        <div class="status-dot purple"></div>
+        <div class="status-info">
+          <div class="status-label">Active Proximity Codes</div>
+          <div class="status-value" id="stat-codes"><?php echo number_format($stats['total_proxcode']); ?></div>
+        </div>
+      </div>
+      <div class="status-item">
         <div class="status-dot green"></div>
         <div class="status-info">
           <div class="status-label">Total Checked In</div>
@@ -636,13 +767,6 @@ if ($databaseConnected) {
         <div class="status-info">
           <div class="status-label">Total Checked Out</div>
           <div class="status-value" id="stat-out"><?php echo number_format($stats['check_out']); ?></div>
-        </div>
-      </div>
-      <div class="status-item">
-        <div class="status-dot purple"></div>
-        <div class="status-info">
-          <div class="status-label">Active Proximity Codes</div>
-          <div class="status-value" id="stat-codes"><?php echo number_format($stats['total_proxcode']); ?></div>
         </div>
       </div>
       <div class="status-item">

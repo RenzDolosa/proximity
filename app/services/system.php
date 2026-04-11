@@ -58,7 +58,6 @@ if ($databaseConnected) {
   <link rel="prefetch" href="https://filemanager.ai/new3/index.php?home=%2Fhtdocs%2Fuploads%2Fuser&path=%2F">
   <link rel="icon" href="../../resource/assets/icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../../resource/css/system.css">
-  <!-- <link rel="stylesheet" href="../../resource/css/system-responsive.css"> -->
   <link rel="stylesheet" href="../../resource/css/system-camera.css">
   <link rel="stylesheet" href="../../resource/css/ptl.css">
   <link rel="stylesheet" href="../../resource/css/modal.css">
@@ -201,28 +200,30 @@ if ($databaseConnected) {
           </div>
         </div>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th>SN</th>
-            <th>EMPID</th>
-            <th>Fullname</th>
-            <th>Position</th>
-            <th>Brand</th>
-            <th>Status</th>
-            <th>Shift</th>
-            <th class="Col7">Remarks</th> <!-- Violation if any -->
-            <th class="Col8">Image</th>
-            <th class="Col9">Proximity Code</th>
-            <th>Register</th>
-            <th>Update</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="employeeTableBody">
-          <!-- Data will be loaded here -->
-        </tbody>
-      </table>
+      <div class="table-scroll-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>SN</th>
+              <th>EMPID</th>
+              <th>Fullname</th>
+              <th>Position</th>
+              <th>Brand</th>
+              <th>Status</th>
+              <th>Shift</th>
+              <th class="Col7">Remarks</th> <!-- Violation if any -->
+              <th class="Col8">Image</th>
+              <th class="Col9">Proximity Code</th>
+              <th>Register</th>
+              <th>Update</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="employeeTableBody">
+            <!-- Data will be loaded here -->
+          </tbody>
+        </table>
+      </div>
 
       <div id="no-data" class="no-data" style="display: none;">
         <div class="no-data-icon">📋</div>
@@ -525,6 +526,97 @@ if ($databaseConnected) {
   <audio id="noResultSound" src="../../resource/assets/sounds/noResultsFound.mp3" preload="auto"></audio>
   <audio id="warningSound" src="../../resource/assets/sounds/ohh-ow.mp3" preload="auto"></audio>
   <audio id="inactiveSound" src="../../resource/assets/sounds/inactive.mp3" preload="auto"></audio>
+
+  <button class="filter-fab" id="filterFab" onclick="toggleDrawer()">
+    <i class="fas fa-sliders-h"></i> Filters
+  </button>
+  <div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>
+
+  <script>
+    function toggleDrawer() {
+      const controls = document.querySelector('.controls');
+      const backdrop = document.getElementById('drawerBackdrop');
+      const isOpen = controls.classList.contains('drawer-open');
+      if (isOpen) {
+        closeDrawer();
+      } else {
+        controls.classList.add('drawer-open');
+        backdrop.classList.add('show');
+        document.getElementById('filterFab').innerHTML = '<i class="fas fa-times"></i> Close';
+      }
+    }
+
+    function closeDrawer() {
+      document.querySelector('.controls').classList.remove('drawer-open');
+      document.getElementById('drawerBackdrop').classList.remove('show');
+      document.getElementById('filterFab').innerHTML = '<i class="fas fa-sliders-h"></i> Filters';
+    }
+
+    // Hide FAB on desktop — only needed on mobile
+    function checkFab() {
+      const fab = document.getElementById('filterFab');
+      if (!fab) return;
+      fab.style.display = window.innerWidth <= 480 ? 'flex' : 'none';
+    }
+    checkFab();
+    window.addEventListener('resize', checkFab);
+
+    // image phone view
+    (function() {
+      if (window.innerWidth > 480) return; // desktop only uses CSS hover
+
+      let clone = null;
+
+      document.addEventListener('touchstart', function(e) {
+        const img = e.target.closest('.employee-image');
+        if (!img) return;
+
+        e.preventDefault(); // prevent scroll while zooming
+
+        const rect = img.getBoundingClientRect();
+        const cloneSize = 130;
+
+        // Calculate position — anchor left of the image, above center
+        let left = rect.left;
+        let top = rect.top - cloneSize - 8;
+
+        // If it would go off the top, show below instead
+        if (top < 8) top = rect.bottom + 8;
+
+        // Don't go off right edge
+        if (left + cloneSize > window.innerWidth - 8) {
+          left = window.innerWidth - cloneSize - 8;
+        }
+
+        clone = document.createElement('img');
+        clone.src = img.src;
+        clone.className = 'img-zoom-clone';
+        clone.style.left = left + 'px';
+        clone.style.top = top + 'px';
+        clone.style.width = cloneSize + 'px';
+        clone.style.height = cloneSize + 'px';
+        document.body.appendChild(clone);
+
+      }, {
+        passive: false
+      });
+
+      document.addEventListener('touchend', function() {
+        if (clone) {
+          clone.remove();
+          clone = null;
+        }
+      });
+
+      document.addEventListener('touchcancel', function() {
+        if (clone) {
+          clone.remove();
+          clone = null;
+        }
+      });
+
+    })();
+  </script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>

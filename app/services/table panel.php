@@ -118,6 +118,42 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
     .tab-frame.active {
       display: block;
     }
+
+    @media (max-width: 480px) {
+
+      /* ── Tab bar ── */
+      .tab-bar {
+        padding: 0 8px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+      }
+
+      .tab-bar::-webkit-scrollbar {
+        display: none;
+      }
+
+      .tab-btn {
+        padding: 12px 14px;
+        font-size: 12px;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+
+      .tab-btn i {
+        font-size: 13px;
+      }
+
+      .tab-btn .badge {
+        font-size: 10px;
+        padding: 1px 6px;
+      }
+
+      .tab-frame {
+        height: calc(100vh - 45px);
+      }
+
+    }
   </style>
   <link rel="stylesheet" href="../../resource/css/btn.css">
 </head>
