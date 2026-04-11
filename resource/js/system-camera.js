@@ -81,6 +81,15 @@ async function initializeCamera() {
   const captureBtn = document.getElementById("captureBtn");
   if (!video) return;
 
+  if (!window.isSecureContext) {
+    updateCameraStatus(
+      "❌ Camera requires HTTPS. Ask your admin to enable SSL or access via localhost.",
+      "error"
+    );
+    if (captureBtn) captureBtn.disabled = true;
+    return;
+  }
+  
   updateCameraStatus("Requesting camera access…", "info");
 
   try {
