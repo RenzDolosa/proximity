@@ -287,8 +287,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    .sidebar:hover ~ .topbar,
-    .sidebar:hover ~ * .topbar {
+    .sidebar:hover~.topbar,
+    .sidebar:hover~* .topbar {
       left: var(--sidebar-expanded);
     }
 
@@ -650,6 +650,136 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     .sidebar:hover .version-tag {
       opacity: 1;
     }
+
+    .bottom-nav {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 56px;
+      background: var(--sidebar-bg);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      align-items: center;
+      justify-content: space-around;
+      z-index: 200;
+      padding: 0 4px;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    @media (max-width: 640px) {
+
+      .sidebar {
+        display: none;
+      }
+
+      .topbar {
+        left: 0;
+        padding: 0 12px;
+        height: 48px;
+        overflow: visible;
+      }
+
+      .breadcrumb {
+        font-size: 12px;
+      }
+
+      .db-badge .db-label {
+        display: none;
+      }
+
+      .db-badge {
+        padding: 4px 8px;
+      }
+
+      .main-wrap {
+        margin-left: 0;
+        margin-top: 48px;
+        width: 100vw;
+        height: calc(100vh - 48px - 56px);
+      }
+
+      /* ── Bottom nav bar ── */
+      .bottom-nav {
+        display: flex;
+      }
+    }
+
+    .bn-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      flex: 1;
+      padding: 6px 4px;
+      color: var(--sidebar-text);
+      cursor: pointer;
+      border-radius: 8px;
+      transition: color 0.15s, background 0.15s;
+      border: none;
+      background: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .bn-item:active {
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    .bn-item.active {
+      color: #60a5fa;
+    }
+
+    .bn-item i {
+      font-size: 17px;
+      line-height: 1;
+    }
+
+    .bn-item img {
+      width: 18px;
+      height: 18px;
+      filter: invert(0.8);
+      opacity: 0.7;
+    }
+
+    .bn-item.active img {
+      filter: invert(1) sepia(1) saturate(3) hue-rotate(190deg);
+      opacity: 1;
+    }
+
+    .bn-label {
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      line-height: 1;
+    }
+
+    /* Center NFC pill button */
+    .bn-item.nfc-btn {
+      position: relative;
+    }
+
+    .bn-nfc-pill {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: #1e2433;
+      border: 2px solid rgba(255, 255, 255, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 0;
+      margin-top: -18px;
+      box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.35);
+    }
+
+    .bn-nfc-pill img {
+      width: 22px;
+      height: 22px;
+      margin: 0;
+      filter: invert(1);
+      opacity: 1;
+    }
   </style>
 </head>
 
@@ -716,8 +846,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <!-- User pill with dropdown -->
       <div class="user-wrapper" id="userWrapper">
         <div class="user-pill" id="userPill">
-          <div class="user-avatar"><?= strtoupper(substr($username ?? 'U', 0, 1)); ?></div>
-          <?= htmlspecialchars($username ?? 'User'); ?>
+          <div class="user-avatar"><?= strtoupper(substr($firstName . " " . $lastName ?? 'U', 0, 1)); ?></div>
+          <?= htmlspecialchars($firstName . " " . $lastName ?? 'User'); ?>
           <i class="fas fa-chevron-down user-chevron" id="userChevron"></i>
         </div>
 
@@ -752,22 +882,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <div class="cp-field">
             <label for="current_password">Current Password</label>
             <input type="password" name="current_password" id="cpOld"
-                   autocomplete="current-password" placeholder="Enter current password">
+              autocomplete="current-password" placeholder="Enter current password">
           </div>
           <div class="cp-field">
             <label for="new_password">New Password</label>
             <input type="password" name="new_password" id="cpNew"
-                   autocomplete="new-password" placeholder="Min. 8 chars, upper, lower, number">
+              autocomplete="new-password" placeholder="Min. 8 chars, upper, lower, number">
           </div>
           <div class="cp-field">
             <label for="confirm_password">Confirm New Password</label>
             <input type="password" name="confirm_password" id="cpConfirm"
-                   autocomplete="new-password" placeholder="Re-enter new password">
+              autocomplete="new-password" placeholder="Re-enter new password">
           </div>
 
           <!-- Feedback shown client-side before submit, and server result after reload -->
           <div class="cp-msg <?= $messageType === 'error' ? 'err' : ($messageType === 'success' ? 'ok' : ''); ?>"
-               id="cpMsg">
+            id="cpMsg">
             <?= htmlspecialchars($message); ?>
           </div>
         </div>
@@ -787,28 +917,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <iframe src="resource/views/iframe/main.php" class="frames" allowfullscreen="allowfullscreen"></iframe>
   </div>
 
+  <nav class="bottom-nav" id="bottomNav">
+
+    <!-- Home -->
+    <button class="bn-item active" id="bn-home"
+      onclick="setActive('bn-home'); document.querySelector('.frames').src='resource/views/iframe/main.php';">
+      <i class="fas fa-home"></i>
+      <span class="bn-label">Home</span>
+    </button>
+
+    <!-- Scanned Log / Employee Dashboard -->
+    <?php if ($access['employee dashboard']): ?>
+      <button class="bn-item" id="bn-dash"
+        onclick="setActive('bn-dash'); document.querySelector('.frames').src='resource/views/iframe/main.php?page=employee dashboard';">
+        <i class="fas fa-list-alt"></i>
+        <span class="bn-label">Log</span>
+      </button>
+    <?php endif; ?>
+
+    <!-- NFC / Proximity — centre pill -->
+    <?php if ($access['proximity']): ?>
+      <button class="bn-item nfc-btn" id="bn-nfc"
+        onclick="window.location.href='proximity.php';">
+        <div class="bn-nfc-pill">
+          <img src="../../../resource/assets/icon/nfc-icon.svg" alt="NFC">
+        </div>
+        <span class="bn-label">NFC</span>
+      </button>
+    <?php endif; ?>
+
+    <!-- Admin Panel -->
+    <?php if ($access['admin panel']): ?>
+      <button class="bn-item" id="bn-admin"
+        onclick="setActive('bn-admin'); document.querySelector('.frames').src='resource/views/iframe/main.php?page=admin panel';">
+        <i class="fas fa-user-shield"></i>
+        <span class="bn-label">Admin</span>
+      </button>
+    <?php endif; ?>
+
+    <!-- Settings -->
+    <button class="bn-item" id="bn-settings"
+      onclick="setActive('bn-settings'); document.querySelector('.frames').src='resource/views/iframe/main.php?page=settings';">
+      <i class="fas fa-cog"></i>
+      <span class="bn-label">Settings</span>
+    </button>
+
+  </nav>
+
   <script src="resource/js/req.js"></script>
   <script src="resource/js/ver.js"></script>
   <script>
-    // ── Iframe session guard ──
-    const mainFrame = document.querySelector('.frames');
-    if (mainFrame) {
-      mainFrame.addEventListener('load', function () {
-        try {
-          const frameUrl = this.contentWindow.location.href;
-          if (frameUrl.includes('index.php') || frameUrl.includes('login')) {
-            window.top.location.href = frameUrl;
-          }
-        } catch (e) {
-          window.top.location.href = 'index.php';
-        }
-      });
-    }
-
     // ── User dropdown ──
-    const userPill     = document.getElementById('userPill');
+    const userPill = document.getElementById('userPill');
     const userDropdown = document.getElementById('userDropdown');
-    const userChevron  = document.getElementById('userChevron');
+    const userChevron = document.getElementById('userChevron');
 
     function openDropdown() {
       userDropdown.classList.add('open');
@@ -820,20 +982,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       userChevron.classList.remove('open');
     }
 
+    // Desktop: hover to open/close
     userPill.addEventListener('mouseenter', openDropdown);
-
-    document.getElementById('userWrapper').addEventListener('mouseleave', function () {
-      setTimeout(function () {
+    document.getElementById('userWrapper').addEventListener('mouseleave', function() {
+      setTimeout(function() {
         if (!document.getElementById('userWrapper').matches(':hover')) closeDropdown();
       }, 100);
     });
 
-    userPill.addEventListener('click', function (e) {
+    // Click: ALWAYS open (never toggle) — fixes the double-click bug
+    // Clicking outside will close it via the document listener below
+    userPill.addEventListener('click', function(e) {
       e.stopPropagation();
-      userDropdown.classList.contains('open') ? closeDropdown() : openDropdown();
+      openDropdown();
     });
 
+    // Click outside → close
     document.addEventListener('click', closeDropdown);
+
+    function setActive(id) {
+      document.querySelectorAll('.bn-item').forEach(el => el.classList.remove('active'));
+      const el = document.getElementById(id);
+      if (el) el.classList.add('active');
+    }
   </script>
 </body>
 

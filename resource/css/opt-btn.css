@@ -115,7 +115,7 @@
   color: #475569 !important;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 640px) {
   .dropdown {
     width: 100%;
   }

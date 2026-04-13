@@ -106,6 +106,42 @@ if (isset($_POST['portal_password'])) {
   }
 }
 
+function maskEmail(string $email): string
+{
+  if (!str_contains($email, '@')) return $email;
+
+  [$local, $domain] = explode('@', $email, 2);
+  $len = strlen($local);
+
+  if ($len <= 4) {
+    // e.g. "ab@…" → "a*@…"
+    $masked = $local[0] . str_repeat('*', max(1, $len - 1));
+  } else {
+    // Show first 2 + stars + last 2
+    $masked = substr($local, 0, 2)
+      . str_repeat('*', $len - 4)
+      . substr($local, -2);
+  }
+
+  return $masked . '@' . $domain;
+}
+
+function maskUsername(string $name): string
+{
+  $len = strlen($name);
+
+  if ($len <= 2) return $name[0] . '*';
+  if ($len === 3) return $name[0] . '*' . $name[2];
+
+  // Show first + stars + last
+  return $name[0]
+    . str_repeat('*', $len - 2)
+    . $name[$len - 1];
+}
+
+$firstName = $_SESSION['first_name'] ?? '';
+$lastName = $_SESSION['last_name'] ?? '';
+
 if (!$portalAccessGranted) {
 ?>
   <!DOCTYPE html>
@@ -171,8 +207,8 @@ if (!$portalAccessGranted) {
       <p class="access-subtitle">Please enter the access password to continue to your portal</p>
 
       <div class="user-info">
-        Logged in as: <strong><?= htmlspecialchars($username) ?></strong><br>
-        Email: <?= htmlspecialchars($email) ?>
+        Logged in as: <strong><?= htmlspecialchars($firstName . ' ' . $lastName) ?></strong><br>
+        Email: <?= htmlspecialchars(maskEmail($email)) ?>
       </div>
 
       <?php if (isset($error)): ?>
@@ -214,6 +250,6 @@ if (!$portalAccessGranted) {
 
   </html>
 <?php
-  exit(); // CRITICAL: Stop execution here if not authenticated
+  exit();
 }
 ?>

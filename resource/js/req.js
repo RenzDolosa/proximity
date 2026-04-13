@@ -194,3 +194,26 @@
   }
 
 })();
+
+// ── Password visibility toggle ────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function () {
+  var toggleBtn = document.getElementById('togglePassword');
+  var passwordField = document.getElementById('portal_password');
+
+  if (!toggleBtn || !passwordField) return;
+
+  toggleBtn.addEventListener('click', function () {
+    var isPassword = passwordField.type === 'password';
+
+    passwordField.type = isPassword ? 'text' : 'password';
+
+    var icon = toggleBtn.querySelector('i');
+    if (icon) {
+      icon.classList.toggle('fa-eye',      !isPassword);
+      icon.classList.toggle('fa-eye-slash', isPassword);
+    }
+
+    // Return focus to the field so mobile keyboard stays open
+    passwordField.focus();
+  });
+});

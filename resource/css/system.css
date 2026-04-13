@@ -448,7 +448,7 @@ tr:hover {
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 640px) {
   /* ── Floating filter toggle button ── */
   .filter-fab {
     display: flex;
@@ -517,7 +517,7 @@ tr:hover {
 
   /* ── Container: no top padding since controls is no longer in flow ── */
   .container {
-    padding: 0.5rem 0.75rem 80px;
+    padding: 0;
   }
 
   /* ── Controls inner content ── */
@@ -640,6 +640,7 @@ tr:hover {
   }
 
   .table-scroll-wrap {
+    padding-bottom: 52px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     width: 100%;

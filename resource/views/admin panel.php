@@ -1693,11 +1693,12 @@ function renderBindRows(array $pages, int $depth = 0): void
       box-shadow: 0 0 0 3px rgba(124, 58, 237, .1);
     }
 
-    @media (max-width: 480px) {
+    @media (max-width: 640px) {
 
       /* ── Body padding ── */
       body {
-        padding: 10px;
+        padding: 0;
+        padding-bottom: 80px;
       }
 
       /* ── Tab navigation ── */
