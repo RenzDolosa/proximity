@@ -920,8 +920,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <nav class="bottom-nav" id="bottomNav">
 
     <!-- Home -->
-    <button class="bn-item active" id="bn-home"
-      onclick="setActive('bn-home'); document.querySelector('.frames').src='resource/views/iframe/main.php';">
+    <button class="bn-item" id="bn-home"
+      onclick="document.querySelector('.frames').src='resource/views/iframe/main.php';">
       <i class="fas fa-home"></i>
       <span class="bn-label">Home</span>
     </button>
@@ -929,7 +929,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <!-- Scanned Log / Employee Dashboard -->
     <?php if ($access['employee dashboard']): ?>
       <button class="bn-item" id="bn-dash"
-        onclick="setActive('bn-dash'); document.querySelector('.frames').src='resource/views/iframe/main.php?page=employee dashboard';">
+        onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=employee dashboard';">
         <i class="fas fa-list-alt"></i>
         <span class="bn-label">Log</span>
       </button>
@@ -949,7 +949,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <!-- Admin Panel -->
     <?php if ($access['admin panel']): ?>
       <button class="bn-item" id="bn-admin"
-        onclick="setActive('bn-admin'); document.querySelector('.frames').src='resource/views/iframe/main.php?page=admin panel';">
+        onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=admin panel';">
         <i class="fas fa-user-shield"></i>
         <span class="bn-label">Admin</span>
       </button>
@@ -957,7 +957,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <!-- Settings -->
     <button class="bn-item" id="bn-settings"
-      onclick="setActive('bn-settings'); document.querySelector('.frames').src='resource/views/iframe/main.php?page=settings';">
+      onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=settings';">
       <i class="fas fa-cog"></i>
       <span class="bn-label">Settings</span>
     </button>
@@ -990,8 +990,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }, 100);
     });
 
-    // Click: ALWAYS open (never toggle) — fixes the double-click bug
-    // Clicking outside will close it via the document listener below
     userPill.addEventListener('click', function(e) {
       e.stopPropagation();
       openDropdown();
@@ -999,12 +997,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Click outside → close
     document.addEventListener('click', closeDropdown);
-
-    function setActive(id) {
-      document.querySelectorAll('.bn-item').forEach(el => el.classList.remove('active'));
-      const el = document.getElementById(id);
-      if (el) el.classList.add('active');
-    }
   </script>
 </body>
 

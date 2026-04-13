@@ -403,7 +403,11 @@ body {
   font-size: 9px;
 }
 
-@media (max-width: 480px) {
+.icon-accent {
+  filter: invert(32%) sepia(98%) saturate(1500%) hue-rotate(210deg) brightness(95%) contrast(95%);
+}
+
+@media (max-width: 640px) {
   /* ── Page body ── */
   .page-body {
     padding: 5px;

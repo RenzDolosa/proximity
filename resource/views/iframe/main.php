@@ -287,7 +287,10 @@ if ($databaseConnected) {
 
               <?php if ($access['proximity code']): ?>
                 <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=proximity');">
-                  <div class="sc-icon"><img src="../../../resource/assets/logo/nfc-logo.svg" alt="NFC" style="width:18px;height:18px;"></div>
+                  <div class="sc-icon">
+                    <img src="../../../resource/assets/logo/nfc-logo.svg" alt="NFC"
+                      class="icon-accent" style="width:18px;height:18px;">
+                  </div>
                   <div class="sc-label">Proximity Center</div>
                 </div>
               <?php endif; ?>
