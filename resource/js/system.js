@@ -433,8 +433,19 @@ async function renderEmployeeTable() {
             <td>${employee.brand.toProperCase()}</td>
             <td><span class="status-${employee.status.toLowerCase()}">${employee.status}</span></td>
             <td>${employee.shift}</td>
-            <td class="Col7"><div style="height: 50px; overflow-y: auto; scrollbar-width: thin; align-content: center;">
-              <small>${employee.violation || "None"}</small></div></td>
+            <td class="Col7">
+              ${employee.violation && employee.violation.trim()
+                ? `<button
+                    onclick="openViolationPopup('${employee.fullname.replace(/'/g, "\\'")}', \`${employee.violation.replace(/`/g, '\\`')}\`)"
+                    style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;
+                      font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
+                      border:0.5px solid #f59e0b;border-radius:6px;
+                      background:#fffbeb;color:#b45309;">
+                    &#9888; See more...
+                  </button>`
+                : `<span style="color:#aaa;font-size:12px;font-style:italic;">None</span>`
+              }
+            </td>
             <td class="Col8">${
               employee.image
                 ? `<img src="${thumbSrc}" alt="${employee.fullname}" class="employee-image"
@@ -1125,6 +1136,36 @@ async function openLogsModal(employeeId, fullname) {
   modal.onclick = (e) => {
     if (e.target === modal) closeModal();
   };
+}
+
+function openViolationPopup(fullname, violation) {
+  const existing = document.getElementById('violationPopupOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'violationPopupOverlay';
+  overlay.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,0.35);
+    display:flex;align-items:center;justify-content:center;z-index:9999;
+  `;
+
+  overlay.innerHTML = `
+    <div style="background:#fff;border:0.5px solid #e2e8f0;border-radius:12px;
+      padding:1.25rem;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.12);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <span style="font-size:13px;font-weight:500;color:#64748b;">${fullname} — Remarks</span>
+        <button onclick="document.getElementById('violationPopupOverlay').remove()"
+          style="background:none;border:none;font-size:16px;cursor:pointer;color:#94a3b8;line-height:1;padding:0;">&#x2715;</button>
+      </div>
+      <div style="font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">${violation}</div>
+    </div>
+  `;
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  document.body.appendChild(overlay);
 }
 
 function updateSelectColor(select) {
