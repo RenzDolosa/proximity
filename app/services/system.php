@@ -285,7 +285,7 @@ if ($databaseConnected) {
           </div>
           <div class="form-group">
             <label for="brand">Brand / Department <span style="color:#e74c3c">*</span></label>
-            <input type="text" id="brand" name="brand" placeholder="Enter brand">
+            <input type="text" id="brand" name="brand" placeholder="Enter brand / department">
           </div>
         </div>
         <div class="form-row">
