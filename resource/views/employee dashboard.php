@@ -257,7 +257,9 @@ if ($databaseConnected) {
             <div class="db-block">
               <img src="../assets/icon/database-icon.png" alt="DB">
               <div>
-                <div class="db-name"><?= htmlspecialchars($myDatabase); ?></div>
+                <div class="db-name" style="color:<?= $databaseConnected ? '#16a34a' : '#dc2626' ?>;">
+                  <?= htmlspecialchars($myDatabase) ?>
+                </div>
                 <div class="db-sub">Personal database</div>
               </div>
             </div>
