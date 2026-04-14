@@ -531,7 +531,7 @@ if ($databaseConnected) {
           </div>
           <div>
             <div class="stat-dot people"><i class="fas fa-users" style="font-size:10px;"></i></div>
-            <p>Affected</p>
+            <p>Violators</p>
             <h3 id="statAffected"><?= $stats['employees_affected'] ?></h3>
           </div>
           <div>
