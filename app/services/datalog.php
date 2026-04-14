@@ -116,8 +116,30 @@ if ($databaseConnected) {
     <div class="controls">
       <form id="searchForm">
         <div class="search-row">
-          <div class="search-group">
-            <input type="text" id="search_fullname" name="fullname" placeholder="Fullname">
+          <div class="search-group" style="position: relative;">
+            <input type="text" id="search_fullname" name="fullname" 
+                  placeholder="Fullname" autocomplete="off"
+                  oninput="showFullnameSuggestions(this.value)"
+                  onkeydown="handleSuggestionNav(event)"
+                  onfocus="showFullnameSuggestions(this.value)">
+            <ul id="fullname-suggestions" style="
+              display: none;
+              position: absolute;
+              top: 100%;
+              left: 0;
+              right: 0;
+              z-index: 9999;
+              background: #fff;
+              border: 1px solid #cbd5e1;
+              border-top: none;
+              border-radius: 0 0 8px 8px;
+              box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+              list-style: none;
+              margin: 0;
+              padding: 0;
+              max-height: 220px;
+              overflow-y: auto;
+            "></ul>
           </div>
           <div class="search-group">
             <select id="search_position" name="position">
@@ -255,7 +277,7 @@ if ($databaseConnected) {
               <th>EMPID</th>
               <th>Fullname</th>
               <th>Position</th>
-              <th>Brand</th>
+              <th>Brand / Department</th>
               <th>Status</th>
               <th>Shift</th>
               <th class="Col7">Remarks</th> <!-- Violation -->

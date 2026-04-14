@@ -992,6 +992,104 @@ function forceRefresh() {
     });
 }
 
+// ── Fullname Autocomplete ────────────────────────────────────────────────────
+let suggestionIndex = -1;
+
+function showFullnameSuggestions(query) {
+  const list = document.getElementById("fullname-suggestions");
+  if (!list) return;
+
+  const q = query.trim().toLowerCase();
+
+  // Build unique fullname list from loaded employees
+  const matches = [
+    ...new Map(
+      employees
+        .filter((emp) => !q || emp.fullname.toLowerCase().includes(q))
+        .map((emp) => [emp.fullname.toLowerCase(), emp.fullname]),
+    ).values(),
+  ].slice(0, 10); // cap at 10 suggestions
+
+  if (!matches.length || !q) {
+    list.style.display = "none";
+    suggestionIndex = -1;
+    return;
+  }
+
+  list.innerHTML = matches
+    .map((name, i) => {
+      // Highlight matching portion
+      const regex = new RegExp(
+        `(${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+        "gi",
+      );
+      const highlighted = name.replace(
+        regex,
+        '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
+      );
+      return `
+      <li data-value="${name}" data-index="${i}"
+          onmousedown="selectSuggestion('${name.replace(/'/g, "\\'")}')"
+          onmouseover="highlightSuggestion(${i})"
+          style="padding: 8px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #f1f5f9;">
+        ${highlighted}
+      </li>`;
+    })
+    .join("");
+
+  list.style.display = "block";
+  suggestionIndex = -1;
+}
+
+function selectSuggestion(name) {
+  const input = document.getElementById("search_fullname");
+  const list = document.getElementById("fullname-suggestions");
+  if (input) input.value = name;
+  if (list) list.style.display = "none";
+  suggestionIndex = -1;
+  searchEmployees();
+}
+
+function highlightSuggestion(index) {
+  const items = document.querySelectorAll("#fullname-suggestions li");
+  items.forEach((li, i) => {
+    li.style.background = i === index ? "#f0f9ff" : "";
+  });
+  suggestionIndex = index;
+}
+
+function handleSuggestionNav(e) {
+  const list = document.getElementById("fullname-suggestions");
+  const items = list ? list.querySelectorAll("li") : [];
+  if (!items.length || list.style.display === "none") return;
+
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    suggestionIndex = Math.min(suggestionIndex + 1, items.length - 1);
+    highlightSuggestion(suggestionIndex);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    suggestionIndex = Math.max(suggestionIndex - 1, 0);
+    highlightSuggestion(suggestionIndex);
+  } else if (e.key === "Enter" && suggestionIndex >= 0) {
+    e.preventDefault();
+    selectSuggestion(items[suggestionIndex].dataset.value);
+  } else if (e.key === "Escape") {
+    list.style.display = "none";
+    suggestionIndex = -1;
+  }
+}
+
+// Close suggestions when clicking outside
+document.addEventListener("click", function (e) {
+  const list = document.getElementById("fullname-suggestions");
+  const input = document.getElementById("search_fullname");
+  if (list && input && !input.contains(e.target) && !list.contains(e.target)) {
+    list.style.display = "none";
+    suggestionIndex = -1;
+  }
+});
+
 // ✨ 🆕 ENHANCED DELETE MODAL - WITH FILTERED DELETE SUPPORT
 function openDeleteModal(employeeId = null, requireConfirmation = false) {
   const modal = document.getElementById("deleteModal");

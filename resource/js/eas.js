@@ -149,7 +149,7 @@ async function exportEmployeeData(employees, type = "Data") {
       "EMPID",
       "Fullname",
       "Position",
-      "Brand",
+      "Brand / Department",
       "Status",
       "Shift",
       "Violation",
@@ -187,7 +187,7 @@ async function exportEmployeeData(employees, type = "Data") {
       { wch: 10 }, // EMPID
       { wch: 25 }, // Fullname
       { wch: 20 }, // Position
-      { wch: 15 }, // Brand
+      { wch: 20 }, // Brand
       { wch: 12 }, // Status
       { wch: 15 }, // Shift
       { wch: 20 }, // Violation
@@ -324,7 +324,7 @@ function exportToExcel(type = "Filtered") {
       "EMPID",
       "Fullname",
       "Position",
-      "Brand",
+      "Brand / Department",
       "Status",
       "Shift",
       "Violation",
@@ -377,7 +377,7 @@ function exportToExcel(type = "Filtered") {
       { wch: 10 }, // EMPID
       { wch: 25 }, // Fullname
       { wch: 20 }, // Position
-      { wch: 15 }, // Brand
+      { wch: 20 }, // Brand
       { wch: 12 }, // Status
       { wch: 15 }, // Shift
       { wch: 20 }, // Violation
@@ -511,17 +511,14 @@ function loadExcelJS() {
 
 // ─── Resolve image URL from table cell OR fallback to employee ID path ─────
 function resolveEmployeeImageUrl(employee, tableRow) {
-  // 1. Try to grab <img src> from table cell[8] (the photo column)
+  if (employee.image) {
+    return `${window.location.origin}/public/uploads/user/${employee.image}`;
+  }
   if (tableRow) {
     const imgEl = tableRow.querySelectorAll("td")[8]?.querySelector("img");
     if (imgEl?.src) return imgEl.src;
   }
-  // 2. Fallback: construct URL from employee ID (adjust path to match your setup)
-  const basePaths = [
-    `../../public/uploads/user/${employee.id}.jpg`,
-    `../../public/uploads/user/${employee.id}.png`,
-  ];
-  return basePaths[0]; // primary guess; others tried inside fetchImageBase64
+  return null; // No image available
 }
 
 // ─── Fetch an image URL and return { base64, extension } ──────────────────
@@ -652,18 +649,18 @@ async function exportWithImages() {
 
   // ── Column definitions ────────────────────────────────────────────────────
   worksheet.columns = [
-    { header: "SN",             key: "sn",         width: 5 },
-    { header: "EMPID",          key: "id",         width: 12 },
-    { header: "Photo",          key: "photo",      width: IMG_COL_WIDTH },
-    { header: "Fullname",       key: "fullname",   width: 26 },
-    { header: "Position",       key: "position",   width: 22 },
-    { header: "Brand",          key: "brand",      width: 16 },
-    { header: "Status",         key: "status",     width: 12 },
-    { header: "Shift",          key: "shift",      width: 15 },
-    { header: "Violation",      key: "violation",  width: 20 },
-    { header: "Proximity Code", key: "qr_code",    width: 16 },
-    { header: "Register Date",  key: "created_at", width: 20 },
-    { header: "Last Update",    key: "updated_at", width: 20 },
+    { header: "SN",                   key: "sn",         width: 5 },
+    { header: "EMPID",                key: "id",         width: 12 },
+    { header: "Photo",                key: "photo",      width: IMG_COL_WIDTH },
+    { header: "Fullname",             key: "fullname",   width: 26 },
+    { header: "Position",             key: "position",   width: 22 },
+    { header: "Brand / Department",   key: "brand",      width: 22 },
+    { header: "Status",               key: "status",     width: 12 },
+    { header: "Shift",                key: "shift",      width: 15 },
+    { header: "Violation",            key: "violation",  width: 20 },
+    { header: "Proximity Code",       key: "qr_code",    width: 16 },
+    { header: "Register Date",        key: "created_at", width: 20 },
+    { header: "Last Update",          key: "updated_at", width: 20 },
   ];
 
   // ── Style header row ──────────────────────────────────────────────────────
@@ -801,7 +798,7 @@ function excelTemplate(type = "Template") {
       "EMPID",
       "Fullname",
       "Position",
-      "Brand",
+      "Brand / Department",
       "Status",
       "Shift",
       "Violation",
@@ -818,7 +815,7 @@ function excelTemplate(type = "Template") {
       { wch: 10 }, // EMPID
       { wch: 25 }, // Fullname
       { wch: 20 }, // Position
-      { wch: 15 }, // Brand
+      { wch: 20 }, // Brand
       { wch: 12 }, // Status
       { wch: 15 }, // Shift
       { wch: 20 }, // Violation

@@ -530,12 +530,10 @@ function loadExcelJS() {
 
 // ─── Resolve image URL from table cell OR fallback to employee ID path ─────
 function resolveEmployeeImageUrl(employee, tableRow) {
-  // 1. Try to grab <img src> from table cell[8] (the photo column)
   if (tableRow) {
     const imgEl = tableRow.querySelectorAll("td")[8]?.querySelector("img");
     if (imgEl?.src) return imgEl.src;
   }
-  // 2. Fallback: construct URL from employee ID (adjust path to match your setup)
   const basePaths = [
     `../../public/uploads/user/${employee.id}.jpg`,
     `../../public/uploads/user/${employee.id}.png`,

@@ -107,7 +107,7 @@ async function parseExcelFile(file) {
 function displayPreview(data) {
   let previewHTML = '<table class="preview-table"><thead><tr>';
   previewHTML +=
-    "<th>SN</th><th>EMPID</th><th>Fullname</th><th>Position</th><th>Brand</th><th>Status</th><th>Shift</th><th>Violation</th><th>Proximity Code</th>";
+    "<th>SN</th><th>EMPID</th><th>Fullname</th><th>Position</th><th>Brand / Department</th><th>Status</th><th>Shift</th><th>Violation</th><th>Proximity Code</th>";
   previewHTML += "</tr></thead><tbody>";
 
   data.forEach((col, index) => {

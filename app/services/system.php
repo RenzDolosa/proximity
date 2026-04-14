@@ -84,8 +84,30 @@ if ($databaseConnected) {
     <div class="controls">
       <form id="searchForm">
         <div class="search-row">
-          <div class="search-group">
-            <input type="text" id="search_fullname" name="fullname" placeholder="Fullname">
+          <div class="search-group" style="position: relative;">
+            <input type="text" id="search_fullname" name="fullname" 
+                  placeholder="Fullname" autocomplete="off"
+                  oninput="showFullnameSuggestions(this.value)"
+                  onkeydown="handleSuggestionNav(event)"
+                  onfocus="showFullnameSuggestions(this.value)">
+            <ul id="fullname-suggestions" style="
+              display: none;
+              position: absolute;
+              top: 100%;
+              left: 0;
+              right: 0;
+              z-index: 9999;
+              background: #fff;
+              border: 1px solid #cbd5e1;
+              border-top: none;
+              border-radius: 0 0 8px 8px;
+              box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+              list-style: none;
+              margin: 0;
+              padding: 0;
+              max-height: 220px;
+              overflow-y: auto;
+            "></ul>
           </div>
           <div class="search-group">
             <select id="search_position" name="position">
@@ -207,7 +229,7 @@ if ($databaseConnected) {
               <th>EMPID</th>
               <th>Fullname</th>
               <th>Position</th>
-              <th>Brand</th>
+              <th>Brand / Department</th>
               <th>Status</th>
               <th>Shift</th>
               <th class="Col7">Remarks</th> <!-- Violation if any -->
@@ -262,7 +284,7 @@ if ($databaseConnected) {
             <input type="text" id="position" name="position" placeholder="Enter position">
           </div>
           <div class="form-group">
-            <label for="brand">Brand <span style="color:#e74c3c">*</span></label>
+            <label for="brand">Brand / Department <span style="color:#e74c3c">*</span></label>
             <input type="text" id="brand" name="brand" placeholder="Enter brand">
           </div>
         </div>
@@ -434,7 +456,7 @@ if ($databaseConnected) {
           <li><strong>empid</strong> - Employee's ID (required)</li>
           <li><strong>fullname</strong> - Employee's fullname (required)</li>
           <li><strong>position</strong> - Job position</li>
-          <li><strong>brand</strong> - Brand/Department</li>
+          <li><strong>brand/deparment</strong> - Brand/Department</li>
           <li><strong>status</strong> - Active or Inactive (default: Active)</li>
           <li><strong>shift</strong> - Day Shift, Night Shift, or Graveyard Shift (required)</li>
           <li><strong>remarks</strong> - Any remarks (optional)</li> <!-- Violation -->
