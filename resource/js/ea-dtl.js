@@ -160,10 +160,10 @@ async function exportEmployeeData(employees, type = "Data") {
       "EMPID",
       "Fullname",
       "Position",
-      "Brand",
+      "Brand / Department",
       "Status",
       "Shift",
-      "Violation",
+      "Remarks",              // Violation
       "Proximity Code",
       "Timestamp",
       "Check Status",
@@ -201,7 +201,7 @@ async function exportEmployeeData(employees, type = "Data") {
       { wch: 10 }, // SN
       { wch: 25 }, // Fullname
       { wch: 20 }, // Position
-      { wch: 15 }, // Brand
+      { wch: 20 }, // Brand
       { wch: 10 }, // Status
       { wch: 15 }, // Shift
       { wch: 15 }, // Violation
@@ -339,11 +339,11 @@ function exportToExcelDTL(type = "Filtered") {
       "EMPID",
       "Fullname",
       "Position",
-      "Brand",
+      "Brand / Department",
       "Status",
       "Shift",
-      "Violation",
-      "Proximity Code", // Image column is skipped
+      "Remarks",              // Violation
+      "Proximity Code",       // Image column is skipped
       "Timestamp",
       "Check Status",
       "Gate",
@@ -394,7 +394,7 @@ function exportToExcelDTL(type = "Filtered") {
       { wch: 10 }, // EMPID
       { wch: 25 }, // Fullname
       { wch: 20 }, // Position
-      { wch: 15 }, // Brand
+      { wch: 20 }, // Brand
       { wch: 10 }, // Status
       { wch: 15 }, // Shift
       { wch: 15 }, // Violation
@@ -662,19 +662,19 @@ async function exportWithImages() {
 
   // ── Column definitions (matches DTL table columns) ────────────────────────
   worksheet.columns = [
-    { header: "SN",             key: "sn",               width: 5  },
-    { header: "EMPID",          key: "employee_id",      width: 12 },
-    { header: "Photo",          key: "photo",            width: IMG_COL_WIDTH },
-    { header: "Fullname",       key: "fullname",         width: 26 },
-    { header: "Position",       key: "position",         width: 22 },
-    { header: "Brand",          key: "brand",            width: 16 },
-    { header: "Status",         key: "status",           width: 12 },
-    { header: "Shift",          key: "shift",            width: 15 },
-    { header: "Violation",      key: "violation",        width: 20 },
-    { header: "Proximity Code", key: "qr_code",          width: 16 },
-    { header: "Timestamp",      key: "access_timestamp", width: 22 },
-    { header: "Check Status",   key: "check_status",     width: 14 },
-    { header: "Gate",           key: "user_id",          width: 16 },
+    { header: "SN",                   key: "sn",               width: 5  },
+    { header: "EMPID",                key: "employee_id",      width: 12 },
+    { header: "Photo",                key: "photo",            width: IMG_COL_WIDTH },
+    { header: "Fullname",             key: "fullname",         width: 26 },
+    { header: "Position",             key: "position",         width: 22 },
+    { header: "Brand / Department",   key: "brand",            width: 22 },
+    { header: "Status",               key: "status",           width: 12 },
+    { header: "Shift",                key: "shift",            width: 15 },
+    { header: "Remakrs",              key: "violation",        width: 20 },
+    { header: "Proximity Code",       key: "qr_code",          width: 16 },
+    { header: "Timestamp",            key: "access_timestamp", width: 22 },
+    { header: "Check Status",         key: "check_status",     width: 14 },
+    { header: "Gate",                 key: "user_id",          width: 16 },
   ];
 
   // ── Style header row ──────────────────────────────────────────────────────

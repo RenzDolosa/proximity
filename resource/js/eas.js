@@ -152,7 +152,7 @@ async function exportEmployeeData(employees, type = "Data") {
       "Brand / Department",
       "Status",
       "Shift",
-      "Violation",
+      "Remarks",              // Violation
       "Proximity Code",
       "Register Date",
       "Last Update",
@@ -327,8 +327,8 @@ function exportToExcel(type = "Filtered") {
       "Brand / Department",
       "Status",
       "Shift",
-      "Violation",
-      "Proximity Code", // Image column is skipped
+      "Remarks",              // Violation
+      "Proximity Code",       // Image column is skipped
       "Register Date",
       "Last Update",
     ];
@@ -657,7 +657,7 @@ async function exportWithImages() {
     { header: "Brand / Department",   key: "brand",      width: 22 },
     { header: "Status",               key: "status",     width: 12 },
     { header: "Shift",                key: "shift",      width: 15 },
-    { header: "Violation",            key: "violation",  width: 20 },
+    { header: "Remarks",              key: "violation",  width: 20 },
     { header: "Proximity Code",       key: "qr_code",    width: 16 },
     { header: "Register Date",        key: "created_at", width: 20 },
     { header: "Last Update",          key: "updated_at", width: 20 },
@@ -801,8 +801,8 @@ function excelTemplate(type = "Template") {
       "Brand / Department",
       "Status",
       "Shift",
-      "Violation",
-      "Proximity Code", // Image column is skipped
+      "Remarks",              // Violation
+      "Proximity Code",       // Image column is skipped
     ];
     data.push(headers);
 
