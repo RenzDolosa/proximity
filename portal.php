@@ -946,13 +946,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php endif; ?>
 
     <!-- Admin Panel -->
-    <?php if ($access['admin panel']): ?>
-      <button class="bn-item" id="bn-admin"
-        onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=admin panel';">
-        <i class="fas fa-user-shield"></i>
-        <span class="bn-label">Admin</span>
-      </button>
-    <?php endif; ?>
+    <button class="bn-item" id="bn-admin"
+      onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=admin panel';">
+      <i class="fas fa-user-shield"></i>
+      <span class="bn-label">Admin</span>
+    </button>
 
     <!-- Settings -->
     <button class="bn-item" id="bn-settings"
