@@ -361,7 +361,7 @@ $audioIconMap = [
                 </div>
                 <div class="stat-label">Active Employees</div>
               </div>
-              <div class="stat-card">
+              <div class="stat-card" onclick="navigateWithLoading('../../../app/services/violation_log.php');">
                 <div class="stat-top">
                   <div class="stat-icon" style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i></div>
                   <div class="stat-value"><?= number_format($userStats['total_violations']) ?></div>

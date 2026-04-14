@@ -110,7 +110,9 @@ class EmployeeManager
 
   public function getEmployees($filters = [])
   {
-    $query  = "SELECT * FROM " . $this->table . " WHERE 1=1";
+    $query  = "SELECT e.*, 
+             (SELECT COUNT(*) FROM violations v WHERE v.employee_id = e.id) AS violation_count
+           FROM " . $this->table . " e WHERE 1=1";
     $params = [];
 
     if (!empty($filters['user_id'])) {
@@ -671,6 +673,19 @@ try {
           $response['message'] = 'Employee created successfully';
           $response['data']    = ['id' => $employee_id, 'qr_code' => $employee_data['qr_code']];
           logSystemAction($database->getCurrentUserId(), 'EMPLOYEE_CREATED', "Created employee: " . $employee_data['fullname']);
+
+          if (!empty($employee_data['violation'])) {
+            try {
+              $conn = $database->getUserConnection();
+              $stmt = $conn->prepare(
+                "INSERT INTO violations (employee_id, violation_type, violation_description, violation_date)
+             VALUES (?, 'Initial Remarks', ?, ?)"
+              );
+              $stmt->execute([$employee_id, $employee_data['violation'], date('Y-m-d')]);
+            } catch (Exception $e) {
+              error_log("Violation log on create failed: " . $e->getMessage());
+            }
+          }
         } else {
           $response['message'] = 'Failed to create employee. Please check your input data.';
         }
@@ -729,6 +744,32 @@ try {
           $employeeManager->updateEmployee($old_id, $employee_data);
           $response['success'] = true;
           $response['message'] = 'Employee updated successfully';
+
+          $oldViolation = trim($current_employee['violation'] ?? '');
+          $newViolation = trim($employee_data['violation'] ?? '');
+
+          if ($oldViolation !== $newViolation) {
+            try {
+              $conn = $database->getUserConnection();
+              if (!empty($newViolation)) {
+                // Added or changed — log the new remarks
+                $stmt = $conn->prepare(
+                  "INSERT INTO violations (employee_id, violation_type, violation_description, violation_date)
+                 VALUES (?, 'Remarks Updated', ?, ?)"
+                );
+                $stmt->execute([$new_id, $newViolation, date('Y-m-d')]);
+              } elseif (!empty($oldViolation) && empty($newViolation)) {
+                // Cleared — log the removal
+                $stmt = $conn->prepare(
+                  "INSERT INTO violations (employee_id, violation_type, violation_description, violation_date)
+                 VALUES (?, 'Remarks Cleared', ?, ?)"
+                );
+                $stmt->execute([$new_id, "Previous: $oldViolation", date('Y-m-d')]);
+              }
+            } catch (Exception $e) {
+              error_log("Violation log on update failed: " . $e->getMessage());
+            }
+          }
         } catch (Exception $e) {
           $response['message'] = $e->getMessage();
         }
@@ -1252,6 +1293,43 @@ try {
           'first_name' => $_SESSION['first_name'] ?? '',
           'last_name'  => $_SESSION['last_name']  ?? '',
         ];
+        break;
+
+      case 'get_violations':
+        $emp_id = $_GET['id'] ?? 0;
+        if (!$emp_id) {
+          $response['message'] = 'Employee ID required';
+          break;
+        }
+        try {
+          $conn = $database->getUserConnection();
+
+          // Ensure violations table exists (safe guard)
+          $conn->exec("CREATE TABLE IF NOT EXISTS `violations` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `employee_id` INT NOT NULL,
+            `violation_type` VARCHAR(100) DEFAULT NULL,
+            `violation_description` TEXT DEFAULT NULL,
+            `violation_date` DATE DEFAULT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+          $stmt = $conn->prepare(
+            "SELECT id, violation_type, violation_description, violation_date, created_at
+             FROM violations
+             WHERE employee_id = :id
+             ORDER BY created_at DESC
+             LIMIT 200"
+          );
+          $stmt->execute([':id' => $emp_id]);
+          $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+          $response['success'] = true;
+          $response['violations'] = $rows;
+        } catch (Exception $e) {
+          $response['message'] = 'Error fetching violations: ' . $e->getMessage();
+          error_log("get_violations error: " . $e->getMessage());
+        }
         break;
 
       default:

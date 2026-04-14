@@ -316,6 +316,12 @@ if ($databaseConnected) {
                 </div>
               <?php endif; ?>
 
+              <?php if ($access['violation']): ?>
+              <div class="sc-card" onclick="navigateWithLoading('../../../app/services/violation_log.php');">
+                <div class="sc-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                <div class="sc-label">Violation</div>
+              </div>
+              <?php endif; ?>
             </div>
           </div>
         </div>

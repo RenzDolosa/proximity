@@ -434,17 +434,33 @@ async function renderEmployeeTable() {
             <td><span class="status-${employee.status.toLowerCase()}">${employee.status}</span></td>
             <td>${employee.shift}</td>
             <td class="Col7">
-              ${employee.violation && employee.violation.trim()
-                ? `<button
-                    onclick="openViolationPopup('${employee.fullname.replace(/'/g, "\\'")}', \`${employee.violation.replace(/`/g, '\\`')}\`)"
-                    style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;
-                      font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
-                      border:0.5px solid #f59e0b;border-radius:6px;
-                      background:#fffbeb;color:#b45309;">
-                    &#9888; See more...
-                  </button>`
-                : `<span style="color:#aaa;font-size:12px;font-style:italic;">None</span>`
-              }
+              <div style="display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;justify-content:center;">
+
+                ${employee.violation && employee.violation.trim()
+                  ? `<button
+                      onclick="openViolationPopup('${employee.fullname.replace(/'/g, "\\'")}', \`${employee.violation.replace(/`/g, "\\`")}\`)"
+                      style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
+                        font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
+                        border:0.5px solid #f59e0b;border-radius:6px;
+                        background:#fffbeb;color:#b45309;">
+                      &#9888; See more
+                    </button>`
+                  : `<span style="color:#aaa;font-size:11px;font-style:italic;">None</span>`
+                }
+
+                ${parseInt(employee.violation_count) > 0
+                  ? `<button
+                      onclick="openViolationsModal('${employee.id}', '${employee.fullname.replace(/'/g, "\\'")}')"
+                      style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
+                        font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
+                        border:0.5px solid #fca5a5;border-radius:6px;
+                        background:#fff5f5;color:#e53e3e;">
+                      <i class="fas fa-exclamation-triangle" style="font-size:10px;"></i>
+                    </button>`
+                  : ''
+                }
+
+              </div>
             </td>
             <td class="Col8">${
               employee.image
@@ -1138,12 +1154,88 @@ async function openLogsModal(employeeId, fullname) {
   };
 }
 
+async function openViolationsModal(employeeId, fullname) {
+  const modal = document.getElementById("violationsModal");
+  const title = document.getElementById("violationsModalTitle");
+  const tbody = document.getElementById("violationsTableBody");
+
+  document.getElementById("vioCountTotal").textContent = "—";
+  document.getElementById("vioCountUpdates").textContent = "—";
+  document.getElementById("vioCountCleared").textContent = "—";
+  title.innerHTML = `<i class="fas fa-exclamation-triangle" style="color:#e53e3e;"></i> Violation History — ${fullname}`;
+  tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>`;
+  modal.style.display = "block";
+
+  try {
+    const res = await fetch(
+      `manpower_backend.php?action=get_violations&id=${employeeId}`,
+      { headers: { "X-Requested-With": "XMLHttpRequest" } },
+    );
+    const data = await res.json();
+
+    if (data.success) {
+      const rows = data.violations;
+      const updates = rows.filter(
+        (r) => r.violation_type === "Remarks Updated",
+      ).length;
+      const cleared = rows.filter(
+        (r) => r.violation_type === "Remarks Cleared",
+      ).length;
+
+      document.getElementById("vioCountTotal").textContent = rows.length;
+      document.getElementById("vioCountUpdates").textContent = updates;
+      document.getElementById("vioCountCleared").textContent = cleared;
+
+      const typeBg = (type) => {
+        if (type === "Remarks Cleared")
+          return { bg: "#f0fff4", color: "#276749" };
+        if (type === "Remarks Updated")
+          return { bg: "#fffbeb", color: "#b7791f" };
+        return { bg: "#fff5f5", color: "#c53030" };
+      };
+
+      tbody.innerHTML = rows.length
+        ? rows
+            .map((v, i) => {
+              const { bg, color } = typeBg(v.violation_type);
+              return `
+              <tr style="border-bottom:1px solid #f0f0f0;">
+                <td style="padding:9px 12px;color:#aaa;">${i + 1}</td>
+                <td style="padding:9px 12px;">
+                  <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
+                    background:${bg};color:${color};">
+                    ${v.violation_type || "—"}
+                  </span>
+                </td>
+                <td style="padding:9px 12px;color:#555;max-width:220px;word-break:break-word;">
+                  ${v.violation_description || "—"}
+                </td>
+                <td style="padding:9px 12px;white-space:nowrap;">${v.violation_date || "—"}</td>
+                <td style="padding:9px 12px;color:#aaa;font-size:11px;white-space:nowrap;">
+                  ${v.created_at || "—"}
+                </td>
+              </tr>`;
+            })
+            .join("")
+        : `<tr><td colspan="5" style="text-align:center;padding:24px;color:#aaa;">No violation records found.</td></tr>`;
+    } else {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#ef4444;padding:24px;">${data.message || "Failed to load."}</td></tr>`;
+    }
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#ef4444;padding:24px;">Error loading records.</td></tr>`;
+  }
+
+  modal.onclick = (e) => {
+    if (e.target === modal) closeModal();
+  };
+}
+
 function openViolationPopup(fullname, violation) {
-  const existing = document.getElementById('violationPopupOverlay');
+  const existing = document.getElementById("violationPopupOverlay");
   if (existing) existing.remove();
 
-  const overlay = document.createElement('div');
-  overlay.id = 'violationPopupOverlay';
+  const overlay = document.createElement("div");
+  overlay.id = "violationPopupOverlay";
   overlay.style.cssText = `
     position:fixed;inset:0;background:rgba(0,0,0,0.35);
     display:flex;align-items:center;justify-content:center;z-index:9999;
@@ -1161,7 +1253,7 @@ function openViolationPopup(fullname, violation) {
     </div>
   `;
 
-  overlay.addEventListener('click', (e) => {
+  overlay.addEventListener("click", (e) => {
     if (e.target === overlay) overlay.remove();
   });
 
@@ -1339,12 +1431,21 @@ function closeModal() {
   const deleteModal = document.getElementById("deleteModal");
   const importModal = document.getElementById("importModal");
   const logsModal = document.getElementById("logsModal");
-  if (!employeeModal || !deleteModal || !importModal || !logsModal) return;
+  const violationModal = document.getElementById("violationsModal");
+  if (
+    !employeeModal ||
+    !deleteModal ||
+    !importModal ||
+    !logsModal ||
+    !violationModal
+  )
+    return;
 
   employeeModal.style.display = "none";
   deleteModal.style.display = "none";
   importModal.style.display = "none";
   logsModal.style.display = "none";
+  violationModal.style.display = "none";
 
   const form = document.getElementById("employeeForm");
   if (form) form.reset();
