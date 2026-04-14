@@ -421,8 +421,8 @@ async function renderEmployeeTable() {
       };
 
       const isAboveFold = index < 5;
-      const thumbSrc = `${window.location.origin}/../public/uploads/user/thumb_${employee.image}`;
-      const imageSrc = `${window.location.origin}/../public/uploads/user/${employee.image}`;
+      const thumbSrc = `${window.location.origin}/public/uploads/user/thumb_${employee.image}`;
+      const imageSrc = `${window.location.origin}/public/uploads/user/${employee.image}`;
 
       return `
         <tr>

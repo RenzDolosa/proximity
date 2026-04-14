@@ -403,7 +403,7 @@ if ($databaseConnected) {
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="../../resource/js/dtl.js"></script>
   <script src="../../resource/js/btn.js"></script>
-  <script src="../../resource/js/i-dtl.js"></script>
+  <!-- <script src="../../resource/js/i-dtl.js"></script> -->
   <script src="../../resource/js/ea-dtl.js"></script>
   <script src="../../resource/js/opt-btn.js"></script>
   <script src="../../resource/js/loading.js"></script>

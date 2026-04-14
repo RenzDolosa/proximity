@@ -25,7 +25,6 @@ document.addEventListener("DOMContentLoaded", function () {
   updateDeleteButtonState();
   setupEventListeners();
   updateTotalAvailable(); // 🆕 Update count on page load
-  fetchWithUserRefresh();
 });
 
 // Load and cache current user ID

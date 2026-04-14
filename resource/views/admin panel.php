@@ -2444,7 +2444,7 @@ function renderBindRows(array $pages, int $depth = 0): void
     <span id="toastMsg">Done</span>
   </div>
 
-  <script src="../../js/req.js"></script>
+  <!-- <script src="../../js/req.js"></script> -->
   <script>
     const IS_USERS = <?= $access['users'] ? 'true' : 'false' ?>;
     const IS_GROUPS = <?= $access['groups'] ? 'true' : 'false' ?>;

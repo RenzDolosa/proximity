@@ -55,7 +55,6 @@ if ($databaseConnected) {
   <title><?php echo htmlspecialchars($myDatabase); ?> - Manage</title>
   <link rel="preload" href="../../resource/assets/icon/database-icon.png" as="image">
   <link rel="preconnect" href="https://filemanager.ai">
-  <link rel="prefetch" href="https://filemanager.ai/new3/index.php?home=%2Fhtdocs%2Fuploads%2Fuser&path=%2F">
   <link rel="icon" href="../../resource/assets/icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../../resource/css/system.css">
   <link rel="stylesheet" href="../../resource/css/system-camera.css">
@@ -438,7 +437,7 @@ if ($databaseConnected) {
           <li><strong>brand</strong> - Brand/Department</li>
           <li><strong>status</strong> - Active or Inactive (default: Active)</li>
           <li><strong>shift</strong> - Day Shift, Night Shift, or Graveyard Shift (required)</li>
-          <li><strong>violation</strong> - Any violations (optional)</li>
+          <li><strong>remarks</strong> - Any remarks (optional)</li> <!-- Violation -->
           <li><strong>proximity code</strong> - If have Proximity Code (optional)</li>
         </ul>
         <p><em>Note: If blank, Proximity Codes will be automatically generated for each employee.</em></p>

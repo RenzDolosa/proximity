@@ -111,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($myDatabase ?? 'My Database'); ?> - Portal</title>
-  <link rel="preload" href="resource/icon/database-icon.png" as="image">
+  <link rel="preload" href="resource/assets/icon/database-icon.png" as="image">
   <link rel="icon" href="resource/assets/icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
@@ -870,7 +870,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </header>
 
   <!-- Change Password Modal — submits as a normal POST form to portal.php -->
-  <div class="cp-overlay" id="cpOverlay">
+  <!-- <div class="cp-overlay" id="cpOverlay">
     <div class="cp-modal">
       <div class="cp-modal-head">
         <h3><i class="fas fa-lock" style="margin-right:6px;font-size:13px;"></i>Change Password</h3>
@@ -880,22 +880,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <form method="POST" action="portal.php" id="cpForm">
         <div class="cp-modal-body">
           <div class="cp-field">
-            <label for="current_password">Current Password</label>
+            <label for="cpOld">Current Password</label>
             <input type="password" name="current_password" id="cpOld"
               autocomplete="current-password" placeholder="Enter current password">
           </div>
           <div class="cp-field">
-            <label for="new_password">New Password</label>
+            <label for="cpNew">New Password</label>
             <input type="password" name="new_password" id="cpNew"
               autocomplete="new-password" placeholder="Min. 8 chars, upper, lower, number">
           </div>
           <div class="cp-field">
-            <label for="confirm_password">Confirm New Password</label>
+            <label for="cpConfirm">Confirm New Password</label>
             <input type="password" name="confirm_password" id="cpConfirm"
               autocomplete="new-password" placeholder="Re-enter new password">
           </div>
 
-          <!-- Feedback shown client-side before submit, and server result after reload -->
           <div class="cp-msg <?= $messageType === 'error' ? 'err' : ($messageType === 'success' ? 'ok' : ''); ?>"
             id="cpMsg">
             <?= htmlspecialchars($message); ?>
@@ -910,7 +909,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
       </form>
     </div>
-  </div>
+  </div> -->
 
   <!-- Main iframe -->
   <div class="main-wrap">
