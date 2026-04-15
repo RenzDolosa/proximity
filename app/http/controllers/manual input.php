@@ -161,10 +161,10 @@ try {
     </div>
   </div>
 
-  <audio id="successSound" src="../../../resource/assets/sounds/success.mp3" preload="auto"></audio>
-  <audio id="noResultSound" src="../../../resource/assets/sounds/noResultsFound.mp3" preload="auto"></audio>
-  <audio id="warningSound" src="../../../resource/assets/sounds/ohh-ow.mp3" preload="auto"></audio>
-  <audio id="inactiveSound" src="../../../resource/assets/sounds/inactive.mp3" preload="auto"></audio>
+  <audio id="successSound" data-fallback="../../../resource/assets/sounds/success.mp3" preload="none"></audio>
+  <audio id="noResultSound" data-fallback="../../../resource/assets/sounds/noResultsFound.mp3" preload="none"></audio>
+  <audio id="warningSound" data-fallback="../../../resource/assets/sounds/ohh-ow.mp3" preload="none"></audio>
+  <audio id="inactiveSound" data-fallback="../../../resource/assets/sounds/inactive.mp3" preload="none"></audio>
   <script src="../../../resource/js/btn.js"></script>
   <script src="../../../resource/js/req.js"></script>
   <script src="../../../resource/js/ver.js"></script>
@@ -173,6 +173,68 @@ try {
     let hasSearched = false; // Track if user has performed a search
 
     let currentAudio = null;
+
+    // ── Global-audio endpoint (relative to the scan controller page) ─────────
+    const GLOBAL_AUDIO_ENDPOINT = "../../services/global_audio.php";
+
+    // Maps global_audio_settings.audio_type  →  <audio> element ID
+    const AUDIO_TYPE_MAP = {
+      success: "successSound",
+      not_found: "noResultSound",
+      violations: "warningSound",
+      inactive: "inactiveSound",
+    };
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Load global audio from DB; fall back to bundled files if absent
+    // ─────────────────────────────────────────────────────────────────
+    async function loadGlobalAudio() {
+      try {
+        const res = await fetch(GLOBAL_AUDIO_ENDPOINT, {
+          credentials: "same-origin",
+          headers: {
+            "X-Requested-With": "XMLHttpRequest"
+          },
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+
+        if (!json.success) throw new Error("Server returned success:false");
+
+        Object.entries(AUDIO_TYPE_MAP).forEach(([audioType, elementId]) => {
+          const el = document.getElementById(elementId);
+          if (!el) return;
+
+          const entry = json.audio?.[audioType];
+
+          if (entry?.data && entry.data.length > 0) {
+            // Database has a custom sound — use it directly as a data-URL
+            el.src = entry.data;
+            el.preload = "auto";
+          } else {
+            // Nothing uploaded yet — fall back to the bundled file
+            const fallback = el.dataset.fallback;
+            if (fallback) {
+              el.src = fallback;
+              el.preload = "auto";
+            }
+          }
+        });
+
+      } catch (e) {
+        console.warn("Could not load global audio; using bundled fallbacks.", e);
+
+        // On any error, make sure every element at least has its fallback src
+        Object.values(AUDIO_TYPE_MAP).forEach((elementId) => {
+          const el = document.getElementById(elementId);
+          if (el && !el.src && el.dataset.fallback) {
+            el.src = el.dataset.fallback;
+            el.preload = "auto";
+          }
+        });
+      }
+    }
 
     // Convert date strings to proper format if needed
     employees = employees.map(employee => {
@@ -419,7 +481,6 @@ try {
 
       renderEmployees(filteredEmployees);
 
-      // ✅ AUTO-CLEAR AFTER SUCCESSFUL SEARCH
       if (hasSearchCriteria) {
         document.getElementById("search_qr").value = "";
       }
@@ -585,8 +646,9 @@ try {
 
     // Initialize the page
     document.addEventListener('DOMContentLoaded', function() {
+      loadGlobalAudio();
       updateStats();
-      renderEmployees(); // This will show the default blank state
+      renderEmployees();
 
       // Add real-time search
       const searchInputs = document.querySelectorAll('#searchForm input, #searchForm select');

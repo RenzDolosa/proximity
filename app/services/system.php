@@ -587,10 +587,10 @@ if ($databaseConnected) {
     </div>
   </div>
 
-  <audio id="successSound" src="../../resource/assets/sounds/success.mp3" preload="auto"></audio>
-  <audio id="noResultSound" src="../../resource/assets/sounds/noResultsFound.mp3" preload="auto"></audio>
-  <audio id="warningSound" src="../../resource/assets/sounds/ohh-ow.mp3" preload="auto"></audio>
-  <audio id="inactiveSound" src="../../resource/assets/sounds/inactive.mp3" preload="auto"></audio>
+  <audio id="successSound" data-fallback="../../../resource/assets/sounds/success.mp3" preload="none"></audio>
+  <audio id="noResultSound" data-fallback="../../../resource/assets/sounds/noResultsFound.mp3" preload="none"></audio>
+  <audio id="warningSound" data-fallback="../../../resource/assets/sounds/ohh-ow.mp3" preload="none"></audio>
+  <audio id="inactiveSound" data-fallback="../../../resource/assets/sounds/inactive.mp3" preload="none"></audio>
 
   <button class="filter-fab" id="filterFab" onclick="toggleDrawer()">
     <i class="fas fa-sliders-h"></i> Filters

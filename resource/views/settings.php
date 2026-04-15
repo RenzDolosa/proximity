@@ -443,70 +443,15 @@ $audioIconMap = [
       <div>
         <div class="card">
           <div class="card-header">
-            <span class="card-title"><i class="fas fa-volume-up" style="color:#6366f1;margin-right:6px;"></i>Audio Settings</span>
+            <span class="card-title">
+              <i class="fas fa-volume-up" style="color:#6366f1;margin-right:6px;"></i>
+              Audio Settings
+              <span style="font-size:10px;color:#64748b;font-weight:400;margin-left:6px;">(Global)</span>
+            </span>
           </div>
-          <div class="card-body">
-
-            <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">
-              Upload custom audio for each system event. Supported: MP3, WAV, OGG, AAC — max 5 MB each.
-            </p>
-
-            <form method="POST" enctype="multipart/form-data" id="audioForm">
-              <div class="audio-grid">
-                <?php foreach (AUDIO_TYPES as $inputKey => $dbColumn):
-                  $hasFile  = !empty($currentAudio[$dbColumn]);
-                  $filename = $hasFile ? basename($currentAudio[$dbColumn]) : null;
-                  $webPath  = $hasFile ? '../' . htmlspecialchars($currentAudio[$dbColumn], ENT_QUOTES) : null;
-                  $iconData = $audioIconMap[$dbColumn] ?? ['icon' => 'fa-volume-up', 'color' => '#64748b'];
-                ?>
-                  <div class="audio-card">
-                    <div class="audio-card-top">
-                      <div class="audio-card-label">
-                        <i class="fas <?= $iconData['icon'] ?>" style="color:<?= $iconData['color'] ?>;font-size:14px;"></i>
-                        <?= htmlspecialchars(audioLabel($inputKey), ENT_QUOTES) ?>
-                      </div>
-                      <?php if ($hasFile): ?>
-                        <span class="badge badge-ok">Uploaded</span>
-                      <?php else: ?>
-                        <span class="badge badge-none">None</span>
-                      <?php endif; ?>
-                    </div>
-
-                    <?php if ($hasFile): ?>
-                      <audio controls preload="none">
-                        <source src="<?= $webPath ?>">
-                      </audio>
-                      <div class="audio-actions">
-                        <label for="audio_<?= $inputKey ?>" class="file-upload-label">
-                          <i class="fas fa-file-audio"></i> Replace
-                        </label>
-                        <a href="delete_audio.php?type=<?= urlencode($dbColumn) ?>&token=<?= htmlspecialchars($_SESSION['delete_audio_token'], ENT_QUOTES) ?>"
-                          class="remove-audio"
-                          onclick="return confirm('Remove <?= htmlspecialchars(audioLabel($inputKey), ENT_QUOTES) ?>?')">
-                          <i class="fas fa-times-circle"></i> Remove
-                        </a>
-                      </div>
-                    <?php else: ?>
-                      <label for="audio_<?= $inputKey ?>" class="file-upload-label">
-                        <i class="fas fa-file-audio"></i> Select audio file
-                      </label>
-                    <?php endif; ?>
-
-                    <input type="file"
-                      id="audio_<?= $inputKey ?>"
-                      name="audio_<?= $inputKey ?>"
-                      accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/webm,audio/aac"
-                      style="display:none;">
-                    <div class="file-chosen" id="chosen_<?= $inputKey ?>"></div>
-                  </div>
-                <?php endforeach; ?>
-              </div>
-
-              <button type="submit" name="update_audio" class="btn-primary" style="margin-top:16px;" id="saveBtn">
-                <i class="fas fa-save"></i> Save Audio Settings
-              </button>
-            </form>
-
+          <div class="card-body" id="global-audio-card-body">
+            <!-- Populated by global_audio_settings.js -->
+            <div style="font-size:12px;color:var(--text-muted);">Loading audio settings…</div>
           </div>
         </div>
       </div>
@@ -514,17 +459,8 @@ $audioIconMap = [
     </div><!-- /.two-col -->
   </div><!-- /.page-body -->
 
-  <script>
-    window.AUDIO_SETTINGS = <?= json_encode([
-                              'success'    => $currentAudio['success_audio_path']    ? '../' . $currentAudio['success_audio_path']    : null,
-                              'not_found'  => $currentAudio['not_found_audio_path']  ? '../' . $currentAudio['not_found_audio_path']  : null,
-                              'inactive'   => $currentAudio['inactive_audio_path']   ? '../' . $currentAudio['inactive_audio_path']   : null,
-                              'violations' => $currentAudio['violations_audio_path'] ? '../' . $currentAudio['violations_audio_path'] : null,
-                            ], JSON_UNESCAPED_SLASHES) ?>;
-  </script>
-
   <script src="../js/btn.js"></script>
-  <script src="../js/aud.js"></script>
+  <script src="../js/global_audio_settings.js"></script>
   <script src="../js/req.js"></script>
   <script src="../js/loading.js"></script>
 

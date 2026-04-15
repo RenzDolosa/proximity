@@ -11,11 +11,70 @@ let totalPages = 1;
 
 let currentAudio = null;
 
-// FILTER STATE - Track active filters
 let activeFilters = {};
+
+// ── Global-audio endpoint ─────────────────────────────────────────
+const GLOBAL_AUDIO_ENDPOINT = "global_audio.php";
+
+// Maps global_audio_settings.audio_type  →  <audio> element ID
+const AUDIO_TYPE_MAP = {
+  success: "successSound",
+  not_found: "noResultSound",
+  violations: "warningSound",
+  inactive: "inactiveSound",
+};
+
+// ─────────────────────────────────────────────────────────────────
+//  Load global audio from DB; fall back to bundled files if absent
+// ─────────────────────────────────────────────────────────────────
+async function loadGlobalAudio() {
+  try {
+    const res = await fetch(GLOBAL_AUDIO_ENDPOINT, {
+      credentials: "same-origin",
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+
+    if (!json.success) throw new Error("Server returned success:false");
+
+    Object.entries(AUDIO_TYPE_MAP).forEach(([audioType, elementId]) => {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+
+      const entry = json.audio?.[audioType];
+
+      if (entry?.data && entry.data.length > 0) {
+        // Database has a custom sound — use it directly as a data-URL
+        el.src = entry.data;
+        el.preload = "auto";
+      } else {
+        // Nothing uploaded yet — fall back to the bundled file
+        const fallback = el.dataset.fallback;
+        if (fallback) {
+          el.src = fallback;
+          el.preload = "auto";
+        }
+      }
+    });
+  } catch (e) {
+    console.warn("Could not load global audio; using bundled fallbacks.", e);
+
+    // On any error, make sure every element at least has its fallback src
+    Object.values(AUDIO_TYPE_MAP).forEach((elementId) => {
+      const el = document.getElementById(elementId);
+      if (el && !el.src && el.dataset.fallback) {
+        el.src = el.dataset.fallback;
+        el.preload = "auto";
+      }
+    });
+  }
+}
 
 // Initialize the application
 document.addEventListener("DOMContentLoaded", function () {
+  loadGlobalAudio();
   loadEmployees();
   setupEventListeners();
   updateDeleteButtonState();
@@ -436,20 +495,22 @@ async function renderEmployeeTable() {
             <td class="Col7">
               <div style="display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;justify-content:center;">
 
-                ${employee.violation && employee.violation.trim()
-                  ? `<button
-                      onclick="openViolationPopup('${employee.fullname.replace(/'/g, "\\'")}', \`${employee.violation.replace(/`/g, "\\`")}\`)"
+                ${
+                  employee.violation && employee.violation.trim()
+                    ? `<button
+                      onclick="openViolationPopup('${employee.fullname.replace(/'/g, "\\'")}', \`${employee.violation.replace(/`/g, "\\`")}\`, '${employee.id}')"
                       style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
                         font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
                         border:0.5px solid #f59e0b;border-radius:6px;
                         background:#fffbeb;color:#b45309;">
                       &#9888; See more
                     </button>`
-                  : `<span style="color:#aaa;font-size:11px;font-style:italic;">None</span>`
+                    : `<span style="color:#aaa;font-size:11px;font-style:italic;">None</span>`
                 }
 
-                ${parseInt(employee.violation_count) > 0
-                  ? `<button
+                ${
+                  parseInt(employee.violation_count) > 0
+                    ? `<button
                       onclick="openViolationsModal('${employee.id}', '${employee.fullname.replace(/'/g, "\\'")}')"
                       style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
                         font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
@@ -457,7 +518,7 @@ async function renderEmployeeTable() {
                         background:#fff5f5;color:#e53e3e;">
                       <i class="fas fa-exclamation-triangle" style="font-size:10px;"></i>
                     </button>`
-                  : ''
+                    : ""
                 }
 
               </div>
@@ -1230,9 +1291,23 @@ async function openViolationsModal(employeeId, fullname) {
   };
 }
 
-function openViolationPopup(fullname, violation) {
+function openViolationPopup(fullname, violation, employeeId) {
   const existing = document.getElementById("violationPopupOverlay");
   if (existing) existing.remove();
+
+  const employee =
+    employees.find((emp) => String(emp.id) === String(employeeId)) || {};
+
+  const params = new URLSearchParams({
+    emp: employeeId,
+    fullname: fullname,
+    brand: employee?.brand || "",
+    position: employee?.position || "",
+    shift: employee?.shift || "",
+    status: employee?.status || "",
+    violation: violation,
+    ts: new Date().toISOString(),
+  });
 
   const overlay = document.createElement("div");
   overlay.id = "violationPopupOverlay";
@@ -1240,6 +1315,8 @@ function openViolationPopup(fullname, violation) {
     position:fixed;inset:0;background:rgba(0,0,0,0.35);
     display:flex;align-items:center;justify-content:center;z-index:9999;
   `;
+
+  const reportUrl = "incident_report.php?" + params.toString();
 
   overlay.innerHTML = `
     <div style="background:#fff;border:0.5px solid #e2e8f0;border-radius:12px;
@@ -1249,7 +1326,14 @@ function openViolationPopup(fullname, violation) {
         <button onclick="document.getElementById('violationPopupOverlay').remove()"
           style="background:none;border:none;font-size:16px;cursor:pointer;color:#94a3b8;line-height:1;padding:0;">&#x2715;</button>
       </div>
-      <div style="font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">${violation}</div>
+      <div style="font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;margin-bottom:12px;">${violation}</div>
+      <button onclick="window.open('${reportUrl}', '_blank')"
+        style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;
+          font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;
+          border:0.5px solid #cbd5e1;border-radius:6px;
+          background:#f8fafc;color:#1e293b;">
+        &#128438; View Attachment
+      </button>
     </div>
   `;
 

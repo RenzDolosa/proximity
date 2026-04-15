@@ -8,8 +8,18 @@ let currentResults = [];
 let displayTimeout;
 let currentAudio = null;
 let activeController = null;
-
 let cachedUserId = null;
+
+// ── Global-audio endpoint (relative to the scan controller page) ─────────
+const GLOBAL_AUDIO_ENDPOINT = "../../services/global_audio.php";
+
+// Maps global_audio_settings.audio_type  →  <audio> element ID
+const AUDIO_TYPE_MAP = {
+  success:    "successSound",
+  not_found:  "noResultSound",
+  violations: "warningSound",
+  inactive:   "inactiveSound",
+};
 
 async function fetchUserId() {
   try {
@@ -22,6 +32,55 @@ async function fetchUserId() {
     }
   } catch {
     cachedUserId = "default";
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  Load global audio from DB; fall back to bundled files if absent
+// ─────────────────────────────────────────────────────────────────
+async function loadGlobalAudio() {
+  try {
+    const res = await fetch(GLOBAL_AUDIO_ENDPOINT, {
+      credentials: "same-origin",
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+
+    if (!json.success) throw new Error("Server returned success:false");
+
+    Object.entries(AUDIO_TYPE_MAP).forEach(([audioType, elementId]) => {
+      const el    = document.getElementById(elementId);
+      if (!el) return;
+
+      const entry = json.audio?.[audioType];
+
+      if (entry?.data && entry.data.length > 0) {
+        // Database has a custom sound — use it directly as a data-URL
+        el.src     = entry.data;
+        el.preload = "auto";
+      } else {
+        // Nothing uploaded yet — fall back to the bundled file
+        const fallback = el.dataset.fallback;
+        if (fallback) {
+          el.src     = fallback;
+          el.preload = "auto";
+        }
+      }
+    });
+
+  } catch (e) {
+    console.warn("Could not load global audio; using bundled fallbacks.", e);
+
+    // On any error, make sure every element at least has its fallback src
+    Object.values(AUDIO_TYPE_MAP).forEach((elementId) => {
+      const el = document.getElementById(elementId);
+      if (el && !el.src && el.dataset.fallback) {
+        el.src     = el.dataset.fallback;
+        el.preload = "auto";
+      }
+    });
   }
 }
 
@@ -96,16 +155,16 @@ function stopCurrentAudio() {
 function playSound(id) {
   stopCurrentAudio();
   const sound = document.getElementById(id);
-  if (!sound) return;
+  if (!sound || !sound.src) return;       // guard: src not yet set
   currentAudio = sound;
   sound.currentTime = 0;
   sound.play().catch((e) => console.log("Audio play error:", e));
 }
 
-const playSuccessSound = () => playSound("successSound");
+const playSuccessSound  = () => playSound("successSound");
 const playInactiveSound = () => playSound("inactiveSound");
 const playNoResultSound = () => playSound("noResultSound");
-const playWarningSound = () => playSound("warningSound");
+const playWarningSound  = () => playSound("warningSound");
 
 // ─────────────────────────────────────────────────────────────────
 //  Input-block helper
@@ -127,7 +186,6 @@ function blockSearchInput(durationMs = 1000) {
 }
 
 // ── Matches any non-whitespace string of 4+ chars as a potential QR code ──
-// Adjust min length to match your actual QR code format
 const QR_PATTERN = /^[^\s]{4,}$/;
 
 async function searchEmployees(query) {
@@ -136,9 +194,7 @@ async function searchEmployees(query) {
   const signal = activeController.signal;
 
   try {
-    // Always attempt exact QR match first via POST
     const isLikelyQR = QR_PATTERN.test(query);
-
     let response, data;
 
     if (isLikelyQR) {
@@ -156,16 +212,13 @@ async function searchEmployees(query) {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       data = await response.json();
 
-      // If exact QR match found → render and stop
       if (data.success && data.data) {
-        const employee = data.data;
-        currentResults = [employee];
+        currentResults = [data.data];
         renderResults(currentResults, query);
         return;
       }
     }
 
-    // FALLBACK PATH: fuzzy name/position/brand search (GET)
     const url = `../../services/scanTest_search_backend.php?q=${encodeURIComponent(query)}`;
     response = await fetch(url, {
       method: "GET",
@@ -181,7 +234,6 @@ async function searchEmployees(query) {
       currentResults = data.data;
       renderResults(currentResults, query);
     } else {
-      // Nothing found at all
       currentResults = [];
       document.getElementById("message").innerHTML =
         '<p class="no-results-message">No results found. 🔍</p>';
@@ -202,9 +254,9 @@ async function searchEmployees(query) {
 function renderResults(results) {
   stopCurrentAudio();
 
-  const messageEl = document.getElementById("message");
+  const messageEl    = document.getElementById("message");
   const resultsTable = document.getElementById("resultsTable");
-  const resultsBody = document.getElementById("resultsBody");
+  const resultsBody  = document.getElementById("resultsBody");
 
   if (displayTimeout) {
     clearTimeout(displayTimeout);
@@ -215,10 +267,10 @@ function renderResults(results) {
   resultsTable.style.display = "block";
 
   const hasViolations = results.some(
-    (e) => e.violation && e.violation.trim() !== "",
+    (e) => e.violation && e.violation.trim() !== ""
   );
   const hasInactive = results.some(
-    (e) => (e.status || "").toLowerCase() === "inactive",
+    (e) => (e.status || "").toLowerCase() === "inactive"
   );
 
   resultsBody.innerHTML = results.map(buildCard).join("");
@@ -226,12 +278,11 @@ function renderResults(results) {
   displayTimeout = setTimeout(() => {
     resultsTable.style.display = "none";
     resultsBody.innerHTML = "";
-    // background();
   }, 10000);
 
-  if (hasViolations) playWarningSound();
+  if (hasViolations)   playWarningSound();
   else if (hasInactive) playInactiveSound();
-  else playSuccessSound();
+  else                  playSuccessSound();
 
   blockSearchInput();
 }
@@ -240,12 +291,12 @@ function renderResults(results) {
 //  Card builder
 // ─────────────────────────────────────────────────────────────────
 function buildCard(employee) {
-  const fullname = escapeHtml(employee.fullname || "Unknown");
-  const position = escapeHtml(employee.position || "Unknown");
-  const brand = escapeHtml(employee.brand || "N/A");
-  const status = escapeHtml(employee.status || "Unknown");
-  const shift = escapeHtml(employee.shift || "N/A");
-  const violation = employee.violation ? escapeHtml(employee.violation) : null;
+  const fullname   = escapeHtml(employee.fullname  || "Unknown");
+  const position   = escapeHtml(employee.position  || "Unknown");
+  const brand      = escapeHtml(employee.brand     || "N/A");
+  const status     = escapeHtml(employee.status    || "Unknown");
+  const shift      = escapeHtml(employee.shift     || "N/A");
+  const violation  = employee.violation ? escapeHtml(employee.violation) : null;
   const checkStatus = "Test Scan";
 
   const initials = (employee.fullname || "UN")
@@ -279,11 +330,14 @@ function buildCard(employee) {
         </div>
       </div>
       <div class="${violation ? "with-violation" : "without-violation"}">
-        <div class="div-padding"><p>Remarks: ${violation || "None"}</p></div> <!-- Violation if any -->
+        <div class="div-padding"><p>Remarks: ${violation || "None"}</p></div>
       </div>
     </div>`;
 }
 
+// ─────────────────────────────────────────────────────────────────
+//  Utilities
+// ─────────────────────────────────────────────────────────────────
 function escapeHtml(text) {
   if (typeof text !== "string") return String(text ?? "");
   const d = document.createElement("div");
@@ -301,7 +355,11 @@ function showMessage(text, type = "info") {
     }, 1000);
 }
 
+// ─────────────────────────────────────────────────────────────────
+//  Init
+// ─────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
   fetchUserId();
+  loadGlobalAudio();
   setupEventListeners();
 });
