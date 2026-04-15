@@ -494,24 +494,10 @@ async function renderEmployeeTable() {
             <td>${employee.shift}</td>
             <td class="Col7">
               <div style="display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;justify-content:center;">
-
                 ${
                   employee.violation && employee.violation.trim()
                     ? `<button
                       onclick="openViolationPopup('${employee.fullname.replace(/'/g, "\\'")}', \`${employee.violation.replace(/`/g, "\\`")}\`, '${employee.id}')"
-                      style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
-                        font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
-                        border:0.5px solid #f59e0b;border-radius:6px;
-                        background:#fffbeb;color:#b45309;">
-                      &#9888; See more
-                    </button>`
-                    : `<span style="color:#aaa;font-size:11px;font-style:italic;">None</span>`
-                }
-
-                ${
-                  parseInt(employee.violation_count) > 0
-                    ? `<button
-                      onclick="openViolationsModal('${employee.id}', '${employee.fullname.replace(/'/g, "\\'")}')"
                       style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
                         font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
                         border:0.5px solid #fca5a5;border-radius:6px;
@@ -520,7 +506,18 @@ async function renderEmployeeTable() {
                     </button>`
                     : ""
                 }
-
+                ${
+                  parseInt(employee.violation_count) > 0
+                    ? `<button
+                      onclick="openViolationsModal('${employee.id}', '${employee.fullname.replace(/'/g, "\\'")}')"
+                      style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
+                        font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
+                        border:0.5px solid #f59e0b;border-radius:6px;
+                        background:#fffbeb;color:#b45309;">
+                      &#9888; See more
+                    </button>`
+                    : `<span style="color:#aaa;font-size:11px;font-style:italic;">None</span>`
+                }
               </div>
             </td>
             <td class="Col8">${
@@ -1326,14 +1323,16 @@ function openViolationPopup(fullname, violation, employeeId) {
         <button onclick="document.getElementById('violationPopupOverlay').remove()"
           style="background:none;border:none;font-size:16px;cursor:pointer;color:#94a3b8;line-height:1;padding:0;">&#x2715;</button>
       </div>
-      <div style="font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;margin-bottom:12px;">${violation}</div>
-      <button onclick="window.open('${reportUrl}', '_blank')"
-        style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;
-          font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;
-          border:0.5px solid #cbd5e1;border-radius:6px;
-          background:#f8fafc;color:#1e293b;">
-        &#128438; View Attachment
-      </button>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+        <div style="font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;flex:1;">${violation}</div>
+        <button onclick="window.open('${reportUrl}', '_blank')"
+          style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;
+            font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;
+            border:0.5px solid #cbd5e1;border-radius:6px;
+            background:#f8fafc;color:#1e293b;">
+          &#128438; View Attachment
+        </button>
+      </div>
     </div>
   `;
 

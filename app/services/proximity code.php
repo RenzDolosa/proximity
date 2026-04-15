@@ -210,16 +210,16 @@ if ($databaseConnected) {
   <div id="employeeModal" class="modal">
     <div class="modal-content">
       <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
-      <h2 id="modalTitle">Add Proximity Code</h2>
+      <h2 id="modalTitle" style="padding-bottom: 10px;">Add Proximity Code</h2>
       <form id="employeeForm" enctype="multipart/form-data">
         <input type="hidden" id="employee_id" name="id">
-        <div class="form-group">
-          <label for="qr_code">Proximity Code</label>
-          <input type="text" id="qr_code" name="qr_code" placeholder="Enter proximity code or leave blank to auto-generate" autocomplete="off">
+        <div class="form-group fl-group">
+          <input type="text" id="qr_code" name="qr_code" placeholder=" " autocomplete="off">
+          <label class="fl-label" for="qr_code">Proximity Code <span style="color:#e74c3c">*</span></label>
         </div>
-        <div class="form-group" style="padding-top: 10px;">
-          <label>Status</label>
-          <div style="display:flex; align-items:center; gap:12px; margin-top:6px;">
+        <div class="form-group">
+          <div style="display:flex; align-items: center; gap: 12px; margin-top: 6px;">
+            <span style="font-weight:500;">Status</span>
             <label class="toggle-switch">
               <input type="checkbox" id="is_active_toggle" name="is_active_toggle" checked>
               <span class="toggle-slider"></span>

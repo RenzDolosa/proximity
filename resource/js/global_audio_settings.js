@@ -79,34 +79,34 @@
       : `<span class="badge badge-none">None</span>`;
 
     const audioEl = hasAudio
-      ? `<audio controls preload="none" style="width:100%;margin:6px 0;">
+      ? `<audio controls preload="none" style="flex:1;min-width:0;height:32px;">
            <source src="${dataUrl}" type="${mime || "audio/mpeg"}">
          </audio>`
-      : "";
+      : `<div style="flex:1;"></div>`;
 
     const removeBtn = hasAudio
-      ? `<button class="remove-audio" data-key="${key}" style="margin-top:4px;">
+      ? `<button class="remove-audio" data-key="${key}">
            <i class="fas fa-times-circle"></i> Remove
          </button>`
       : "";
 
     return `
-      <div class="audio-card-top">
-        <div class="audio-card-label">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:nowrap;">
+        <div class="audio-card-label" style="display:flex;align-items:center;gap:6px;white-space:nowrap;min-width:130px;">
           <i class="fas ${icon}" style="color:${color};font-size:14px;"></i>
           ${label}
         </div>
+        ${audioEl}
         ${badge}
+        <label class="file-upload-label" for="ga-input-${key}" style="margin:0;white-space:nowrap;cursor:pointer;">
+          <i class="fas fa-file-audio"></i> ${hasAudio ? "Replace" : "Select file"}
+        </label>
+        <input type="file" id="ga-input-${key}" data-key="${key}"
+               accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/webm,audio/aac"
+               style="display:none;">
+        ${removeBtn}
       </div>
-      ${audioEl}
-      <label class="file-upload-label" for="ga-input-${key}" style="margin-top:6px;">
-        <i class="fas fa-file-audio"></i> ${hasAudio ? "Replace" : "Select audio file"}
-      </label>
-      <input type="file" id="ga-input-${key}" data-key="${key}"
-             accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/webm,audio/aac"
-             style="display:none;">
-      <div class="file-chosen" id="ga-chosen-${key}"></div>
-      ${removeBtn}`;
+      <div class="file-chosen" id="ga-chosen-${key}" style="font-size:11px;color:#64748b;margin-top:2px;padding-left:136px;"></div>`;
   }
 
   // ── Load from server ──────────────────────────────────────────────────────

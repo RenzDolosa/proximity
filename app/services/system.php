@@ -134,9 +134,6 @@ if ($databaseConnected) {
               <option value="">Default: ALL</option>
             </select>
           </div>
-          <!-- <div class="search-group">
-            <input type="text" id="search_date" name="created_at" placeholder="Date">
-          </div> -->
           <div class="search-group" style="position: relative;">
             <input type="date"
               id="search_date"
@@ -232,7 +229,7 @@ if ($databaseConnected) {
               <th>Brand / Department</th>
               <th>Status</th>
               <th>Shift</th>
-              <th class="Col7">Remarks</th> <!-- Violation if any -->
+              <th class="Col7">Remarks</th>
               <th class="Col8">Image</th>
               <th class="Col9">Proximity Code</th>
               <th>Register</th>
@@ -264,63 +261,72 @@ if ($databaseConnected) {
   <div id="employeeModal" class="modal">
     <div class="modal-content">
       <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
-      <h2 id="modalTitle">Add Employee</h2>
+      <h2 id="modalTitle" style="padding-bottom: 10px;">Add Employee</h2>
       <form id="employeeForm" enctype="multipart/form-data">
         <input type="hidden" id="original_id" name="original_id" value="">
         <input type="hidden" id="user_id" name="user_id" value="<?php echo htmlspecialchars($_SESSION['user_id'] ?? ''); ?>">
         <div class="form-row">
-          <div class="form-group">
-            <label for="employee_id">EMPID <span style="color:#e74c3c">*</span></label>
-            <input type="text" id="employee_id" name="id" placeholder="Enter employee ID">
+          <div class="form-group fl-group">
+            <input type="text" id="employee_id" name="id" placeholder=" " autocomplete="off">
+            <label class="fl-label" for="employee_id">EMPID <span style="color:#e74c3c">*</span></label>
           </div>
-          <div class="form-group">
-            <label for="fullname">Fullname <span style="color:#e74c3c">*</span></label>
-            <input type="text" id="fullname" name="fullname" placeholder="Enter fullname">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="position">Position <span style="color:#e74c3c">*</span></label>
-            <input type="text" id="position" name="position" placeholder="Enter position">
-          </div>
-          <div class="form-group">
-            <label for="brand">Brand / Department <span style="color:#e74c3c">*</span></label>
-            <input type="text" id="brand" name="brand" placeholder="Enter brand / department">
+          <div class="form-group fl-group">
+            <input type="text" id="fullname" name="fullname" placeholder=" " autocomplete="off">
+            <label class="fl-label" for="fullname">Fullname <span style="color:#e74c3c">*</span></label>
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group">
-            <label for="shift">Shift <span style="color:#e74c3c">*</span></label>
-            <select id="shift" name="shift">
+          <div class="form-group fl-group">
+            <input type="text" id="position" name="position" placeholder=" " autocomplete="off">
+            <label class="fl-label" for="position">Position <span style="color:#e74c3c">*</span></label>
+          </div>
+          <div class="form-group fl-group">
+            <input type="text" id="brand" name="brand" placeholder=" " autocomplete="off">
+            <label class="fl-label" for="brand">Brand / Department <span style="color:#e74c3c">*</span></label>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group fl-group">
+            <select id="shift" name="shift" onchange="this.classList.toggle('has-value', this.value !== '')">
               <option value="">Select Shift</option>
               <option value="Day Shift">Day Shift</option>
               <option value="Night Shift">Night Shift</option>
               <option value="Graveyard Shift">Graveyard Shift</option>
             </select>
+            <label class="fl-label" for="shift">Shift <span style="color:#e74c3c">*</span></label>
           </div>
-          <div class="form-group">
-            <label for="status">Status</label>
-            <select id="status" name="status">
+          <div class="form-group fl-group">
+            <select id="status" name="status" class="has-value" onchange="this.classList.toggle('has-value', this.value !== '')">
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
             </select>
+            <label class="fl-label" for="status">Status</label>
           </div>
         </div>
+
         <div class="form-layout">
           <div class="left-column">
-            <div class="form-group">
-              <label for="qr_code">Proximity Code</label>
-              <input type="text" id="qr_code" name="qr_code" placeholder="Enter proximity code or leave blank to auto-generate" autocomplete="off">
+            <div class="form-group fl-group">
+              <input type="text" id="qr_code" name="qr_code" placeholder=" " autocomplete="off">
+              <label class="fl-label" for="qr_code">Proximity Code</label>
             </div>
-            <div class="form-group">
-              <label for="violation">Violation</label>
-              <textarea id="violation" name="violation" rows="3" placeholder="Kindly specify any violations, if applicable."></textarea>
+            <div class="form-group fl-group">
+              <textarea id="violation" name="violation" rows="3" placeholder="&#10;Kindly specify any violations, if applicable."></textarea>
+              <script>
+                const violation = document.getElementById('violation');
+                violation.addEventListener('focus', function() {
+                  this.placeholder = 'Kindly specify any violations, if applicable.';
+                });
+                violation.addEventListener('blur', function() {
+                  this.placeholder = '\nKindly specify any violations, if applicable.';
+                });
+              </script>
+              <label class="fl-label" for="violation">Violation</label>
             </div>
           </div>
           <div class="right-column">
-            <div class="form-group">
-              <label for="image">Employee Image</label>
-              <div class="file-upload-wrapper">
+            <div class="form-group fl-group">
+              <div class="file-upload-wrapper" style="margin-top: 0.5rem;">
                 <div class="file-upload">
                   <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/gif,image/webp">
                   <label for="image" class="file-upload-label">
@@ -331,6 +337,7 @@ if ($databaseConnected) {
                   <i class="fas fa-camera"></i>
                 </button>
               </div>
+              <label class="fl-label" style="top: 0; transform: translateY(-50%); font-size: 0.75rem; color: #667eea;">Employee Image</label>
             </div>
           </div>
         </div>
@@ -355,7 +362,6 @@ if ($databaseConnected) {
 
       <div class="camera-modal-body">
 
-        <!-- Camera selector + status -->
         <div class="camera-selextor-grid">
           <div class="camera-selector-container">
             <label for="cameraSelector">
@@ -370,28 +376,21 @@ if ($databaseConnected) {
           </div>
         </div>
 
-        <!-- Live video + final preview canvas share this wrapper -->
         <div class="camera-container">
           <video id="cameraStream" playsinline autoplay></video>
           <canvas id="cameraPreview" style="display:none;"></canvas>
         </div>
 
-        <!--
-        Crop container — hidden until a photo is captured.
-        Cropper.js mounts on #cropImage.
-      -->
         <div id="cropContainer" style="display:none;">
           <img id="cropImage" alt="Capture for cropping" />
         </div>
 
-        <!-- Action buttons -->
         <div class="camera-controls">
           <button type="button" class="camera-btn capture"
             id="captureBtn" onclick="capturePhoto()">
             <i class="fas fa-circle"></i> Capture
           </button>
 
-          <!-- Shown while crop interface is active -->
           <button type="button" class="camera-btn apply-crop"
             id="applyCropBtn" onclick="applyCrop()" style="display:none;">
             <i class="fas fa-crop-alt"></i> Apply Crop
@@ -459,7 +458,7 @@ if ($databaseConnected) {
           <li><strong>brand/deparment</strong> - Brand/Department</li>
           <li><strong>status</strong> - Active or Inactive (default: Active)</li>
           <li><strong>shift</strong> - Day Shift, Night Shift, or Graveyard Shift (required)</li>
-          <li><strong>remarks</strong> - Any remarks (optional)</li> <!-- Violation -->
+          <li><strong>remarks</strong> - Any remarks (optional)</li>
           <li><strong>proximity code</strong> - If have Proximity Code (optional)</li>
         </ul>
         <p><em>Note: If blank, Proximity Codes will be automatically generated for each employee.</em></p>
@@ -506,7 +505,6 @@ if ($databaseConnected) {
       <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
       <h2 id="logsModalTitle"><i class="fas fa-history"></i> Access Logs</h2>
 
-      <!-- Summary cards -->
       <div style="display:flex;gap:16px;margin:16px 0;">
         <div style="flex:1;background:#d1fae5;border-radius:8px;padding:16px;text-align:center;">
           <div style="font-size:28px;font-weight:700;color:#065f46;" id="logCountIn">—</div>
@@ -522,7 +520,6 @@ if ($databaseConnected) {
         </div>
       </div>
 
-      <!-- Logs table -->
       <div style="max-height:360px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px;">
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
           <thead>
@@ -549,7 +546,6 @@ if ($databaseConnected) {
       <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
       <h2 id="violationsModalTitle"><i class="fas fa-exclamation-triangle" style="color:#e53e3e;"></i> Violation History</h2>
 
-      <!-- Summary cards -->
       <div style="display:flex;gap:16px;margin:16px 0;">
         <div style="flex:1;background:#fff5f5;border-radius:8px;padding:16px;text-align:center;">
           <div style="font-size:28px;font-weight:700;color:#c53030;" id="vioCountTotal">—</div>
@@ -565,7 +561,6 @@ if ($databaseConnected) {
         </div>
       </div>
 
-      <!-- Violations table -->
       <div style="max-height:360px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px;">
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
           <thead>
@@ -617,7 +612,6 @@ if ($databaseConnected) {
       document.getElementById('filterFab').innerHTML = '<i class="fas fa-sliders-h"></i> Filters';
     }
 
-    // Hide FAB on desktop — only needed on mobile
     function checkFab() {
       const fab = document.getElementById('filterFab');
       if (!fab) return;
@@ -626,9 +620,8 @@ if ($databaseConnected) {
     checkFab();
     window.addEventListener('resize', checkFab);
 
-    // image phone view
     (function() {
-      if (window.innerWidth > 480) return; // desktop only uses CSS hover
+      if (window.innerWidth > 480) return;
 
       let clone = null;
 
@@ -636,19 +629,16 @@ if ($databaseConnected) {
         const img = e.target.closest('.employee-image');
         if (!img) return;
 
-        e.preventDefault(); // prevent scroll while zooming
+        e.preventDefault();
 
         const rect = img.getBoundingClientRect();
         const cloneSize = 130;
 
-        // Calculate position — anchor left of the image, above center
         let left = rect.left;
         let top = rect.top - cloneSize - 8;
 
-        // If it would go off the top, show below instead
         if (top < 8) top = rect.bottom + 8;
 
-        // Don't go off right edge
         if (left + cloneSize > window.innerWidth - 8) {
           left = window.innerWidth - cloneSize - 8;
         }

@@ -298,7 +298,6 @@ function showAutoUpdateNotification() {
 // Auto-load employees (silent update) - Fixed error handling
 async function loadEmployeesAuto(filters = {}) {
   try {
-
     // 🆕 If no filters passed, check for active filters in form
     if (Object.keys(filters).length === 0 && hasActiveFilters()) {
       filters = getActiveFilters();
@@ -755,17 +754,20 @@ async function renderEmployeeTable() {
               }</span></td>
               <td>${employee.shift || "N/A"}</td>
               <td class="Col7">
-                ${employee.violation && employee.violation.trim()
-                  ? `<button
-                      onclick="openViolationPopup('${employee.fullname.replace(/'/g, "\\'")}', \`${employee.violation.replace(/`/g, '\\`')}\`)"
-                      style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;
-                        font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
-                        border:0.5px solid #f59e0b;border-radius:6px;
-                        background:#fffbeb;color:#b45309;">
-                      &#9888; See more...
-                    </button>`
-                  : `<span style="color:#aaa;font-size:12px;font-style:italic;">None</span>`
-                }
+                <div style="display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;justify-content:center;">
+                  ${
+                    employee.violation && employee.violation.trim()
+                      ? `<button
+                        onclick="openViolationPopup('${employee.fullname.replace(/'/g, "\\'")}', \`${employee.violation.replace(/`/g, "\\`")}\`, '${employee.id}')"
+                        style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
+                          font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
+                          border:0.5px solid #fca5a5;border-radius:6px;
+                          background:#fff5f5;color:#e53e3e;">
+                        <i class="fas fa-exclamation-triangle" style="font-size:10px;"></i>
+                      </button>`
+                      : `<span style="color:#aaa;font-size:11px;font-style:italic;">None</span>`
+                  }
+                </div>
               </td>
               <td class="Col8">${
                 imageUrl
@@ -1308,16 +1310,32 @@ async function deleteFilteredEmployees() {
   }
 }
 
-function openViolationPopup(fullname, violation) {
-  const existing = document.getElementById('violationPopupOverlay');
+function openViolationPopup(fullname, violation, employeeId) {
+  const existing = document.getElementById("violationPopupOverlay");
   if (existing) existing.remove();
 
-  const overlay = document.createElement('div');
-  overlay.id = 'violationPopupOverlay';
+  const employee =
+    employees.find((emp) => String(emp.id) === String(employeeId)) || {};
+
+  const params = new URLSearchParams({
+    emp: employeeId,
+    fullname: fullname,
+    brand: employee?.brand || "",
+    position: employee?.position || "",
+    shift: employee?.shift || "",
+    status: employee?.status || "",
+    violation: violation,
+    ts: new Date().toISOString(),
+  });
+
+  const overlay = document.createElement("div");
+  overlay.id = "violationPopupOverlay";
   overlay.style.cssText = `
     position:fixed;inset:0;background:rgba(0,0,0,0.35);
     display:flex;align-items:center;justify-content:center;z-index:9999;
   `;
+
+  const reportUrl = "incident_report.php?" + params.toString();
 
   overlay.innerHTML = `
     <div style="background:#fff;border:0.5px solid #e2e8f0;border-radius:12px;
@@ -1327,11 +1345,20 @@ function openViolationPopup(fullname, violation) {
         <button onclick="document.getElementById('violationPopupOverlay').remove()"
           style="background:none;border:none;font-size:16px;cursor:pointer;color:#94a3b8;line-height:1;padding:0;">&#x2715;</button>
       </div>
-      <div style="font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">${violation}</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+        <div style="font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;flex:1;">${violation}</div>
+        <button onclick="window.open('${reportUrl}', '_blank')"
+          style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;
+            font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;
+            border:0.5px solid #cbd5e1;border-radius:6px;
+            background:#f8fafc;color:#1e293b;">
+          &#128438; View Attachment
+        </button>
+      </div>
     </div>
   `;
 
-  overlay.addEventListener('click', (e) => {
+  overlay.addEventListener("click", (e) => {
     if (e.target === overlay) overlay.remove();
   });
 
@@ -1454,7 +1481,11 @@ function populateFilter(employeeList) {
 }
 
 // Load employees with improved error handling
-async function loadEmployees(filters = {}, preservePage = false, silent = false) {
+async function loadEmployees(
+  filters = {},
+  preservePage = false,
+  silent = false,
+) {
   try {
     if (!silent) showLoading(true);
 
