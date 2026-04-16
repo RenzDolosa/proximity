@@ -3,10 +3,11 @@
 // Function to fetch all employees data bypassing pagination
 async function fetchAllEmployeesForExport() {
   try {
-    const response = await fetch("../../app/services/ea-dtl.php?export=all", {
+    const response = await fetch("datalog_backend.php?action=get", {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
       },
     });
 
@@ -17,7 +18,7 @@ async function fetchAllEmployeesForExport() {
     const data = await response.json();
 
     if (data.success) {
-      return data.employees || [];
+      return data.data || [];
     } else {
       throw new Error(data.message || "Failed to fetch employee data");
     }
@@ -175,18 +176,18 @@ async function exportEmployeeData(employees, type = "Data") {
     employees.forEach((employee, index) => {
 
       const rowData = [
-        String(index + 1), // SN
-        String(employee.employee_id) || "", 
+        String(index + 1),                                    // SN
+        String(employee.employee_id) || "",
         toProperCase(employee.fullname) || "",
         toProperCase(employee.position) || "",
         toProperCase(employee.brand) || "",
         employee.status || "",
         employee.shift || "",
         employee.violation || "None",
-        employee.qr_code || "", // Image column is skipped
+        employee.qr_code || "",                               // Proximity Code
         formatDate(employee.access_timestamp) || "",
         employee.check_status || "",
-        employee.user_id || "",
+        employee.gate_name || employee.user_id || "",         // FIX: gate_name first, fallback to user_id
       ];
       data.push(rowData);
     });
@@ -197,8 +198,8 @@ async function exportEmployeeData(employees, type = "Data") {
 
     // Set column widths
     const colWidths = [
-      { wch: 5 }, // SN
-      { wch: 10 }, // SN
+      { wch: 5 },  // SN
+      { wch: 10 }, // EMPID
       { wch: 25 }, // Fullname
       { wch: 20 }, // Position
       { wch: 20 }, // Brand
@@ -207,7 +208,7 @@ async function exportEmployeeData(employees, type = "Data") {
       { wch: 15 }, // Violation
       { wch: 15 }, // Proximity Code
       { wch: 20 }, // Timestamp
-      { wch: 5 }, // Check Status
+      { wch: 5 },  // Check Status
       { wch: 10 }, // Gate
     ];
     ws["!cols"] = colWidths;
@@ -351,28 +352,33 @@ function exportToExcelDTL(type = "Filtered") {
     data.push(headers);
 
     // Extract data from table rows
-    rows.forEach((row, index) => {
+    // Column index map (matches renderEmployeeTable's <td> order):
+    //  0=SN, 1=EMPID, 2=Fullname, 3=Position, 4=Brand, 5=Status,
+    //  6=Shift, 7=Violation, 8=Image(skip), 9=QR, 10=Timestamp,
+    //  11=CheckStatus, 12=Gate
+    rows.forEach((row) => {
       if (row.style.display !== "none") {
         // Only export visible rows
         const cells = row.querySelectorAll("td");
         if (cells.length > 0) {
           const rowData = [
-            cells[0]?.textContent?.trim() || "", // SN
-            cells[1]?.textContent?.trim() || "", // EMPID
-            cells[2]?.textContent?.trim() || "", // Fullname
-            cells[3]?.textContent?.trim() || "", // Position
-            cells[4]?.textContent?.trim() || "", // Brand
-            cells[5]?.textContent?.trim() || "", // Status
-            cells[6]?.textContent?.trim() || "", // Shift
-            cells[7]?.textContent?.trim() || "", // Violation
+            cells[0]?.textContent?.trim() || "",   // SN
+            cells[1]?.textContent?.trim() || "",   // EMPID
+            cells[2]?.textContent?.trim() || "",   // Fullname
+            cells[3]?.textContent?.trim() || "",   // Position
+            cells[4]?.textContent?.trim() || "",   // Brand
+            cells[5]?.textContent?.trim() || "",   // Status
+            cells[6]?.textContent?.trim() || "",   // Shift
+            cells[7]?.textContent?.trim() || "",   // Violation
             (() => {
+              // Col 9 = QR code cell (col 8 = Image, skipped)
               const onclick = cells[9]?.getAttribute("onclick") || "";
               const match = onclick.match(/copyQRCode\('(.+?)'\)/);
               return match ? match[1] : "";
-            })(), // Proximity Code (skip Image column)
-            cells[10]?.textContent?.trim() || "", // Timestamp
-            cells[11]?.textContent?.trim() || "", // Check Status
-            cells[12]?.textContent?.trim() || "", // Gate
+            })(),                                  // Proximity Code
+            cells[10]?.textContent?.trim() || "",  // Timestamp
+            cells[11]?.textContent?.trim() || "",  // Check Status
+            cells[12]?.textContent?.trim() || "",  // Gate — already shows gate_name from DOM
           ];
           data.push(rowData);
         }
@@ -655,10 +661,10 @@ async function exportWithImages() {
   workbook.created = new Date();
   const worksheet = workbook.addWorksheet("Scan History");
 
-  const ROW_HEIGHT   = 55;
+  const ROW_HEIGHT    = 55;
   const IMG_COL_WIDTH = 14;
-  const IMG_PX_W     = 60;
-  const IMG_PX_H     = 48;
+  const IMG_PX_W      = 60;
+  const IMG_PX_H      = 48;
 
   // ── Column definitions (matches DTL table columns) ────────────────────────
   worksheet.columns = [
@@ -670,11 +676,11 @@ async function exportWithImages() {
     { header: "Brand / Department",   key: "brand",            width: 22 },
     { header: "Status",               key: "status",           width: 12 },
     { header: "Shift",                key: "shift",            width: 15 },
-    { header: "Remakrs",              key: "violation",        width: 20 },
+    { header: "Remarks",              key: "violation",        width: 20 },
     { header: "Proximity Code",       key: "qr_code",          width: 16 },
     { header: "Timestamp",            key: "access_timestamp", width: 22 },
     { header: "Check Status",         key: "check_status",     width: 14 },
-    { header: "Gate",                 key: "user_id",          width: 16 },
+    { header: "Gate",                 key: "gate",             width: 16 },
   ];
 
   // ── Style header row ──────────────────────────────────────────────────────
@@ -707,14 +713,14 @@ async function exportWithImages() {
     const emp = exportEmployees[i];
 
     // ── Resolve matched manpower data via QR code (same logic as renderEmployeeTable) ──
-    const qrKey         = (emp.qr_code || "").trim().toLowerCase();
-    const matchedData   = qrImageMap[qrKey] || null;
+    const qrKey       = (emp.qr_code || "").trim().toLowerCase();
+    const matchedData = qrImageMap[qrKey] || null;
 
     // Use matched manpower data for display fields when available
-    const displayEmpId  = matchedData ? String(matchedData.id)       : (emp.employee_id || "");
-    const displayName   = matchedData ? matchedData.fullname          : (emp.fullname   || "");
-    const displayPos    = matchedData ? matchedData.position          : (emp.position   || "");
-    const displayBrand  = matchedData ? matchedData.brand             : (emp.brand      || "");
+    const displayEmpId = matchedData ? String(matchedData.id)  : (emp.employee_id || "");
+    const displayName  = matchedData ? matchedData.fullname     : (emp.fullname    || "");
+    const displayPos   = matchedData ? matchedData.position     : (emp.position    || "");
+    const displayBrand = matchedData ? matchedData.brand        : (emp.brand       || "");
 
     const dataRow = worksheet.addRow({
       sn:               i + 1,
@@ -729,7 +735,7 @@ async function exportWithImages() {
       qr_code:          emp.qr_code        || "",
       access_timestamp: formatDate(emp.access_timestamp),
       check_status:     emp.check_status   || "",
-      user_id:          emp.user_id        || "",
+      gate:             emp.gate_name || emp.user_id || "",  // FIX: gate_name first, fallback to user_id
     });
 
     dataRow.height = ROW_HEIGHT;
@@ -743,7 +749,7 @@ async function exportWithImages() {
       };
     });
 
-    // ── Resolve image URL via QR match (the key fix) ──────────────────────
+    // ── Resolve image URL via QR match ────────────────────────────────────
     let imgUrl = null;
 
     if (matchedData && matchedData.image) {
