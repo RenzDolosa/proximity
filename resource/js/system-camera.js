@@ -11,7 +11,7 @@ let currentCameraLabel = null;
 let cropperInstance = null;
 
 // ─────────────────────────────────────────────────────────────
-// 1. DISCOVER CAMERAS
+//  DISCOVER CAMERAS
 // ─────────────────────────────────────────────────────────────
 async function discoverAvailableCameras() {
   try {
@@ -55,7 +55,7 @@ function populateCameraSelector() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 2. OPEN / CLOSE MODAL
+//  OPEN / CLOSE MODAL
 // ─────────────────────────────────────────────────────────────
 function openCameraModal() {
   const modal = document.getElementById("cameraModal");
@@ -74,7 +74,7 @@ function closeCameraModal() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 3. INITIALIZE CAMERA
+//  INITIALIZE CAMERA
 // ─────────────────────────────────────────────────────────────
 async function initializeCamera() {
   const video = document.getElementById("cameraStream");
@@ -84,12 +84,12 @@ async function initializeCamera() {
   if (!window.isSecureContext) {
     updateCameraStatus(
       "❌ Camera requires HTTPS. Ask your admin to enable SSL or access via localhost.",
-      "error"
+      "error",
     );
     if (captureBtn) captureBtn.disabled = true;
     return;
   }
-  
+
   updateCameraStatus("Requesting camera access…", "info");
 
   try {
@@ -130,7 +130,7 @@ async function initializeCamera() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 4. SWITCH CAMERA
+//  SWITCH CAMERA
 // ─────────────────────────────────────────────────────────────
 async function switchCamera() {
   const sel = document.getElementById("cameraSelector");
@@ -176,7 +176,7 @@ async function switchCamera() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 5. CAPTURE
+//  CAPTURE
 // ─────────────────────────────────────────────────────────────
 function capturePhoto() {
   const video = document.getElementById("cameraStream");
@@ -202,8 +202,143 @@ function capturePhoto() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 6. CROP INTERFACE  (Cropper.js)
+//  CROP INTERFACE  (Cropper.js)
 // ─────────────────────────────────────────────────────────────
+
+/**
+ * Aspect-ratio presets shown in the toolbar.
+ * { label, value }  — value is the numeric w/h ratio (NaN = free).
+ */
+const ASPECT_RATIO_PRESETS = [
+  { label: "Free", value: NaN },
+  { label: "1:1", value: 1 / 1 },
+];
+
+let currentAspectRatio = NaN; // tracks the currently active preset
+
+/**
+ * Dynamically builds (or rebuilds) the ratio toolbar at the top of cropWrap.
+ * Safe to call multiple times — removes any previous toolbar first.
+ */
+function injectAspectRatioToolbar(cropWrap) {
+  const existing = document.querySelector(".aspect-ratio-toolbar");
+  if (existing) existing.remove();
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "aspect-ratio-toolbar";
+  toolbar.style.cssText = [
+    "display:flex",
+    "flex-wrap:wrap",
+    "gap:6px",
+    "padding:8px 10px",
+    "background:rgba(0,0,0,0.60)",
+    "border-bottom:1px solid rgba(255,255,255,0.12)",
+    "align-items:center",
+    "flex-shrink:0",
+  ].join(";");
+
+  // Section label
+  const lbl = document.createElement("span");
+  lbl.textContent = "Aspect Ratio:";
+  lbl.style.cssText =
+    "color:#bbb;font-size:11px;font-weight:700;letter-spacing:.4px;" +
+    "margin-right:2px;white-space:nowrap;text-transform:uppercase;";
+  toolbar.appendChild(lbl);
+
+  ASPECT_RATIO_PRESETS.forEach((preset) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = preset.label;
+    btn.dataset.ratio = isNaN(preset.value) ? "free" : String(preset.value);
+
+    btn.style.cssText = [
+      "padding:4px 10px",
+      "font-size:11px",
+      "font-weight:600",
+      "border-radius:5px",
+      "border:1px solid rgba(255,255,255,0.28)",
+      "background:rgba(255,255,255,0.07)",
+      "color:#ddd",
+      "cursor:pointer",
+      "transition:background .15s,border-color .15s,color .15s",
+      "white-space:nowrap",
+      "line-height:1.4",
+    ].join(";");
+
+    btn.addEventListener("mouseenter", () => {
+      if (!btn.classList.contains("ar-active")) {
+        btn.style.background = "rgba(255,255,255,0.16)";
+        btn.style.borderColor = "rgba(255,255,255,0.5)";
+      }
+    });
+    btn.addEventListener("mouseleave", () => {
+      if (!btn.classList.contains("ar-active")) {
+        btn.style.background = "rgba(255,255,255,0.07)";
+        btn.style.borderColor = "rgba(255,255,255,0.28)";
+      }
+    });
+
+    btn.addEventListener("click", () => setAspectRatio(preset.value, toolbar));
+    toolbar.appendChild(btn);
+  });
+
+  // Insert toolbar at the very top of cropWrap, before the image
+  cropWrap.insertAdjacentElement("afterend", toolbar);
+
+  // Default highlight: Free
+  _highlightRatioBtn(toolbar, NaN);
+}
+
+/**
+ * Apply a new aspect ratio to the live Cropper instance and update the UI.
+ * @param {number} ratioValue  Numeric ratio (NaN = free crop).
+ * @param {HTMLElement|null} toolbar  Optional direct reference; falls back to DOM query.
+ */
+function setAspectRatio(ratioValue, toolbar) {
+  currentAspectRatio = ratioValue;
+
+  if (cropperInstance) {
+    cropperInstance.setAspectRatio(isNaN(ratioValue) ? NaN : ratioValue);
+  }
+
+  // Resolve toolbar reference if not provided
+  const tb = toolbar || document.querySelector(".aspect-ratio-toolbar");
+  if (tb) _highlightRatioBtn(tb, ratioValue);
+
+  const preset = ASPECT_RATIO_PRESETS.find(
+    (p) => (isNaN(p.value) && isNaN(ratioValue)) || p.value === ratioValue,
+  );
+  const name = preset ? preset.label : "Custom";
+
+  updateCameraStatus(
+    isNaN(ratioValue)
+      ? "✂️  Free crop — drag handles to any shape."
+      : `🔒 Locked to ${name} — resize handles to adjust crop area.`,
+    "success",
+  );
+}
+
+/** Update button active states in the toolbar. */
+function _highlightRatioBtn(toolbar, ratioValue) {
+  toolbar.querySelectorAll("button").forEach((btn) => {
+    const isActive =
+      (btn.dataset.ratio === "free" && isNaN(ratioValue)) ||
+      btn.dataset.ratio === String(ratioValue);
+
+    btn.classList.toggle("ar-active", isActive);
+
+    if (isActive) {
+      btn.style.background = "rgba(56,161,255,0.42)";
+      btn.style.borderColor = "rgba(56,161,255,0.95)";
+      btn.style.color = "#fff";
+    } else {
+      btn.style.background = "rgba(255,255,255,0.07)";
+      btn.style.borderColor = "rgba(255,255,255,0.28)";
+      btn.style.color = "#ddd";
+    }
+  });
+}
+
 function showCropInterface(dataUrl) {
   const video = document.getElementById("cameraStream");
   const cropWrap = document.getElementById("cropContainer");
@@ -232,6 +367,9 @@ function showCropInterface(dataUrl) {
   if (uploadBtn) uploadBtn.style.display = "none";
 
   destroyCropper();
+  currentAspectRatio = NaN; // always start as free on each new capture
+  injectAspectRatioToolbar(cropWrap);
+
   cropImg.src = dataUrl;
 
   cropImg.onload = () => {
@@ -247,7 +385,7 @@ function showCropInterface(dataUrl) {
     }
 
     cropperInstance = new Cropper(cropImg, {
-      aspectRatio: NaN,
+      aspectRatio: NaN, // starts free; changed live via setAspectRatio()
       viewMode: 2,
       autoCropArea: 0.85,
       movable: true,
@@ -267,7 +405,7 @@ function showCropInterface(dataUrl) {
     });
 
     updateCameraStatus(
-      '✂️  Drag to reposition · Resize handles to crop · Click "Apply Crop" when done.',
+      '✂️  Drag to reposition · Resize handles to crop · "Apply Crop" when done.',
       "success",
     );
   };
@@ -298,6 +436,9 @@ function applyCrop() {
 }
 
 function finalizeCapture(dataUrl) {
+  const existingToolbar = document.querySelector(".aspect-ratio-toolbar");
+  if (existingToolbar) existingToolbar.remove();
+
   const cropWrap = document.getElementById("cropContainer");
   const previewCanvas = document.getElementById("cameraPreview");
   const applyCropBtn = document.getElementById("applyCropBtn");
@@ -330,10 +471,13 @@ function finalizeCapture(dataUrl) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 7. RETAKE
+//  RETAKE
 // ─────────────────────────────────────────────────────────────
 function retakePhoto() {
   destroyCropper();
+
+  const existingToolbar = document.querySelector(".aspect-ratio-toolbar");
+  if (existingToolbar) existingToolbar.remove();
 
   const video = document.getElementById("cameraStream");
   const cropWrap = document.getElementById("cropContainer");
@@ -361,12 +505,13 @@ function retakePhoto() {
 
   capturedImageData = null;
   rawCaptureDataUrl = null;
+  currentAspectRatio = NaN;
 
   updateCameraStatus("✓ Camera ready — tap Capture.", "success");
 }
 
 // ─────────────────────────────────────────────────────────────
-// 8. UPLOAD TO FORM  (converts captured JPEG → WebP via Canvas)
+//  UPLOAD TO FORM  (converts captured JPEG → WebP via Canvas)
 // ─────────────────────────────────────────────────────────────
 function uploadCameraPhoto() {
   if (!capturedImageData) {
@@ -399,11 +544,9 @@ function uploadCameraPhoto() {
             return;
           }
 
-          const webpFile = new File(
-            [blob],
-            `camera-${Date.now()}.webp`,
-            { type: "image/webp" },
-          );
+          const webpFile = new File([blob], `camera-${Date.now()}.webp`, {
+            type: "image/webp",
+          });
 
           const dt = new DataTransfer();
           dt.items.add(webpFile);
@@ -473,7 +616,7 @@ function fallbackJpegUpload() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 9. UTILITIES
+//  UTILITIES
 // ─────────────────────────────────────────────────────────────
 function destroyCropper() {
   if (cropperInstance) {
@@ -532,6 +675,7 @@ function resetCaptureUI() {
 
   capturedImageData = null;
   rawCaptureDataUrl = null;
+  currentAspectRatio = NaN;
 }
 
 function resetCameraUI() {
@@ -541,7 +685,7 @@ function resetCameraUI() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 10. EVENT LISTENERS
+//  EVENT LISTENERS
 // ─────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
   const sel = document.getElementById("cameraSelector");
