@@ -158,21 +158,18 @@ function getSelectedInterval() {
 
 // Start auto-update
 function startAutoUpdate(intervalMs) {
-  stopAutoUpdate(); // Clear any existing interval
+  stopAutoUpdate();
 
   autoUpdateInterval = setInterval(() => {
-    // Only auto-update if enabled and user is not actively using the interface
     if (autoUpdateEnabled && !isUserActive) {
       console.log("Performing auto-update...");
-      loadEmployeesAuto();
+      loadEmployeesAuto(); // activeFilters handled inside
     } else if (isUserActive) {
       console.log("Skipping auto-update - user is active");
     }
   }, intervalMs);
 
-  console.log(
-    `Auto-update started with ${formatInterval(intervalMs)} interval`,
-  );
+  console.log(`Auto-update started with ${formatInterval(intervalMs)} interval`);
 }
 
 // Stop auto-update
@@ -298,31 +295,43 @@ function showAutoUpdateNotification() {
 // Auto-load employees (silent update) - Fixed error handling
 async function loadEmployeesAuto(filters = {}) {
   try {
-    // 🆕 If no filters passed, check for active filters in form
-    if (Object.keys(filters).length === 0 && hasActiveFilters()) {
-      filters = getActiveFilters();
-      console.log("📋 Using active filters from form:", filters);
+    // Always use the currently active filters — never override with form state
+    const filtersToUse = Object.keys(activeFilters).length > 0
+      ? activeFilters
+      : (hasActiveFilters() ? getActiveFilters() : {});
+
+    // Build params using the SAME translation logic as loadEmployees
+    const params = new URLSearchParams({ action: "get" });
+
+    for (const [key, value] of Object.entries(filtersToUse)) {
+      if (key === "position" && value === "__none__") {
+        params.append("position_none", "1");
+      } else if (key === "brand" && value === "__none__") {
+        params.append("brand_none", "1");
+      } else if (key === "status" && value === "__none__") {
+        params.append("status_none", "1");
+      } else if (key === "shift" && value === "__none__") {
+        params.append("shift_none", "1");
+      } else if (key === "violation" && value === "__none__") {
+        params.append("violation_none", "1");
+      } else if (key === "user_id" && value === "__none__") {
+        params.append("user_id_none", "1");
+      } else if (key === "user_id") {
+        params.append("gate_name", value); // translate user_id → gate_name
+      } else {
+        params.append(key, value);
+      }
     }
-
-    // 🆕 Store the active filters
-    activeFilters = filters;
-
-    const params = new URLSearchParams({
-      action: "get", // or 'list' - both work according to your backend
-      ...filters,
-    });
 
     const response = await fetch(`datalog_backend.php?${params.toString()}`, {
       headers: {
         "X-Requested-With": "XMLHttpRequest",
         "X-Silent-Request": "true",
       },
-      signal: AbortSignal.timeout(10000), // 10 second timeout
+      signal: AbortSignal.timeout(10000),
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();
 
@@ -331,38 +340,27 @@ async function loadEmployeesAuto(filters = {}) {
 
       if (hasChanges) {
         employees = data.data;
-        // 🆕 Clear cache to fetch fresh manpower data
         employeeDataCache = null;
         qrImageMapCache = null;
         await renderEmployeeTable();
         showAutoUpdateNotification();
-        console.log(
-          `Auto-update: Employee data refreshed - ${employees.length} employees loaded`,
-        );
+        console.log(`Auto-update: ${employees.length} records refreshed`);
       } else {
         console.log("Auto-update: No changes detected");
       }
 
       lastUpdateTimestamp = Date.now();
       updateAutoUpdateUI();
+      resetNetworkErrorCount();
     } else {
-      console.warn(
-        "Auto-update failed:",
-        data.message || "Invalid data format",
-      );
+      console.warn("Auto-update failed:", data.message || "Invalid data format");
     }
   } catch (error) {
     console.error("Auto-update error:", error);
-
-    // Handle different types of errors
     if (error.name === "TimeoutError") {
       console.warn("Auto-update timeout - server may be slow");
-    } else if (
-      error.message.includes("Failed to fetch") ||
-      error.message.includes("NetworkError")
-    ) {
+    } else if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
       console.warn("Auto-update: Network connection issue");
-      // Optionally disable auto-update on repeated network failures
       handleNetworkError();
     } else if (error.name === "AbortError") {
       console.warn("Auto-update request was aborted");
