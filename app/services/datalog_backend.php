@@ -122,28 +122,28 @@ class AccessLogManager
     }
     if (!empty($filters['position'])) {
       $query .= " AND position LIKE :position";
-      $params[':position'] = '%' . $filters['position'] . '%';
+      $params[':position'] = $filters['position'];
     }
     if (!empty($filters['position_none'])) {
       $query .= " AND (position IS NULL OR TRIM(position) = '' OR LOWER(TRIM(position)) = 'none')";
     }
     if (!empty($filters['brand'])) {
       $query .= " AND brand LIKE :brand";
-      $params[':brand'] = '%' . $filters['brand'] . '%';
+      $params[':brand'] = $filters['brand'];
     }
     if (!empty($filters['brand_none'])) {
       $query .= " AND (brand IS NULL OR TRIM(brand) = '' OR LOWER(TRIM(brand)) = 'none')";
     }
     if (!empty($filters['status'])) {
-      $query .= " AND status LIKE :status";
-      $params[':status'] = '%' . $filters['status'] . '%';
+      $query .= " AND status = :status";
+      $params[':status'] = $filters['status'];
     }
     if (!empty($filters['status_none'])) {
       $query .= " AND (status IS NULL OR TRIM(status) = '' OR LOWER(TRIM(status)) = 'none')";
     }
     if (!empty($filters['shift'])) {
-      $query .= " AND shift LIKE :shift";
-      $params[':shift'] = '%' . $filters['shift'] . '%';
+      $query .= " AND shift = :shift";
+      $params[':shift'] = $filters['shift'];
     }
     if (!empty($filters['shift_none'])) {
       $query .= " AND (shift IS NULL OR TRIM(shift) = '' OR LOWER(TRIM(shift)) = 'none')";
@@ -157,7 +157,7 @@ class AccessLogManager
     }
     if (!empty($filters['qr_code'])) {
       $query .= " AND qr_code LIKE :qr_code";
-      $params[':qr_code'] = '%' . $filters['qr_code'] . '%';
+      $params[':qr_code'] = $filters['qr_code'];
     }
     if (!empty($filters['check_status'])) {
       $query .= " AND check_status = :check_status";

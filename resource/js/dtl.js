@@ -3,8 +3,8 @@
 // Global variables
 let currentAction = "add";
 let employees = [];
-let employeeDataCache = null; // 🆕 Cache employee data from manpower_backend
-let qrImageMapCache = null; // 🆕 Cache QR code to image mapping
+let employeeDataCache = null;
+let qrImageMapCache = null;
 
 // Update variables
 let autoUpdateInterval = null;
@@ -19,6 +19,28 @@ const itemsPerPage = 25;
 let totalPages = 1;
 
 let activeFilters = {};
+
+// ─────────────────────────────────────────────────────────────────
+// SECURITY: HTML escape helper — use on ALL dynamic content
+// inserted via innerHTML to prevent stored XSS attacks.
+// ─────────────────────────────────────────────────────────────────
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// SECURITY: Standalone toProperCase — replaces String.prototype pollution
+function toProperCase(str) {
+  if (!str) return "";
+  return String(str).replace(/[^\s,\-]+/g, function (txt) {
+    return txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase();
+  });
+}
 
 // Setup event listeners
 function setupEventListeners() {
@@ -407,7 +429,7 @@ function debounce(func, wait) {
   };
 }
 
-// 🆕 GET CURRENT ACTIVE FILTERS FROM FORM
+// GET CURRENT ACTIVE FILTERS FROM FORM
 function getActiveFilters() {
   const searchForm = document.getElementById("searchForm");
   const filters = {};
@@ -442,13 +464,13 @@ function getActiveFilters() {
   return filters;
 }
 
-// 🆕 CHECK IF ANY FILTERS ARE ACTIVE
+// CHECK IF ANY FILTERS ARE ACTIVE
 function hasActiveFilters() {
   const filters = getActiveFilters();
   return Object.keys(filters).length > 0;
 }
 
-// 🆕 DISPLAY FILTER STATUS IN UI
+// DISPLAY FILTER STATUS IN UI
 function displayFilterStatus() {
   const filters = getActiveFilters();
   const filterInfo = document.createElement("div");
@@ -522,7 +544,7 @@ function displayFilterStatus() {
   }
 }
 
-// 🆕 Fetch employee data from manpower_backend.php and cache it
+// Fetch employee data from manpower_backend.php and cache it
 async function getManpowerEmployeeData() {
   try {
     // Return cached data if available
@@ -552,7 +574,7 @@ async function getManpowerEmployeeData() {
   return [];
 }
 
-// 🆕 Build a map of QR codes to employee images and details
+// Build a map of QR codes to employee images and details
 async function buildQRToImageMap() {
   if (qrImageMapCache) return qrImageMapCache; // Return cached map
 
@@ -580,10 +602,11 @@ async function buildQRToImageMap() {
 async function loadEmployeeData(employeeId) {
   try {
     const response = await fetch(
-      `datalog_backend.php?action=get_single&id=${employeeId}`,
+      `datalog_backend.php?action=get_single&id=${encodeURIComponent(employeeId)}`,
       {
         headers: {
           "X-Requested-With": "XMLHttpRequest",
+          "X-Silent-Request": "true",
         },
       },
     );
@@ -651,16 +674,17 @@ async function renderEmployeeError(message = "Failed to load employee data.") {
 
   if (noDataDiv) noDataDiv.style.display = "none";
 
+  // SECURITY: escapeHtml on message in case it contains user-influenced content
   tbody.innerHTML = `
     <tr>
       <td colspan="13" style="text-align: center; padding: 20px; color: #c0392b;">
-        ⚠️ ${message}
+        ⚠️ ${escapeHtml(message)}
       </td>
     </tr>
   `;
 }
 
-// 🆕 ENHANCED Render employee table with QR matching logic AND employee image display
+// Render employee table
 async function renderEmployeeTable() {
   const tbody = document.getElementById("employeeTableBody");
   const paginationDiv = document.getElementById("pagination");
@@ -704,6 +728,16 @@ async function renderEmployeeTable() {
   // Render table rows
   tbody.innerHTML = currentEmployees
     .map((employee, index) => {
+      // SECURITY: escapeHtml on ALL employee fields used in innerHTML
+      const safeFullname = escapeHtml(employee.fullname);
+      const safePosition = escapeHtml(employee.position);
+      const safeBrand = escapeHtml(employee.brand);
+      const safeStatus = escapeHtml(employee.status);
+      const safeShift = escapeHtml(employee.shift);
+      const safeViolation = escapeHtml(employee.violation);
+      const safeQrCode = escapeHtml(employee.qr_code);
+      const safeImage = escapeHtml(employee.image);
+      const safeId = escapeHtml(String(employee.id));
       // 🆕 Get matched employee data from manpower_backend
       const matchedEmployeeData =
         qrImageMap[employee.qr_code.trim().toLowerCase()];
@@ -724,39 +758,37 @@ async function renderEmployeeTable() {
         tooltipText = `${employee.fullname}\n${employee.position}\n${employee.brand}`;
       }
 
-      // Generate initials for placeholder
-      const fullnameInitials = (displayName || "UN")
+      const fullnameInitials = (employee.fullname || "UN")
         .split(" ")
         .map((name) => name.charAt(0))
         .join("")
         .substring(0, 2)
         .toUpperCase();
 
-      const empId = matchedEmployeeData ? `${matchedEmployeeData.id}` : "";
+      const isAboveFold = index < 5;
 
-      String.prototype.toProperCase = function () {
-        return this.replace(/[^\s,\-]+/g, function (txt) {
-          return txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase();
-        });
-      };
+      // SECURITY: Use encodeURIComponent for URL params, escapeHtml for HTML attrs
+      const thumbSrc = `${window.location.origin}/public/uploads/user/thumb_${safeImage}`;
+      const imageSrc = `${window.location.origin}/public/uploads/user/${safeImage}`;
 
       return `
           <tr>
               <td>${startIndex + index + 1}</td>
-              <td><strong>${empId}</strong></td>
-              <td><strong>${displayName.toProperCase()}</strong></td>
-              <td>${matchedEmployeeData ? matchedEmployeeData.position.toProperCase() : employee.position.toProperCase() || "N/A"}</td>
-              <td>${matchedEmployeeData ? matchedEmployeeData.brand.toProperCase() : employee.brand.toProperCase() || "N/A"}</td>
-              <td><span class="status-${(employee.status || "").toLowerCase()}">${
-                employee.status || "N/A"
-              }</span></td>
-              <td>${employee.shift || "N/A"}</td>
+              <td><strong>${safeId}</strong></td>
+              <td><strong>${toProperCase(safeFullname)}</strong></td>
+              <td>${toProperCase(safePosition)}</td>
+              <td>${toProperCase(safeBrand)}</td>
+              <td><span class="status-${safeStatus.toLowerCase()}">${safeStatus}</span></td>
+              <td>${safeShift}</td>
               <td class="Col7">
                 <div style="display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;justify-content:center;">
                   ${
                     employee.violation && employee.violation.trim()
                       ? `<button
-                        onclick="openViolationPopup('${employee.fullname.replace(/'/g, "\\'")}', \`${employee.violation.replace(/`/g, "\\`")}\`, '${employee.id}')"
+                        data-emp-id="${safeId}"
+                        data-fullname="${safeFullname}"
+                        data-violation="${safeViolation}"
+                        onclick="openViolationPopupFromBtn(this)"
                         style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
                           font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
                           border:0.5px solid #fca5a5;border-radius:6px;
@@ -768,16 +800,19 @@ async function renderEmployeeTable() {
                 </div>
               </td>
               <td class="Col8">${
-                imageUrl
-                  ? `<img src="${imageUrl}" alt="${displayName}" class="employee-image" loading="lazy"
-                    title="${tooltipText}" 
-                    onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
+                employee.image
+                  ? `<img src="${thumbSrc}" alt="${safeFullname}" class="employee-image"
+                      width="48" height="48"
+                      loading="${isAboveFold ? "eager" : "lazy"}"
+                      decoding="async"
+                      title="${tooltipText}"
+                      ${isAboveFold ? 'fetchpriority="high"' : ""}
+                      onerror="this.src='${imageSrc}'; this.onerror=null;">
                     <span style="display:none;" title="${tooltipText}">📷</span>`
-                  : `<div class="ph-cont" title="${tooltipText}"><div class="employee-ph">${fullnameInitials}</div></div>`
-              }
-              </td>
-              <td class="Col9" onclick="copyQRCode('${escapeHtml(employee.qr_code || "")}')" title="Copy Proximity code" style="cursor: pointer;">
-              <img src="../../resource/assets/icon/nfc-icon.svg" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;"></td>
+                  : `<div class="ph-cont" title="${tooltipText}"><div class="employee-ph">${escapeHtml(fullnameInitials)}</div></div>`
+              }</td>
+              <td class="Col9" data-qr="${safeQrCode}" onclick="copyQRCodeFromCell(this)" title="Copy Proximity code" style="cursor:pointer;">
+                <img src="../../resource/assets/icon/nfc-icon.svg" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;"></td>
               <td class="employee-timestamp"><small>${employee.access_timestamp || "N/A"}</small></td>
               <td><div class="check-status-${(employee.check_status || "").toLowerCase()}"><div class="employee-ph">${
                 employee.check_status || "N/A"
@@ -792,16 +827,18 @@ async function renderEmployeeTable() {
   updatePaginationControls();
 }
 
-// Escape HTML to prevent XSS
-function escapeHtml(text) {
-  const map = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;",
-  };
-  return text.replace(/[&<>"']/g, (m) => map[m]);
+function openViolationPopupFromBtn(btn) {
+  // Read values from data attributes (already HTML-escaped in the template)
+  // but pass RAW values from the employees array to avoid double-escaping in the popup logic
+  const empId = btn.dataset.empId;
+  const employee = employees.find((e) => String(e.id) === String(empId));
+  if (!employee) return;
+  openViolationPopup(employee.fullname, employee.violation, employee.id);
+}
+
+function copyQRCodeFromCell(td) {
+  // SECURITY: read from data attribute, not from rendered text
+  copyQRCode(td.dataset.qr);
 }
 
 // Get current user ID with better error handling
@@ -824,7 +861,7 @@ async function getCurrentUserId() {
     console.error("Error getting user ID:", error);
   }
 
-  return "default"; // fallback
+  return "default";
 }
 
 // Copy QR code to clipboard
@@ -936,47 +973,36 @@ function goToPage(page) {
   }
 }
 
-// 🆕 SEARCH EMPLOYEES - NOW RESPECTS ACTIVE FILTERS
+// SEARCH EMPLOYEES
 function searchEmployees() {
   const searchForm = document.getElementById("searchForm");
   const searchQuery = document.getElementById("search_qr").value.trim();
 
   if (!searchForm) return;
 
-  // 🆕 Get active filters from the form
   const filters = getActiveFilters();
+  loadEmployees(filters, true, true);
 
-  // Load employees with the current filters
-  loadEmployees(filters, true, true); // true = preserve page when filtering
-
-  // ✅ AUTO-CLEAR AFTER SUCCESSFUL SEARCH
   if (searchQuery) {
     document.getElementById("search_qr").value = "";
   }
 
-  // 🆕 Display filter status
   displayFilterStatus();
   updateDeleteButtonState();
 }
 
-// 🆕 CLEAR SEARCH - Properly reset and reload all
+// CLEAR SEARCH
 function clearSearch() {
   const searchForm = document.getElementById("searchForm");
-  if (searchForm) {
-    searchForm.reset();
-  }
+  if (searchForm) searchForm.reset();
 
-  // Remove filter status display
   const filterStatus = document.getElementById("filter-status");
-  if (filterStatus) {
-    filterStatus.remove();
-  }
+  if (filterStatus) filterStatus.remove();
 
-  // Reset to page 1 and load all employees
   currentPage = 1;
   activeFilters = {};
-  loadEmployees({}, false, true); // Load without filters
   updateDeleteButtonState();
+  loadEmployees({}, false, true);
 }
 
 // Force refresh with improved UX
@@ -1012,14 +1038,13 @@ function showFullnameSuggestions(query) {
 
   const q = query.trim().toLowerCase();
 
-  // Build unique fullname list from loaded employees
   const matches = [
     ...new Map(
       employees
         .filter((emp) => !q || emp.fullname.toLowerCase().includes(q))
         .map((emp) => [emp.fullname.toLowerCase(), emp.fullname]),
     ).values(),
-  ].slice(0, 10); // cap at 10 suggestions
+  ].slice(0, 10);
 
   if (!matches.length || !q) {
     list.style.display = "none";
@@ -1027,20 +1052,22 @@ function showFullnameSuggestions(query) {
     return;
   }
 
+  // SECURITY: escapeHtml on name before inserting into innerHTML
   list.innerHTML = matches
     .map((name, i) => {
-      // Highlight matching portion
+      const safeName = escapeHtml(name);
+      const properName = escapeHtml(toProperCase(name));
       const regex = new RegExp(
         `(${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
         "gi",
       );
-      const highlighted = name.replace(
+      const highlighted = properName.replace(
         regex,
         '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
       );
       return `
-      <li data-value="${name}" data-index="${i}"
-          onmousedown="selectSuggestion('${name.replace(/'/g, "\\'")}')"
+      <li data-value="${safeName}" data-index="${i}"
+          onmousedown="selectSuggestionFromLi(this)"
           onmouseover="highlightSuggestion(${i})"
           style="padding: 8px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #f1f5f9;">
         ${highlighted}
@@ -1052,9 +1079,15 @@ function showFullnameSuggestions(query) {
   suggestionIndex = -1;
 }
 
+// SECURITY: read name from data-value attribute instead of string interpolation
+function selectSuggestionFromLi(li) {
+  selectSuggestion(li.dataset.value);
+}
+
 function selectSuggestion(name) {
   const input = document.getElementById("search_fullname");
   const list = document.getElementById("fullname-suggestions");
+  // SECURITY: .value assignment is safe (no HTML injection)
   if (input) input.value = name;
   if (list) list.style.display = "none";
   suggestionIndex = -1;
@@ -1084,6 +1117,7 @@ function handleSuggestionNav(e) {
     highlightSuggestion(suggestionIndex);
   } else if (e.key === "Enter" && suggestionIndex >= 0) {
     e.preventDefault();
+    // SECURITY: read from data attribute
     selectSuggestion(items[suggestionIndex].dataset.value);
   } else if (e.key === "Escape") {
     list.style.display = "none";
@@ -1101,7 +1135,7 @@ document.addEventListener("click", function (e) {
   }
 });
 
-// ✨ 🆕 ENHANCED DELETE MODAL - WITH FILTERED DELETE SUPPORT
+// ENHANCED DELETE MODAL
 function openDeleteModal(employeeId = null, requireConfirmation = false) {
   const modal = document.getElementById("deleteModal");
   const confirmBtn = document.getElementById("confirmDeleteBtn");
@@ -1112,48 +1146,70 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
   const modalTitle = document.getElementById("deleteModalTitle");
   const modalMessage = document.getElementById("deleteModalMessage");
 
-  // 🆕 NEW: Check if filters are active
   const hasFilters = hasActiveFilters();
 
-  // Store the employeeId for use in confirm handler
   confirmBtn.dataset.employeeId = employeeId;
   confirmBtn.dataset.requireConfirmation = requireConfirmation;
-  confirmBtn.dataset.hasFilters = hasFilters; // 🆕 NEW: Store filter state
+  confirmBtn.dataset.hasFilters = hasFilters;
 
-  // Update modal content based on delete type
   if (requireConfirmation) {
-    // 🆕 DELETE BASED ON FILTERS
     if (hasFilters) {
-      // Delete filtered employees
+      // SECURITY: textContent for title, DOM construction for message
       modalTitle.textContent = "⚠️ Delete Filtered Employees";
-      modalMessage.innerHTML = `
-        <div>
-          <p style="margin-bottom: 15px;"><strong>This will delete ${employees.length} employee(s) matching your filters:</strong></p>
-          <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 4px; margin-bottom: 15px;">
-            ${Object.entries(getActiveFilters())
-              .map(([key, value]) => {
-                const properKey = key
-                  .split(/(?=[A-Z])/)
-                  .map(
-                    (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
-                  )
-                  .join(" ");
-                return `<div style="margin: 5px 0;"><strong>${properKey}:</strong> ${value}</div>`;
-              })
-              .join("")}
-          </div>
-          <p style="color: #d63031; font-weight: bold;">This action cannot be undone.</p>
-        </div>
-      `;
+
+      // Build message safely using DOM methods
+      const msgDiv = document.createElement("div");
+      const p1 = document.createElement("p");
+      p1.style.marginBottom = "15px";
+      const strong = document.createElement("strong");
+      strong.textContent = `This will delete ${employees.length} employee(s) matching your filters:`;
+      p1.appendChild(strong);
+      msgDiv.appendChild(p1);
+
+      const filterBox = document.createElement("div");
+      filterBox.style.cssText =
+        "background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 4px; margin-bottom: 15px;";
+
+      Object.entries(getActiveFilters()).forEach(([key, value]) => {
+        const row = document.createElement("div");
+        row.style.margin = "5px 0";
+        const keyStrong = document.createElement("strong");
+        const properKey = key
+          .split(/(?=[A-Z])/)
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(" ");
+        keyStrong.textContent = properKey + ":";
+        row.appendChild(keyStrong);
+        // SECURITY: textContent for filter values — no XSS
+        row.appendChild(document.createTextNode(" " + value));
+        filterBox.appendChild(row);
+      });
+
+      msgDiv.appendChild(filterBox);
+
+      const p2 = document.createElement("p");
+      p2.style.cssText = "color: #d63031; font-weight: bold;";
+      p2.textContent = "This action cannot be undone.";
+      msgDiv.appendChild(p2);
+
+      modalMessage.innerHTML = "";
+      modalMessage.appendChild(msgDiv);
     } else {
-      // Delete all employees
       modalTitle.textContent = "⚠️ Delete All Employees";
-      modalMessage.innerHTML = `
-        <div>
-          <p style="margin-bottom: 15px;"><strong>This will permanently delete ALL ${employees.length} employee(s).</strong></p>
-          <p style="color: #d63031; font-weight: bold;">This action cannot be undone.</p>
-        </div>
-      `;
+
+      const msgDiv = document.createElement("div");
+      const p1 = document.createElement("p");
+      p1.style.marginBottom = "15px";
+      const strong = document.createElement("strong");
+      strong.textContent = `This will permanently delete ALL ${employees.length} employee(s).`;
+      p1.appendChild(strong);
+      msgDiv.appendChild(p1);
+      const p2 = document.createElement("p");
+      p2.style.cssText = "color: #d63031; font-weight: bold;";
+      p2.textContent = "This action cannot be undone.";
+      msgDiv.appendChild(p2);
+      modalMessage.innerHTML = "";
+      modalMessage.appendChild(msgDiv);
     }
 
     confirmationContainer.style.display = "block";
@@ -1161,7 +1217,6 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
     confirmBtn.style.opacity = "0.5";
     confirmBtn.style.cursor = "not-allowed";
   } else {
-    // Single employee delete
     modalTitle.textContent = "Delete Employee";
     modalMessage.textContent = "Are you sure you want to delete this employee?";
     confirmationContainer.style.display = "none";
@@ -1170,19 +1225,13 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
     confirmBtn.style.cursor = "pointer";
   }
 
-  // Clear input field
-  if (confirmationInput) {
-    confirmationInput.value = "";
-  }
+  if (confirmationInput) confirmationInput.value = "";
 
-  // Show modal
   modal.style.display = "flex";
 
-  // Remove previous listeners to avoid duplicates
   const newConfirmBtn = confirmBtn.cloneNode(true);
   confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
 
-  // Handle confirmation input (if delete all)
   if (requireConfirmation && confirmationInput) {
     const newConfirmationInput = confirmationInput.cloneNode(true);
     confirmationInput.parentNode.replaceChild(
@@ -1201,7 +1250,6 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
     });
   }
 
-  // Handle confirm click or Enter key
   const handleConfirm = () => {
     const id = newConfirmBtn.dataset.employeeId;
     const requiresConfirm =
@@ -1212,7 +1260,7 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
       if (hasFiltersFlag) {
         deleteFilteredEmployees();
       } else {
-        showAlert("Cannot be Deleted!, Try changing filters.", "error");
+        showAlert("Cannot be Deleted! Try changing filters.", "error");
       }
     } else {
       deleteEmployee(id);
@@ -1224,42 +1272,39 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
 
   document.addEventListener("keydown", function onEnterKey(e) {
     if (e.key === "Enter" && modal.style.display === "flex") {
-      if (!newConfirmBtn.disabled) {
-        handleConfirm();
-      }
+      if (!newConfirmBtn.disabled) handleConfirm();
       document.removeEventListener("keydown", onEnterKey);
     }
   });
 
-  // Handle clicking outside modal
   modal.addEventListener("click", (e) => {
-    if (e.target === modal) {
-      modal.style.display = "none";
-    }
+    if (e.target === modal) modal.style.display = "none";
   });
 }
 
-// 🆕 UPDATE DELETE BUTTON STATE based on active filters
+// UPDATE DELETE BUTTON STATE based on active filters
 function updateDeleteButtonState() {
   const deleteBtn = document.querySelector(".delete-all-btn .btn-danger");
   if (!deleteBtn) return;
 
-  const hasFilters = hasActiveFilters();
+  const hasFilters = Object.keys(activeFilters).length > 0;
+  const hasData = employees && employees.length > 0;
+  const canDelete = hasFilters && hasData;
 
-  if (hasFilters) {
-    deleteBtn.disabled = false;
-    deleteBtn.style.opacity = "1";
-    deleteBtn.style.cursor = "pointer";
-    deleteBtn.title = "Delete filtered employees";
-  } else {
-    deleteBtn.disabled = true;
-    deleteBtn.style.opacity = "0.4";
-    deleteBtn.style.cursor = "not-allowed";
+  deleteBtn.disabled = !canDelete;
+  deleteBtn.style.opacity = canDelete ? "1" : "0.4";
+  deleteBtn.style.cursor = canDelete ? "pointer" : "not-allowed";
+
+  if (!hasFilters) {
     deleteBtn.title = "Apply filters first to enable deletion";
+  } else if (!hasData) {
+    deleteBtn.title = "No matching records to delete";
+  } else {
+    deleteBtn.title = `Delete ${employees.length} filtered employee(s)`;
   }
 }
 
-// 🆕 NEW FUNCTION - DELETE EMPLOYEES BASED ON ACTIVE FILTERS
+// DELETE EMPLOYEES BASED ON ACTIVE FILTERS
 async function deleteFilteredEmployees() {
   try {
     showLoading(true);
@@ -1276,29 +1321,29 @@ async function deleteFilteredEmployees() {
     const formData = new FormData();
     formData.append("action", "delete_filtered");
     formData.append("employee_ids", JSON.stringify(employeeIds));
-    formData.append("filters", JSON.stringify(activeFilters)); // 🆕 Send filters for logging
+    formData.append("filters", JSON.stringify(activeFilters));
 
     const response = await fetch("datalog_backend.php", {
       method: "POST",
       body: formData,
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
     const data = await response.json();
 
     if (data.success) {
       showAlert(
-        `Successfully deleted ${data.deleted_count || employeeIds.length} employee(s) matching your filters.`,
+        `Successfully deleted ${escapeHtml(String(data.deleted_count || employeeIds.length))} employee(s) matching your filters.`,
         "success",
       );
 
-      // 🆕 Reset to page 1 and clear filters after deleting filtered
       currentPage = 1;
-      clearSearch(); // This will also remove filter status display
+      clearSearch();
     } else {
-      showAlert(data.message || "Failed to delete filtered employees", "error");
+      showAlert(
+        escapeHtml(data.message) || "Failed to delete filtered employees",
+        "error",
+      );
     }
   } catch (error) {
     console.error("Error:", error);
@@ -1326,6 +1371,7 @@ function openViolationPopup(fullname, violation, employeeId) {
     ts: new Date().toISOString(),
   });
 
+  // Build popup using DOM methods — no innerHTML with raw user data
   const overlay = document.createElement("div");
   overlay.id = "violationPopupOverlay";
   overlay.style.cssText = `
@@ -1335,26 +1381,58 @@ function openViolationPopup(fullname, violation, employeeId) {
 
   const reportUrl = "incident_report.php?" + params.toString();
 
-  overlay.innerHTML = `
-    <div style="background:#fff;border:0.5px solid #e2e8f0;border-radius:12px;
-      padding:1.25rem;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.12);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <span style="font-size:13px;font-weight:500;color:#64748b;">${fullname} — Remarks</span>
-        <button onclick="document.getElementById('violationPopupOverlay').remove()"
-          style="background:none;border:none;font-size:16px;cursor:pointer;color:#94a3b8;line-height:1;padding:0;">&#x2715;</button>
-      </div>
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
-        <div style="font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;flex:1;">${violation}</div>
-        <button onclick="window.open('${reportUrl}', '_blank')"
-          style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;
-            font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;
-            border:0.5px solid #cbd5e1;border-radius:6px;
-            background:#f8fafc;color:#1e293b;">
-          &#128438; View Attachment
-        </button>
-      </div>
-    </div>
-  `;
+  const card = document.createElement("div");
+  card.style.cssText = `background:#fff;border:0.5px solid #e2e8f0;border-radius:12px;
+    padding:1.25rem;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.12);`;
+
+  // Header row
+  const header = document.createElement("div");
+  header.style.cssText =
+    "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;";
+
+  const headerLabel = document.createElement("span");
+  headerLabel.style.cssText = "font-size:13px;font-weight:500;color:#64748b;";
+  // SECURITY: textContent for fullname
+  headerLabel.textContent = `${fullname} — Remarks`;
+
+  const footer = document.createElement("div");
+  footer.style.cssText =
+    "display:flex;justify-content:end;align-items:center;margin-top:12px;";
+
+  const closeBtn = document.createElement("button");
+  closeBtn.style.cssText =
+    "background:none;border:none;font-size:16px;cursor:pointer;color:#94a3b8;line-height:1;padding:0;";
+  closeBtn.textContent = "✕";
+  closeBtn.onclick = () => overlay.remove();
+
+  header.appendChild(headerLabel);
+  header.appendChild(closeBtn);
+
+  // Body row
+  const body = document.createElement("div");
+  body.style.cssText =
+    "display:flex;align-items:flex-start;justify-content:space-between;gap:12px;";
+
+  const violationText = document.createElement("div");
+  violationText.style.cssText =
+    "font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;flex:1;max-height:200px;overflow-y:auto;word-break:break-word;";
+  // SECURITY: textContent for violation content
+  violationText.textContent = violation;
+
+  const attachBtn = document.createElement("button");
+  attachBtn.style.cssText = `display:inline-flex;align-items:center;gap:5px;padding:5px 12px;
+    font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;
+    border:0.5px solid #cbd5e1;border-radius:6px;background:#f8fafc;color:#1e293b;`;
+  attachBtn.textContent = "📎 View Attachment";
+  attachBtn.onclick = () => window.open(reportUrl, "_blank");
+
+  body.appendChild(violationText);
+  footer.appendChild(attachBtn);
+
+  card.appendChild(header);
+  card.appendChild(body);
+  card.appendChild(footer);
+  overlay.appendChild(card);
 
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) overlay.remove();
@@ -1546,7 +1624,8 @@ async function loadEmployees(
       await renderEmployeeTable();
       lastUpdateTimestamp = Date.now();
       updateAutoUpdateUI();
-      resetNetworkErrorCount(); // Reset network error counter on successful load
+      resetNetworkErrorCount();
+      updateDeleteButtonState();
 
       if (Object.keys(filters).length > 0) {
         displayFilterStatus();
@@ -1577,57 +1656,90 @@ function closeModal() {
   deleteModal.style.display = "none";
 }
 
-// Handle form submission with better validation
+// Handle form submission
 async function handleFormSubmit(e) {
   e.preventDefault();
 
   try {
-    // Basic form validation
-    const fullname = document.getElementById("fullname")?.value.trim();
-    const position = document.getElementById("position")?.value.trim();
-    const brand = document.getElementById("brand")?.value.trim();
-    const shift = document.getElementById("shift")?.value;
+    const empid = document.getElementById("employee_id").value.trim();
+    const fullname = document.getElementById("fullname").value.trim();
+    const position = document.getElementById("position").value.trim();
+    const brand = document.getElementById("brand").value.trim();
+    const shift = document.getElementById("shift").value;
+    const originalId = document.getElementById("original_id").value.trim();
 
+    if (!empid) {
+      showAlert("EMPID is required", "error");
+      return;
+    }
     if (!fullname) {
       showAlert("Fullname is required", "error");
       return;
     }
-
     if (!position) {
       showAlert("Position is required", "error");
       return;
     }
-
     if (!brand) {
       showAlert("Brand is required", "error");
       return;
     }
-
     if (!shift) {
       showAlert("Shift is required", "error");
       return;
     }
 
-    // Check file size if image is selected
-    const imageInput = document.getElementById("image");
-    if (imageInput && imageInput.files.length > 0) {
-      const file = imageInput.files[0];
-      const maxSize = 5 * 1024 * 1024; // 5MB
+    if (currentAction === "edit" && empid !== originalId) {
+      const idTaken = employees.some((emp) => String(emp.id) === String(empid));
+      if (idTaken) {
+        showAlert(
+          `Employee ID "${escapeHtml(empid)}" is already in use`,
+          "error",
+        );
+        return;
+      }
+    }
 
-      if (file.size > maxSize) {
+    const isDuplicate = employees.some((emp) => {
+      if (
+        currentAction === "edit" &&
+        originalId &&
+        String(emp.id) === String(originalId)
+      ) {
+        return false;
+      }
+      return (
+        emp.fullname.toLowerCase().trim() === fullname.toLowerCase().trim()
+      );
+    });
+
+    if (isDuplicate) {
+      showAlert(
+        `Employee with name "${escapeHtml(fullname)}" already exists!`,
+        "error",
+      );
+      return;
+    }
+
+    const imageInput = document.getElementById("image");
+    if (imageInput.files.length > 0) {
+      const file = imageInput.files[0];
+      if (file.size > 5 * 1024 * 1024) {
         showAlert("Image file size must be less than 5MB", "error");
         return;
       }
-
-      // Check file type
       const allowedTypes = [
         "image/jpeg",
         "image/jpg",
         "image/png",
         "image/gif",
+        "image/webp",
       ];
       if (!allowedTypes.includes(file.type)) {
-        showAlert("Only image files (JPEG, PNG, GIF) are allowed", "error");
+        showAlert(
+          "Only image files (JPEG, JPG, PNG, GIF, WebP) are allowed",
+          "error",
+        );
         return;
       }
     }
@@ -1636,18 +1748,19 @@ async function handleFormSubmit(e) {
 
     const formData = new FormData(e.target);
     formData.append("action", currentAction);
+    formData.set("id", empid);
+
+    if (currentAction === "edit") {
+      formData.set("original_id", originalId);
+    }
 
     const response = await fetch("datalog_backend.php", {
       method: "POST",
       body: formData,
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();
 
@@ -1660,7 +1773,7 @@ async function handleFormSubmit(e) {
         "success",
       );
       closeModal();
-      // 🆕 Clear cache and reload with fresh manpower data
+
       employeeDataCache = null;
       qrImageMapCache = null;
       const preservePage = currentAction === "edit";
@@ -1680,6 +1793,9 @@ async function handleFormSubmit(e) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// FILE UPLOAD HANDLER
+// ─────────────────────────────────────────────────────────────
 // Setup file upload handler with fixed label assignment
 function setupFileUploadHandler() {
   const imageInput = document.getElementById("image");
@@ -1733,16 +1849,13 @@ async function deleteEmployee(employeeId) {
     const response = await fetch("datalog_backend.php", {
       method: "POST",
       body: formData,
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
     const data = await response.json();
 
     if (data.success) {
       showAlert(data.message, "success");
-      // 🆕 Clear cache and reload
       employeeDataCache = null;
       qrImageMapCache = null;
       await loadEmployees(filters, preservePage, true);
@@ -1757,20 +1870,19 @@ async function deleteEmployee(employeeId) {
   }
 }
 
-// Delete all employees with better confirmation
-async function deleteAllEmployees() {
+// Delete all employees
+async function deleteAllEmployees(employeeId) {
   try {
     showLoading(true);
 
     const formData = new FormData();
     formData.append("action", "delete_all");
+    formData.append("id", employeeId);
 
     const response = await fetch("datalog_backend.php", {
       method: "POST",
       body: formData,
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
     // Check if response is ok
@@ -1780,21 +1892,18 @@ async function deleteAllEmployees() {
 
     const data = await response.json();
 
-    // Check for success response
     if (data.success) {
       showAlert(data.message, "success");
-      // Clear cache and reload the table (will show empty)
       employeeDataCache = null;
       qrImageMapCache = null;
       await loadEmployees(filters, preservePage, true);
+      clearSearch();
     } else {
-      // Show error message from backend
       showAlert(data.message, "error");
     }
   } catch (error) {
     console.error("Success:", error);
 
-    // More specific error messages
     if (error instanceof TypeError) {
       showAlert("Network error: Failed to connect to server", "error");
     } else if (error.message.includes("JSON")) {
@@ -1814,10 +1923,20 @@ function showAlert(message, type = "info") {
 
   const alert = document.createElement("div");
   alert.className = `alert alert-${type}`;
-  alert.innerHTML = `
-    <span>${message}</span>
-    <button onclick="this.parentElement.remove()" style="float: right; background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 5px;"><i class="fas fa-times"></i></button>
-  `;
+
+  // SECURITY: Use DOM methods instead of innerHTML for alert messages
+  const msgSpan = document.createElement("span");
+  // Use textContent so any HTML in message is rendered as plain text
+  msgSpan.textContent = message;
+
+  const closeBtn = document.createElement("button");
+  closeBtn.style.cssText =
+    "float: right; background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 5px;";
+  closeBtn.innerHTML = `<i class="fas fa-times"></i>`;
+  closeBtn.onclick = () => alert.remove();
+
+  alert.appendChild(msgSpan);
+  alert.appendChild(closeBtn);
 
   document.body.insertBefore(alert, document.body.firstChild);
 

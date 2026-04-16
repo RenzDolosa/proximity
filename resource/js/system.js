@@ -429,7 +429,10 @@ async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
       else if (hasInactive) playInactiveSound();
       else playSuccessSound();
 
-      showAlert(`Employee marked as ${escapeHtml(checkStatus)} successfully!`, "success");
+      showAlert(
+        `Employee marked as ${escapeHtml(checkStatus)} successfully!`,
+        "success",
+      );
     } else {
       throw new Error(result.message || "Failed to add employee to log");
     }
@@ -503,17 +506,17 @@ async function renderEmployeeTable() {
   tbody.innerHTML = currentEmployees
     .map((employee, index) => {
       // SECURITY: escapeHtml on ALL employee fields used in innerHTML
-      const safeFullname   = escapeHtml(employee.fullname);
-      const safePosition   = escapeHtml(employee.position);
-      const safeBrand      = escapeHtml(employee.brand);
-      const safeStatus     = escapeHtml(employee.status);
-      const safeShift      = escapeHtml(employee.shift);
-      const safeViolation  = escapeHtml(employee.violation);
-      const safeQrCode     = escapeHtml(employee.qr_code);
-      const safeImage      = escapeHtml(employee.image);
-      const safeId         = escapeHtml(String(employee.id));
-      const safeCreatedAt  = escapeHtml(employee.created_at);
-      const safeUpdatedAt  = escapeHtml(employee.updated_at);
+      const safeFullname = escapeHtml(employee.fullname);
+      const safePosition = escapeHtml(employee.position);
+      const safeBrand = escapeHtml(employee.brand);
+      const safeStatus = escapeHtml(employee.status);
+      const safeShift = escapeHtml(employee.shift);
+      const safeViolation = escapeHtml(employee.violation);
+      const safeQrCode = escapeHtml(employee.qr_code);
+      const safeImage = escapeHtml(employee.image);
+      const safeId = escapeHtml(String(employee.id));
+      const safeCreatedAt = escapeHtml(employee.created_at);
+      const safeUpdatedAt = escapeHtml(employee.updated_at);
 
       const fullnameInitials = (employee.fullname || "UN")
         .split(" ")
@@ -714,17 +717,21 @@ async function renderEmployeeTable() {
 // ─────────────────────────────────────────────────────────────────
 
 function toggleActionsPanel(btn) {
-  const panel = btn.parentElement.querySelector('.actions-panel');
-  const allPanels = document.querySelectorAll('.actions-panel');
-  const allBtns = document.querySelectorAll('.actions-toggle-btn');
+  const panel = btn.parentElement.querySelector(".actions-panel");
+  const allPanels = document.querySelectorAll(".actions-panel");
+  const allBtns = document.querySelectorAll(".actions-toggle-btn");
 
-  allPanels.forEach(p => { if (p !== panel) p.classList.remove('actions-open'); });
-  allBtns.forEach(b => { if (b !== btn) b.classList.remove('actions-active'); });
+  allPanels.forEach((p) => {
+    if (p !== panel) p.classList.remove("actions-open");
+  });
+  allBtns.forEach((b) => {
+    if (b !== btn) b.classList.remove("actions-active");
+  });
 
-  panel.classList.toggle('actions-open');
-  btn.classList.toggle('actions-active');
+  panel.classList.toggle("actions-open");
+  btn.classList.toggle("actions-active");
 
-  if (panel.classList.contains('actions-open') && window.innerWidth <= 480) {
+  if (panel.classList.contains("actions-open") && window.innerWidth <= 480) {
     const rect = btn.getBoundingClientRect();
     let top = rect.bottom + 4;
     let left = rect.left;
@@ -732,11 +739,11 @@ function toggleActionsPanel(btn) {
     if (left + 160 > window.innerWidth - 8) left = window.innerWidth - 160 - 8;
     if (top + 180 > window.innerHeight) top = rect.top - 184;
 
-    panel.style.top  = top  + 'px';
-    panel.style.left = left + 'px';
+    panel.style.top = top + "px";
+    panel.style.left = left + "px";
   } else {
-    panel.style.top  = '';
-    panel.style.left = '';
+    panel.style.top = "";
+    panel.style.left = "";
   }
 }
 
@@ -752,7 +759,7 @@ function openLogsModalFromBtn(btn) {
 }
 
 function openEditFromBtn(btn) {
-  openModal('edit', parseInt(btn.dataset.empId, 10));
+  openModal("edit", parseInt(btn.dataset.empId, 10));
 }
 
 function openDeleteFromBtn(btn) {
@@ -767,7 +774,7 @@ function openViolationPopupFromBtn(btn) {
   // Read values from data attributes (already HTML-escaped in the template)
   // but pass RAW values from the employees array to avoid double-escaping in the popup logic
   const empId = btn.dataset.empId;
-  const employee = employees.find(e => String(e.id) === String(empId));
+  const employee = employees.find((e) => String(e.id) === String(empId));
   if (!employee) return;
   openViolationPopup(employee.fullname, employee.violation, employee.id);
 }
@@ -789,6 +796,8 @@ async function getCurrentUserId() {
     if (response.ok) {
       const data = await response.json();
       return data.user_id || "default";
+    } else {
+      console.warn("Failed to get user ID, using default");
     }
   } catch (error) {
     console.error("Error getting user ID:", error);
@@ -797,28 +806,43 @@ async function getCurrentUserId() {
   return "default";
 }
 
+// Copy QR code to clipboard
 function copyQRCode(code) {
+  // Create a temporary textarea element to hold the text
   const tempTextArea = document.createElement("textarea");
-  // SECURITY: assign to .value (not innerHTML) — safe
   tempTextArea.value = code;
   document.body.appendChild(tempTextArea);
+
+  // Select and copy the text
   tempTextArea.select();
-  tempTextArea.setSelectionRange(0, 99999);
+  tempTextArea.setSelectionRange(0, 99999); // For mobile devices
 
   try {
+    // Copy the text to clipboard
     document.execCommand("copy");
+
+    // Show success message (optional)
     showAlert("Proximity code copied to clipboard!");
+
+    // Alternative: Use a more subtle notification
+    // console.log('QR code copied:', code);
   } catch (err) {
+    // Fallback for modern browsers using the Clipboard API
     if (navigator.clipboard) {
       navigator.clipboard
         .writeText(code)
-        .then(() => showAlert("Proximity code copied to clipboard!"))
-        .catch(() => showAlert("Failed to copy Proximity code"));
+        .then(() => {
+          showAlert("Proximity code copied to clipboard!");
+        })
+        .catch(() => {
+          showAlert("Failed to copy Proximity code");
+        });
     } else {
       showAlert("Failed to copy Proximity code");
     }
   }
 
+  // Remove the temporary textarea
   document.body.removeChild(tempTextArea);
 }
 
@@ -920,8 +944,8 @@ function clearSearch() {
 
   currentPage = 1;
   activeFilters = {};
-  loadEmployees({}, false, true);
   updateDeleteButtonState();
+  loadEmployees({}, false, true);
 }
 
 function clearDateFilter() {
@@ -959,13 +983,12 @@ function showFullnameSuggestions(query) {
   list.innerHTML = matches
     .map((name, i) => {
       const safeName = escapeHtml(name);
-      const safeQ = escapeHtml(q);
+      const properName = escapeHtml(toProperCase(name));
       const regex = new RegExp(
         `(${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
         "gi",
       );
-      // Highlight is applied to escaped name — safe
-      const highlighted = safeName.replace(
+      const highlighted = properName.replace(
         regex,
         '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
       );
@@ -1111,7 +1134,8 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
       msgDiv.appendChild(p1);
 
       const filterBox = document.createElement("div");
-      filterBox.style.cssText = "background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 4px; margin-bottom: 15px;";
+      filterBox.style.cssText =
+        "background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 4px; margin-bottom: 15px;";
 
       Object.entries(getActiveFilters()).forEach(([key, value]) => {
         const row = document.createElement("div");
@@ -1230,18 +1254,20 @@ function updateDeleteButtonState() {
   const deleteBtn = document.querySelector(".delete-all-btn .btn-danger");
   if (!deleteBtn) return;
 
-  const hasFilters = hasActiveFilters();
+  const hasFilters = Object.keys(activeFilters).length > 0;
+  const hasData = employees && employees.length > 0;
+  const canDelete = hasFilters && hasData;
 
-  if (hasFilters) {
-    deleteBtn.disabled = false;
-    deleteBtn.style.opacity = "1";
-    deleteBtn.style.cursor = "pointer";
-    deleteBtn.title = "Delete filtered employees";
-  } else {
-    deleteBtn.disabled = true;
-    deleteBtn.style.opacity = "0.4";
-    deleteBtn.style.cursor = "not-allowed";
+  deleteBtn.disabled = !canDelete;
+  deleteBtn.style.opacity = canDelete ? "1" : "0.4";
+  deleteBtn.style.cursor = canDelete ? "pointer" : "not-allowed";
+
+  if (!hasFilters) {
     deleteBtn.title = "Apply filters first to enable deletion";
+  } else if (!hasData) {
+    deleteBtn.title = "No matching records to delete";
+  } else {
+    deleteBtn.title = `Delete ${employees.length} filtered employee(s)`;
   }
 }
 
@@ -1279,7 +1305,10 @@ async function deleteFilteredEmployees() {
       currentPage = 1;
       clearSearch();
     } else {
-      showAlert(escapeHtml(data.message) || "Failed to delete filtered employees", "error");
+      showAlert(
+        escapeHtml(data.message) || "Failed to delete filtered employees",
+        "error",
+      );
     }
   } catch (error) {
     console.error("Error:", error);
@@ -1474,15 +1503,21 @@ function openViolationPopup(fullname, violation, employeeId) {
 
   // Header row
   const header = document.createElement("div");
-  header.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;";
+  header.style.cssText =
+    "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;";
 
   const headerLabel = document.createElement("span");
   headerLabel.style.cssText = "font-size:13px;font-weight:500;color:#64748b;";
   // SECURITY: textContent for fullname
   headerLabel.textContent = `${fullname} — Remarks`;
 
+  const footer = document.createElement("div");
+  footer.style.cssText =
+    "display:flex;justify-content:end;align-items:center;margin-top:12px;";
+
   const closeBtn = document.createElement("button");
-  closeBtn.style.cssText = "background:none;border:none;font-size:16px;cursor:pointer;color:#94a3b8;line-height:1;padding:0;";
+  closeBtn.style.cssText =
+    "background:none;border:none;font-size:16px;cursor:pointer;color:#94a3b8;line-height:1;padding:0;";
   closeBtn.textContent = "✕";
   closeBtn.onclick = () => overlay.remove();
 
@@ -1491,10 +1526,12 @@ function openViolationPopup(fullname, violation, employeeId) {
 
   // Body row
   const body = document.createElement("div");
-  body.style.cssText = "display:flex;align-items:flex-start;justify-content:space-between;gap:12px;";
+  body.style.cssText =
+    "display:flex;align-items:flex-start;justify-content:space-between;gap:12px;";
 
   const violationText = document.createElement("div");
-  violationText.style.cssText = "font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;flex:1;";
+  violationText.style.cssText =
+    "font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;flex:1;max-height:200px;overflow-y:auto;word-break:break-word;";
   // SECURITY: textContent for violation content
   violationText.textContent = violation;
 
@@ -1506,10 +1543,11 @@ function openViolationPopup(fullname, violation, employeeId) {
   attachBtn.onclick = () => window.open(reportUrl, "_blank");
 
   body.appendChild(violationText);
-  body.appendChild(attachBtn);
+  footer.appendChild(attachBtn);
 
   card.appendChild(header);
   card.appendChild(body);
+  card.appendChild(footer);
   overlay.appendChild(card);
 
   overlay.addEventListener("click", (e) => {
@@ -1658,6 +1696,7 @@ async function loadEmployees(
       await renderEmployeeTable();
       await updateTotalEmployees();
       await updateActiveEmployees();
+      updateDeleteButtonState();
 
       if (Object.keys(filters).length > 0) {
         displayFilterStatus();
@@ -1747,7 +1786,10 @@ async function handleFormSubmit(e) {
     if (currentAction === "edit" && empid !== originalId) {
       const idTaken = employees.some((emp) => String(emp.id) === String(empid));
       if (idTaken) {
-        showAlert(`Employee ID "${escapeHtml(empid)}" is already in use`, "error");
+        showAlert(
+          `Employee ID "${escapeHtml(empid)}" is already in use`,
+          "error",
+        );
         return;
       }
     }
@@ -1766,7 +1808,10 @@ async function handleFormSubmit(e) {
     });
 
     if (isDuplicate) {
-      showAlert(`Employee with name "${escapeHtml(fullname)}" already exists!`, "error");
+      showAlert(
+        `Employee with name "${escapeHtml(fullname)}" already exists!`,
+        "error",
+      );
       return;
     }
 
@@ -1989,7 +2034,7 @@ async function deleteEmployee(employeeId) {
       await updateTotalEmployees();
       await updateActiveEmployees();
     } else {
-      showAlert(data.message || "Failed to delete proximity code", "error");
+      showAlert(data.message, "error");
     }
   } catch (error) {
     console.error("Error:", error);
@@ -2025,9 +2070,17 @@ async function deleteAllEmployees(employeeId) {
     }
   } catch (error) {
     console.error("Error:", error);
-    showAlert("Failed to delete all employee data", "error");
+
     currentPage = 1;
     clearSearch();
+
+    if (error instanceof TypeError) {
+      showAlert("Network error: Failed to connect to server", "error");
+    } else if (error.message.includes("JSON")) {
+      showAlert("Server returned invalid response", "error");
+    } else {
+      showAlert("Delete all employee data", "success");
+    }
   } finally {
     showLoading(false);
   }
@@ -2047,7 +2100,8 @@ function showAlert(message, type = "info") {
   msgSpan.textContent = message;
 
   const closeBtn = document.createElement("button");
-  closeBtn.style.cssText = "float: right; background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 5px;";
+  closeBtn.style.cssText =
+    "float: right; background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 5px;";
   closeBtn.innerHTML = `<i class="fas fa-times"></i>`;
   closeBtn.onclick = () => alert.remove();
 

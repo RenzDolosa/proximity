@@ -206,9 +206,7 @@ if ($databaseConnected) {
             </div>
           </div>
           <div class="delete-all-btn">
-            <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All
-              Data
-            </button>
+            <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All Data</button>
           </div>
           <!-- Auto-update controls -->
           <div class="auto-update-controls">
