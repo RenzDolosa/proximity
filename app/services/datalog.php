@@ -360,14 +360,14 @@ if ($databaseConnected) {
     function checkFab() {
       const fab = document.getElementById('filterFab');
       if (!fab) return;
-      fab.style.display = window.innerWidth <= 480 ? 'flex' : 'none';
+      fab.style.display = window.innerWidth <= 640 ? 'flex' : 'none';
     }
     checkFab();
     window.addEventListener('resize', checkFab);
 
     // image phone view
     (function() {
-      if (window.innerWidth > 480) return; // desktop only uses CSS hover
+      if (window.innerWidth > 640) return; // desktop only uses CSS hover
 
       let clone = null;
 

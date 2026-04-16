@@ -1,24 +1,109 @@
 <?php
 // app/services/manpower_backend.php --> system table backend
+// SECURITY FIXES APPLIED:
+// 1. Security headers added (X-Content-Type-Options, X-Frame-Options, CSP)
+// 2. Server-side MIME type validation for file uploads
+// 3. restore_mode whitelisted to allowed values
+// 4. json_decode depth-limited (JSON_THROW_ON_ERROR + depth param)
+// 5. action values validated against an explicit whitelist
+// 6. employee_ids array size capped to prevent mass-delete abuse
+// 7. sanitizeInput() defined here as a safe fallback if config.php's version is absent
 
 require_once __DIR__ . '/../../config/config.php';
 
-// Safety-net: re-assert PHP timezone in case this file is ever bootstrapped
-// without config.php. config.php already defines APP_TIMEZONE / APP_TIMEZONE_TZ
-// and calls date_default_timezone_set(), so this is a no-op in normal operation.
+// ── Security headers ──────────────────────────────────────────────────────────
+// Send before any output. Skip for file-serving responses (handled later).
+if (!isset($_GET['serve_file']) && !isset($_GET['api_info']) && !isset($_GET['health_check'])) {
+  header('X-Content-Type-Options: nosniff');
+  header('X-Frame-Options: DENY');
+  header('Referrer-Policy: strict-origin-when-cross-origin');
+  // Tighten CSP to match your actual CDN/asset sources
+  header("Content-Security-Policy: default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com;");
+}
+
+// ── Safe fallback sanitizeInput() ─────────────────────────────────────────────
+// config.php should define this; this guard ensures it is never missing.
+if (!function_exists('sanitizeInput')) {
+  function sanitizeInput($input) {
+    if (is_null($input)) return '';
+    // Strip tags first, then encode remaining HTML-special chars
+    return htmlspecialchars(strip_tags(trim((string)$input)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+  }
+}
+
+// Safety-net: re-assert PHP timezone
 if (!defined('APP_TIMEZONE')) {
   define('APP_TIMEZONE',    'Asia/Manila');
   define('APP_TIMEZONE_TZ', '+08:00');
 }
 date_default_timezone_set(APP_TIMEZONE);
 
+// ── Whitelists ────────────────────────────────────────────────────────────────
+const ALLOWED_POST_ACTIONS = [
+  'add', 'create', 'edit', 'update', 'delete', 'delete_filtered',
+  'delete_all', 'import', 'get_stats', 'get_status_history',
+  'bulk_status_update', 'search_qr', 'restore_data', 'backup_data',
+];
+
+const ALLOWED_GET_ACTIONS = [
+  'get', 'list', 'get_single', 'get_access_logs',
+  'check_qr', 'stats', 'user_info', 'get_violations',
+];
+
+const ALLOWED_STATUSES   = ['Active', 'Inactive'];
+const ALLOWED_SHIFTS     = ['Day Shift', 'Night Shift', 'Graveyard Shift'];
+const ALLOWED_RESTORE    = ['replace', 'merge'];       // whitelist for restore_mode
+const MAX_BULK_DELETE    = 5000;                        // safety cap for bulk deletes
+const MAX_IMPORT_ROWS    = 2000;                        // safety cap for import
+
+// ── MIME-type validation helper ───────────────────────────────────────────────
+function validateImageMime($tmpPath) {
+  $allowed_mimes = [
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+  ];
+
+  // Use finfo (preferred) or getimagesize as fallback
+  if (function_exists('finfo_open')) {
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mime  = finfo_file($finfo, $tmpPath);
+    finfo_close($finfo);
+  } elseif (function_exists('mime_content_type')) {
+    $mime = mime_content_type($tmpPath);
+  } else {
+    // Last resort: getimagesize (not spoofable via extension alone)
+    $info = @getimagesize($tmpPath);
+    $mime = $info ? $info['mime'] : '';
+  }
+
+  return in_array($mime, $allowed_mimes, true);
+}
+
+// ── Safe json_decode wrapper ──────────────────────────────────────────────────
+// Limits nesting depth and throws on malformed JSON.
+function safeJsonDecode($json, $assoc = true, $depth = 32) {
+  if (!is_string($json) || $json === '') return null;
+  try {
+    $decoded = json_decode($json, $assoc, $depth, JSON_THROW_ON_ERROR);
+    return $decoded;
+  } catch (JsonException $e) {
+    error_log("safeJsonDecode error: " . $e->getMessage());
+    return null;
+  }
+}
+
 if (isset($_GET['serve_file'])) {
-  header('Content-Type: ' . $content_type);
-  header('Content-Disposition: inline; filename="' . $filename . '"');
-  header('Content-Length: ' . filesize($filepath));
-  header('Cache-Control: public, max-age=86400');
-  header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 86400) . ' GMT');
-  header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($filepath)) . ' GMT');
+  header('Content-Type: ' . ($content_type ?? 'application/octet-stream'));
+  if (!empty($filename)) header('Content-Disposition: inline; filename="' . $filename . '"');
+  if (!empty($filepath) && file_exists($filepath)) {
+    header('Content-Length: ' . filesize($filepath));
+    header('Cache-Control: public, max-age=86400');
+    header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 86400) . ' GMT');
+    header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($filepath)) . ' GMT');
+  }
 }
 
 class Database
@@ -70,7 +155,7 @@ class Database
 class EmployeeManager
 {
   private $conn;
-  private $table = 'employees';
+  private $table = 'employees';   // hardcoded — never user-supplied
   private $userId;
 
   public function __construct($db)
@@ -243,18 +328,18 @@ class EmployeeManager
 
       $stmt = $this->conn->prepare($query);
       $stmt->execute([
-        ':user_id'   => $this->userId,
-        ':id'        => $data['id'],
-        ':fullname'  => $data['fullname'],
-        ':position'  => $data['position'],
-        ':brand'     => $data['brand'],
-        ':status'    => $data['status'],
-        ':shift'     => $data['shift'],
-        ':violation' => $data['violation'],
-        ':image'     => $data['image'],
-        ':qr_code'   => $data['qr_code'],
+        ':user_id'    => $this->userId,
+        ':id'         => $data['id'],
+        ':fullname'   => $data['fullname'],
+        ':position'   => $data['position'],
+        ':brand'      => $data['brand'],
+        ':status'     => $data['status'],
+        ':shift'      => $data['shift'],
+        ':violation'  => $data['violation'],
+        ':image'      => $data['image'],
+        ':qr_code'    => $data['qr_code'],
         ':updated_at' => date('Y-m-d H:i:s'),
-        ':where_id'  => $old_id,
+        ':where_id'   => $old_id,
       ]);
     }
 
@@ -363,6 +448,9 @@ class EmployeeManager
     if (!is_array($employeeIds) || empty($employeeIds)) {
       return 0;
     }
+    // SECURITY: cap the array size to prevent accidental mass-delete via large payloads
+    $employeeIds = array_slice($employeeIds, 0, MAX_BULK_DELETE);
+
     try {
       $placeholders = implode(',', array_fill(0, count($employeeIds), '?'));
       $stmt = $this->conn->prepare(
@@ -411,7 +499,7 @@ class EmployeeManager
 class FileUploader
 {
   private $upload_dir;
-  private $allowed_types = ['jpg', 'jpeg', 'png', 'gif'];
+  private $allowed_types = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
   private $max_size = 5 * 1024 * 1024;
 
   public function __construct($userId = null)
@@ -428,11 +516,16 @@ class FileUploader
       return false;
     }
 
-    $file_extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-    $allowed_types  = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    // SECURITY: Validate actual MIME type — not just extension
+    if (!validateImageMime($file['tmp_name'])) {
+      throw new Exception("Invalid file type. The uploaded file does not appear to be a valid image.");
+    }
 
-    if (!in_array($file_extension, $allowed_types)) {
-      throw new Exception("Invalid file type. Only JPG, JPEG, PNG, GIF and WebP allowed.");
+    $file_extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    $allowed_types  = $this->allowed_types;
+
+    if (!in_array($file_extension, $allowed_types, true)) {
+      throw new Exception("Invalid file extension. Only JPG, JPEG, PNG, GIF and WebP allowed.");
     }
 
     if ($file['size'] > $this->max_size) {
@@ -451,7 +544,7 @@ class FileUploader
         @unlink($oldPath);
       }
     } else {
-      $filename = uniqid() . '.webp';
+      $filename = bin2hex(random_bytes(16)) . '.webp';
       $filepath = $this->upload_dir . $filename;
     }
 
@@ -491,6 +584,9 @@ class FileUploader
       case 'gif':
         $src = @imagecreatefromgif($tmpPath);
         break;
+      case 'webp':
+        $src = @imagecreatefromwebp($tmpPath);
+        break;
       default:
         return false;
     }
@@ -525,6 +621,9 @@ class FileUploader
   {
     if (!$filename) return false;
 
+    // SECURITY: basename() prevents path traversal
+    $filename = basename($filename);
+
     $deleted = false;
     $main  = $this->upload_dir . $filename;
     $thumb = $this->upload_dir . 'thumb_' . $filename;
@@ -542,6 +641,7 @@ class FileUploader
 
   public function getImagePath($filename)
   {
+    // SECURITY: basename() prevents path traversal attacks
     return $this->upload_dir . basename($filename);
   }
 }
@@ -564,7 +664,7 @@ class QRCodeGenerator
 
     $random = '';
     for ($i = 0; $i < max(0, $remainingLength); $i++) {
-      $random .= $chars[rand(0, strlen($chars) - 1)];
+      $random .= $chars[random_int(0, strlen($chars) - 1)]; // SECURITY: random_int > rand
     }
 
     return $prefix . $random . $uniquePart;
@@ -595,7 +695,7 @@ try {
 
   $response = ['success' => false, 'message' => '', 'data' => null];
 
-  // ── backup_data: stream JSON and exit before anything else fires ──────────
+  // ── backup_data ───────────────────────────────────────────────────────────
   if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'backup_data') {
     $employees   = $employeeManager->getEmployees();
     $stats       = $employeeManager->getEmployeeStats();
@@ -625,6 +725,12 @@ try {
   if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
+    // SECURITY: Validate action against whitelist
+    if (!in_array($action, ALLOWED_POST_ACTIONS, true)) {
+      $response['message'] = 'Invalid action specified.';
+      goto send_response;
+    }
+
     switch ($action) {
       case 'add':
       case 'create':
@@ -639,15 +745,22 @@ try {
           }
         }
 
-        $qr_code       = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
+        $qr_code = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
+
+        // SECURITY: validate status and shift against whitelists
+        $raw_status = $_POST['status'] ?? 'Active';
+        $raw_shift  = $_POST['shift']  ?? '';
+        $status = in_array($raw_status, ALLOWED_STATUSES, true) ? $raw_status : 'Active';
+        $shift  = in_array($raw_shift,  ALLOWED_SHIFTS,   true) ? $raw_shift  : '';
+
         $employee_data = [
           'user_id'   => $database->getCurrentUserId(),
-          'id'        => sanitizeInput($_POST['id'] ?? ''),
-          'fullname'  => sanitizeInput($_POST['fullname'] ?? ''),
-          'position'  => sanitizeInput($_POST['position'] ?? ''),
-          'brand'     => sanitizeInput($_POST['brand'] ?? ''),
-          'status'    => $_POST['status'] ?? 'Active',
-          'shift'     => sanitizeInput($_POST['shift'] ?? ''),
+          'id'        => sanitizeInput($_POST['id']        ?? ''),
+          'fullname'  => sanitizeInput($_POST['fullname']  ?? ''),
+          'position'  => sanitizeInput($_POST['position']  ?? ''),
+          'brand'     => sanitizeInput($_POST['brand']     ?? ''),
+          'status'    => $status,
+          'shift'     => $shift,
           'violation' => sanitizeInput($_POST['violation'] ?? ''),
           'image'     => $image_filename,
           'qr_code'   => sanitizeInput(!empty($_POST['qr_code']) ? $_POST['qr_code'] : $qr_code),
@@ -727,14 +840,20 @@ try {
           break;
         }
 
+        // SECURITY: validate status and shift
+        $raw_status = $_POST['status'] ?? $current_employee['status'];
+        $raw_shift  = $_POST['shift']  ?? $current_employee['shift'];
+        $status = in_array($raw_status, ALLOWED_STATUSES, true) ? $raw_status : $current_employee['status'];
+        $shift  = in_array($raw_shift,  ALLOWED_SHIFTS,   true) ? $raw_shift  : $current_employee['shift'];
+
         $employee_data = [
           'user_id'   => $database->getCurrentUserId(),
           'id'        => $new_id,
           'fullname'  => sanitizeInput($_POST['fullname']  ?? $current_employee['fullname']),
           'position'  => sanitizeInput($_POST['position']  ?? $current_employee['position']),
           'brand'     => sanitizeInput($_POST['brand']     ?? $current_employee['brand']),
-          'status'    => sanitizeInput($_POST['status']    ?? $current_employee['status']),
-          'shift'     => sanitizeInput($_POST['shift']     ?? $current_employee['shift']),
+          'status'    => $status,
+          'shift'     => $shift,
           'violation' => sanitizeInput($_POST['violation'] ?? $current_employee['violation']),
           'image'     => sanitizeInput($image_filename),
           'qr_code'   => sanitizeInput(!empty($_POST['qr_code']) ? $_POST['qr_code'] : $current_employee['qr_code']),
@@ -752,14 +871,12 @@ try {
             try {
               $conn = $database->getUserConnection();
               if (!empty($newViolation)) {
-                // Added or changed — log the new remarks
                 $stmt = $conn->prepare(
                   "INSERT INTO violations (employee_id, violation_type, violation_description, violation_date)
                  VALUES (?, 'Remarks Updated', ?, ?)"
                 );
                 $stmt->execute([$new_id, $newViolation, date('Y-m-d')]);
               } elseif (!empty($oldViolation) && empty($newViolation)) {
-                // Cleared — log the removal
                 $stmt = $conn->prepare(
                   "INSERT INTO violations (employee_id, violation_type, violation_description, violation_date)
                  VALUES (?, 'Remarks Cleared', ?, ?)"
@@ -792,8 +909,18 @@ try {
 
       case 'delete_filtered':
         try {
-          $employee_ids = json_decode($_POST['employee_ids'] ?? '[]', true) ?: [];
-          $filters      = json_decode($_POST['filters']       ?? '{}', true) ?: [];
+          // SECURITY: safeJsonDecode with depth limit
+          $employee_ids = safeJsonDecode($_POST['employee_ids'] ?? '[]');
+          $filters      = safeJsonDecode($_POST['filters']       ?? '{}');
+
+          if (!is_array($employee_ids)) $employee_ids = [];
+          if (!is_array($filters))      $filters      = [];
+
+          // SECURITY: cap bulk-delete count
+          if (count($employee_ids) > MAX_BULK_DELETE) {
+            $response['message'] = 'Too many IDs in a single request.';
+            break;
+          }
 
           if (empty($employee_ids)) {
             $response['message'] = 'No employees to delete';
@@ -825,7 +952,8 @@ try {
 
             $filterParts = [];
             foreach ($filters as $key => $value) {
-              $filterParts[] = "$key: $value";
+              // SECURITY: sanitize filter labels before logging
+              $filterParts[] = sanitizeInput($key) . ": " . sanitizeInput($value);
             }
             $filterStr = implode(', ', $filterParts) ?: 'All';
 
@@ -876,10 +1004,17 @@ try {
         break;
 
       case 'import':
-        $employees_data = json_decode($_POST['employees'] ?? '', true);
+        // SECURITY: safeJsonDecode with depth limit
+        $employees_data = safeJsonDecode($_POST['employees'] ?? '');
 
         if (!is_array($employees_data) || empty($employees_data)) {
           $response['message'] = empty($_POST['employees']) ? 'No employee data provided' : 'Invalid employee data format';
+          break;
+        }
+
+        // SECURITY: cap import row count
+        if (count($employees_data) > MAX_IMPORT_ROWS) {
+          $response['message'] = 'Import exceeds maximum allowed rows (' . MAX_IMPORT_ROWS . ').';
           break;
         }
 
@@ -896,14 +1031,20 @@ try {
                 ? trim($employee_data['qr'])
                 : QRCodeGenerator::generateQRCode($database->getCurrentUserId());
 
+              // SECURITY: validate status and shift for each import row
+              $row_status = in_array($employee_data['status'] ?? '', ALLOWED_STATUSES, true)
+                ? $employee_data['status'] : 'Active';
+              $row_shift  = in_array($employee_data['shift']  ?? '', ALLOWED_SHIFTS,   true)
+                ? $employee_data['shift']  : 'Day Shift';
+
               $employee_record = [
                 'user_id'   => $database->getCurrentUserId(),
                 'id'        => sanitizeInput(trim($employee_data['id'])),
                 'fullname'  => sanitizeInput(trim($employee_data['fullname'])),
                 'position'  => sanitizeInput(trim($employee_data['position'])),
                 'brand'     => sanitizeInput(trim($employee_data['brand'] ?? '')),
-                'status'    => in_array($employee_data['status'], ['Active', 'Inactive']) ? $employee_data['status'] : 'Active',
-                'shift'     => in_array($employee_data['shift'], ['Day Shift', 'Night Shift', 'Graveyard Shift']) ? $employee_data['shift'] : 'Day Shift',
+                'status'    => $row_status,
+                'shift'     => $row_shift,
                 'violation' => (($v = sanitizeInput(trim($employee_data['violation'] ?? ''))) === '' || $v === 'None') ? '' : $v,
                 'image'     => null,
                 'qr_code'   => sanitizeInput(trim($employee_data['qr_code'] ?? $qr_code)),
@@ -975,16 +1116,25 @@ try {
       case 'bulk_status_update':
         $employee_ids = $_POST['employee_ids'] ?? [];
         $new_status   = $_POST['new_status']   ?? '';
-        $reason       = $_POST['reason']       ?? 'Bulk status update';
+        $reason       = sanitizeInput($_POST['reason'] ?? 'Bulk status update');
 
-        if (empty($employee_ids) || empty($new_status)) {
-          $response['message'] = 'Employee IDs and new status are required';
+        // SECURITY: whitelist new_status
+        if (!in_array($new_status, ALLOWED_STATUSES, true)) {
+          $response['message'] = 'Invalid status value.';
+          break;
+        }
+
+        if (empty($employee_ids)) {
+          $response['message'] = 'Employee IDs are required';
           break;
         }
 
         if (!is_array($employee_ids)) {
-          $employee_ids = json_decode($employee_ids, true) ?: [];
+          $employee_ids = safeJsonDecode($employee_ids) ?: [];
         }
+
+        // SECURITY: cap bulk update count
+        $employee_ids = array_slice($employee_ids, 0, MAX_BULK_DELETE);
 
         $updated_count = 0;
         $errors        = [];
@@ -1043,7 +1193,7 @@ try {
         break;
 
       case 'search_qr':
-        $qr_code = $_POST['qr_code'] ?? '';
+        $qr_code = sanitizeInput($_POST['qr_code'] ?? '');
         if (empty($qr_code)) {
           $response['message'] = 'Proximity code is required';
           break;
@@ -1065,7 +1215,10 @@ try {
 
       case 'restore_data':
         $backup_json  = $_POST['backup_data'] ?? '';
-        $restore_mode = $_POST['restore_mode'] ?? 'replace';
+
+        // SECURITY: whitelist restore_mode
+        $raw_mode     = $_POST['restore_mode'] ?? 'replace';
+        $restore_mode = in_array($raw_mode, ALLOWED_RESTORE, true) ? $raw_mode : 'replace';
 
         if (empty($backup_json)) {
           $response['message'] = 'No backup data provided';
@@ -1073,10 +1226,17 @@ try {
         }
 
         try {
-          $backup_data = json_decode($backup_json, true);
+          // SECURITY: safeJsonDecode with depth limit
+          $backup_data = safeJsonDecode($backup_json);
 
-          if (!$backup_data || !isset($backup_data['employees'])) {
+          if (!$backup_data || !isset($backup_data['employees']) || !is_array($backup_data['employees'])) {
             $response['message'] = 'Invalid backup data format';
+            break;
+          }
+
+          // SECURITY: cap restore rows
+          if (count($backup_data['employees']) > MAX_IMPORT_ROWS) {
+            $response['message'] = 'Backup exceeds maximum allowed rows (' . MAX_IMPORT_ROWS . ').';
             break;
           }
 
@@ -1097,6 +1257,12 @@ try {
               if (empty($employee_data['qr_code'])) {
                 $employee_data['qr_code'] = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
               }
+
+              // SECURITY: validate status/shift for restore rows too
+              $employee_data['status'] = in_array($employee_data['status'] ?? '', ALLOWED_STATUSES, true)
+                ? $employee_data['status'] : 'Active';
+              $employee_data['shift']  = in_array($employee_data['shift']  ?? '', ALLOWED_SHIFTS,   true)
+                ? $employee_data['shift']  : 'Day Shift';
 
               $employee_id = $employeeManager->createEmployee($employee_data);
 
@@ -1127,47 +1293,62 @@ try {
           $response['message'] = 'Restore error: ' . $e->getMessage();
         }
         break;
-
-      default:
-        $response['message'] = 'Invalid action specified: ' . $action;
-        break;
     }
 
-    // ── GET handler ──────────────────────────────────────────────────────────
+  // ── GET handler ──────────────────────────────────────────────────────────
   } elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $action = $_GET['action'] ?? '';
+
+    // SECURITY: validate action against whitelist
+    if (!empty($action) && !in_array($action, ALLOWED_GET_ACTIONS, true)) {
+      $response['message'] = 'Invalid GET action specified.';
+      goto send_response;
+    }
 
     switch ($action) {
       case 'get':
       case 'list':
         $filters = [];
 
-        if (!empty($_GET['user_id']))        $filters['user_id']        = $_GET['user_id'];
-        if (!empty($_GET['id']))             $filters['id']             = $_GET['id'];
-        if (!empty($_GET['fullname']))       $filters['fullname']       = $_GET['fullname'];
-        if (!empty($_GET['position']))       $filters['position']       = $_GET['position'];
+        if (!empty($_GET['user_id']))        $filters['user_id']        = sanitizeInput($_GET['user_id']);
+        if (!empty($_GET['id']))             $filters['id']             = sanitizeInput($_GET['id']);
+        if (!empty($_GET['fullname']))       $filters['fullname']       = sanitizeInput($_GET['fullname']);
+        if (!empty($_GET['position']))       $filters['position']       = sanitizeInput($_GET['position']);
         if (!empty($_GET['position_none']))  $filters['position_none']  = '1';
-        if (!empty($_GET['brand']))          $filters['brand']          = $_GET['brand'];
+        if (!empty($_GET['brand']))          $filters['brand']          = sanitizeInput($_GET['brand']);
         if (!empty($_GET['brand_none']))     $filters['brand_none']     = '1';
-        if (!empty($_GET['status']))         $filters['status']         = $_GET['status'];
+        if (!empty($_GET['status']))         $filters['status']         = sanitizeInput($_GET['status']);
         if (!empty($_GET['status_none']))    $filters['status_none']    = '1';
-        if (!empty($_GET['shift']))          $filters['shift']          = $_GET['shift'];
+        if (!empty($_GET['shift']))          $filters['shift']          = sanitizeInput($_GET['shift']);
         if (!empty($_GET['shift_none']))     $filters['shift_none']     = '1';
-        if (!empty($_GET['violation']))      $filters['violation']      = $_GET['violation'];
+        if (!empty($_GET['violation']))      $filters['violation']      = sanitizeInput($_GET['violation']);
         if (!empty($_GET['violation_none'])) $filters['violation_none'] = '1';
-        if (!empty($_GET['qr_code']))        $filters['qr_code']        = $_GET['qr_code'];
+        if (!empty($_GET['qr_code']))        $filters['qr_code']        = sanitizeInput($_GET['qr_code']);
         if (!empty($_GET['created_at'])) {
-          $filters['created_at'] = $_GET['created_at'];
+          // SECURITY: validate date format
+          $d = $_GET['created_at'];
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) {
+            $filters['created_at'] = $d;
+          }
         } elseif (!empty($_GET['created_from']) && !empty($_GET['created_to'])) {
-          $filters['created_from'] = $_GET['created_from'];
-          $filters['created_to']   = $_GET['created_to'];
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['created_from']) &&
+              preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['created_to'])) {
+            $filters['created_from'] = $_GET['created_from'];
+            $filters['created_to']   = $_GET['created_to'];
+          }
         }
 
         if (!empty($_GET['updated_at'])) {
-          $filters['updated_at'] = $_GET['updated_at'];
+          $d = $_GET['updated_at'];
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) {
+            $filters['updated_at'] = $d;
+          }
         } elseif (!empty($_GET['updated_from']) && !empty($_GET['updated_to'])) {
-          $filters['updated_from'] = $_GET['updated_from'];
-          $filters['updated_to']   = $_GET['updated_to'];
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['updated_from']) &&
+              preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['updated_to'])) {
+            $filters['updated_from'] = $_GET['updated_from'];
+            $filters['updated_to']   = $_GET['updated_to'];
+          }
         }
 
         try {
@@ -1217,7 +1398,6 @@ try {
           $stmt->execute([':id' => $id]);
           $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-          // Resolve user_id → first_name from main DB
           $userIds = array_unique(array_filter(array_column($logs, 'user_id')));
           $userNameMap = [];
 
@@ -1254,7 +1434,7 @@ try {
         break;
 
       case 'check_qr':
-        $qr_code = $_GET['qr_code'] ?? '';
+        $qr_code = sanitizeInput($_GET['qr_code'] ?? '');
         if (!empty($qr_code)) {
           try {
             $employee = $employeeManager->getEmployeeByQR($qr_code);
@@ -1296,7 +1476,7 @@ try {
         break;
 
       case 'get_violations':
-        $emp_id = $_GET['id'] ?? 0;
+        $emp_id = intval($_GET['id'] ?? 0);
         if (!$emp_id) {
           $response['message'] = 'Employee ID required';
           break;
@@ -1304,7 +1484,6 @@ try {
         try {
           $conn = $database->getUserConnection();
 
-          // Ensure violations table exists (safe guard)
           $conn->exec("CREATE TABLE IF NOT EXISTS `violations` (
             `id` INT AUTO_INCREMENT PRIMARY KEY,
             `employee_id` INT NOT NULL,
@@ -1324,19 +1503,17 @@ try {
           $stmt->execute([':id' => $emp_id]);
           $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-          $response['success'] = true;
+          $response['success']    = true;
           $response['violations'] = $rows;
         } catch (Exception $e) {
           $response['message'] = 'Error fetching violations: ' . $e->getMessage();
           error_log("get_violations error: " . $e->getMessage());
         }
         break;
-
-      default:
-        $response['message'] = 'Invalid GET action specified';
-        break;
     }
   }
+
+  send_response:
 
   if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
     header('Content-Type: application/json');
@@ -1350,8 +1527,9 @@ try {
     $_SESSION['error_message'] = $response['message'];
   }
 } catch (Exception $e) {
-  $error_response = ['success' => false, 'message' => 'System error: ' . $e->getMessage()];
+  $error_response = ['success' => false, 'message' => 'A system error occurred. Please try again.'];
 
+  // SECURITY: never expose raw exception messages to client
   error_log("Manpower System Error: " . $e->getMessage());
 
   if (isset($_SESSION['user_id'])) {
@@ -1422,6 +1600,7 @@ if (isset($_GET['serve_file'])) {
     exit;
   }
   $fileUploader = new FileUploader($userId);
+  // SECURITY: basename() prevents path traversal
   $filename     = basename($_GET['serve_file']);
   $filepath     = $fileUploader->getImagePath($filename);
   serveFile($filepath, $filename);
@@ -1430,14 +1609,9 @@ if (isset($_GET['serve_file'])) {
 if (isset($_GET['api_info'])) {
   header('Content-Type: application/json');
   echo json_encode([
-    'version'     => '2.4',
+    'version'     => '2.5',
     'name'        => 'Integrated Manpower Management System',
-    'description' => 'Multi-user employee management with editable IDs, persistent images, filtered delete',
-    'fixes'       => [
-      'bulk_status_update: single audit log entry per bulk call',
-      'backup_data: headers sent before JSON block can fire',
-      'QRCodeGenerator: no userId=0 collisions',
-    ],
+    'description' => 'Multi-user employee management — security hardened',
   ], JSON_PRETTY_PRINT);
   exit;
 }
@@ -1448,7 +1622,7 @@ if (isset($_GET['health_check'])) {
     'timestamp'           => date('Y-m-d H:i:s'),
     'timezone'            => date_default_timezone_get(),
     'user_authenticated'  => isset($_SESSION['user_id']),
-    'user_id'             => $_SESSION['user_id'] ?? null,
+    // SECURITY: never expose user_id in health check response
     'database_connection' => 'OK',
   ];
 
@@ -1459,7 +1633,7 @@ if (isset($_GET['health_check'])) {
     $health['user_database'] = 'OK';
   } catch (Exception $e) {
     $health['status']        = 'ERROR';
-    $health['user_database'] = 'ERROR: ' . $e->getMessage();
+    $health['user_database'] = 'ERROR';   // SECURITY: don't leak exception message
   }
 
   header('Content-Type: application/json');

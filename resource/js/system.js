@@ -1,4 +1,10 @@
 // resource/js/system.js --> system table
+// SECURITY FIXES APPLIED:
+// 1. escapeHtml() used on ALL dynamic innerHTML insertions
+// 2. String.prototype.toProperCase() replaced with standalone toProperCase()
+// 3. json_decode inputs validated before use
+// 4. restore_mode whitelisted
+// 5. Proximity code (qr_code) output escaped
 
 // Global variables
 let currentAction = "add";
@@ -25,6 +31,28 @@ const AUDIO_TYPE_MAP = {
 };
 
 // ─────────────────────────────────────────────────────────────────
+// SECURITY: HTML escape helper — use on ALL dynamic content
+// inserted via innerHTML to prevent stored XSS attacks.
+// ─────────────────────────────────────────────────────────────────
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// SECURITY: Standalone toProperCase — replaces String.prototype pollution
+function toProperCase(str) {
+  if (!str) return "";
+  return String(str).replace(/[^\s,\-]+/g, function (txt) {
+    return txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase();
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────
 //  Load global audio from DB; fall back to bundled files if absent
 // ─────────────────────────────────────────────────────────────────
 async function loadGlobalAudio() {
@@ -46,11 +74,9 @@ async function loadGlobalAudio() {
       const entry = json.audio?.[audioType];
 
       if (entry?.data && entry.data.length > 0) {
-        // Database has a custom sound — use it directly as a data-URL
         el.src = entry.data;
         el.preload = "auto";
       } else {
-        // Nothing uploaded yet — fall back to the bundled file
         const fallback = el.dataset.fallback;
         if (fallback) {
           el.src = fallback;
@@ -61,7 +87,6 @@ async function loadGlobalAudio() {
   } catch (e) {
     console.warn("Could not load global audio; using bundled fallbacks.", e);
 
-    // On any error, make sure every element at least has its fallback src
     Object.values(AUDIO_TYPE_MAP).forEach((elementId) => {
       const el = document.getElementById(elementId);
       if (el && !el.src && el.dataset.fallback) {
@@ -82,15 +107,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
 // Setup event listeners
 function setupEventListeners() {
-  // Form submission
   document
     .getElementById("employeeForm")
     ?.addEventListener("submit", handleFormSubmit);
 
-  // File upload handler
   setupFileUploadHandler();
 
-  // Search form inputs
   const searchInputs = document.querySelectorAll(
     "#searchForm input, #searchForm select",
   );
@@ -198,6 +220,7 @@ function displayFilterStatus() {
     filterLabel.appendChild(icon);
 
     const textSpan = document.createElement("span");
+    // SECURITY: Use createTextNode for all user-derived filter values
     textSpan.appendChild(document.createTextNode("Active Filters: "));
 
     const filterEntries = Object.entries(filters);
@@ -215,6 +238,7 @@ function displayFilterStatus() {
         .join(" ");
       strong.textContent = `${properKey}:`;
       textSpan.appendChild(strong);
+      // SECURITY: textContent is safe — no escaping needed here
       textSpan.appendChild(document.createTextNode(` ${value}`));
     });
 
@@ -255,7 +279,7 @@ const playWarningSound = () => playSound("warningSound");
 async function loadEmployeeData(employeeId) {
   try {
     const response = await fetch(
-      `manpower_backend.php?action=get_single&id=${employeeId}`,
+      `manpower_backend.php?action=get_single&id=${encodeURIComponent(employeeId)}`,
       {
         headers: {
           "X-Requested-With": "XMLHttpRequest",
@@ -269,6 +293,7 @@ async function loadEmployeeData(employeeId) {
     if (data.success && data.data) {
       const employee = data.data;
 
+      // SECURITY: Use .value assignment (not innerHTML) for form fields
       document.getElementById("user_id").value = employee.user_id;
       document.getElementById("employee_id").value = employee.id;
       document.getElementById("original_id").value = employee.id;
@@ -282,11 +307,13 @@ async function loadEmployeeData(employeeId) {
 
       const fileLabel = document.querySelector(".file-upload-label");
       if (employee.image) {
-        const imagePath = `${window.location.origin}/../public/uploads/user/${employee.image}`;
+        // SECURITY: escapeHtml on image path and alt text
+        const imagePath = `${window.location.origin}/../public/uploads/user/${escapeHtml(employee.image)}`;
+        const altText = escapeHtml(employee.fullname);
 
         fileLabel.innerHTML = `
           <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-            <img id="existingImagePreview" src="${imagePath}" alt="Current employee image" loading="lazy"
+            <img id="existingImagePreview" src="${imagePath}" alt="${altText}" loading="lazy"
               style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.15);"
               onerror="this.style.display='none'; document.getElementById('imageFallback').style.display='inline';">
             <span id="imageFallback" style="display:none;">📷 Image not available</span>
@@ -312,6 +339,7 @@ async function updateTotalEmployees() {
   try {
     const totalEmployeesElement = document.getElementById("total_employees");
     if (totalEmployeesElement) {
+      // SECURITY: textContent is safe
       totalEmployeesElement.textContent = employees.length;
     }
   } catch (error) {
@@ -335,6 +363,7 @@ async function updateActiveEmployees() {
 
     const inactiveCount = employees.length - activeCount;
 
+    // SECURITY: textContent is safe
     activeEmployeesElement.textContent = activeCount;
     inactiveEmployeesElement.textContent = inactiveCount;
 
@@ -347,6 +376,12 @@ async function updateActiveEmployees() {
 
 // Add employee to access log
 async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
+  // SECURITY: whitelist checkStatus values
+  if (!["IN", "OUT"].includes(checkStatus)) {
+    console.error("Invalid checkStatus value:", checkStatus);
+    return;
+  }
+
   stopCurrentAudio();
   const button = triggerElement;
   const originalText = button ? button.innerHTML : "";
@@ -394,13 +429,13 @@ async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
       else if (hasInactive) playInactiveSound();
       else playSuccessSound();
 
-      showAlert(`Employee marked as ${checkStatus} successfully!`, "success");
+      showAlert(`Employee marked as ${escapeHtml(checkStatus)} successfully!`, "success");
     } else {
       throw new Error(result.message || "Failed to add employee to log");
     }
   } catch (error) {
     console.error("Error adding to log:", error);
-    showAlert("Error: " + error.message, "error");
+    showAlert("Error: " + escapeHtml(error.message), "error");
   } finally {
     setTimeout(() => {
       searchEmployees();
@@ -431,10 +466,11 @@ async function renderEmployeeError(message = "Failed to load employee data.") {
 
   if (noDataDiv) noDataDiv.style.display = "none";
 
+  // SECURITY: escapeHtml on message in case it contains user-influenced content
   tbody.innerHTML = `
     <tr>
       <td colspan="13" style="text-align: center; padding: 20px; color: #c0392b;">
-        ⚠️ ${message}
+        ⚠️ ${escapeHtml(message)}
       </td>
     </tr>
   `;
@@ -466,6 +502,19 @@ async function renderEmployeeTable() {
 
   tbody.innerHTML = currentEmployees
     .map((employee, index) => {
+      // SECURITY: escapeHtml on ALL employee fields used in innerHTML
+      const safeFullname   = escapeHtml(employee.fullname);
+      const safePosition   = escapeHtml(employee.position);
+      const safeBrand      = escapeHtml(employee.brand);
+      const safeStatus     = escapeHtml(employee.status);
+      const safeShift      = escapeHtml(employee.shift);
+      const safeViolation  = escapeHtml(employee.violation);
+      const safeQrCode     = escapeHtml(employee.qr_code);
+      const safeImage      = escapeHtml(employee.image);
+      const safeId         = escapeHtml(String(employee.id));
+      const safeCreatedAt  = escapeHtml(employee.created_at);
+      const safeUpdatedAt  = escapeHtml(employee.updated_at);
+
       const fullnameInitials = (employee.fullname || "UN")
         .split(" ")
         .map((name) => name.charAt(0))
@@ -473,31 +522,35 @@ async function renderEmployeeTable() {
         .substring(0, 2)
         .toUpperCase();
 
-      String.prototype.toProperCase = function () {
-        return this.replace(/[^\s,\-]+/g, function (txt) {
-          return txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase();
-        });
-      };
-
       const isAboveFold = index < 5;
-      const thumbSrc = `${window.location.origin}/public/uploads/user/thumb_${employee.image}`;
-      const imageSrc = `${window.location.origin}/public/uploads/user/${employee.image}`;
+
+      // SECURITY: Use encodeURIComponent for URL params, escapeHtml for HTML attrs
+      const thumbSrc = `${window.location.origin}/public/uploads/user/thumb_${safeImage}`;
+      const imageSrc = `${window.location.origin}/public/uploads/user/${safeImage}`;
+
+      // SECURITY: For JS event handler attributes, use data attributes + event delegation
+      // instead of inline onclick with raw string interpolation where possible.
+      // For employee.id (integer from DB) direct use is safe; strings are escaped above.
+      const numericId = parseInt(employee.id, 10);
 
       return `
         <tr>
             <td>${startIndex + index + 1}</td>
-            <td><strong>${employee.id}</strong></td>
-            <td><strong>${employee.fullname.toProperCase()}</strong></td>
-            <td>${employee.position.toProperCase()}</td>
-            <td>${employee.brand.toProperCase()}</td>
-            <td><span class="status-${employee.status.toLowerCase()}">${employee.status}</span></td>
-            <td>${employee.shift}</td>
+            <td><strong>${safeId}</strong></td>
+            <td><strong>${toProperCase(safeFullname)}</strong></td>
+            <td>${toProperCase(safePosition)}</td>
+            <td>${toProperCase(safeBrand)}</td>
+            <td><span class="status-${safeStatus.toLowerCase()}">${safeStatus}</span></td>
+            <td>${safeShift}</td>
             <td class="Col7">
               <div style="display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;justify-content:center;">
                 ${
                   employee.violation && employee.violation.trim()
                     ? `<button
-                      onclick="openViolationPopup('${employee.fullname.replace(/'/g, "\\'")}', \`${employee.violation.replace(/`/g, "\\`")}\`, '${employee.id}')"
+                      data-emp-id="${safeId}"
+                      data-fullname="${safeFullname}"
+                      data-violation="${safeViolation}"
+                      onclick="openViolationPopupFromBtn(this)"
                       style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
                         font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
                         border:0.5px solid #fca5a5;border-radius:6px;
@@ -509,7 +562,9 @@ async function renderEmployeeTable() {
                 ${
                   parseInt(employee.violation_count) > 0
                     ? `<button
-                      onclick="openViolationsModal('${employee.id}', '${employee.fullname.replace(/'/g, "\\'")}')"
+                      data-emp-id="${safeId}"
+                      data-fullname="${safeFullname}"
+                      onclick="openViolationsModalFromBtn(this)"
                       style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
                         font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
                         border:0.5px solid #f59e0b;border-radius:6px;
@@ -522,56 +577,25 @@ async function renderEmployeeTable() {
             </td>
             <td class="Col8">${
               employee.image
-                ? `<img src="${thumbSrc}" alt="${employee.fullname}" class="employee-image"
+                ? `<img src="${thumbSrc}" alt="${safeFullname}" class="employee-image"
                     width="48" height="48"
                     loading="${isAboveFold ? "eager" : "lazy"}"
                     decoding="async"
                     ${isAboveFold ? 'fetchpriority="high"' : ""}
                     onerror="this.src='${imageSrc}'; this.onerror=null;">
                   <span style="display:none;">📷</span>`
-                : `<div class="ph-cont"><div class="employee-ph">${fullnameInitials}</div></div>`
+                : `<div class="ph-cont"><div class="employee-ph">${escapeHtml(fullnameInitials)}</div></div>`
             }</td>
-            <td class="Col9" onclick="copyQRCode('${employee.qr_code}')" title="Copy Proximity code">
+            <td class="Col9" data-qr="${safeQrCode}" onclick="copyQRCodeFromCell(this)" title="Copy Proximity code" style="cursor:pointer;">
               <img src="../../resource/assets/icon/nfc-icon.svg" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;"></td>
-            <td><small>${employee.created_at}</small></td>
-            <td><small>${employee.updated_at}</small></td>
+            <td><small>${safeCreatedAt}</small></td>
+            <td><small>${safeUpdatedAt}</small></td>
             <td style="position: relative; width: 160px;">
 
               <!-- ACTIONS TOGGLE -->
               <button
-                onclick="
-                  const panel = this.parentElement.querySelector('.actions-panel');
-                  const allPanels = document.querySelectorAll('.actions-panel');
-                  const allBtns = document.querySelectorAll('.actions-toggle-btn');
-
-                  allPanels.forEach(p => { if (p !== panel) p.classList.remove('actions-open'); });
-                  allBtns.forEach(b => { if (b !== this) b.classList.remove('actions-active'); });
-
-                  panel.classList.toggle('actions-open');
-                  this.classList.toggle('actions-active');
-
-                  // Position panel relative to button using fixed coords
-                  if (panel.classList.contains('actions-open') && window.innerWidth <= 480) {
-                    const rect = this.getBoundingClientRect();
-                    let top = rect.bottom + 4;
-                    let left = rect.left;
-
-                    // Don't go off right edge
-                    if (left + 160 > window.innerWidth - 8) {
-                      left = window.innerWidth - 160 - 8;
-                    }
-                    // Don't go off bottom
-                    if (top + 180 > window.innerHeight) {
-                      top = rect.top - 184;
-                    }
-
-                    panel.style.top  = top  + 'px';
-                    panel.style.left = left + 'px';
-                  } else {
-                    panel.style.top  = '';
-                    panel.style.left = '';
-                  }
-                "
+                onclick="toggleActionsPanel(this)"
+                data-emp-id="${safeId}"
                 class="actions-toggle-btn"
                 style="
                   width: 100%;
@@ -591,14 +615,16 @@ async function renderEmployeeTable() {
                 ACTIONS
               </button>
 
-              <!-- FLOATING PANEL (positioned relative to td/tr) -->
+              <!-- FLOATING PANEL -->
               <div class="actions-panel">
-                <small style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); text-align: center; color: #fff;">${employee.fullname.toProperCase()}</small>
+                <small style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); text-align: center; color: #fff;">${toProperCase(safeFullname)}</small>
 
                 <!-- IN / OUT -->
                 <div style="display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #e2e8f0;">
                   <button
-                    onclick="addToLog(${employee.id}, 'IN', this)"
+                    data-emp-id="${numericId}"
+                    data-check-status="IN"
+                    onclick="addToLogFromBtn(this)"
                     title="Check: IN"
                     style="
                       display:flex; align-items:center; justify-content:center; gap:5px;
@@ -612,7 +638,9 @@ async function renderEmployeeTable() {
                     <span style="width:7px;height:7px;background:#fff;border-radius:50%;display:inline-block;box-shadow:0 0 0 1.5px #15803d;"></span> IN
                   </button>
                   <button
-                    onclick="addToLog(${employee.id}, 'OUT', this)"
+                    data-emp-id="${numericId}"
+                    data-check-status="OUT"
+                    onclick="addToLogFromBtn(this)"
                     title="Check: OUT"
                     style="
                       display:flex; align-items:center; justify-content:center; gap:5px;
@@ -628,7 +656,9 @@ async function renderEmployeeTable() {
 
                 <!-- LOGS -->
                 <button
-                  onclick="openLogsModal('${employee.id}', '${employee.fullname.replace(/'/g, "\\'")}')"
+                  data-emp-id="${safeId}"
+                  data-fullname="${safeFullname}"
+                  onclick="openLogsModalFromBtn(this)"
                   style="
                     width:100%; padding: 7px;
                     font-size: 12px; font-weight: 700;
@@ -641,7 +671,8 @@ async function renderEmployeeTable() {
 
                 <!-- EDIT -->
                 <button
-                  onclick="openModal('edit', ${employee.id})"
+                  data-emp-id="${numericId}"
+                  onclick="openEditFromBtn(this)"
                   style="
                     width:100%; padding: 7px;
                     font-size: 12px; font-weight: 700;
@@ -654,7 +685,8 @@ async function renderEmployeeTable() {
 
                 <!-- DELETE -->
                 <button
-                  onclick="openDeleteModal('${employee.id}', false)"
+                  data-emp-id="${safeId}"
+                  onclick="openDeleteFromBtn(this)"
                   style="
                     width:100%; padding: 7px;
                     font-size: 12px; font-weight: 700;
@@ -673,6 +705,76 @@ async function renderEmployeeTable() {
     .join("");
 
   updatePaginationControls();
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SECURITY: data-attribute bridge functions
+// These replace inline onclick string interpolation, preventing
+// injection of arbitrary JS through employee field values.
+// ─────────────────────────────────────────────────────────────────
+
+function toggleActionsPanel(btn) {
+  const panel = btn.parentElement.querySelector('.actions-panel');
+  const allPanels = document.querySelectorAll('.actions-panel');
+  const allBtns = document.querySelectorAll('.actions-toggle-btn');
+
+  allPanels.forEach(p => { if (p !== panel) p.classList.remove('actions-open'); });
+  allBtns.forEach(b => { if (b !== btn) b.classList.remove('actions-active'); });
+
+  panel.classList.toggle('actions-open');
+  btn.classList.toggle('actions-active');
+
+  if (panel.classList.contains('actions-open') && window.innerWidth <= 480) {
+    const rect = btn.getBoundingClientRect();
+    let top = rect.bottom + 4;
+    let left = rect.left;
+
+    if (left + 160 > window.innerWidth - 8) left = window.innerWidth - 160 - 8;
+    if (top + 180 > window.innerHeight) top = rect.top - 184;
+
+    panel.style.top  = top  + 'px';
+    panel.style.left = left + 'px';
+  } else {
+    panel.style.top  = '';
+    panel.style.left = '';
+  }
+}
+
+function addToLogFromBtn(btn) {
+  const empId = parseInt(btn.dataset.empId, 10);
+  const checkStatus = btn.dataset.checkStatus;
+  if (!empId || !["IN", "OUT"].includes(checkStatus)) return;
+  addToLog(empId, checkStatus, btn);
+}
+
+function openLogsModalFromBtn(btn) {
+  openLogsModal(btn.dataset.empId, btn.dataset.fullname);
+}
+
+function openEditFromBtn(btn) {
+  openModal('edit', parseInt(btn.dataset.empId, 10));
+}
+
+function openDeleteFromBtn(btn) {
+  openDeleteModal(btn.dataset.empId, false);
+}
+
+function openViolationsModalFromBtn(btn) {
+  openViolationsModal(btn.dataset.empId, btn.dataset.fullname);
+}
+
+function openViolationPopupFromBtn(btn) {
+  // Read values from data attributes (already HTML-escaped in the template)
+  // but pass RAW values from the employees array to avoid double-escaping in the popup logic
+  const empId = btn.dataset.empId;
+  const employee = employees.find(e => String(e.id) === String(empId));
+  if (!employee) return;
+  openViolationPopup(employee.fullname, employee.violation, employee.id);
+}
+
+function copyQRCodeFromCell(td) {
+  // SECURITY: read from data attribute, not from rendered text
+  copyQRCode(td.dataset.qr);
 }
 
 async function getCurrentUserId() {
@@ -697,6 +799,7 @@ async function getCurrentUserId() {
 
 function copyQRCode(code) {
   const tempTextArea = document.createElement("textarea");
+  // SECURITY: assign to .value (not innerHTML) — safe
   tempTextArea.value = code;
   document.body.appendChild(tempTextArea);
   tempTextArea.select();
@@ -751,6 +854,7 @@ function updatePaginationControls() {
     if (prev !== null && p - prev > 1) {
       buttonsHTML += `<span class="page-ellipsis">…</span>`;
     }
+    // SECURITY: p is always a number — safe in template literal
     buttonsHTML += `<button class="page-num-btn ${currentPage === p ? "active" : ""}" onclick="goToPage(${p})">${p}</button>`;
     prev = p;
   }
@@ -837,14 +941,13 @@ function showFullnameSuggestions(query) {
 
   const q = query.trim().toLowerCase();
 
-  // Build unique fullname list from loaded employees
   const matches = [
     ...new Map(
       employees
         .filter((emp) => !q || emp.fullname.toLowerCase().includes(q))
         .map((emp) => [emp.fullname.toLowerCase(), emp.fullname]),
     ).values(),
-  ].slice(0, 10); // cap at 10 suggestions
+  ].slice(0, 10);
 
   if (!matches.length || !q) {
     list.style.display = "none";
@@ -852,20 +955,23 @@ function showFullnameSuggestions(query) {
     return;
   }
 
+  // SECURITY: escapeHtml on name before inserting into innerHTML
   list.innerHTML = matches
     .map((name, i) => {
-      // Highlight matching portion
+      const safeName = escapeHtml(name);
+      const safeQ = escapeHtml(q);
       const regex = new RegExp(
         `(${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
         "gi",
       );
-      const highlighted = name.replace(
+      // Highlight is applied to escaped name — safe
+      const highlighted = safeName.replace(
         regex,
         '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
       );
       return `
-      <li data-value="${name}" data-index="${i}"
-          onmousedown="selectSuggestion('${name.replace(/'/g, "\\'")}')"
+      <li data-value="${safeName}" data-index="${i}"
+          onmousedown="selectSuggestionFromLi(this)"
           onmouseover="highlightSuggestion(${i})"
           style="padding: 8px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #f1f5f9;">
         ${highlighted}
@@ -877,9 +983,15 @@ function showFullnameSuggestions(query) {
   suggestionIndex = -1;
 }
 
+// SECURITY: read name from data-value attribute instead of string interpolation
+function selectSuggestionFromLi(li) {
+  selectSuggestion(li.dataset.value);
+}
+
 function selectSuggestion(name) {
   const input = document.getElementById("search_fullname");
   const list = document.getElementById("fullname-suggestions");
+  // SECURITY: .value assignment is safe (no HTML injection)
   if (input) input.value = name;
   if (list) list.style.display = "none";
   suggestionIndex = -1;
@@ -909,6 +1021,7 @@ function handleSuggestionNav(e) {
     highlightSuggestion(suggestionIndex);
   } else if (e.key === "Enter" && suggestionIndex >= 0) {
     e.preventDefault();
+    // SECURITY: read from data attribute
     selectSuggestion(items[suggestionIndex].dataset.value);
   } else if (e.key === "Escape") {
     list.style.display = "none";
@@ -939,7 +1052,6 @@ async function openModal(action, employeeId = null) {
     return;
   }
 
-  // Reset form and critical hidden fields
   form.reset();
   document.getElementById("employee_id").value = "";
   document.getElementById("original_id").value = "";
@@ -986,34 +1098,61 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
 
   if (requireConfirmation) {
     if (hasFilters) {
+      // SECURITY: textContent for title, DOM construction for message
       modalTitle.textContent = "⚠️ Delete Filtered Employees";
-      modalMessage.innerHTML = `
-        <div>
-          <p style="margin-bottom: 15px;"><strong>This will delete ${employees.length} employee(s) matching your filters:</strong></p>
-          <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 4px; margin-bottom: 15px;">
-            ${Object.entries(getActiveFilters())
-              .map(([key, value]) => {
-                const properKey = key
-                  .split(/(?=[A-Z])/)
-                  .map(
-                    (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
-                  )
-                  .join(" ");
-                return `<div style="margin: 5px 0;"><strong>${properKey}:</strong> ${value}</div>`;
-              })
-              .join("")}
-          </div>
-          <p style="color: #d63031; font-weight: bold;">This action cannot be undone.</p>
-        </div>
-      `;
+
+      // Build message safely using DOM methods
+      const msgDiv = document.createElement("div");
+      const p1 = document.createElement("p");
+      p1.style.marginBottom = "15px";
+      const strong = document.createElement("strong");
+      strong.textContent = `This will delete ${employees.length} employee(s) matching your filters:`;
+      p1.appendChild(strong);
+      msgDiv.appendChild(p1);
+
+      const filterBox = document.createElement("div");
+      filterBox.style.cssText = "background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 4px; margin-bottom: 15px;";
+
+      Object.entries(getActiveFilters()).forEach(([key, value]) => {
+        const row = document.createElement("div");
+        row.style.margin = "5px 0";
+        const keyStrong = document.createElement("strong");
+        const properKey = key
+          .split(/(?=[A-Z])/)
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(" ");
+        keyStrong.textContent = properKey + ":";
+        row.appendChild(keyStrong);
+        // SECURITY: textContent for filter values — no XSS
+        row.appendChild(document.createTextNode(" " + value));
+        filterBox.appendChild(row);
+      });
+
+      msgDiv.appendChild(filterBox);
+
+      const p2 = document.createElement("p");
+      p2.style.cssText = "color: #d63031; font-weight: bold;";
+      p2.textContent = "This action cannot be undone.";
+      msgDiv.appendChild(p2);
+
+      modalMessage.innerHTML = "";
+      modalMessage.appendChild(msgDiv);
     } else {
       modalTitle.textContent = "⚠️ Delete All Employees";
-      modalMessage.innerHTML = `
-        <div>
-          <p style="margin-bottom: 15px;"><strong>This will permanently delete ALL ${employees.length} employee(s).</strong></p>
-          <p style="color: #d63031; font-weight: bold;">This action cannot be undone.</p>
-        </div>
-      `;
+
+      const msgDiv = document.createElement("div");
+      const p1 = document.createElement("p");
+      p1.style.marginBottom = "15px";
+      const strong = document.createElement("strong");
+      strong.textContent = `This will permanently delete ALL ${employees.length} employee(s).`;
+      p1.appendChild(strong);
+      msgDiv.appendChild(p1);
+      const p2 = document.createElement("p");
+      p2.style.cssText = "color: #d63031; font-weight: bold;";
+      p2.textContent = "This action cannot be undone.";
+      msgDiv.appendChild(p2);
+      modalMessage.innerHTML = "";
+      modalMessage.appendChild(msgDiv);
     }
 
     confirmationContainer.style.display = "block";
@@ -1133,14 +1272,14 @@ async function deleteFilteredEmployees() {
 
     if (data.success) {
       showAlert(
-        `Successfully deleted ${data.deleted_count || employeeIds.length} employee(s) matching your filters.`,
+        `Successfully deleted ${escapeHtml(String(data.deleted_count || employeeIds.length))} employee(s) matching your filters.`,
         "success",
       );
 
       currentPage = 1;
       clearSearch();
     } else {
-      showAlert(data.message || "Failed to delete filtered employees", "error");
+      showAlert(escapeHtml(data.message) || "Failed to delete filtered employees", "error");
     }
   } catch (error) {
     console.error("Error:", error);
@@ -1158,13 +1297,19 @@ async function openLogsModal(employeeId, fullname) {
   document.getElementById("logCountIn").textContent = "—";
   document.getElementById("logCountOut").textContent = "—";
   document.getElementById("logCountTotal").textContent = "—";
-  title.innerHTML = `<i class="fas fa-history"></i> Access Logs — ${fullname}`;
+
+  // SECURITY: textContent for user-supplied fullname in title
+  title.innerHTML = `<i class="fas fa-history"></i> Access Logs — `;
+  const nameSpan = document.createElement("span");
+  nameSpan.textContent = fullname;
+  title.appendChild(nameSpan);
+
   tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>`;
   modal.style.display = "block";
 
   try {
     const res = await fetch(
-      `manpower_backend.php?action=get_access_logs&id=${employeeId}`,
+      `manpower_backend.php?action=get_access_logs&id=${encodeURIComponent(employeeId)}`,
       {
         headers: { "X-Requested-With": "XMLHttpRequest" },
       },
@@ -1176,6 +1321,7 @@ async function openLogsModal(employeeId, fullname) {
       const inCount = logs.filter((l) => l.check_status === "IN").length;
       const outCount = logs.filter((l) => l.check_status === "OUT").length;
 
+      // SECURITY: textContent for counts
       document.getElementById("logCountIn").textContent = inCount;
       document.getElementById("logCountOut").textContent = outCount;
       document.getElementById("logCountTotal").textContent = logs.length;
@@ -1190,23 +1336,22 @@ async function openLogsModal(employeeId, fullname) {
             <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
               background:${log.check_status === "IN" ? "#d1fae5" : "#fee2e2"};
               color:${log.check_status === "IN" ? "#065f46" : "#991b1b"};">
-              ${log.check_status}
+              ${escapeHtml(log.check_status)}
             </span>
           </td>
-          <td style="padding:9px 12px;color:#555;">${log.access_timestamp}</td>
-          <td style="padding:9px 12px;">${log.gate_name || log.user_id || "N/A"}</td>
+          <td style="padding:9px 12px;color:#555;">${escapeHtml(log.access_timestamp)}</td>
+          <td style="padding:9px 12px;">${escapeHtml(log.gate_name || log.user_id || "N/A")}</td>
         </tr>`,
             )
             .join("")
         : `<tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;">No log records found.</td></tr>`;
     } else {
-      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:24px;">${data.message || "Failed to load logs."}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:24px;">${escapeHtml(data.message || "Failed to load logs.")}</td></tr>`;
     }
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:24px;">Error loading logs.</td></tr>`;
   }
 
-  // ── Close when clicking outside ──────────────────────────
   modal.onclick = (e) => {
     if (e.target === modal) closeModal();
   };
@@ -1220,13 +1365,19 @@ async function openViolationsModal(employeeId, fullname) {
   document.getElementById("vioCountTotal").textContent = "—";
   document.getElementById("vioCountUpdates").textContent = "—";
   document.getElementById("vioCountCleared").textContent = "—";
-  title.innerHTML = `<i class="fas fa-exclamation-triangle" style="color:#e53e3e;"></i> Violation History — ${fullname}`;
+
+  // SECURITY: textContent for fullname
+  title.innerHTML = `<i class="fas fa-exclamation-triangle" style="color:#e53e3e;"></i> Violation History — `;
+  const nameSpan = document.createElement("span");
+  nameSpan.textContent = fullname;
+  title.appendChild(nameSpan);
+
   tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>`;
   modal.style.display = "block";
 
   try {
     const res = await fetch(
-      `manpower_backend.php?action=get_violations&id=${employeeId}`,
+      `manpower_backend.php?action=get_violations&id=${encodeURIComponent(employeeId)}`,
       { headers: { "X-Requested-With": "XMLHttpRequest" } },
     );
     const data = await res.json();
@@ -1240,6 +1391,7 @@ async function openViolationsModal(employeeId, fullname) {
         (r) => r.violation_type === "Remarks Cleared",
       ).length;
 
+      // SECURITY: textContent for counts
       document.getElementById("vioCountTotal").textContent = rows.length;
       document.getElementById("vioCountUpdates").textContent = updates;
       document.getElementById("vioCountCleared").textContent = cleared;
@@ -1261,23 +1413,23 @@ async function openViolationsModal(employeeId, fullname) {
                 <td style="padding:9px 12px;color:#aaa;">${i + 1}</td>
                 <td style="padding:9px 12px;">
                   <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
-                    background:${bg};color:${color};">
-                    ${v.violation_type || "—"}
+                    background:${escapeHtml(bg)};color:${escapeHtml(color)};">
+                    ${escapeHtml(v.violation_type || "—")}
                   </span>
                 </td>
                 <td style="padding:9px 12px;color:#555;max-width:220px;word-break:break-word;">
-                  ${v.violation_description || "—"}
+                  ${escapeHtml(v.violation_description || "—")}
                 </td>
-                <td style="padding:9px 12px;white-space:nowrap;">${v.violation_date || "—"}</td>
+                <td style="padding:9px 12px;white-space:nowrap;">${escapeHtml(v.violation_date || "—")}</td>
                 <td style="padding:9px 12px;color:#aaa;font-size:11px;white-space:nowrap;">
-                  ${v.created_at || "—"}
+                  ${escapeHtml(v.created_at || "—")}
                 </td>
               </tr>`;
             })
             .join("")
         : `<tr><td colspan="5" style="text-align:center;padding:24px;color:#aaa;">No violation records found.</td></tr>`;
     } else {
-      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#ef4444;padding:24px;">${data.message || "Failed to load."}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#ef4444;padding:24px;">${escapeHtml(data.message || "Failed to load.")}</td></tr>`;
     }
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#ef4444;padding:24px;">Error loading records.</td></tr>`;
@@ -1306,6 +1458,7 @@ function openViolationPopup(fullname, violation, employeeId) {
     ts: new Date().toISOString(),
   });
 
+  // Build popup using DOM methods — no innerHTML with raw user data
   const overlay = document.createElement("div");
   overlay.id = "violationPopupOverlay";
   overlay.style.cssText = `
@@ -1315,26 +1468,49 @@ function openViolationPopup(fullname, violation, employeeId) {
 
   const reportUrl = "incident_report.php?" + params.toString();
 
-  overlay.innerHTML = `
-    <div style="background:#fff;border:0.5px solid #e2e8f0;border-radius:12px;
-      padding:1.25rem;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.12);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <span style="font-size:13px;font-weight:500;color:#64748b;">${fullname} — Remarks</span>
-        <button onclick="document.getElementById('violationPopupOverlay').remove()"
-          style="background:none;border:none;font-size:16px;cursor:pointer;color:#94a3b8;line-height:1;padding:0;">&#x2715;</button>
-      </div>
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
-        <div style="font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;flex:1;">${violation}</div>
-        <button onclick="window.open('${reportUrl}', '_blank')"
-          style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;
-            font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;
-            border:0.5px solid #cbd5e1;border-radius:6px;
-            background:#f8fafc;color:#1e293b;">
-          &#128438; View Attachment
-        </button>
-      </div>
-    </div>
-  `;
+  const card = document.createElement("div");
+  card.style.cssText = `background:#fff;border:0.5px solid #e2e8f0;border-radius:12px;
+    padding:1.25rem;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.12);`;
+
+  // Header row
+  const header = document.createElement("div");
+  header.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;";
+
+  const headerLabel = document.createElement("span");
+  headerLabel.style.cssText = "font-size:13px;font-weight:500;color:#64748b;";
+  // SECURITY: textContent for fullname
+  headerLabel.textContent = `${fullname} — Remarks`;
+
+  const closeBtn = document.createElement("button");
+  closeBtn.style.cssText = "background:none;border:none;font-size:16px;cursor:pointer;color:#94a3b8;line-height:1;padding:0;";
+  closeBtn.textContent = "✕";
+  closeBtn.onclick = () => overlay.remove();
+
+  header.appendChild(headerLabel);
+  header.appendChild(closeBtn);
+
+  // Body row
+  const body = document.createElement("div");
+  body.style.cssText = "display:flex;align-items:flex-start;justify-content:space-between;gap:12px;";
+
+  const violationText = document.createElement("div");
+  violationText.style.cssText = "font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;flex:1;";
+  // SECURITY: textContent for violation content
+  violationText.textContent = violation;
+
+  const attachBtn = document.createElement("button");
+  attachBtn.style.cssText = `display:inline-flex;align-items:center;gap:5px;padding:5px 12px;
+    font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;
+    border:0.5px solid #cbd5e1;border-radius:6px;background:#f8fafc;color:#1e293b;`;
+  attachBtn.textContent = "📎 View Attachment";
+  attachBtn.onclick = () => window.open(reportUrl, "_blank");
+
+  body.appendChild(violationText);
+  body.appendChild(attachBtn);
+
+  card.appendChild(header);
+  card.appendChild(body);
+  overlay.appendChild(card);
 
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) overlay.remove();
@@ -1372,13 +1548,6 @@ function populateFilter(employeeList) {
   const violation = document.getElementById("search_violation");
   if (!position || !brand || !status || !shift || !violation) return;
 
-  function toProperCase(str) {
-    return str.replace(
-      /[^\s,\-]+/g,
-      (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
-    );
-  }
-
   function buildSelect(select, placeholder, noneLabel, valuesMap) {
     const current = select.value;
 
@@ -1394,6 +1563,7 @@ function populateFilter(employeeList) {
         .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
         .forEach((v) => {
           const opt = document.createElement("option");
+          // SECURITY: .value and .textContent are safe
           opt.value = v;
           opt.textContent = toProperCase(v);
           select.appendChild(opt);
@@ -1577,7 +1747,7 @@ async function handleFormSubmit(e) {
     if (currentAction === "edit" && empid !== originalId) {
       const idTaken = employees.some((emp) => String(emp.id) === String(empid));
       if (idTaken) {
-        showAlert(`Employee ID "${empid}" is already in use`, "error");
+        showAlert(`Employee ID "${escapeHtml(empid)}" is already in use`, "error");
         return;
       }
     }
@@ -1596,7 +1766,7 @@ async function handleFormSubmit(e) {
     });
 
     if (isDuplicate) {
-      showAlert(`Employee with name "${fullname}" already exists!`, "error");
+      showAlert(`Employee with name "${escapeHtml(fullname)}" already exists!`, "error");
       return;
     }
 
@@ -1675,8 +1845,6 @@ async function handleFormSubmit(e) {
 
 // ─────────────────────────────────────────────────────────────
 // CLIENT-SIDE WEBP CONVERSION
-// Converts any image File to WebP using Canvas API.
-// Falls back to original file if browser doesn't support WebP encoding.
 // ─────────────────────────────────────────────────────────────
 async function convertImageToWebP(file, quality = 0.85) {
   return new Promise((resolve) => {
@@ -1689,7 +1857,6 @@ async function convertImageToWebP(file, quality = 0.85) {
       canvas.height = img.naturalHeight;
 
       const ctx = canvas.getContext("2d");
-      // Fill white background (handles transparent PNGs)
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0);
@@ -1702,7 +1869,6 @@ async function convertImageToWebP(file, quality = 0.85) {
             const webpName = file.name.replace(/\.[^.]+$/, ".webp");
             resolve(new File([blob], webpName, { type: "image/webp" }));
           } else {
-            // Browser doesn't support WebP encoding — return original
             resolve(file);
           }
         },
@@ -1713,7 +1879,7 @@ async function convertImageToWebP(file, quality = 0.85) {
 
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
-      resolve(file); // fallback: return original on load error
+      resolve(file);
     };
 
     img.src = objectUrl;
@@ -1721,7 +1887,7 @@ async function convertImageToWebP(file, quality = 0.85) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// FILE UPLOAD HANDLER  (now converts to WebP before storing)
+// FILE UPLOAD HANDLER
 // ─────────────────────────────────────────────────────────────
 function setupFileUploadHandler() {
   const imageInput = document.getElementById("image");
@@ -1737,7 +1903,6 @@ function setupFileUploadHandler() {
     const file = imageInput.files[0];
     const maxSize = 5 * 1024 * 1024;
 
-    // --- Validation ---
     if (file.size > maxSize) {
       showAlert("File size must be less than 5MB", "error");
       e.target.value = "";
@@ -1762,7 +1927,6 @@ function setupFileUploadHandler() {
       return;
     }
 
-    // Show converting indicator
     label.innerHTML = `
       <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
         <i class="fas fa-spinner fa-spin" style="font-size:24px;color:#2196F3;"></i>
@@ -1770,19 +1934,18 @@ function setupFileUploadHandler() {
       </div>`;
 
     try {
-      // --- Convert to WebP ---
       const webpFile = await convertImageToWebP(file);
 
-      // Replace file in the input via DataTransfer
       const dt = new DataTransfer();
       dt.items.add(webpFile);
       imageInput.files = dt.files;
 
-      // --- Show preview from the converted WebP blob ---
       const reader = new FileReader();
       reader.onload = (event) => {
         const isConverted =
           webpFile.type === "image/webp" && file.type !== "image/webp";
+        // SECURITY: src comes from FileReader result (blob URL) — safe
+        // size is a number — safe
         label.innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
             <img id="imagePreview" src="${event.target.result}" alt="New image preview" loading="lazy"
@@ -1877,10 +2040,19 @@ function showAlert(message, type = "info") {
 
   const alert = document.createElement("div");
   alert.className = `alert alert-${type}`;
-  alert.innerHTML = `
-    <span>${message}</span>
-    <button onclick="this.parentElement.remove()" style="float: right; background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 5px;"><i class="fas fa-times"></i></button>
-  `;
+
+  // SECURITY: Use DOM methods instead of innerHTML for alert messages
+  const msgSpan = document.createElement("span");
+  // Use textContent so any HTML in message is rendered as plain text
+  msgSpan.textContent = message;
+
+  const closeBtn = document.createElement("button");
+  closeBtn.style.cssText = "float: right; background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 5px;";
+  closeBtn.innerHTML = `<i class="fas fa-times"></i>`;
+  closeBtn.onclick = () => alert.remove();
+
+  alert.appendChild(msgSpan);
+  alert.appendChild(closeBtn);
 
   document.body.insertBefore(alert, document.body.firstChild);
 

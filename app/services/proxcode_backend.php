@@ -19,6 +19,9 @@ if (isset($_GET['serve_file'])) {
   header('Cache-Control: public, max-age=86400');
   header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 86400) . ' GMT');
   header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($filepath)) . ' GMT');
+  header('X-Content-Type-Options: nosniff');
+  header('X-Frame-Options: DENY');
+  header('Content-Security-Policy: default-src \'self\'');
 }
 
 class Database
