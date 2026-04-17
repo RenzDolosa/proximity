@@ -479,6 +479,14 @@ body {
 .lb-footer .lb-in  { font-size: 10px; }
 .lb-footer .lb-out { font-size: 10px; }
 
+.lb-scroll {
+  overflow-y: auto;
+  flex: 1;
+  margin: 0 -16px;          /* pull to card edges */
+  padding: 0 16px;          /* restore inner padding for content */
+  scrollbar-gutter: stable; /* reserve space so content doesn't shift */
+}
+
 @media (max-width: 640px) {
   /* ── Page body ── */
   .page-body {

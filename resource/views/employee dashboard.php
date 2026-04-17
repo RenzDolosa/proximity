@@ -454,7 +454,7 @@ if ($databaseConnected) {
               </table>
 
               <!-- Scrollable tbody only -->
-              <div style="overflow-y:auto; flex:1;">
+              <div class="lb-scroll">
                 <table class="lb-table" style="table-layout:fixed; width:100%;">
                   <tbody>
                     <?php foreach ($leaderboard as $rank => $row):
