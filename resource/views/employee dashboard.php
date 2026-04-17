@@ -69,20 +69,21 @@ if ($databaseConnected) {
       $stats[$key] = (int)$stmt->fetchColumn();
     }
 
+    $selectedDate = $_GET['lb_date'] ?? date('Y-m-d');
+
     // Gate activity stats
     $stmt = $userDb->prepare("
       SELECT u.first_name AS gate_name, COUNT(*) AS total
       FROM employee_access_log el
       LEFT JOIN " . DB_NAME . ".users u ON el.user_id = u.id
       WHERE el.user_id IS NOT NULL
+        AND DATE(el.access_timestamp) = :selected_date
       GROUP BY el.user_id, u.first_name
       ORDER BY total DESC
       LIMIT 10
     ");
-    $stmt->execute();
+    $stmt->execute([':selected_date' => $selectedDate]);
     $gateStats = $stmt->fetchAll();
-
-    $selectedDate = $_GET['lb_date'] ?? date('Y-m-d');
 
     // Today's employee scan leaderboard
     $stmt = $userDb->prepare("
@@ -289,26 +290,25 @@ if ($databaseConnected) {
             </span>
           </div>
           <div class="card-body" style="display:flex;align-items:center;justify-content:center;gap:32px;padding:20px;">
-            <?php if (!empty($gateStats)): ?>
-              <div style="position:relative;width:180px;height:180px;flex-shrink:0;">
-                <canvas id="gateChart"></canvas>
-                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-                    text-align:center;pointer-events:none;">
-                  <div style="font-size:22px;font-weight:700;color:var(--text);">
-                    <?= number_format(array_sum(array_column($gateStats, 'total'))); ?>
-                  </div>
-                  <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Total Scans</div>
+            <div style="position:relative;width:180px;height:180px;flex-shrink:0;">
+              <canvas id="gateChart"></canvas>
+              <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+          text-align:center;pointer-events:none;">
+                <div id="gate-total-count" style="font-size:22px;font-weight:700;color:var(--text);">
+                  <?= number_format(array_sum(array_column($gateStats, 'total'))); ?>
                 </div>
+                <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Total Scans</div>
               </div>
-              <div id="gate-legend" style="display:flex;flex-direction:column;gap:8px;min-width:160px;">
-                <?php
+            </div>
+            <div id="gate-legend" style="display:flex;flex-direction:column;gap:8px;min-width:160px;">
+              <?php if (!empty($gateStats)):
                 $gateColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ec4899', '#8b5cf6', '#f97316', '#06b6d4', '#84cc16', '#a855f7', '#14b8a6'];
                 $gateTotal  = array_sum(array_column($gateStats, 'total'));
                 foreach ($gateStats as $i => $gate):
                   $color = $gateColors[$i % count($gateColors)];
                   $pct   = $gateTotal > 0 ? round(($gate['total'] / $gateTotal) * 100, 1) : 0;
                   $name  = htmlspecialchars($gate['gate_name'] ?? 'Unknown');
-                ?>
+              ?>
                   <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
                     <span style="width:10px;height:10px;border-radius:50%;background:<?= $color ?>;flex-shrink:0;"></span>
                     <span style="color:var(--text);flex:1;"><?= $name ?></span>
@@ -316,14 +316,14 @@ if ($databaseConnected) {
                       <?= number_format($gate['total']) ?> <span style="font-weight:400;">(<?= $pct ?>%)</span>
                     </span>
                   </div>
-                <?php endforeach; ?>
-              </div>
-            <?php else: ?>
-              <div class="no-data" style="padding:30px 0;">
-                <i class="fas fa-door-open"></i>
-                No gate scan data available.
-              </div>
-            <?php endif; ?>
+                <?php endforeach;
+              else: ?>
+                <div class="no-data" style="padding:30px 0;">
+                  <i class="fas fa-door-open"></i>
+                  No gate scan data available.
+                </div>
+              <?php endif; ?>
+            </div>
           </div>
         </div>
 
@@ -522,32 +522,20 @@ if ($databaseConnected) {
   <script src="../js/req.js"></script>
   <script src="../js/loading.js"></script>
   <script>
-    function updateTime() {
-      const now = new Date();
-      document.getElementById('wb-time').textContent = now.toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-      document.getElementById('wb-date').textContent = now.toLocaleDateString([], {
-        weekday: 'short',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
-    }
-    updateTime();
-    setInterval(updateTime, 1000);
+    // Gate chart colors (shared between init and updates)
+    const gateColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ec4899', '#8b5cf6',
+      '#f97316', '#06b6d4', '#84cc16', '#a855f7', '#14b8a6'
+    ];
 
+    // Init gate chart (replaces the current IIFE chart init)
+    let gateChart = null;
     (function() {
       <?php if (!empty($gateStats)): ?>
         const gateLabels = <?= json_encode(array_map(fn($g) => $g['gate_name'] ?? 'Unknown', $gateStats)); ?>;
         const gateData = <?= json_encode(array_column($gateStats, 'total')); ?>;
-        const gateColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ec4899', '#8b5cf6', '#f97316', '#06b6d4', '#84cc16', '#a855f7', '#14b8a6'];
-
         const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
 
-        new Chart(document.getElementById('gateChart'), {
+        gateChart = new Chart(document.getElementById('gateChart'), {
           type: 'doughnut',
           data: {
             labels: gateLabels,
@@ -574,7 +562,7 @@ if ($databaseConnected) {
                 titleColor: isDark ? '#f1f5f9' : '#1e293b',
                 bodyColor: isDark ? '#94a3b8' : '#64748b',
                 callbacks: {
-                  label: function(item) {
+                  label(item) {
                     const total = item.dataset.data.reduce((a, b) => a + b, 0);
                     const pct = total > 0 ? ((item.parsed / total) * 100).toFixed(1) : 0;
                     return '  ' + item.label + ': ' + item.parsed.toLocaleString() + ' (' + pct + '%)';
@@ -587,20 +575,101 @@ if ($databaseConnected) {
       <?php endif; ?>
     })();
 
+    // Helper: re-render gate chart + legend
+    function updateGateChart(gateStats) {
+      const legend = document.getElementById('gate-legend');
+      const totalEl = document.getElementById('gate-total-count');
+      const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+
+      if (!gateStats || !gateStats.length) {
+        totalEl.textContent = '0';
+        legend.innerHTML = `
+      <div class="no-data" style="padding:30px 0;">
+        <i class="fas fa-door-open"></i> No gate scan data available.
+      </div>`;
+        if (gateChart) {
+          gateChart.data.labels = [];
+          gateChart.data.datasets[0].data = [];
+          gateChart.update();
+        }
+        return;
+      }
+
+      const labels = gateStats.map(g => g.gate_name || 'Unknown');
+      const data = gateStats.map(g => parseInt(g.total));
+      const total = data.reduce((a, b) => a + b, 0);
+
+      // Update or create chart
+      if (gateChart) {
+        gateChart.data.labels = labels;
+        gateChart.data.datasets[0].data = data;
+        gateChart.data.datasets[0].backgroundColor = gateColors.slice(0, data.length);
+        gateChart.update();
+      } else {
+        gateChart = new Chart(document.getElementById('gateChart'), {
+          type: 'doughnut',
+          data: {
+            labels,
+            datasets: [{
+              data,
+              backgroundColor: gateColors.slice(0, data.length),
+              borderColor: isDark ? '#1e293b' : '#ffffff',
+              borderWidth: 3,
+              hoverOffset: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '68%',
+            plugins: {
+              legend: {
+                display: false
+              }
+            }
+          }
+        });
+      }
+
+      // Update center total
+      totalEl.textContent = total.toLocaleString();
+
+      // Rebuild legend
+      legend.innerHTML = gateStats.map((g, i) => {
+        const color = gateColors[i % gateColors.length];
+        const pct = total > 0 ? ((parseInt(g.total) / total) * 100).toFixed(1) : 0;
+        const name = g.gate_name || 'Unknown';
+        return `
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
+        <span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+        <span style="color:var(--text);flex:1;">${name}</span>
+        <span style="color:var(--text-muted);font-weight:600;">
+          ${parseInt(g.total).toLocaleString()} <span style="font-weight:400;">(${pct}%)</span>
+        </span>
+      </div>`;
+      }).join('');
+    }
+
+    // Date picker — updates both leaderboard AND gate chart
     document.getElementById('lb-date-picker').addEventListener('change', function() {
       const date = this.value;
       const tbody = document.getElementById('lb-tbody');
       const footer = document.getElementById('lb-footer');
 
-      // Show a subtle loading state
       tbody.style.opacity = '0.4';
 
-      fetch(`partials/leaderboard.php?lb_date=${date}`)
+      fetch(`partials/chart.php?lb_date=${date}`)
         .then(r => r.json())
         .then(({
           success,
-          data
+          data,
+          gate_stats
         }) => {
+
+          // ── Gate chart ──────────────────────────────────────────
+          updateGateChart(gate_stats);
+
+          // ── Leaderboard ─────────────────────────────────────────
           if (!success || !data.length) {
             tbody.innerHTML = `
           <tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">
@@ -625,27 +694,21 @@ if ($databaseConnected) {
             const name = row.fullname.replace(/\w\S*/g, t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
             const truncated = name.length > 18 ? name.slice(0, 18) + '…' : name;
             const rankCell = rank <= 3 ?
-              `<td style="text-align:center;color:${rankColors[i]};font-size:11px;font-weight:700;">
-               <i class="fas fa-circle" style="font-size:8px;"></i>
-             </td>` :
+              `<td style="text-align:center;color:${rankColors[i]};font-size:11px;font-weight:700;"><i class="fas fa-circle" style="font-size:8px;"></i></td>` :
               `<td style="text-align:center;font-size:11px;font-weight:700;color:var(--text-muted);">${rank}</td>`;
-
             totalIn += parseInt(row.total_in);
             totalOut += parseInt(row.total_out);
-
             return `<tr>
           ${rankCell}
           <td title="${name}" style="text-align:left;font-weight:500;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${truncated}</td>
-          <td class="lb-in" style="text-align:right;">${row.total_in}</td>
+          <td class="lb-in"  style="text-align:right;">${row.total_in}</td>
           <td class="lb-out" style="text-align:right;">${row.total_out}</td>
           <td class="lb-total" style="text-align:right;">${row.total}</td>
         </tr>`;
           }).join('');
 
           footer.innerHTML = `
-        <span style="color:var(--text-muted);">
-          ${data.length} employee${data.length !== 1 ? 's' : ''}
-        </span>
+        <span style="color:var(--text-muted);">${data.length} employee${data.length !== 1 ? 's' : ''}</span>
         <span style="display:flex;gap:12px;">
           <span class="lb-in">In: ${totalIn.toLocaleString()}</span>
           <span class="lb-out">Out: ${totalOut.toLocaleString()}</span>

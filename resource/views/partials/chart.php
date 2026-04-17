@@ -16,6 +16,8 @@ $selectedDate = $_GET['lb_date'] ?? date('Y-m-d');
 
 try {
   $userDb = getUserDBConnection($userId);
+
+  // Leaderboard rows
   $stmt = $userDb->prepare("
     SELECT 
       COALESCE(NULLIF(TRIM(el.fullname), ''), e.fullname, 'Unknown') AS fullname,
@@ -31,7 +33,25 @@ try {
   $stmt->execute([':selected_date' => $selectedDate]);
   $leaderboard = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-  echo json_encode(['success' => true, 'data' => $leaderboard]);
+  // Gate stats for the same date
+  $stmt = $userDb->prepare("
+    SELECT u.first_name AS gate_name, COUNT(*) AS total
+    FROM employee_access_log el
+    LEFT JOIN " . DB_NAME . ".users u ON el.user_id = u.id
+    WHERE el.user_id IS NOT NULL
+      AND DATE(el.access_timestamp) = :selected_date
+    GROUP BY el.user_id, u.first_name
+    ORDER BY total DESC
+    LIMIT 10
+  ");
+  $stmt->execute([':selected_date' => $selectedDate]);
+  $gateStats = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+  echo json_encode([
+    'success'    => true,
+    'data'       => $leaderboard,
+    'gate_stats' => $gateStats,
+  ]);
 } catch (Exception $e) {
-  echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+  echo json_encode(['success' => false, 'data' => [], 'gate_stats' => []]);
 }
