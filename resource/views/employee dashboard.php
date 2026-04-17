@@ -94,7 +94,6 @@ if ($databaseConnected) {
       WHERE DATE(el.access_timestamp) = CURDATE()
       GROUP BY el.employee_id, el.fullname
       ORDER BY total DESC
-      LIMIT 25
     ");
     $stmt->execute();
     $leaderboard = $stmt->fetchAll();
