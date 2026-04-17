@@ -82,6 +82,23 @@ if ($databaseConnected) {
     $stmt->execute();
     $gateStats = $stmt->fetchAll();
 
+    // Today's employee scan leaderboard
+    $stmt = $userDb->prepare("
+      SELECT 
+        COALESCE(NULLIF(TRIM(el.fullname), ''), e.fullname, 'Unknown') AS fullname,
+        SUM(CASE WHEN el.check_status = 'IN'  THEN 1 ELSE 0 END) AS total_in,
+        SUM(CASE WHEN el.check_status = 'OUT' THEN 1 ELSE 0 END) AS total_out,
+        COUNT(*) AS total
+      FROM employee_access_log el
+      LEFT JOIN employees e ON el.employee_id = e.id
+      WHERE DATE(el.access_timestamp) = CURDATE()
+      GROUP BY el.employee_id, el.fullname
+      ORDER BY total DESC
+      LIMIT 25
+    ");
+    $stmt->execute();
+    $leaderboard = $stmt->fetchAll();
+
     $stmt = $userDb->prepare("
       SELECT el.*,
             COALESCE(NULLIF(TRIM(el.fullname), ''), e.fullname, 'Unknown Employee') AS fullname,
@@ -404,6 +421,79 @@ if ($databaseConnected) {
                 <a href="../../app/services/table panel.php?tab=datalog" class="btn-link">
                   <i class="fas fa-history" style="margin-right:4px;"></i>View All Logs
                 </a>
+              </div>
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card" style="height:100%;">
+          <div class="card-header">
+            <span class="card-title">
+              <i class="fas fa-trophy" style="color:#f59e0b;margin-right:6px;"></i>
+              Today's Scan
+            </span>
+            <span style="font-size:10px;color:var(--text-muted);">
+              <?= date('M j, Y'); ?>
+            </span>
+          </div>
+          <div class="card-body" style="padding:12px 16px;overflow-y:auto;max-height:520px;">
+            <?php if (!empty($leaderboard)): ?>
+              <table class="lb-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Employee</th>
+                    <th style="color:#22c55e;">In</th>
+                    <th style="color:#f59e0b;">Out</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php foreach ($leaderboard as $rank => $row):
+                    $rankNum  = $rank + 1;
+                    $rankClass = $rankNum === 1 ? 'lb-rank-1' : ($rankNum === 2 ? 'lb-rank-2' : ($rankNum === 3 ? 'lb-rank-3' : ''));
+                    $name     = mb_convert_case($row['fullname'], MB_CASE_TITLE, 'UTF-8');
+                  ?>
+                    <tr>
+                      <td class="<?= $rankClass ?>">
+                        <?php if ($rankNum <= 3): ?>
+                          <i class="fas fa-circle" style="font-size:8px;"></i>
+                        <?php else: ?>
+                          <?= $rankNum ?>
+                        <?php endif; ?>
+                      </td>
+                      <td title="<?= htmlspecialchars($name) ?>">
+                        <?= htmlspecialchars(mb_strimwidth($name, 0, 18, '…')) ?>
+                      </td>
+                      <td class="lb-in"><?= number_format($row['total_in']) ?></td>
+                      <td class="lb-out"><?= number_format($row['total_out']) ?></td>
+                      <td class="lb-total"><?= number_format($row['total']) ?></td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+
+              <!-- Footer totals -->
+              <div class="lb-footer">
+                <span style="color:var(--text-muted);">
+                  <?= count($leaderboard) ?> employee<?= count($leaderboard) !== 1 ? 's' : '' ?>
+                </span>
+                <span style="display:flex;gap:12px;">
+                  <span class="lb-in">
+                    In: <?= number_format(array_sum(array_column($leaderboard, 'total_in'))) ?>
+                  </span>
+                  <span class="lb-out">
+                    Out: <?= number_format(array_sum(array_column($leaderboard, 'total_out'))) ?>
+                  </span>
+                </span>
+              </div>
+
+            <?php else: ?>
+              <div class="no-data">
+                <i class="fas fa-trophy"></i>
+                No scan activity today.
               </div>
             <?php endif; ?>
           </div>
