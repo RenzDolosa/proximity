@@ -16,16 +16,23 @@ ini_set('log_errors', 1);
 
 // ── Headers ─────────────────────────────────────────────────
 header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
+
+// SECURITY: Restrict CORS to your own origin only.
+// Replace 'https://yourdomain.com' with your actual domain.
+// Wildcard (*) has been removed — it allowed any site to probe this endpoint.
+$allowedOrigin = 'https://yourdomain.com'; // <-- CHANGE THIS to your real domain
+$requestOrigin = $_SERVER['HTTP_ORIGIN'] ?? '';
+if ($requestOrigin === $allowedOrigin) {
+  header("Access-Control-Allow-Origin: $allowedOrigin");
+  header('Access-Control-Allow-Credentials: true');
+}
+// SECURITY: Removed 'Authorization' — we use sessions, not bearer tokens.
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, X-Requested-With, Authorization');
+header('Access-Control-Allow-Headers: Content-Type, X-Requested-With, X-CSRF-Token');
 header('Access-Control-Max-Age: 86400');
 
 require_once __DIR__ . '/../../config/config.php';
 
-// Safety-net: re-assert PHP timezone in case this file is ever bootstrapped
-// without config.php. config.php already defines APP_TIMEZONE / APP_TIMEZONE_TZ
-// and calls date_default_timezone_set(), so this is a no-op in normal operation.
 if (!defined('APP_TIMEZONE')) {
   define('APP_TIMEZONE',    'Asia/Manila');
   define('APP_TIMEZONE_TZ', '+08:00');
@@ -44,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
   exit();
 }
 
+// ── Authentication check ─────────────────────────────────────
 if (!isset($_SESSION['user_id'])) {
   http_response_code(401);
   echo json_encode([
@@ -56,6 +64,52 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $currentUserId = $_SESSION['user_id'];
+
+// ── SECURITY: CSRF validation for all state-changing POST requests ──
+// Every POST (toggle status, get_by_qr, get_by_id) must include the
+// X-CSRF-Token header matching the token stored in the user's session.
+// This prevents cross-site request forgery attacks.
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  $submittedToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+  $sessionToken   = $_SESSION['csrf_token'] ?? '';
+
+  // hash_equals() prevents timing attacks during comparison
+  if (empty($sessionToken) || !hash_equals($sessionToken, $submittedToken)) {
+    http_response_code(403);
+    echo json_encode([
+      'success' => false,
+      'message' => 'Invalid request. Please refresh the page and try again.',
+      'data'    => []
+    ]);
+    exit();
+  }
+}
+
+// ── SECURITY: Rate limiting — max 120 search requests per minute per session ──
+// This prevents brute-force QR enumeration and database exhaustion.
+$rateBucket = 'search_rate_' . date('YmdHi');
+$_SESSION[$rateBucket] = ($_SESSION[$rateBucket] ?? 0) + 1;
+if ($_SESSION[$rateBucket] > 120) {
+  http_response_code(429);
+  echo json_encode([
+    'success' => false,
+    'message' => 'Too many requests. Please slow down.',
+    'data'    => []
+  ]);
+  exit();
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  SECURITY: Sanitize User-Agent before storing to database.
+//  Strips non-printable characters and limits length to prevent
+//  log injection attacks.
+// ─────────────────────────────────────────────────────────────────
+function sanitizeUserAgent(?string $ua): string
+{
+  if (!$ua) return 'unknown';
+  $ua = preg_replace('/[^\x20-\x7E]/', '', $ua);
+  return mb_substr($ua, 0, 255);
+}
 
 // ─────────────────────────────────────────────────────────────────
 //  IMAGE PATH HELPER
@@ -111,11 +165,6 @@ class Database
       }
 
       $this->conn = getUserDBConnection($this->userId);
-
-      // ── Explicitly sync MySQL session timezone with PHP/app timezone ──
-      // getUserDBConnection() already does this, but we set it again here
-      // to guarantee correct CURRENT_TIMESTAMP behaviour for every INSERT
-      // made through this connection (scan_timestamp, access_timestamp, etc.)
       $this->conn->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
 
       $this->createCheckInOutTable();
@@ -224,7 +273,8 @@ class QueryLogger
         ':check_type'      => $checkType,
         ':scan_timestamp'  => $now,
         ':ip_address'      => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-        ':user_agent'      => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
+        // SECURITY: Sanitized to prevent log injection
+        ':user_agent'      => sanitizeUserAgent($_SERVER['HTTP_USER_AGENT'] ?? null),
       ]);
 
       return true;
@@ -278,7 +328,8 @@ class QueryLogger
         ':access_type'      => $accessType,
         ':access_timestamp' => $now,
         ':ip_address'       => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-        ':user_agent'       => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
+        // SECURITY: Sanitized to prevent log injection
+        ':user_agent'       => sanitizeUserAgent($_SERVER['HTTP_USER_AGENT'] ?? null),
       ]);
 
       return true;
@@ -293,7 +344,7 @@ class QueryLogger
     $searchTerm,
     $searchParams,
     $resultsCount,
-    $resultsData,
+    $auditData,       // SECURITY: Now receives minimal audit data only, not full PII
     $executionTime,
     $success,
     $errorMessage = null
@@ -314,28 +365,20 @@ class QueryLogger
         ':search_term'       => $searchTerm,
         ':search_parameters' => json_encode($searchParams),
         ':results_count'     => $resultsCount,
-        ':results_data'      => json_encode($resultsData),
+        ':results_data'      => json_encode($auditData),
         ':ip_address'        => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-        ':user_agent'        => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
+        // SECURITY: Sanitized to prevent log injection
+        ':user_agent'        => sanitizeUserAgent($_SERVER['HTTP_USER_AGENT'] ?? null),
         ':execution_time'    => $executionTime,
         ':success'           => $success ? 1 : 0,
         ':error_message'     => $errorMessage,
       ]);
 
-      // logSystemAction($this->userId, 'SEARCH_QUERY', json_encode([
-      //   'query_type'    => $queryType,
-      //   'search_term'   => $searchTerm,
-      //   'results_count' => $resultsCount,
-      //   'success'       => $success,
-      // ]));
-
-      $employeeData = $resultsData[0] ?? [];
-
       logSystemAction($this->userId, 'SEARCH_QUERY', json_encode([
-        'employee_id'  => $employeeData['id']           ?? null,
-        'fullname'     => $employeeData['fullname']     ?? null,
-        'qr_code'      => $employeeData['qr_code']      ?? null,
-        'check_status' => $employeeData['check_status'] ?? 'IN'
+        'employee_id'  => $auditData['employee_id']  ?? null,
+        'fullname'     => $auditData['fullname']      ?? null,
+        'qr_code'      => $auditData['qr_code']       ?? null,
+        'check_status' => $auditData['check_status']  ?? 'IN'
       ]));
 
       return true;
@@ -433,6 +476,9 @@ class LiveSearchHandler
     $errorMessage = null;
 
     try {
+      // SECURITY: Only select the specific columns the UI needs.
+      // SELECT * was removed to prevent accidental exposure of sensitive
+      // columns that may be added to the employees table in the future.
       $sql    = "SELECT id, fullname, position, brand, status, shift,
                           violation, image, qr_code
                    FROM {$this->employeesTable} WHERE 1=1";
@@ -510,12 +556,23 @@ class LiveSearchHandler
     $executionTime = (microtime(true) - $startTime) * 1000;
 
     if ($this->logger) {
+      // SECURITY: Pass minimal audit data to logger — not the full employee records.
+      // This prevents sensitive PII (shift, violation, image path, etc.) from being
+      // duplicated into the search_queries log table.
+      $firstEmployee = $results[0] ?? [];
+      $auditData = $firstEmployee ? [
+        'employee_id'  => $firstEmployee['id']           ?? null,
+        'fullname'     => $firstEmployee['fullname']     ?? null,
+        'qr_code'      => $firstEmployee['qr_code']      ?? null,
+        'check_status' => $firstEmployee['check_status'] ?? null,
+      ] : [];
+
       $this->logger->logSearchQuery(
         'live_search',
         $searchTerm,
         $searchParams,
         count($results),
-        [],
+        $auditData,
         $executionTime,
         $success,
         $errorMessage
@@ -534,7 +591,10 @@ class LiveSearchHandler
     $result       = null;
 
     try {
-      $sql  = "SELECT * FROM {$this->employeesTable} WHERE qr_code = :qr_code LIMIT 1";
+      // SECURITY: Explicit column list — no SELECT *
+      $sql  = "SELECT id, fullname, position, brand, status, shift,
+                      violation, image, qr_code
+               FROM {$this->employeesTable} WHERE qr_code = :qr_code LIMIT 1";
       $stmt = $this->conn->prepare($sql);
       $stmt->bindParam(':qr_code', $qr_code);
       $stmt->execute();
@@ -581,12 +641,20 @@ class LiveSearchHandler
     $executionTime = (microtime(true) - $startTime) * 1000;
 
     if ($this->logger) {
+      // SECURITY: Minimal audit data only — not full employee record
+      $auditData = $result ? [
+        'employee_id'  => $result['id']           ?? null,
+        'fullname'     => $result['fullname']      ?? null,
+        'qr_code'      => $result['qr_code']       ?? null,
+        'check_status' => $result['check_status']  ?? null,
+      ] : [];
+
       $this->logger->logSearchQuery(
         $queryType,
         $qr_code,
         ['qr_code' => $qr_code],
         $result ? 1 : 0,
-        $result ? [$result] : [],
+        $auditData,
         $executionTime,
         $success,
         $errorMessage
@@ -605,7 +673,10 @@ class LiveSearchHandler
     $result       = null;
 
     try {
-      $sql  = "SELECT * FROM {$this->employeesTable} WHERE id = :id LIMIT 1";
+      // SECURITY: Explicit column list — no SELECT *
+      $sql  = "SELECT id, fullname, position, brand, status, shift,
+                      violation, image, qr_code
+               FROM {$this->employeesTable} WHERE id = :id LIMIT 1";
       $stmt = $this->conn->prepare($sql);
       $stmt->bindParam(':id', $id);
       $stmt->execute();
@@ -628,12 +699,20 @@ class LiveSearchHandler
     $executionTime = (microtime(true) - $startTime) * 1000;
 
     if ($this->logger) {
+      // SECURITY: Minimal audit data only — not full employee record
+      $auditData = $result ? [
+        'employee_id'  => $result['id']      ?? null,
+        'fullname'     => $result['fullname'] ?? null,
+        'qr_code'      => $result['qr_code']  ?? null,
+        'check_status' => $result['check_status'] ?? null,
+      ] : [];
+
       $this->logger->logSearchQuery(
         $queryType,
         (string)$id,
         ['id' => $id],
         $result ? 1 : 0,
-        $result ? [$result] : [],
+        $auditData,
         $executionTime,
         $success,
         $errorMessage
@@ -652,7 +731,7 @@ try {
   $db       = $database->connect();
 
   if (!$db) {
-    throw new Exception("Failed to connect to user database. Please try again.");
+    throw new Exception("Database connection failed");
   }
 
   $logger        = new QueryLogger($db, $currentUserId);
@@ -662,11 +741,13 @@ try {
   if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $searchParams = [];
 
-    $q = isset($_GET['q']) ? trim($_GET['q']) : '';
+    // SECURITY: Enforce max input length of 255 characters to prevent
+    // oversized payloads from being passed into SQL LIKE queries or logs.
+    $q = mb_substr(trim($_GET['q'] ?? ''), 0, 255);
 
     if ($q === '') {
       foreach (['fullname', 'position', 'brand', 'status', 'shift', 'qr_code'] as $p) {
-        $v = isset($_GET[$p]) ? trim($_GET[$p]) : '';
+        $v = mb_substr(trim($_GET[$p] ?? ''), 0, 255);
         if ($v !== '') {
           $q = $v;
           break;
@@ -701,8 +782,15 @@ try {
     switch ($action) {
 
       case 'get_by_qr':
-        $qr_code    = trim($input['qr_code'] ?? '');
-        $autoToggle = isset($input['auto_toggle']) ? (bool)$input['auto_toggle'] : true;
+        // SECURITY: Enforce max input length on QR code input
+        $qr_code    = mb_substr(trim($input['qr_code'] ?? ''), 0, 100);
+
+        // SECURITY: autoToggle is only permitted when the request explicitly
+        // identifies itself as coming from a physical scanner (source = 'scanner').
+        // Manual text searches from the keyboard must never trigger a status toggle.
+        // Note: For stronger security, use a dedicated scanner-only endpoint instead.
+        $source     = $input['source'] ?? 'manual';
+        $autoToggle = ($source === 'scanner') && (isset($input['auto_toggle']) ? (bool)$input['auto_toggle'] : true);
 
         if (empty($qr_code)) {
           $response['message'] = 'QR code is required';
@@ -716,14 +804,16 @@ try {
           $response['data']    = $employee;
 
           if (!empty($employee['status_changed'])) {
-            $prev = $employee['previous_status'] ?? '–';
             $curr = $employee['check_status'];
-            $response['message'] = "Employee checked {$curr}. (was {$prev})";
+            // SECURITY: Do not echo back user input — use a fixed message
+            $response['message'] = "Employee checked {$curr}.";
           } else {
             $response['message'] = 'Employee found. Current status: ' . $employee['check_status'];
           }
         } else {
-          $response['message'] = 'No employee found with QR code: ' . htmlspecialchars($qr_code);
+          // SECURITY: Do not echo the user's QR code back in the response.
+          // This prevents reflected XSS if the message is ever rendered as HTML.
+          $response['message'] = 'No employee found for the provided QR code.';
         }
         break;
 
@@ -742,14 +832,16 @@ try {
           $response['data']    = $employee;
           $response['message'] = 'Employee found. Current status: ' . $employee['check_status'];
         } else {
-          $response['message'] = 'Employee not found with ID: ' . $employee_id;
+          // SECURITY: Do not echo back user-supplied input
+          $response['message'] = 'Employee not found.';
         }
         break;
 
       case 'toggle_status':
         $employee_id = intval($input['employee_id'] ?? 0);
-        $qr_code     = trim($input['qr_code']      ?? '');
-        $fullname    = trim($input['fullname']      ?? '');
+        // SECURITY: Enforce max input length
+        $qr_code     = mb_substr(trim($input['qr_code']   ?? ''), 0, 100);
+        $fullname    = mb_substr(trim($input['fullname']   ?? ''), 0, 255);
 
         if ($employee_id <= 0 || empty($qr_code) || empty($fullname)) {
           $response['message'] = 'Employee ID, QR code, and fullname are required';
@@ -768,19 +860,24 @@ try {
         break;
 
       default:
-        $response['message'] = 'Invalid or missing action parameter: ' . htmlspecialchars($action);
+        // SECURITY: Do not echo back the action value — could enable reflected XSS
+        $response['message'] = 'Invalid or missing action parameter.';
         break;
     }
   } else {
-    $response['message'] = 'Invalid request method: ' . $_SERVER['REQUEST_METHOD'];
+    $response['message'] = 'Invalid request method.';
   }
 } catch (Exception $e) {
+  // SECURITY: Log the real error internally — never expose it to the client.
+  // Detailed error messages leak database structure, table names, and
+  // file paths that attackers can use to craft targeted attacks.
+  error_log("Critical server error: " . $e->getMessage());
+
   $response = [
     'success' => false,
-    'message' => 'Server error: ' . $e->getMessage(),
+    'message' => 'An unexpected error occurred. Please try again.',
     'data'    => [],
   ];
-  error_log("Critical server error: " . $e->getMessage());
   http_response_code(500);
 }
 

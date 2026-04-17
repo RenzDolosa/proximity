@@ -30,6 +30,14 @@ if (!isset($_SESSION['user_id'])) {
   exit();
 }
 
+// ── SECURITY: Generate a per-session CSRF token ──────────────────
+// This token is embedded into the page and sent with every POST
+// request from qp.js. The backend validates it before acting.
+if (empty($_SESSION['csrf_token'])) {
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf_token'];
+
 try {
   if (!$userId) throw new Exception("Not logged in");
 
@@ -56,6 +64,10 @@ try {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Proximity Pass</title>
+
+  <!-- SECURITY: CSRF token stored in a meta tag for qp.js to read -->
+  <meta name="csrf-token" content="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
+
   <link rel="preload" href="../../../resource/assets/logo/nfc-logo.svg" as="image/svg+xml">
   <link rel="preload" href="../../../resource/assets/logo/proximity-logo.svg" type="image/svg+xml">
   <link rel="icon" href="../../../resource/assets/logo/nfc-logo.svg" type="image/svg+xml">

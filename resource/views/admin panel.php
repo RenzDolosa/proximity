@@ -1540,7 +1540,7 @@ function renderBindRows(array $pages, int $depth = 0): void
     }
 
     .bind-children-wrap {
-      /* No extra styling needed — indentation is handled inline per depth */
+      position: relative;
     }
 
     /* ── Disabled pill state ── */
