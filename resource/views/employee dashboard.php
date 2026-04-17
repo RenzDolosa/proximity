@@ -135,7 +135,6 @@ if ($databaseConnected) {
 </head>
 
 <body>
-
   <!-- Loading Screen -->
   <div id="loading-screen">
     <div class="loading-content">
@@ -468,7 +467,7 @@ if ($databaseConnected) {
               <!-- Scrollable tbody only -->
               <div class="lb-scroll">
                 <table class="lb-table" style="table-layout:fixed; width:100%;">
-                  <tbody>
+                  <tbody id="lb-tbody">
                     <?php foreach ($leaderboard as $rank => $row):
                       $rankNum  = $rank + 1;
                       $rankClass = $rankNum === 1 ? 'lb-rank-1' : ($rankNum === 2 ? 'lb-rank-2' : ($rankNum === 3 ? 'lb-rank-3' : ''));
@@ -495,7 +494,7 @@ if ($databaseConnected) {
               </div>
 
               <!-- Fixed footer -->
-              <div class="lb-footer">
+              <div class="lb-footer" id="lb-footer">
                 <span style="color:var(--text-muted);">
                   <?= count($leaderboard) ?> employee<?= count($leaderboard) !== 1 ? 's' : '' ?>
                 </span>
@@ -539,8 +538,7 @@ if ($databaseConnected) {
     }
     updateTime();
     setInterval(updateTime, 1000);
-  </script>
-  <script>
+
     (function() {
       <?php if (!empty($gateStats)): ?>
         const gateLabels = <?= json_encode(array_map(fn($g) => $g['gate_name'] ?? 'Unknown', $gateStats)); ?>;
@@ -590,9 +588,78 @@ if ($databaseConnected) {
     })();
 
     document.getElementById('lb-date-picker').addEventListener('change', function() {
-      const url = new URL(window.location.href);
-      url.searchParams.set('lb_date', this.value);
-      window.location.href = url.toString();
+      const date = this.value;
+      const tbody = document.getElementById('lb-tbody');
+      const footer = document.getElementById('lb-footer');
+
+      // Show a subtle loading state
+      tbody.style.opacity = '0.4';
+
+      fetch(`partials/leaderboard.php?lb_date=${date}`)
+        .then(r => r.json())
+        .then(({
+          success,
+          data
+        }) => {
+          if (!success || !data.length) {
+            tbody.innerHTML = `
+          <tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">
+            No scan activity for this date.
+          </td></tr>`;
+            footer.innerHTML = `
+          <span style="color:var(--text-muted);">0 employees</span>
+          <span style="display:flex;gap:12px;">
+            <span class="lb-in">In: 0</span>
+            <span class="lb-out">Out: 0</span>
+          </span>`;
+            tbody.style.opacity = '1';
+            return;
+          }
+
+          const rankColors = ['#f59e0b', '#94a3b8', '#b45309'];
+          let totalIn = 0,
+            totalOut = 0;
+
+          tbody.innerHTML = data.map((row, i) => {
+            const rank = i + 1;
+            const name = row.fullname.replace(/\w\S*/g, t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
+            const truncated = name.length > 18 ? name.slice(0, 18) + '…' : name;
+            const rankCell = rank <= 3 ?
+              `<td style="text-align:center;color:${rankColors[i]};font-size:11px;font-weight:700;">
+               <i class="fas fa-circle" style="font-size:8px;"></i>
+             </td>` :
+              `<td style="text-align:center;font-size:11px;font-weight:700;color:var(--text-muted);">${rank}</td>`;
+
+            totalIn += parseInt(row.total_in);
+            totalOut += parseInt(row.total_out);
+
+            return `<tr>
+          ${rankCell}
+          <td title="${name}" style="text-align:left;font-weight:500;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${truncated}</td>
+          <td class="lb-in" style="text-align:right;">${row.total_in}</td>
+          <td class="lb-out" style="text-align:right;">${row.total_out}</td>
+          <td class="lb-total" style="text-align:right;">${row.total}</td>
+        </tr>`;
+          }).join('');
+
+          footer.innerHTML = `
+        <span style="color:var(--text-muted);">
+          ${data.length} employee${data.length !== 1 ? 's' : ''}
+        </span>
+        <span style="display:flex;gap:12px;">
+          <span class="lb-in">In: ${totalIn.toLocaleString()}</span>
+          <span class="lb-out">Out: ${totalOut.toLocaleString()}</span>
+        </span>`;
+
+          tbody.style.opacity = '1';
+        })
+        .catch(() => {
+          tbody.innerHTML = `
+        <tr><td colspan="5" style="text-align:center;padding:20px;color:#ef4444;">
+          Failed to load data.
+        </td></tr>`;
+          tbody.style.opacity = '1';
+        });
     });
   </script>
 
