@@ -82,6 +82,8 @@ if ($databaseConnected) {
     $stmt->execute();
     $gateStats = $stmt->fetchAll();
 
+    $selectedDate = $_GET['lb_date'] ?? date('Y-m-d');
+
     // Today's employee scan leaderboard
     $stmt = $userDb->prepare("
       SELECT 
@@ -91,11 +93,11 @@ if ($databaseConnected) {
         COUNT(*) AS total
       FROM employee_access_log el
       LEFT JOIN employees e ON el.employee_id = e.id
-      WHERE DATE(el.access_timestamp) = CURDATE()
+      WHERE DATE(el.access_timestamp) = :selected_date
       GROUP BY el.employee_id, el.fullname
       ORDER BY total DESC
     ");
-    $stmt->execute();
+    $stmt->execute([':selected_date' => $selectedDate]);
     $leaderboard = $stmt->fetchAll();
 
     $stmt = $userDb->prepare("
@@ -433,9 +435,20 @@ if ($databaseConnected) {
               <i class="fas fa-user-check" style="color:#f59e0b;margin-right:6px;"></i>
               Today's Scan
             </span>
-            <span style="font-size:10px;color:var(--text-muted);">
-              <?= date('M j, Y'); ?>
-            </span>
+            <input type="date"
+              id="lb-date-picker"
+              value="<?= htmlspecialchars($selectedDate) ?>"
+              max="<?= date('Y-m-d') ?>"
+              style="
+                font-size:10px;
+                color:var(--text-muted);
+                border:1px solid var(--border);
+                border-radius:4px;
+                padding:2px 6px;
+                background:var(--surface);
+                cursor:pointer;
+                outline:none;
+              ">
           </div>
           <div class="card-body" style="padding:12px 16px; display:flex; flex-direction:column; height:520px;">
             <?php if (!empty($leaderboard)): ?>
@@ -494,7 +507,7 @@ if ($databaseConnected) {
 
             <?php else: ?>
               <div class="no-data">
-                <i class="fas fa-trophy"></i>
+                <i class="fas fa-history"></i>
                 No scan activity today.
               </div>
             <?php endif; ?>
@@ -575,6 +588,12 @@ if ($databaseConnected) {
         });
       <?php endif; ?>
     })();
+
+    document.getElementById('lb-date-picker').addEventListener('change', function() {
+      const url = new URL(window.location.href);
+      url.searchParams.set('lb_date', this.value);
+      window.location.href = url.toString();
+    });
   </script>
 
 </body>
