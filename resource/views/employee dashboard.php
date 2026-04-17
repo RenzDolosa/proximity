@@ -431,7 +431,7 @@ if ($databaseConnected) {
         <div class="card" style="height:100%;">
           <div class="card-header">
             <span class="card-title">
-              <i class="fas fa-trophy" style="color:#f59e0b;margin-right:6px;"></i>
+              <i class="fas fa-user-check" style="color:#f59e0b;margin-right:6px;"></i>
               Today's Scan
             </span>
             <span style="font-size:10px;color:var(--text-muted);">
