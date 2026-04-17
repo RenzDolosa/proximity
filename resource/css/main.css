@@ -184,7 +184,7 @@ body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .card-header {
@@ -203,6 +203,7 @@ body {
 
 .card-body {
   padding: 16px;
+  overflow: visible;
 }
 
 /* ── Shortcuts grid ── */

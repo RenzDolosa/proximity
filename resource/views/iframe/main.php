@@ -42,31 +42,31 @@ if (!isset($_SESSION['user_id'])) {
 
 // Get dashboard statistics
 $stats = [
-  'total_employees' => 0,
-  'active_employees' => 0,
+  'total_employees'   => 0,
+  'active_employees'  => 0,
   'inactive_employees' => 0,
-  'total_scanned' => 0,
-  'active_scan' => 0,
-  'inactive_scan' => 0,
-  'today_attendance' => 0,
-  'check_in' => 0,
-  'check_out' => 0,
-  'total_proxcode' => 0,
+  'total_scanned'     => 0,
+  'active_scan'       => 0,
+  'inactive_scan'     => 0,
+  'today_attendance'  => 0,
+  'check_in'          => 0,
+  'check_out'         => 0,
+  'total_proxcode'    => 0,
 ];
 
 try {
   $userDb = getUserDBConnection($userId);
   $databaseConnected = true;
   $requiredTables = ['employees', 'code', 'employee_access_log', 'check_in_out'];
-  $missingTables = [];
+  $missingTables  = [];
 
   if ($databaseConnected) {
     try {
       foreach ($requiredTables as $table) {
         $stmt = $userDb->prepare("
-        SELECT COUNT(*) FROM information_schema.TABLES 
-        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
-      ");
+          SELECT COUNT(*) FROM information_schema.TABLES
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+        ");
         $stmt->execute([$table]);
         if ((int)$stmt->fetchColumn() === 0) {
           $missingTables[] = $table;
@@ -259,6 +259,75 @@ if ($databaseConnected) {
       </div>
     </div>
 
+    <!-- ── Attendance chart ── -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">
+          <i class="fas fa-chart-line" style="color:#3b82f6;margin-right:6px;"></i>
+          <span id="chart-title-label">Hourly Attendance</span>
+        </span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:11px;color:var(--text-muted);" id="chart-updated"></span>
+          <div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;">
+            <button id="btn-today" onclick="setChartTab('volume')"
+              style="font-size:11px;padding:4px 10px;border:none;cursor:pointer;
+                    background:var(--accent);color:#fff;font-weight:500;">Today</button>
+            <button id="btn-15" onclick="setDayRange(15)"
+              style="font-size:11px;padding:4px 10px;border:none;cursor:pointer;
+                    background:var(--surface);color:var(--text-muted);border-left:1px solid var(--border);">Past 15 Days</button>
+            <button id="btn-30" onclick="setDayRange(30)"
+              style="font-size:11px;padding:4px 10px;border:none;cursor:pointer;
+                    background:var(--surface);color:var(--text-muted);border-left:1px solid var(--border);">Recent 30 Days</button>
+          </div>
+        </div>
+      </div>
+      <div class="card-body" style="padding-bottom:20px;">
+
+        <!-- Tab strip -->
+        <div id="chart-tabs" style="display:flex;gap:24px;margin-bottom:16px;border-bottom:1px solid var(--border);">
+          <span id="tab-volume"
+            onclick="setChartTab('volume')"
+            style="font-size:13px;font-weight:500;padding-bottom:10px;cursor:pointer;
+                  color:var(--text);border-bottom:2px solid var(--accent);">Volume</span>
+          <span id="tab-checkin"
+            onclick="setChartTab('checkin')"
+            style="font-size:13px;padding-bottom:10px;cursor:pointer;
+                  color:var(--text-muted);border-bottom:2px solid transparent;">Check In</span>
+          <span id="tab-checkout"
+            onclick="setChartTab('checkout')"
+            style="font-size:13px;padding-bottom:10px;cursor:pointer;
+                  color:var(--text-muted);border-bottom:2px solid transparent;">Check Out</span>
+        </div>
+
+        <!-- Canvas -->
+        <div style="position:relative;width:100%;height:260px;">
+          <canvas id="attendanceChart"
+            role="img"
+            aria-label="Line chart showing today and yesterday attendance counts by hour">
+            Hourly attendance data comparing today and yesterday.
+          </canvas>
+        </div>
+
+        <!-- Legend -->
+        <div id="chart-legend" style="display:flex;justify-content:center;gap:20px;margin-top:12px;font-size:12px;color:var(--text-muted);">
+          <span style="display:flex;align-items:center;gap:5px;">
+            <span style="display:inline-block;width:16px;height:2px;background:#f97316;border-radius:1px;position:relative;">
+              <span style="position:absolute;top:-4px;left:3px;width:8px;height:8px;border-radius:50%;border:2px solid #f97316;background:var(--surface);"></span>
+            </span>
+            Today
+          </span>
+          <span style="display:flex;align-items:center;gap:5px;">
+            <span style="display:inline-block;width:16px;height:2px;background:#3b82f6;border-radius:1px;position:relative;">
+              <span style="position:absolute;top:-4px;left:3px;width:8px;height:8px;border-radius:50%;border:2px solid #3b82f6;background:var(--surface);"></span>
+            </span>
+            Yesterday
+          </span>
+        </div>
+
+      </div>
+    </div>
+    <!-- ── /Attendance chart ── -->
+
     <!-- Two-column: shortcuts + menu -->
     <div class="two-col">
 
@@ -317,11 +386,12 @@ if ($databaseConnected) {
               <?php endif; ?>
 
               <?php if ($access['violation']): ?>
-              <div class="sc-card" onclick="navigateWithLoading('../../../app/services/violation_log.php');">
-                <div class="sc-icon"><i class="fas fa-exclamation-triangle"></i></div>
-                <div class="sc-label">Violation</div>
-              </div>
+                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/violation_log.php');">
+                  <div class="sc-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                  <div class="sc-label">Violation</div>
+                </div>
               <?php endif; ?>
+
             </div>
           </div>
         </div>
@@ -386,8 +456,10 @@ if ($databaseConnected) {
 
   <script src="../../js/req.js"></script>
   <script src="../../js/loading.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+
   <script>
-    // Live clock
+    // ── Live clock ──────────────────────────────────────────────────────────────
     function updateTime() {
       const now = new Date();
       document.getElementById('wb-time').textContent = now.toLocaleTimeString([], {
@@ -405,7 +477,7 @@ if ($databaseConnected) {
     updateTime();
     setInterval(updateTime, 1000);
 
-    // Frame guard
+    // ── Frame guard ─────────────────────────────────────────────────────────────
     function attachFrameGuard(frame) {
       frame.addEventListener('load', function() {
         try {
@@ -419,6 +491,412 @@ if ($databaseConnected) {
       });
     }
     document.querySelectorAll('.tab-frame').forEach(attachFrameGuard);
+
+    // ── Attendance chart ────────────────────────────────────────────────────────
+    const HOURS = [
+      '00:00', '01:00', '02:00', '03:00', '04:00', '05:00', '06:00', '07:00',
+      '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00',
+      '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00'
+    ];
+
+    // Populated by fetchAttendanceData(); defaults to zeros so chart renders
+    // immediately while the fetch is in flight.
+    let chartDatasets = {
+      volume: {
+        today: new Array(24).fill(0),
+        yesterday: new Array(24).fill(0)
+      },
+      checkin: {
+        today: new Array(24).fill(0),
+        yesterday: new Array(24).fill(0)
+      },
+      checkout: {
+        today: new Array(24).fill(0),
+        yesterday: new Array(24).fill(0)
+      }
+    };
+
+    let currentChartTab = 'volume';
+    let attendanceChart;
+
+    // Bucket raw log rows into per-hour arrays for today and yesterday
+    function buildHourlyBuckets(rows) {
+      const out = {
+        volume: {
+          today: new Array(24).fill(0),
+          yesterday: new Array(24).fill(0)
+        },
+        checkin: {
+          today: new Array(24).fill(0),
+          yesterday: new Array(24).fill(0)
+        },
+        checkout: {
+          today: new Array(24).fill(0),
+          yesterday: new Array(24).fill(0)
+        }
+      };
+
+      const todayStr = new Date().toDateString();
+      const yd = new Date();
+      yd.setDate(yd.getDate() - 1);
+      const yesterdayStr = yd.toDateString();
+
+      rows.forEach(function(row) {
+        const ts = new Date(row.access_timestamp);
+        if (isNaN(ts)) return;
+        const h = ts.getHours();
+        const day = ts.toDateString();
+
+        let bucket = null;
+        if (day === todayStr) bucket = 'today';
+        else if (day === yesterdayStr) bucket = 'yesterday';
+        if (!bucket) return;
+
+        out.volume[bucket][h]++;
+
+        const status = (row.check_status || '').toUpperCase();
+        if (status === 'IN') out.checkin[bucket][h]++;
+        if (status === 'OUT') out.checkout[bucket][h]++;
+      });
+
+      return out;
+    }
+
+    // Fetch log rows for the current month (covers today + yesterday)
+    function fetchAttendanceData() {
+      const yearMonth = new Date().toISOString().slice(0, 7); // e.g. "2025-07"
+      const url = '../../../app/services/datalog_backend.php' +
+        '?action=list' +
+        '&access_timestamp=' + encodeURIComponent(yearMonth);
+
+      fetch(url, {
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        })
+        .then(function(res) {
+          return res.json();
+        })
+        .then(function(json) {
+          if (json.success && Array.isArray(json.data)) {
+            chartDatasets = buildHourlyBuckets(json.data);
+          }
+          renderChart(currentChartTab);
+
+          const el = document.getElementById('chart-updated');
+          if (el) {
+            el.textContent = 'Updated ' + new Date().toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
+            });
+          }
+        })
+        .catch(function(err) {
+          console.warn('Attendance chart: fetch failed, showing zeros.', err);
+          renderChart(currentChartTab);
+        });
+    }
+
+    function renderChart(tab) {
+      const d = chartDatasets[tab];
+      const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+      const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+      const tickColor = isDark ? '#9ca3af' : '#94a3b8';
+
+      if (attendanceChart) attendanceChart.destroy();
+
+      attendanceChart = new Chart(document.getElementById('attendanceChart'), {
+        type: 'line',
+        data: {
+          labels: HOURS,
+          datasets: [{
+              label: 'Today',
+              data: d.today,
+              borderColor: '#f97316',
+              backgroundColor: 'transparent',
+              borderWidth: 1.5,
+              pointBackgroundColor: 'transparent',
+              pointBorderColor: '#f97316',
+              pointRadius: 4,
+              pointHoverRadius: 5,
+              tension: 0.3,
+              borderDash: []
+            },
+            {
+              label: 'Yesterday',
+              data: d.yesterday,
+              borderColor: '#3b82f6',
+              backgroundColor: 'transparent',
+              borderWidth: 1.5,
+              pointBackgroundColor: 'transparent',
+              pointBorderColor: '#3b82f6',
+              pointRadius: 4,
+              pointHoverRadius: 5,
+              tension: 0.3,
+              borderDash: [4, 3]
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              display: false
+            },
+            tooltip: {
+              backgroundColor: isDark ? '#1e293b' : '#fff',
+              borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+              borderWidth: 1,
+              titleColor: isDark ? '#f1f5f9' : '#1e293b',
+              bodyColor: isDark ? '#94a3b8' : '#64748b',
+              callbacks: {
+                title: function(items) {
+                  return items[0].label;
+                },
+                label: function(item) {
+                  return ' ' + item.dataset.label + ': ' + Math.round(item.parsed.y);
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                color: gridColor,
+                drawBorder: false
+              },
+              ticks: {
+                color: tickColor,
+                font: {
+                  size: 11
+                },
+                autoSkip: true,
+                maxTicksLimit: 12,
+                maxRotation: 0
+              }
+            },
+            y: {
+              min: 0,
+              grid: {
+                color: gridColor,
+                drawBorder: false
+              },
+              ticks: {
+                color: tickColor,
+                font: {
+                  size: 11
+                },
+                stepSize: 5
+              }
+            }
+          }
+        }
+      });
+    }
+
+    let currentDayRange = 15;
+
+    function buildDailyBuckets(rows, days) {
+      const labels = [];
+      const today = [];
+      const ref = new Date();
+      ref.setHours(0, 0, 0, 0);
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(ref);
+        d.setDate(d.getDate() - i);
+        labels.push(d.toLocaleDateString([], {
+          month: 'short',
+          day: 'numeric'
+        }));
+        today.push(0);
+      }
+      rows.forEach(function(row) {
+        const ts = new Date(row.access_timestamp);
+        if (isNaN(ts)) return;
+        const tsDay = new Date(ts);
+        tsDay.setHours(0, 0, 0, 0);
+        const diff = Math.round((ref - tsDay) / 86400000);
+        const idx = days - 1 - diff;
+        if (idx >= 0 && idx < days) today[idx]++;
+      });
+      return {
+        labels: labels,
+        data: today
+      };
+    }
+
+    function renderDailyChart(days) {
+      const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+      const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+      const tickColor = isDark ? '#9ca3af' : '#94a3b8';
+
+      const now = new Date();
+      const months = new Set();
+      for (let i = 0; i < days; i++) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        months.add(d.toISOString().slice(0, 7));
+      }
+
+      const fetches = [...months].map(function(ym) {
+        const url = '../../../app/services/datalog_backend.php' +
+          '?action=list&access_timestamp=' + encodeURIComponent(ym);
+        return fetch(url, {
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest'
+            }
+          })
+          .then(function(res) {
+            return res.json();
+          })
+          .then(function(json) {
+            return (json.success && Array.isArray(json.data)) ? json.data : [];
+          });
+      });
+
+      Promise.all(fetches).then(function(results) {
+        const rows = [].concat.apply([], results);
+        const {
+          labels,
+          data
+        } = buildDailyBuckets(rows, days);
+        if (attendanceChart) attendanceChart.destroy();
+        attendanceChart = new Chart(document.getElementById('attendanceChart'), {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Attendance',
+              data: data,
+              borderColor: '#22c55e',
+              backgroundColor: 'rgba(34,197,94,0.08)',
+              fill: true,
+              borderWidth: 1.5,
+              pointBackgroundColor: 'transparent',
+              pointBorderColor: '#22c55e',
+              pointRadius: 4,
+              pointHoverRadius: 5,
+              tension: 0.3
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+              mode: 'index',
+              intersect: false
+            },
+            plugins: {
+              legend: {
+                display: false
+              },
+              tooltip: {
+                backgroundColor: isDark ? '#1e293b' : '#fff',
+                borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+                borderWidth: 1,
+                titleColor: isDark ? '#f1f5f9' : '#1e293b',
+                bodyColor: isDark ? '#94a3b8' : '#64748b',
+                callbacks: {
+                  label: function(item) {
+                    return ' Total: ' + Math.round(item.parsed.y);
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: {
+                  color: gridColor
+                },
+                ticks: {
+                  color: tickColor,
+                  font: {
+                    size: 11
+                  },
+                  maxRotation: 0
+                }
+              },
+              y: {
+                min: 0,
+                grid: {
+                  color: gridColor
+                },
+                ticks: {
+                  color: tickColor,
+                  font: {
+                    size: 11
+                  }
+                }
+              }
+            }
+          }
+        });
+      });
+    }
+
+    function setDayRange(days) {
+      currentDayRange = days;
+
+      // Reset Today button
+      document.getElementById('btn-today').style.background = 'var(--surface)';
+      document.getElementById('btn-today').style.color = 'var(--text-muted)';
+      document.getElementById('btn-today').style.fontWeight = '400';
+
+      // Highlight active range button
+      document.getElementById('btn-15').style.background = days === 15 ? 'var(--accent)' : 'var(--surface)';
+      document.getElementById('btn-15').style.color = days === 15 ? '#fff' : 'var(--text-muted)';
+      document.getElementById('btn-15').style.fontWeight = days === 15 ? '500' : '400';
+      document.getElementById('btn-30').style.background = days === 30 ? 'var(--accent)' : 'var(--surface)';
+      document.getElementById('btn-30').style.color = days === 30 ? '#fff' : 'var(--text-muted)';
+      document.getElementById('btn-30').style.fontWeight = days === 30 ? '500' : '400';
+
+      document.getElementById('chart-title-label').textContent =
+        days === 15 ? 'Past 15 Days — Daily Attendance' : 'Recent 30 Days — Daily Attendance';
+      document.getElementById('chart-tabs').style.display = 'none';
+      document.getElementById('chart-legend').style.display = 'none';
+      renderDailyChart(days);
+    }
+
+    function setChartTab(tab) {
+      document.getElementById('chart-tabs').style.display = 'flex';
+      document.getElementById('chart-legend').style.display = 'flex';
+      document.getElementById('chart-title-label').textContent = 'Hourly Attendance';
+
+      // Highlight Today, reset range buttons
+      document.getElementById('btn-today').style.background = 'var(--accent)';
+      document.getElementById('btn-today').style.color = '#fff';
+      document.getElementById('btn-today').style.fontWeight = '500';
+      document.getElementById('btn-15').style.background = 'var(--surface)';
+      document.getElementById('btn-15').style.color = 'var(--text-muted)';
+      document.getElementById('btn-15').style.fontWeight = '400';
+      document.getElementById('btn-30').style.background = 'var(--surface)';
+      document.getElementById('btn-30').style.color = 'var(--text-muted)';
+      document.getElementById('btn-30').style.fontWeight = '400';
+
+      currentChartTab = tab;
+      ['volume', 'checkin', 'checkout'].forEach(function(t) {
+        const el = document.getElementById('tab-' + t);
+        if (t === tab) {
+          el.style.color = 'var(--text)';
+          el.style.borderBottom = '2px solid var(--accent)';
+          el.style.fontWeight = '500';
+        } else {
+          el.style.color = 'var(--text-muted)';
+          el.style.borderBottom = '2px solid transparent';
+          el.style.fontWeight = '400';
+        }
+      });
+      renderChart(tab);
+    }
+
+    // Kick off — render zeros immediately, then replace with real data
+    renderChart('volume');
+    fetchAttendanceData();
   </script>
 </body>
 
