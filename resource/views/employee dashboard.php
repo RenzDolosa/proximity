@@ -69,6 +69,19 @@ if ($databaseConnected) {
       $stats[$key] = (int)$stmt->fetchColumn();
     }
 
+    // Gate activity stats
+    $stmt = $userDb->prepare("
+      SELECT u.first_name AS gate_name, COUNT(*) AS total
+      FROM employee_access_log el
+      LEFT JOIN " . DB_NAME . ".users u ON el.user_id = u.id
+      WHERE el.user_id IS NOT NULL
+      GROUP BY el.user_id, u.first_name
+      ORDER BY total DESC
+      LIMIT 10
+    ");
+    $stmt->execute();
+    $gateStats = $stmt->fetchAll();
+
     $stmt = $userDb->prepare("
       SELECT el.*,
             COALESCE(NULLIF(TRIM(el.fullname), ''), e.fullname, 'Unknown Employee') AS fullname,
@@ -86,6 +99,7 @@ if ($databaseConnected) {
     error_log($dbError);
   }
 }
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -99,6 +113,7 @@ if ($databaseConnected) {
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <link rel="stylesheet" href="../css/emp-db.css">
   <link rel="stylesheet" href="../css/loading.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 </head>
 
 <body>
@@ -248,8 +263,55 @@ if ($databaseConnected) {
           </div>
         </div>
 
-        <!-- DB info -->
+        <!-- Gate Activity Chart -->
         <div class="card">
+          <div class="card-header">
+            <span class="card-title">
+              <i class="fas fa-door-open" style="color:#ec4899;margin-right:6px;"></i>
+              Gate Scanned Statistics
+            </span>
+          </div>
+          <div class="card-body" style="display:flex;align-items:center;justify-content:center;gap:32px;padding:20px;">
+            <?php if (!empty($gateStats)): ?>
+              <div style="position:relative;width:180px;height:180px;flex-shrink:0;">
+                <canvas id="gateChart"></canvas>
+                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+                    text-align:center;pointer-events:none;">
+                  <div style="font-size:22px;font-weight:700;color:var(--text);">
+                    <?= number_format(array_sum(array_column($gateStats, 'total'))); ?>
+                  </div>
+                  <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Total Scans</div>
+                </div>
+              </div>
+              <div id="gate-legend" style="display:flex;flex-direction:column;gap:8px;min-width:160px;">
+                <?php
+                $gateColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ec4899', '#8b5cf6', '#f97316', '#06b6d4', '#84cc16', '#a855f7', '#14b8a6'];
+                $gateTotal  = array_sum(array_column($gateStats, 'total'));
+                foreach ($gateStats as $i => $gate):
+                  $color = $gateColors[$i % count($gateColors)];
+                  $pct   = $gateTotal > 0 ? round(($gate['total'] / $gateTotal) * 100, 1) : 0;
+                  $name  = htmlspecialchars($gate['gate_name'] ?? 'Unknown');
+                ?>
+                  <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
+                    <span style="width:10px;height:10px;border-radius:50%;background:<?= $color ?>;flex-shrink:0;"></span>
+                    <span style="color:var(--text);flex:1;"><?= $name ?></span>
+                    <span style="color:var(--text-muted);font-weight:600;">
+                      <?= number_format($gate['total']) ?> <span style="font-weight:400;">(<?= $pct ?>%)</span>
+                    </span>
+                  </div>
+                <?php endforeach; ?>
+              </div>
+            <?php else: ?>
+              <div class="no-data" style="padding:30px 0;">
+                <i class="fas fa-door-open"></i>
+                No gate scan data available.
+              </div>
+            <?php endif; ?>
+          </div>
+        </div>
+
+        <!-- DB info -->
+        <!-- <div class="card">
           <div class="card-header">
             <span class="card-title"><i class="fas fa-database" style="color:#6366f1;margin-right:6px;"></i>Database</span>
           </div>
@@ -284,7 +346,7 @@ if ($databaseConnected) {
               </div>
             </div>
           </div>
-        </div>
+        </div> -->
 
       </div>
 
@@ -372,6 +434,55 @@ if ($databaseConnected) {
     }
     updateTime();
     setInterval(updateTime, 1000);
+  </script>
+  <script>
+    (function() {
+      <?php if (!empty($gateStats)): ?>
+        const gateLabels = <?= json_encode(array_map(fn($g) => $g['gate_name'] ?? 'Unknown', $gateStats)); ?>;
+        const gateData = <?= json_encode(array_column($gateStats, 'total')); ?>;
+        const gateColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ec4899', '#8b5cf6', '#f97316', '#06b6d4', '#84cc16', '#a855f7', '#14b8a6'];
+
+        const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+
+        new Chart(document.getElementById('gateChart'), {
+          type: 'doughnut',
+          data: {
+            labels: gateLabels,
+            datasets: [{
+              data: gateData,
+              backgroundColor: gateColors.slice(0, gateData.length),
+              borderColor: isDark ? '#1e293b' : '#ffffff',
+              borderWidth: 3,
+              hoverOffset: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '68%',
+            plugins: {
+              legend: {
+                display: false
+              },
+              tooltip: {
+                backgroundColor: isDark ? '#1e293b' : '#fff',
+                borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+                borderWidth: 1,
+                titleColor: isDark ? '#f1f5f9' : '#1e293b',
+                bodyColor: isDark ? '#94a3b8' : '#64748b',
+                callbacks: {
+                  label: function(item) {
+                    const total = item.dataset.data.reduce((a, b) => a + b, 0);
+                    const pct = total > 0 ? ((item.parsed / total) * 100).toFixed(1) : 0;
+                    return '  ' + item.label + ': ' + item.parsed.toLocaleString() + ' (' + pct + '%)';
+                  }
+                }
+              }
+            }
+          }
+        });
+      <?php endif; ?>
+    })();
   </script>
 
 </body>
