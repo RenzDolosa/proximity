@@ -37,7 +37,7 @@ body {
   padding: 0 20px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   overflow-x: auto;
   min-height: 46px;
   flex-shrink: 0;
@@ -87,10 +87,10 @@ body {
 
 /* ── Page body ── */
 .page-body {
-  padding: 20px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 10px;
   overflow-y: auto;
   flex: 1;
 }
@@ -110,7 +110,7 @@ body {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 5px;
   padding: 0 16px;
   border-right: 1px solid var(--border);
 }
@@ -176,7 +176,7 @@ body {
 .two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: 10px;
 }
 
 /* ── Section cards ── */
@@ -210,14 +210,14 @@ body {
 .shortcuts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-  gap: 12px;
+  gap: 6px;
 }
 
 .sc-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 7px;
+  gap: 4px;
   padding: 14px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -261,13 +261,13 @@ body {
 .menu-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 5px;
 }
 
 .menu-card {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 7px;
   padding: 14px 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -382,7 +382,7 @@ body {
 .status-pill {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
   font-size: 11px;
   padding: 3px 9px;
   border-radius: 12px;
@@ -413,14 +413,14 @@ body {
   .page-body {
     padding: 5px;
     padding-bottom: 80px;
-    gap: 5px;
+    gap: 3px;
   }
 
   /* ── Welcome banner ── */
   .welcome-banner {
     flex-direction: column;
     align-items: flex-start;
-    gap: 10px;
+    gap: 5px;
     padding: 14px 16px;
   }
 
@@ -474,13 +474,13 @@ body {
   /* ── Two-col → single column ── */
   .two-col {
     grid-template-columns: 1fr;
-    gap: 5px;
+    gap: 3px;
   }
 
   /* ── Shortcuts grid ── */
   .shortcuts-grid {
     grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
+    gap: 5px;
   }
 
   .sc-card {
@@ -494,7 +494,7 @@ body {
   /* ── Module cards ── */
   .menu-card {
     padding: 12px;
-    gap: 10px;
+    gap: 5px;
   }
 
   .mc-icon {
@@ -519,7 +519,7 @@ body {
   /* ── Top shortcut bar ── */
   .shortcut-bar {
     padding: 0 10px;
-    gap: 2px;
+    gap: 1px;
   }
 
   .shortcut-item {

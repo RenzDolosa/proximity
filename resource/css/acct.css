@@ -37,7 +37,7 @@ body {
   padding: 0 20px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   overflow-x: auto;
   min-height: 46px;
   flex-shrink: 0;
@@ -71,10 +71,10 @@ body {
 
 /* ── Page body ── */
 .page-body {
-  padding: 20px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 10px;
   overflow-y: auto;
   flex: 1;
 }
@@ -104,7 +104,7 @@ body {
 .status-pill {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
   font-size: 11px;
   padding: 3px 9px;
   border-radius: 12px;
@@ -163,7 +163,7 @@ body {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 12px;
+  gap: 6px;
 }
 
 .stat-card {
@@ -173,13 +173,13 @@ body {
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
 }
 
 .stat-top {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 5px;
 }
 
 .stat-icon-sm {
@@ -204,7 +204,7 @@ body {
 .two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: 10px;
 }
 
 /* ── Card ── */
@@ -237,7 +237,7 @@ body {
 .info-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 5px;
   margin-bottom: 16px;
 }
 
@@ -263,7 +263,7 @@ body {
 .db-block {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   padding: 12px;
   background: var(--bg);
   border-radius: var(--radius);
@@ -294,14 +294,14 @@ body {
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 5px;
   margin-bottom: 14px;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
 }
 
 .form-group.full {
@@ -340,7 +340,7 @@ label {
 .btn-primary {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 3px;
   padding: 8px 18px;
   background: var(--accent);
   color: white;
