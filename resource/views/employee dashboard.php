@@ -438,9 +438,10 @@ if ($databaseConnected) {
               <?= date('M j, Y'); ?>
             </span>
           </div>
-          <div class="card-body" style="padding:12px 16px;overflow-y:auto;max-height:520px;">
+          <div class="card-body" style="padding:12px 16px; display:flex; flex-direction:column; height:520px;">
             <?php if (!empty($leaderboard)): ?>
-              <table class="lb-table">
+              <!-- Fixed thead -->
+              <table class="lb-table" style="table-layout:fixed; width:100%;">
                 <thead>
                   <tr>
                     <th>#</th>
@@ -450,43 +451,45 @@ if ($databaseConnected) {
                     <th>Total</th>
                   </tr>
                 </thead>
-                <tbody>
-                  <?php foreach ($leaderboard as $rank => $row):
-                    $rankNum  = $rank + 1;
-                    $rankClass = $rankNum === 1 ? 'lb-rank-1' : ($rankNum === 2 ? 'lb-rank-2' : ($rankNum === 3 ? 'lb-rank-3' : ''));
-                    $name     = mb_convert_case($row['fullname'], MB_CASE_TITLE, 'UTF-8');
-                  ?>
-                    <tr>
-                      <td class="<?= $rankClass ?>">
-                        <?php if ($rankNum <= 3): ?>
-                          <i class="fas fa-circle" style="font-size:8px;"></i>
-                        <?php else: ?>
-                          <?= $rankNum ?>
-                        <?php endif; ?>
-                      </td>
-                      <td title="<?= htmlspecialchars($name) ?>">
-                        <?= htmlspecialchars(mb_strimwidth($name, 0, 18, '…')) ?>
-                      </td>
-                      <td class="lb-in"><?= number_format($row['total_in']) ?></td>
-                      <td class="lb-out"><?= number_format($row['total_out']) ?></td>
-                      <td class="lb-total"><?= number_format($row['total']) ?></td>
-                    </tr>
-                  <?php endforeach; ?>
-                </tbody>
               </table>
 
-              <!-- Footer totals -->
+              <!-- Scrollable tbody only -->
+              <div style="overflow-y:auto; flex:1;">
+                <table class="lb-table" style="table-layout:fixed; width:100%;">
+                  <tbody>
+                    <?php foreach ($leaderboard as $rank => $row):
+                      $rankNum  = $rank + 1;
+                      $rankClass = $rankNum === 1 ? 'lb-rank-1' : ($rankNum === 2 ? 'lb-rank-2' : ($rankNum === 3 ? 'lb-rank-3' : ''));
+                      $name     = mb_convert_case($row['fullname'], MB_CASE_TITLE, 'UTF-8');
+                    ?>
+                      <tr>
+                        <td class="<?= $rankClass ?>">
+                          <?php if ($rankNum <= 3): ?>
+                            <i class="fas fa-circle" style="font-size:8px;"></i>
+                          <?php else: ?>
+                            <?= $rankNum ?>
+                          <?php endif; ?>
+                        </td>
+                        <td title="<?= htmlspecialchars($name) ?>">
+                          <?= htmlspecialchars(mb_strimwidth($name, 0, 18, '…')) ?>
+                        </td>
+                        <td class="lb-in"><?= number_format($row['total_in']) ?></td>
+                        <td class="lb-out"><?= number_format($row['total_out']) ?></td>
+                        <td class="lb-total"><?= number_format($row['total']) ?></td>
+                      </tr>
+                    <?php endforeach; ?>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Fixed footer -->
               <div class="lb-footer">
                 <span style="color:var(--text-muted);">
                   <?= count($leaderboard) ?> employee<?= count($leaderboard) !== 1 ? 's' : '' ?>
                 </span>
                 <span style="display:flex;gap:12px;">
-                  <span class="lb-in">
-                    In: <?= number_format(array_sum(array_column($leaderboard, 'total_in'))) ?>
-                  </span>
-                  <span class="lb-out">
-                    Out: <?= number_format(array_sum(array_column($leaderboard, 'total_out'))) ?>
-                  </span>
+                  <span class="lb-in">In: <?= number_format(array_sum(array_column($leaderboard, 'total_in'))) ?></span>
+                  <span class="lb-out">Out: <?= number_format(array_sum(array_column($leaderboard, 'total_out'))) ?></span>
                 </span>
               </div>
 
