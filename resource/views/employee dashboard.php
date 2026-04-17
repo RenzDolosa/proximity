@@ -101,6 +101,7 @@ if ($databaseConnected) {
     $stmt->execute([':selected_date' => $selectedDate]);
     $leaderboard = $stmt->fetchAll();
 
+    // Recent activity logs
     $stmt = $userDb->prepare("
       SELECT el.*,
             COALESCE(NULLIF(TRIM(el.fullname), ''), e.fullname, 'Unknown Employee') AS fullname,
@@ -522,6 +523,23 @@ if ($databaseConnected) {
   <script src="../js/req.js"></script>
   <script src="../js/loading.js"></script>
   <script>
+    function updateTime() {
+      const now = new Date();
+      document.getElementById('wb-time').textContent = now.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      document.getElementById('wb-date').textContent = now.toLocaleDateString([], {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    }
+    updateTime();
+    setInterval(updateTime, 1000);
+
     // Gate chart colors (shared between init and updates)
     const gateColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ec4899', '#8b5cf6',
       '#f97316', '#06b6d4', '#84cc16', '#a855f7', '#14b8a6'
