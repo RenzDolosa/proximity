@@ -1156,6 +1156,7 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     list.innerHTML = unique
       .map((name, i) => {
         const safe = escapeHtml(name);
+        const properName = escapeHtml(toProperCase(name));
         const label = options.raw ? safe : escapeHtml(toProperCase(name));
         const regex = new RegExp(
           `(${lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
@@ -1166,7 +1167,7 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
           '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
         );
 
-        return `<li data-value="${safe}" data-index="${i}"
+        return `<li data-value="${properName}" data-index="${i}"
         onmousedown="document.getElementById('${inputId}').value=this.dataset.value;document.getElementById('${listId}').style.display='none';"
         onmouseover="this.parentElement.querySelectorAll('li').forEach((l,j)=>l.style.background=j===${i}?'#f0f9ff':'');"
         style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f5f9;
