@@ -774,10 +774,14 @@ async function renderEmployeeTable() {
       return `
           <tr>
               <td>${startIndex + index + 1}</td>
-              <td><strong>${safeId}</strong></td>
-              <td><strong>${toProperCase(safeFullname)}</strong></td>
-              <td>${toProperCase(safePosition)}</td>
-              <td>${toProperCase(safeBrand)}</td>
+              <td>
+                <div><strong>${toProperCase(safeFullname)}</strong></div>
+                <div class="emp-id"><strong>EMPID: ${safeId}</strong></div>
+              </td>
+              <td>
+                <div>${toProperCase(safeBrand)}</div>
+                <div class="emp-position"><strong>Position: ${toProperCase(safePosition)}</strong></div>
+              </td>
               <td><span class="status-${safeStatus.toLowerCase()}">${safeStatus}</span></td>
               <td>${safeShift}</td>
               <td class="Col7">
@@ -1066,7 +1070,7 @@ function showFullnameSuggestions(query) {
         '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
       );
       return `
-      <li data-value="${safeName}" data-index="${i}"
+      <li data-value="${properName}" data-index="${i}"
           onmousedown="selectSuggestionFromLi(this)"
           onmouseover="highlightSuggestion(${i})"
           style="padding: 8px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #f1f5f9;">

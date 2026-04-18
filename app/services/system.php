@@ -223,9 +223,7 @@ if ($databaseConnected) {
           <thead>
             <tr>
               <th>SN</th>
-              <th>EMPID</th>
               <th>Fullname</th>
-              <th>Position</th>
               <th>Brand / Department</th>
               <th>Status</th>
               <th>Shift</th>
@@ -260,92 +258,111 @@ if ($databaseConnected) {
   <!-- Employee Modal -->
   <div id="employeeModal" class="modal">
     <div class="modal-content">
-      <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
-      <h2 id="modalTitle" style="padding-bottom: 10px;">Add Employee</h2>
-      <form id="employeeForm" enctype="multipart/form-data">
-        <input type="hidden" id="original_id" name="original_id" value="">
-        <input type="hidden" id="user_id" name="user_id" value="<?php echo htmlspecialchars($_SESSION['user_id'] ?? ''); ?>">
-        <div class="form-row">
-          <div class="form-group fl-group">
-            <input type="text" id="employee_id" name="id" placeholder=" " autocomplete="off">
-            <label class="fl-label" for="employee_id">EMPID <span style="color:#e74c3c">*</span></label>
-          </div>
-          <div class="form-group fl-group">
-            <input type="text" id="fullname" name="fullname" placeholder=" " autocomplete="off">
-            <label class="fl-label" for="fullname">Fullname <span style="color:#e74c3c">*</span></label>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group fl-group">
-            <input type="text" id="position" name="position" placeholder=" " autocomplete="off">
-            <label class="fl-label" for="position">Position <span style="color:#e74c3c">*</span></label>
-          </div>
-          <div class="form-group fl-group">
-            <input type="text" id="brand" name="brand" placeholder=" " autocomplete="off">
-            <label class="fl-label" for="brand">Brand / Department <span style="color:#e74c3c">*</span></label>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group fl-group">
-            <select id="shift" name="shift" onchange="this.classList.toggle('has-value', this.value !== '')">
-              <option value="">Select Shift</option>
-              <option value="Day Shift">Day Shift</option>
-              <option value="Night Shift">Night Shift</option>
-              <option value="Graveyard Shift">Graveyard Shift</option>
-            </select>
-            <label class="fl-label" for="shift">Shift <span style="color:#e74c3c">*</span></label>
-          </div>
-          <div class="form-group fl-group">
-            <select id="status" name="status" class="has-value" onchange="this.classList.toggle('has-value', this.value !== '')">
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-            <label class="fl-label" for="status">Status</label>
-          </div>
-        </div>
 
-        <div class="form-layout">
-          <div class="left-column">
+      <!-- HEADER -->
+      <div class="modal-header">
+        <h2 id="modalTitle"><i class="fas fa-user-plus"></i> Add Employee</h2>
+        <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
+      </div>
+
+      <!-- BODY (scrollable) -->
+      <div class="modal-body">
+        <form id="employeeForm" enctype="multipart/form-data">
+          <input type="hidden" id="original_id" name="original_id" value="">
+          <input type="hidden" id="user_id" name="user_id" value="<?php echo htmlspecialchars($_SESSION['user_id'] ?? ''); ?>">
+
+          <div class="form-row">
             <div class="form-group fl-group">
-              <input type="text" id="qr_code" name="qr_code" placeholder=" " autocomplete="off">
-              <label class="fl-label" for="qr_code">Proximity Code</label>
+              <input type="text" id="employee_id" name="id" placeholder=" " autocomplete="off">
+              <label class="fl-label" for="employee_id">EMPID <span style="color:#e74c3c">*</span></label>
             </div>
             <div class="form-group fl-group">
-              <textarea id="violation" name="violation" rows="3" placeholder="&#10;Kindly specify any violations, if applicable."></textarea>
-              <script>
-                const violation = document.getElementById('violation');
-                violation.addEventListener('focus', function() {
-                  this.placeholder = 'Kindly specify any violations, if applicable.';
-                });
-                violation.addEventListener('blur', function() {
-                  this.placeholder = '\nKindly specify any violations, if applicable.';
-                });
-              </script>
-              <label class="fl-label" for="violation">Violation</label>
+              <input type="text" id="fullname" name="fullname" placeholder=" " autocomplete="off">
+              <label class="fl-label" for="fullname">Fullname <span style="color:#e74c3c">*</span></label>
             </div>
           </div>
-          <div class="right-column">
+
+          <div class="form-row">
             <div class="form-group fl-group">
-              <div class="file-upload-wrapper" style="margin-top: 0.5rem;">
-                <div class="file-upload">
-                  <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/gif,image/webp">
-                  <label for="image" class="file-upload-label">
-                    <i class="fas fa-file-image"></i> Click to select image (Max 5MB)
-                  </label>
-                </div>
-                <button type="button" class="camera-toggle-btn" onclick="openCameraModal()" title="Capture from camera">
-                  <i class="fas fa-camera"></i>
-                </button>
+              <input type="text" id="position" name="position" placeholder=" " autocomplete="off">
+              <label class="fl-label" for="position">Position <span style="color:#e74c3c">*</span></label>
+            </div>
+            <div class="form-group fl-group">
+              <input type="text" id="brand" name="brand" placeholder=" " autocomplete="off">
+              <label class="fl-label" for="brand">Brand / Department <span style="color:#e74c3c">*</span></label>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group fl-group">
+              <select id="shift" name="shift" onchange="this.classList.toggle('has-value', this.value !== '')">
+                <option value="">Select Shift</option>
+                <option value="Day Shift">Day Shift</option>
+                <option value="Night Shift">Night Shift</option>
+                <option value="Graveyard Shift">Graveyard Shift</option>
+              </select>
+              <label class="fl-label" for="shift">Shift <span style="color:#e74c3c">*</span></label>
+            </div>
+            <div class="form-group fl-group">
+              <select id="status" name="status" class="has-value" onchange="this.classList.toggle('has-value', this.value !== '')">
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+              <label class="fl-label" for="status">Status</label>
+            </div>
+          </div>
+
+          <div class="form-layout">
+            <div class="left-column">
+              <div class="form-group fl-group">
+                <input type="text" id="qr_code" name="qr_code" placeholder=" " autocomplete="off">
+                <label class="fl-label" for="qr_code">Proximity Code</label>
               </div>
-              <label class="fl-label" style="top: 0; transform: translateY(-50%); font-size: 0.75rem; color: #667eea;">Employee Image</label>
+              <div class="form-group fl-group">
+                <textarea id="violation" name="violation" rows="3" placeholder="&#10;Kindly specify any violations, if applicable."></textarea>
+                <script>
+                  const violation = document.getElementById('violation');
+                  violation.addEventListener('focus', function() {
+                    this.placeholder = 'Kindly specify any violations, if applicable.';
+                  });
+                  violation.addEventListener('blur', function() {
+                    this.placeholder = '\nKindly specify any violations, if applicable.';
+                  });
+                </script>
+                <label class="fl-label" for="violation">Violation</label>
+              </div>
+            </div>
+            <div class="right-column">
+              <div class="form-group fl-group">
+                <div class="file-upload-wrapper" style="margin-top: 0.5rem;">
+                  <div class="file-upload">
+                    <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/gif,image/webp">
+                    <label for="image" class="file-upload-label">
+                      <i class="fas fa-file-image"></i> Click to select image (Max 5MB)
+                    </label>
+                  </div>
+                  <button type="button" class="camera-toggle-btn" onclick="openCameraModal()" title="Capture from camera">
+                    <i class="fas fa-camera"></i>
+                  </button>
+                </div>
+                <label class="fl-label" style="top: 0; transform: translateY(-50%); font-size: 0.75rem; color: #667eea;">Employee Image</label>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="form-row" style="margin-top: 2rem;">
-          <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> Save Employee</button>
-          <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
-        </div>
-      </form>
+
+        </form>
+      </div><!-- /.modal-body -->
+
+      <!-- FOOTER -->
+      <div class="modal-footer">
+        <button type="submit" form="employeeForm" class="btn btn-success">
+          <i class="fas fa-save"></i> Save Employee
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">
+          <i class="fas fa-times"></i> Cancel
+        </button>
+      </div>
+
     </div>
   </div>
 
@@ -436,66 +453,85 @@ if ($databaseConnected) {
   <!-- CSV / Excel Import Modal -->
   <div id="importModal" class="modal">
     <div class="modal-content">
-      <div id="importProgress" style="display: none;">
-        <h4>Import Progress:</h4>
-        <div class="progress-bar">
-          <div class="progress-fill" id="progressFill"></div>
-        </div>
-        <div id="importStatus"></div>
-      </div>
-      <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
-      <h2>Import Employees from File</h2>
 
-      <div class="import-instructions">
-        <h4>Supported File Formats:</h4>
-        <p><strong>&#128196; CSV (.csv)</strong> | <strong>&#128202; Excel (.xlsx, .xls)</strong></p>
-        <h4>File Format Requirements:</h4>
-        <p>Your file should have the following columns in this order:</p>
-        <ul>
-          <li><strong>empid</strong> - Employee's ID (required)</li>
-          <li><strong>fullname</strong> - Employee's fullname (required)</li>
-          <li><strong>position</strong> - Job position</li>
-          <li><strong>brand/deparment</strong> - Brand/Department</li>
-          <li><strong>status</strong> - Active or Inactive (default: Active)</li>
-          <li><strong>shift</strong> - Day Shift, Night Shift, or Graveyard Shift (required)</li>
-          <li><strong>remarks</strong> - Any remarks (optional)</li>
-          <li><strong>proximity code</strong> - If have Proximity Code (optional)</li>
-        </ul>
-        <p><em>Note: If blank, Proximity Codes will be automatically generated for each employee.</em></p>
+      <!-- HEADER -->
+      <div class="modal-header">
+        <h2><i class="fas fa-upload"></i> Import Employees from File</h2>
+        <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
       </div>
 
-      <form id="importForm" enctype="multipart/form-data">
-        <div class="form-group">
-          <div class="form-row">
-            <label for="dataFile">
-              <div class="download-label">Select File</div>
-            </label>
-            <a href="#" onclick="excelTemplate()" style="display: flex; align-items: center; gap: 5px; margin-left: auto; text-decoration: none; color: #007bff;">
-              <i class="fas fa-download"></i> Download Excel Template
-            </a>
+      <!-- BODY (scrollable) -->
+      <div class="modal-body">
+
+        <div id="importProgress" style="display:none;">
+          <h4>Import Progress:</h4>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
           </div>
-          <div class="file-upload">
-            <input type="file" id="dataFile" name="dataFile" accept=".csv,.xlsx,.xls" required>
-            <label for="dataFile" class="file-upload-label">
-              <i class="fas fa-file"></i> Click to select file (.csv, .xlsx, .xls)
+          <div id="importStatus"></div>
+        </div>
+
+        <div class="import-instructions">
+          <h4>Supported File Formats:</h4>
+          <p><strong>&#128196; CSV (.csv)</strong> | <strong>&#128202; Excel (.xlsx, .xls)</strong></p>
+          <h4>File Format Requirements:</h4>
+          <p>Your file should have the following columns in this order:</p>
+          <ul>
+            <li><strong>empid</strong> - Employee's ID (required)</li>
+            <li><strong>fullname</strong> - Employee's fullname (required)</li>
+            <li><strong>position</strong> - Job position</li>
+            <li><strong>brand/deparment</strong> - Brand/Department</li>
+            <li><strong>status</strong> - Active or Inactive (default: Active)</li>
+            <li><strong>shift</strong> - Day Shift, Night Shift, or Graveyard Shift (required)</li>
+            <li><strong>remarks</strong> - Any remarks (optional)</li>
+            <li><strong>proximity code</strong> - If have Proximity Code (optional)</li>
+          </ul>
+          <p><em>Note: If blank, Proximity Codes will be automatically generated for each employee.</em></p>
+        </div>
+
+        <form id="importForm" enctype="multipart/form-data">
+          <div class="form-group">
+            <div class="form-row">
+              <label for="dataFile">
+                <div class="download-label">Select File</div>
+              </label>
+              <a href="#" onclick="excelTemplate()" style="display:flex;align-items:center;gap:5px;margin-left:auto;text-decoration:none;color:#007bff;">
+                <i class="fas fa-download"></i> Download Excel Template
+              </a>
+            </div>
+            <div class="file-upload">
+              <input type="file" id="dataFile" name="dataFile" accept=".csv,.xlsx,.xls" required>
+              <label for="dataFile" class="file-upload-label">
+                <i class="fas fa-file"></i> Click to select file (.csv, .xlsx, .xls)
+              </label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label style="display:grid;grid-template-columns:300px 20px;">
+              Skip first row (if it contains headers)
+              <input type="checkbox" id="skipHeader" name="skipHeader" checked>
             </label>
           </div>
-        </div>
-        <div class="form-group">
-          <label style="display: grid; grid-template-columns: 300px 20px">
-            Skip first row (if it contains headers)
-            <input type="checkbox" id="skipHeader" name="skipHeader" checked>
-          </label>
-        </div>
-        <div id="importPreview" style="display: none;">
-          <h4>Preview (First 5 rows):</h4>
-        </div>
-        <div class="form-row" style="margin-top: 2rem;">
-          <button type="button" class="btn btn-primary" onclick="previewFile()"><i class="fas fa-list-ul"></i> Preview</button>
-          <button type="submit" class="btn btn-import"><i class="fas fa-upload"></i> Import</button>
-          <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
-        </div>
-      </form>
+          <div id="importPreview" style="display:none;">
+            <h4>Preview (First 5 rows):</h4>
+          </div>
+        </form>
+
+      </div><!-- /.modal-body -->
+
+      <!-- FOOTER -->
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" onclick="previewFile()">
+          <i class="fas fa-list-ul"></i> Preview
+        </button>
+        <button type="submit" form="importForm" class="btn btn-import">
+          <i class="fas fa-upload"></i> Import
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">
+          <i class="fas fa-times"></i> Cancel
+        </button>
+      </div>
+
     </div>
   </div>
 

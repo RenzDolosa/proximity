@@ -487,8 +487,31 @@ if ($databaseConnected) {
     <!-- ── Controls ──────────────────────────────────────────────────── -->
     <div class="controls">
       <div class="search-row">
-        <div class="search-group">
-          <input type="text" id="f_name" placeholder="Employee name…" oninput="applyFilters()" autocomplete="off">
+        <div class="search-group" style="position:relative;">
+          <input type="text" id="f_name" placeholder="Employee name…"
+            oninput="showNameSuggestions(this.value); applyFilters()"
+            onkeydown="handleNameSuggestionNav(event)"
+            onfocus="showNameSuggestions(this.value)"
+            autocomplete="off"
+            style="width:100%;">
+          <ul id="name-suggestions" style="
+            display:none;
+            position:absolute;
+            top:100%;
+            left:0;
+            right:0;
+            z-index:9999;
+            background:#fff;
+            border:1px solid #cbd5e1;
+            border-top:none;
+            border-radius:0 0 8px 8px;
+            box-shadow:0 4px 12px rgba(0,0,0,0.1);
+            list-style:none;
+            margin:0;
+            padding:0;
+            max-height:220px;
+            overflow-y:auto;
+          "></ul>
         </div>
         <div class="search-group">
           <select id="f_type" onchange="applyFilters()">
@@ -624,6 +647,14 @@ if ($databaseConnected) {
     const PER_PAGE = 25;
     let deleteTargetId = null;
 
+    // SECURITY: Standalone toProperCase — replaces String.prototype pollution
+    function toProperCase(str) {
+      if (!str) return "";
+      return String(str).replace(/[^\s,\-]+/g, function(txt) {
+        return txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase();
+      });
+    }
+
     // ── Init ─────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', loadViolations);
 
@@ -666,6 +697,101 @@ if ($databaseConnected) {
       });
       if (cur) sel.value = cur;
     }
+
+    // ── Fullname suggestions ─────────────────────────────────────────
+    let nameSuggestionIndex = -1;
+
+    function showNameSuggestions(query) {
+      const list = document.getElementById('name-suggestions');
+      if (!list) return;
+
+      const q = query.trim().toLowerCase();
+
+      const matches = [
+        ...new Map(
+          allVio
+          .filter(v => !q || (v.employee_name || '').toLowerCase().includes(q))
+          .map(v => [(v.employee_name || '').toLowerCase(), v.employee_name])
+        ).values(),
+      ].filter(Boolean);
+
+      if (!matches.length || !q) {
+        list.style.display = 'none';
+        nameSuggestionIndex = -1;
+        return;
+      }
+
+      list.innerHTML = matches.map((name, i) => {
+        const safeName = esc(name);
+        const properName = esc(toProperCase(name));
+        const regex = new RegExp(
+          `(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'
+        );
+        const highlighted = properName.replace(
+          regex,
+          '<mark style="background:#fef08a;border-radius:2px;">$1</mark>'
+        );
+        return `
+      <li data-value="${properName}" data-index="${i}"
+          onmousedown="selectNameSuggestion(this.dataset.value)"
+          onmouseover="highlightNameSuggestion(${i})"
+          style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f5f9;">
+        ${highlighted}
+      </li>`;
+      }).join('');
+
+      list.style.display = 'block';
+      nameSuggestionIndex = -1;
+    }
+
+    function selectNameSuggestion(name) {
+      const input = document.getElementById('f_name');
+      const list = document.getElementById('name-suggestions');
+      if (input) input.value = name;
+      if (list) list.style.display = 'none';
+      nameSuggestionIndex = -1;
+      applyFilters();
+    }
+
+    function highlightNameSuggestion(index) {
+      const items = document.querySelectorAll('#name-suggestions li');
+      items.forEach((li, i) => {
+        li.style.background = i === index ? '#f0f9ff' : '';
+      });
+      nameSuggestionIndex = index;
+    }
+
+    function handleNameSuggestionNav(e) {
+      const list = document.getElementById('name-suggestions');
+      const items = list ? list.querySelectorAll('li') : [];
+      if (!items.length || list.style.display === 'none') return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        nameSuggestionIndex = Math.min(nameSuggestionIndex + 1, items.length - 1);
+        highlightNameSuggestion(nameSuggestionIndex);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        nameSuggestionIndex = Math.max(nameSuggestionIndex - 1, 0);
+        highlightNameSuggestion(nameSuggestionIndex);
+      } else if (e.key === 'Enter' && nameSuggestionIndex >= 0) {
+        e.preventDefault();
+        selectNameSuggestion(items[nameSuggestionIndex].dataset.value);
+      } else if (e.key === 'Escape') {
+        list.style.display = 'none';
+        nameSuggestionIndex = -1;
+      }
+    }
+
+    // Close suggestions when clicking outside
+    document.addEventListener('click', function(e) {
+      const list = document.getElementById('name-suggestions');
+      const input = document.getElementById('f_name');
+      if (list && input && !input.contains(e.target) && !list.contains(e.target)) {
+        list.style.display = 'none';
+        nameSuggestionIndex = -1;
+      }
+    });
 
     function applyFilters() {
       const name = document.getElementById('f_name').value.trim().toLowerCase();
@@ -912,19 +1038,17 @@ if ($databaseConnected) {
       if (!str) return '—';
       try {
         const d = new Date(withTime ? str : str + 'T00:00:00');
-        const opts = withTime ?
-          {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          } :
-          {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-          };
+        const opts = withTime ? {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        } : {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        };
         return d.toLocaleDateString('en-PH', opts);
       } catch {
         return str;

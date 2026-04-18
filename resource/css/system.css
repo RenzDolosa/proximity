@@ -168,6 +168,18 @@ body {
   padding-bottom: 85px;
 }
 
+.emp-id {
+  font-size: 11px;
+  color: #718096;
+  margin-top: 2px;
+}
+
+.emp-position {
+  font-size: 11px;
+  color: #718096;
+  margin-top: 2px;
+}
+
 .emp-status {
   display: flex;
   gap: 30px;
@@ -668,7 +680,7 @@ tr:hover {
     border-radius: 8px;
     object-fit: cover;
     pointer-events: none;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     transition: opacity 0.15s;
   }
 

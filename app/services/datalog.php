@@ -238,7 +238,7 @@ if ($databaseConnected) {
     <!-- Employee Data Table -->
     <div class="data-table">
       <div class="table-header">
-        <h3>Employee Records</h3>
+        <h3>Scanned Records</h3>
         <div class="emp-status">
           <div style="display: flex; gap: 10px;">
             <div class="total-emp"><i class="fas fa-users"></i></div>
@@ -272,9 +272,7 @@ if ($databaseConnected) {
           <thead>
             <tr>
               <th>SN</th>
-              <th>EMPID</th>
               <th>Fullname</th>
-              <th>Position</th>
               <th>Brand / Department</th>
               <th>Status</th>
               <th>Shift</th>
