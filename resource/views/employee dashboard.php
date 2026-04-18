@@ -294,7 +294,7 @@ if ($databaseConnected) {
             <div style="position:relative;width:180px;height:180px;flex-shrink:0;">
               <canvas id="gateChart"></canvas>
               <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-          text-align:center;pointer-events:none;">
+                text-align:center;pointer-events:none;">
                 <div id="gate-total-count" style="font-size:22px;font-weight:700;color:var(--text);">
                   <?= number_format(array_sum(array_column($gateStats, 'total'))); ?>
                 </div>
@@ -523,6 +523,7 @@ if ($databaseConnected) {
   <script src="../js/req.js"></script>
   <script src="../js/loading.js"></script>
   <script>
+    // ── Live clock ──────────────────────────────────────────────────────────────
     function updateTime() {
       const now = new Date();
       document.getElementById('wb-time').textContent = now.toLocaleTimeString([], {
@@ -540,12 +541,12 @@ if ($databaseConnected) {
     updateTime();
     setInterval(updateTime, 1000);
 
-    // Gate chart colors (shared between init and updates)
+    // ── Gate chart colors ─────────────────────────────────────────────────────────
     const gateColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ec4899', '#8b5cf6',
       '#f97316', '#06b6d4', '#84cc16', '#a855f7', '#14b8a6'
     ];
 
-    // Init gate chart (replaces the current IIFE chart init)
+    // ── Init gate chart ───────────────────────────────────────────────────────────
     let gateChart = null;
     (function() {
       <?php if (!empty($gateStats)): ?>

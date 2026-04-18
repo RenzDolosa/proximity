@@ -130,6 +130,19 @@ if ($databaseConnected) {
     $stmt->execute();
     $stats['total_proxcode'] = (int)$stmt->fetchColumn();
 
+    // Gate activity stats
+    $stmt = $userDb->prepare("
+      SELECT u.first_name AS gate_name, COUNT(*) AS total
+      FROM employee_access_log el
+      LEFT JOIN " . DB_NAME . ".users u ON el.user_id = u.id
+      WHERE el.user_id IS NOT NULL
+      GROUP BY el.user_id, u.first_name
+      ORDER BY total DESC
+      LIMIT 10
+    ");
+    $stmt->execute();
+    $gateStats = $stmt->fetchAll();
+
     // Recent logs
     $stmt = $userDb->prepare("
       SELECT el.*,
@@ -200,21 +213,89 @@ if ($databaseConnected) {
 
   <div class="page-body">
 
-    <!-- Welcome banner -->
-    <div class="welcome-banner">
-      <div class="wb-left">
-        <h2><i class="fas fa-server" style="margin-right:8px;opacity:.8;"></i>Management Panel</h2>
-        <p>Welcome back, <strong><?= htmlspecialchars($username ?? 'User'); ?></strong> &nbsp;&middot;&nbsp; <?= htmlspecialchars($email ?? ''); ?></p>
-        <?php if ($databaseConnected): ?>
-          <div class="status-pill ok"><i class="fas fa-circle"></i> Database connected</div>
-        <?php else: ?>
-          <div class="status-pill err"><i class="fas fa-exclamation-circle"></i> Network connection error</div>
-        <?php endif; ?>
+    <div class="two-col">
+
+      <!-- Welcome banner -->
+      <div class="welcome-banner">
+        <div class="wb-left">
+          <h2><i class="fas fa-server" style="margin-right:8px;opacity:.8;"></i>Management Panel</h2>
+          <p>Welcome back, <strong><?= htmlspecialchars($username ?? 'User'); ?></strong> &nbsp;&middot;&nbsp; <?= htmlspecialchars($email ?? ''); ?></p>
+          <?php if ($databaseConnected): ?>
+            <div class="status-pill ok"><i class="fas fa-circle"></i> Database connected</div>
+          <?php else: ?>
+            <div class="status-pill err"><i class="fas fa-exclamation-circle"></i> Network connection error</div>
+          <?php endif; ?>
+        </div>
+        <div class="wb-right">
+          <i class="fas fa-clock" style="margin-right:4px;"></i>
+          <span id="wb-time"></span><br>
+          <span id="wb-date" style="margin-top:3px;display:block;"></span>
+        </div>
       </div>
-      <div class="wb-right">
-        <i class="fas fa-clock" style="margin-right:4px;"></i>
-        <span id="wb-time"></span><br>
-        <span id="wb-date" style="margin-top:3px;display:block;"></span>
+
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i class="fas fa-bolt" style="color:#f59e0b;margin-right:6px;"></i>Quick Access</span>
+          </div>
+          <div class="card-body">
+            <div class="shortcuts-grid">
+
+              <?php if ($access['system']): ?>
+                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=employees');">
+                  <div class="sc-icon"><i class="fas fa-user-plus"></i></div>
+                  <div class="sc-label">Input Employee</div>
+                </div>
+              <?php endif; ?>
+
+              <?php if ($access['datalog']): ?>
+                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=datalog');">
+                  <div class="sc-icon"><i class="fas fa-list-check"></i></div>
+                  <div class="sc-label">Scanned Log</div>
+                </div>
+              <?php endif; ?>
+
+              <?php if ($access['proximity code']): ?>
+                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=proximity');">
+                  <div class="sc-icon">
+                    <img src="../../../resource/assets/logo/nfc-logo.svg" alt="NFC"
+                      class="icon-accent" style="width:18px;height:18px;">
+                  </div>
+                  <div class="sc-label">Proximity Center</div>
+                </div>
+              <?php endif; ?>
+
+              <?php if ($access['scan test']): ?>
+                <div class="sc-card" onclick="navigateWithLoading('../../../app/http/controllers/scan test.php');">
+                  <div class="sc-icon"><i class="fas fa-qrcode"></i></div>
+                  <div class="sc-label">Test Live Search</div>
+                </div>
+              <?php endif; ?>
+
+              <?php if ($access['employee dashboard']): ?>
+                <div class="sc-card" onclick="navigateWithLoading('../employee dashboard.php');">
+                  <div class="sc-icon"><i class="fas fa-chart-line"></i></div>
+                  <div class="sc-label">Insights</div>
+                </div>
+              <?php endif; ?>
+
+              <?php if ($access['account info']): ?>
+                <div class="sc-card" onclick="navigateWithLoading('../account.php');">
+                  <div class="sc-icon"><i class="fas fa-id-card"></i></div>
+                  <div class="sc-label">Account Info</div>
+                </div>
+              <?php endif; ?>
+
+              <?php if ($access['violation']): ?>
+                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/violation_log.php');">
+                  <div class="sc-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                  <div class="sc-label">Violation</div>
+                </div>
+              <?php endif; ?>
+
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -333,65 +414,48 @@ if ($databaseConnected) {
 
       <!-- Left: Quick access -->
       <div>
+        <!-- Gate Activity Chart -->
         <div class="card">
           <div class="card-header">
-            <span class="card-title"><i class="fas fa-bolt" style="color:#f59e0b;margin-right:6px;"></i>Quick Access</span>
+            <span class="card-title">
+              <i class="fas fa-door-open" style="color:#ec4899;margin-right:6px;"></i>
+              Gate Scanned Statistics
+            </span>
           </div>
-          <div class="card-body">
-            <div class="shortcuts-grid">
-
-              <?php if ($access['system']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=employees');">
-                  <div class="sc-icon"><i class="fas fa-user-plus"></i></div>
-                  <div class="sc-label">Input Employee</div>
+          <div class="card-body" style="display:flex;align-items:center;justify-content:center;gap:32px;padding:20px;">
+            <div style="position:relative;width:180px;height:180px;flex-shrink:0;">
+              <canvas id="gateChart"></canvas>
+              <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+                text-align:center;pointer-events:none;">
+                <div id="gate-total-count" style="font-size:22px;font-weight:700;color:var(--text);">
+                  <?= number_format(array_sum(array_column($gateStats, 'total'))); ?>
                 </div>
-              <?php endif; ?>
-
-              <?php if ($access['datalog']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=datalog');">
-                  <div class="sc-icon"><i class="fas fa-list-check"></i></div>
-                  <div class="sc-label">Scanned Log</div>
-                </div>
-              <?php endif; ?>
-
-              <?php if ($access['proximity code']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=proximity');">
-                  <div class="sc-icon">
-                    <img src="../../../resource/assets/logo/nfc-logo.svg" alt="NFC"
-                      class="icon-accent" style="width:18px;height:18px;">
+                <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Total Scans</div>
+              </div>
+            </div>
+            <div id="gate-legend" style="display:flex;flex-direction:column;gap:8px;min-width:160px;">
+              <?php if (!empty($gateStats)):
+                $gateColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ec4899', '#8b5cf6', '#f97316', '#06b6d4', '#84cc16', '#a855f7', '#14b8a6'];
+                $gateTotal  = array_sum(array_column($gateStats, 'total'));
+                foreach ($gateStats as $i => $gate):
+                  $color = $gateColors[$i % count($gateColors)];
+                  $pct   = $gateTotal > 0 ? round(($gate['total'] / $gateTotal) * 100, 1) : 0;
+                  $name  = htmlspecialchars($gate['gate_name'] ?? 'Unknown');
+              ?>
+                  <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
+                    <span style="width:10px;height:10px;border-radius:50%;background:<?= $color ?>;flex-shrink:0;"></span>
+                    <span style="color:var(--text);flex:1;"><?= $name ?></span>
+                    <span style="color:var(--text-muted);font-weight:600;">
+                      <?= number_format($gate['total']) ?> <span style="font-weight:400;">(<?= $pct ?>%)</span>
+                    </span>
                   </div>
-                  <div class="sc-label">Proximity Center</div>
+                <?php endforeach;
+              else: ?>
+                <div class="no-data" style="padding:30px 0;">
+                  <i class="fas fa-door-open"></i>
+                  No gate scan data available.
                 </div>
               <?php endif; ?>
-
-              <?php if ($access['scan test']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../../../app/http/controllers/scan test.php');">
-                  <div class="sc-icon"><i class="fas fa-qrcode"></i></div>
-                  <div class="sc-label">Test Live Search</div>
-                </div>
-              <?php endif; ?>
-
-              <?php if ($access['employee dashboard']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../employee dashboard.php');">
-                  <div class="sc-icon"><i class="fas fa-chart-line"></i></div>
-                  <div class="sc-label">Insights</div>
-                </div>
-              <?php endif; ?>
-
-              <?php if ($access['account info']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../account.php');">
-                  <div class="sc-icon"><i class="fas fa-id-card"></i></div>
-                  <div class="sc-label">Account Info</div>
-                </div>
-              <?php endif; ?>
-
-              <?php if ($access['violation']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/violation_log.php');">
-                  <div class="sc-icon"><i class="fas fa-exclamation-triangle"></i></div>
-                  <div class="sc-label">Violation</div>
-                </div>
-              <?php endif; ?>
-
             </div>
           </div>
         </div>
@@ -476,6 +540,59 @@ if ($databaseConnected) {
     }
     updateTime();
     setInterval(updateTime, 1000);
+
+    // ── Gate chart colors ─────────────────────────────────────────────────────────
+    const gateColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ec4899', '#8b5cf6',
+      '#f97316', '#06b6d4', '#84cc16', '#a855f7', '#14b8a6'
+    ];
+
+    // ── Init gate chart ───────────────────────────────────────────────────────────
+    let gateChart = null;
+    (function() {
+      <?php if (!empty($gateStats)): ?>
+        const gateLabels = <?= json_encode(array_map(fn($g) => $g['gate_name'] ?? 'Unknown', $gateStats)); ?>;
+        const gateData = <?= json_encode(array_column($gateStats, 'total')); ?>;
+        const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+
+        gateChart = new Chart(document.getElementById('gateChart'), {
+          type: 'doughnut',
+          data: {
+            labels: gateLabels,
+            datasets: [{
+              data: gateData,
+              backgroundColor: gateColors.slice(0, gateData.length),
+              borderColor: isDark ? '#1e293b' : '#ffffff',
+              borderWidth: 3,
+              hoverOffset: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '68%',
+            plugins: {
+              legend: {
+                display: false
+              },
+              tooltip: {
+                backgroundColor: isDark ? '#1e293b' : '#fff',
+                borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+                borderWidth: 1,
+                titleColor: isDark ? '#f1f5f9' : '#1e293b',
+                bodyColor: isDark ? '#94a3b8' : '#64748b',
+                callbacks: {
+                  label(item) {
+                    const total = item.dataset.data.reduce((a, b) => a + b, 0);
+                    const pct = total > 0 ? ((item.parsed / total) * 100).toFixed(1) : 0;
+                    return '  ' + item.label + ': ' + item.parsed.toLocaleString() + ' (' + pct + '%)';
+                  }
+                }
+              }
+            }
+          }
+        });
+      <?php endif; ?>
+    })();
 
     // ── Frame guard ─────────────────────────────────────────────────────────────
     function attachFrameGuard(frame) {
