@@ -147,6 +147,56 @@ function setupEventListeners() {
   autoFocusProximity();
   document.addEventListener("click", autoFocusProximity);
   document.addEventListener("focusin", autoFocusProximity);
+
+  // Position/Brand — text suggestions from employees array
+  setupFieldSuggestions("position", "position-suggestions", () =>
+    employees.map((e) => e.position),
+  );
+
+  setupFieldSuggestions("brand", "brand-suggestions", () =>
+    employees.map((e) => e.brand),
+  );
+
+  setupFieldSuggestions("violation", "violation-suggestions", () =>
+    employees.map((e) => e.violation),
+  );
+
+  // Proximity code — available codes from proxcode_backend, with icon + badge
+  let availableCodes = [];
+
+  setupFieldSuggestions("qr_code", "qrcode-suggestions", () => availableCodes, {
+    raw: true,
+    icon: "../../resource/assets/icon/nfc-icon.svg",
+    badge: "Available",
+    onFocus: async () => {
+      try {
+        const res = await fetch("proxcode_backend.php?action=get", {
+          headers: { "X-Requested-With": "XMLHttpRequest" },
+        });
+        const json = await res.json();
+        if (!json.success || !Array.isArray(json.data)) return;
+
+        const currentCode =
+          document.getElementById("qr_code")?.value.trim().toLowerCase() || "";
+        const assignedSet = new Set(
+          employees
+            .map((e) => (e.qr_code || "").trim().toLowerCase())
+            .filter(Boolean),
+        );
+
+        availableCodes = json.data
+          .filter(
+            (c) =>
+              c.is_active == 1 &&
+              (!assignedSet.has((c.qr_code || "").trim().toLowerCase()) ||
+                (c.qr_code || "").trim().toLowerCase() === currentCode),
+          )
+          .map((c) => c.qr_code);
+      } catch (e) {
+        console.warn("QR suggestions: failed to load", e);
+      }
+    },
+  });
 }
 
 // Debounce function
@@ -971,7 +1021,7 @@ function showFullnameSuggestions(query) {
         .filter((emp) => !q || emp.fullname.toLowerCase().includes(q))
         .map((emp) => [emp.fullname.toLowerCase(), emp.fullname]),
     ).values(),
-  ].slice(0, 10);
+  ];
 
   if (!matches.length || !q) {
     list.style.display = "none";
@@ -1050,6 +1100,137 @@ function handleSuggestionNav(e) {
     list.style.display = "none";
     suggestionIndex = -1;
   }
+}
+
+// ── Generic field autocomplete ───────────────────────────────────────────────
+function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+
+  // Always remove existing list and re-append to body
+  const existing = document.getElementById(listId);
+  if (existing) existing.remove();
+
+  const list = document.createElement("ul");
+  list.id = listId;
+  list.style.cssText = `
+    display:none;position:fixed;z-index:99999;
+    background:#fff;border:1px solid #cbd5e1;
+    border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.15);
+    list-style:none;margin:0;padding:0;
+    max-height:260px;overflow:hidden;overflow-y:auto;min-width:160px;
+  `;
+  document.body.appendChild(list);
+
+  let idx = -1;
+
+  function positionList() {
+    const rect = input.getBoundingClientRect();
+    list.style.top = rect.bottom + 4 + "px";
+    list.style.left = rect.left + "px";
+    list.style.width = rect.width + "px";
+  }
+
+  function show(q) {
+    const lower = q.trim().toLowerCase();
+    const raw = getValues();
+    const unique = [
+      ...new Set(
+        raw
+          .map((v) => (v || "").trim())
+          .filter((v) => v && v.toLowerCase() !== "none")
+          .filter((v) => !lower || v.toLowerCase().includes(lower)),
+      ),
+    ];
+
+    if (!unique.length) {
+      list.style.display = "none";
+      idx = -1;
+      return;
+    }
+
+    list.innerHTML = unique
+      .map((name, i) => {
+        const safe = escapeHtml(name);
+        const label = options.raw ? safe : escapeHtml(toProperCase(name));
+        const regex = new RegExp(
+          `(${lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+          "gi",
+        );
+        const hl = label.replace(
+          regex,
+          '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
+        );
+
+        return `<li data-value="${safe}" data-index="${i}"
+        onmousedown="document.getElementById('${inputId}').value=this.dataset.value;document.getElementById('${listId}').style.display='none';"
+        onmouseover="this.parentElement.querySelectorAll('li').forEach((l,j)=>l.style.background=j===${i}?'#f0f9ff':'');"
+        style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f5f9;
+               display:flex;align-items:center;">
+        ${hl}
+      </li>`;
+      })
+      .join("");
+
+    positionList();
+    list.style.display = "block";
+    idx = -1;
+  }
+
+  // Focus: optionally run async loader first
+  input.addEventListener("focus", async () => {
+    show(input.value);
+    if (options.onFocus) {
+      await options.onFocus();
+      show(input.value);
+    }
+  });
+
+  input.addEventListener("input", () => show(input.value));
+
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (list.style.display !== "none") positionList();
+    },
+    true,
+  );
+  window.addEventListener("resize", () => {
+    if (list.style.display !== "none") positionList();
+  });
+
+  input.addEventListener("keydown", (e) => {
+    const items = list.querySelectorAll("li");
+    if (!items.length || list.style.display === "none") return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      idx = Math.min(idx + 1, items.length - 1);
+      items.forEach(
+        (l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""),
+      );
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      idx = Math.max(idx - 1, 0);
+      items.forEach(
+        (l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""),
+      );
+    } else if (e.key === "Enter" && idx >= 0) {
+      e.preventDefault();
+      input.value = items[idx].dataset.value;
+      list.style.display = "none";
+      idx = -1;
+    } else if (e.key === "Escape") {
+      list.style.display = "none";
+      idx = -1;
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!input.contains(e.target) && !list.contains(e.target)) {
+      list.style.display = "none";
+      idx = -1;
+    }
+  });
 }
 
 // Close suggestions when clicking outside
