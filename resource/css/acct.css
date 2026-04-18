@@ -101,6 +101,12 @@ body {
   opacity: 0.85;
 }
 
+.wb-right {
+  font-size: 12px;
+  opacity: 0.8;
+  text-align: right;
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -230,7 +236,7 @@ body {
 }
 
 .card-body {
-  padding: 16px;
+  padding: 8px;
 }
 
 /* ── Info grid ── */
@@ -393,16 +399,57 @@ label {
 
   /* ── Welcome banner ── */
   .welcome-banner {
-    flex-direction: column;
+    flex-direction: row;
     align-items: flex-start;
-    gap: 10px;
+    gap: 5px;
     padding: 14px 16px;
+  }
+
+  .wb-right {
+    text-align: left;
+    font-size: 12px;
+  }
+
+  .wb-left h2 {
+    font-size: 15px;
   }
 
   /* ── Two-col → single column ── */
   .two-col {
     grid-template-columns: 1fr;
     gap: 5px;
+  }
+
+  /* ── Stats grid → 2 columns ── */
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+  }
+
+  /* ── Info grid ── */
+  .info-grid {
+    margin: 5px 0;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .info-value {
+    font-size: 12px;
+  }
+
+  /* ── DB block ── */
+  .db-block {
+    margin: 5px 0;
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .db-name {
+    font-size: 13px;
+  }
+
+  .card-body {
+    padding: 6px !important;
   }
 
   /* ── Top shortcut bar ── */

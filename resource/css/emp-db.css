@@ -162,14 +162,14 @@ body {
 }
 
 .card-body {
-  padding: 16px;
+  padding: 8px;
 }
 
 /* ── Stats grid ── */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 6px;
+  gap: 3px;
 }
 
 .stat-card {
@@ -497,7 +497,7 @@ body {
 
   /* ── Welcome banner ── */
   .welcome-banner {
-    flex-direction: column;
+    flex-direction: row;
     align-items: flex-start;
     gap: 10px;
     padding: 14px 16px;
@@ -521,7 +521,7 @@ body {
   /* ── Stats grid → 2 columns ── */
   .stats-grid {
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    gap: 5px;
   }
 
   .stat-value {
@@ -545,6 +545,7 @@ body {
 
   /* ── DB block ── */
   .db-block {
+    margin: 5px 0;
     padding: 10px;
     gap: 10px;
   }
@@ -555,7 +556,7 @@ body {
 
   /* ── Activity list ── */
   .card-body {
-    padding: 12px !important;
+    padding: 6px !important;
     /* override the inline padding:0 150px */
   }
 

@@ -246,6 +246,11 @@ try {
           <div class="status-pill err"><i class="fas fa-exclamation-circle"></i> Connection error</div>
         <?php endif; ?>
       </div>
+      <div class="wb-right">
+        <i class="fas fa-clock" style="margin-right:4px;"></i>
+        <span id="wb-time"></span><br>
+        <span id="wb-date" style="margin-top:3px;display:block;"></span>
+      </div>
     </div>
 
     <!-- Alert message -->
@@ -429,6 +434,24 @@ try {
   <script src="../js/req.js"></script>
   <script src="../js/loading.js"></script>
   <script>
+    // ── Live clock ──────────────────────────────────────────────────────────────
+    function updateTime() {
+      const now = new Date();
+      document.getElementById('wb-time').textContent = now.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      document.getElementById('wb-date').textContent = now.toLocaleDateString([], {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    }
+    updateTime();
+    setInterval(updateTime, 1000);
+    
     function togglePw(fieldId, btn) {
       const input = document.getElementById(fieldId);
       const icon = btn.querySelector('i');

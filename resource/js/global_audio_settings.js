@@ -45,13 +45,13 @@
     if (!container) return;
 
     container.innerHTML = `
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:7px;">
         Upload custom audio for each system event. Changes apply globally to all scan stations.
         Supported: MP3, WAV, OGG, AAC — max 5 MB each.
       </p>
       <div class="audio-grid" id="global-audio-grid"></div>
       <div id="global-audio-msg" style="font-size:12px;margin-top:10px;"></div>
-      <button id="global-audio-save-btn" class="btn-primary" style="margin-top:14px;">
+      <button id="global-audio-save-btn" class="btn-primary" style="margin-top:7px;">
         <i class="fas fa-save"></i> Save Audio Settings
       </button>`;
 

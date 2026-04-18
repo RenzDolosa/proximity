@@ -418,7 +418,7 @@ body {
 
   /* ── Welcome banner ── */
   .welcome-banner {
-    flex-direction: column;
+    flex-direction: row;
     align-items: flex-start;
     gap: 5px;
     padding: 14px 16px;
@@ -479,12 +479,12 @@ body {
 
   /* ── Shortcuts grid ── */
   .shortcuts-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 5px;
   }
 
   .sc-card {
-    padding: 12px 6px;
+    padding: 6px 3px;
   }
 
   .sc-card .sc-label {
