@@ -1138,14 +1138,16 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
   function show(q) {
     const lower = q.trim().toLowerCase();
     const raw = getValues();
-    const unique = [
-      ...new Set(
-        raw
-          .map((v) => (v || "").trim())
-          .filter((v) => v && v.toLowerCase() !== "none")
-          .filter((v) => !lower || v.toLowerCase().includes(lower)),
-      ),
-    ];
+    const seen = new Map();
+    raw
+      .map((v) => (v || "").trim())
+      .filter((v) => v && v.toLowerCase() !== "none")
+      .filter((v) => !lower || v.toLowerCase().includes(lower))
+      .forEach((v) => {
+        const key = v.toLowerCase();
+        if (!seen.has(key)) seen.set(key, v);
+      });
+    const unique = [...seen.values()];
 
     if (!unique.length) {
       list.style.display = "none";
