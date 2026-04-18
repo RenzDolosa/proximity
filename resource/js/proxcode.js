@@ -516,11 +516,13 @@ async function renderEmployeeTable() {
                   : `<div class="ph-cont" title="${tooltipText}"><div class="employee-ph">${displayInitials}</div></div>`
               }
             </td>
-            <td><strong>${empid}</strong></td>
             <td class="Col9" onclick="copyQRCode('${escapeHtml(employee.qr_code)}')" title="Copy Proximity code" style="cursor: pointer;">
               <img src="../../resource/assets/icon/nfc-icon.svg" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;">
             </td>
-            <td><span class="remarks-${displayRemarks.toLowerCase()}">${displayRemarks}</span></td>
+            <td>
+              <div><span class="remarks-${displayRemarks.toLowerCase()}">${displayRemarks}</span></div>
+              <div class="emp-id"><strong>EMPID: ${empid}</strong></div>
+            </td>
             <td>
               <span class="status-${employee.is_active == 1 ? "enabled" : "disabled"}">
                 ${employee.is_active == 1 ? "Enabled" : "Disabled"}
