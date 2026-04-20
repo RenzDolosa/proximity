@@ -659,36 +659,61 @@ if ($databaseConnected) {
         const pct = total > 0 ? ((parseInt(g.total) / total) * 100).toFixed(1) : 0;
         const name = g.gate_name || 'Unknown';
         return `
-      <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
-        <span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;"></span>
-        <span style="color:var(--text);flex:1;">${name}</span>
-        <span style="color:var(--text-muted);font-weight:600;">
-          ${parseInt(g.total).toLocaleString()} <span style="font-weight:400;">(${pct}%)</span>
-        </span>
-      </div>`;
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
+            <span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+            <span style="color:var(--text);flex:1;">${name}</span>
+            <span style="color:var(--text-muted);font-weight:600;">
+              ${parseInt(g.total).toLocaleString()} <span style="font-weight:400;">(${pct}%)</span>
+            </span>
+          </div>`;
       }).join('');
     }
 
     // Date picker — updates both leaderboard AND gate chart
     document.getElementById('lb-date-picker').addEventListener('change', function() {
       const date = this.value;
-      const tbody = document.getElementById('lb-tbody');
-      const footer = document.getElementById('lb-footer');
+      const cardBody = document.getElementById('lb-date-picker')
+        .closest('.card')
+        .querySelector('.card-body');
 
-      tbody.style.opacity = '0.4';
+      // Always replace card body with a fresh skeleton so elements are guaranteed to exist
+      cardBody.innerHTML = `
+        <table class="lb-table" style="table-layout:fixed;width:100%;">
+          <thead>
+            <tr>
+              <th>#</th><th>Employee</th>
+              <th style="color:#22c55e;">In</th>
+              <th style="color:#f59e0b;">Out</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+        </table>
+        <div class="lb-scroll">
+          <table class="lb-table" style="table-layout:fixed;width:100%;">
+            <tbody id="lb-tbody">
+              <tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">
+                <i class="fas fa-spinner fa-spin"></i> Loading...
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="lb-footer" id="lb-footer"></div>`;
 
       fetch(`partials/chart.php?lb_date=${date}`)
-        .then(r => r.json())
+        .then(r => {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
         .then(({
           success,
           data,
           gate_stats
         }) => {
+          const tbody = document.getElementById('lb-tbody');
+          const footer = document.getElementById('lb-footer');
 
-          // ── Gate chart ──────────────────────────────────────────
           updateGateChart(gate_stats);
 
-          // ── Leaderboard ─────────────────────────────────────────
           if (!success || !data.length) {
             tbody.innerHTML = `
           <tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">
@@ -700,7 +725,6 @@ if ($databaseConnected) {
             <span class="lb-in">In: 0</span>
             <span class="lb-out">Out: 0</span>
           </span>`;
-            tbody.style.opacity = '1';
             return;
           }
 
@@ -720,8 +744,8 @@ if ($databaseConnected) {
             return `<tr>
           ${rankCell}
           <td title="${name}" style="text-align:left;font-weight:500;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${truncated}</td>
-          <td class="lb-in"  style="text-align:right;">${row.total_in}</td>
-          <td class="lb-out" style="text-align:right;">${row.total_out}</td>
+          <td class="lb-in"    style="text-align:right;">${row.total_in}</td>
+          <td class="lb-out"   style="text-align:right;">${row.total_out}</td>
           <td class="lb-total" style="text-align:right;">${row.total}</td>
         </tr>`;
           }).join('');
@@ -732,15 +756,14 @@ if ($databaseConnected) {
           <span class="lb-in">In: ${totalIn.toLocaleString()}</span>
           <span class="lb-out">Out: ${totalOut.toLocaleString()}</span>
         </span>`;
-
-          tbody.style.opacity = '1';
         })
-        .catch(() => {
-          tbody.innerHTML = `
+        .catch(err => {
+          console.error('Fetch error:', err);
+          const tbody = document.getElementById('lb-tbody');
+          if (tbody) tbody.innerHTML = `
         <tr><td colspan="5" style="text-align:center;padding:20px;color:#ef4444;">
           Failed to load data.
         </td></tr>`;
-          tbody.style.opacity = '1';
         });
     });
   </script>
