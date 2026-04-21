@@ -716,15 +716,16 @@ if ($databaseConnected) {
 
           if (!success || !data.length) {
             tbody.innerHTML = `
-          <tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">
-            No scan activity for this date.
-          </td></tr>`;
+              <div class="no-data">
+                <i class="fas fa-history"></i>
+                No scan activity available.
+              </div>`;
             footer.innerHTML = `
-          <span style="color:var(--text-muted);">0 employees</span>
-          <span style="display:flex;gap:12px;">
-            <span class="lb-in">In: 0</span>
-            <span class="lb-out">Out: 0</span>
-          </span>`;
+              <span style="color:var(--text-muted);">0 employees</span>
+              <span style="display:flex;gap:12px;">
+                <span class="lb-in">In: 0</span>
+                <span class="lb-out">Out: 0</span>
+              </span>`;
             return;
           }
 
