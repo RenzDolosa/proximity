@@ -509,10 +509,12 @@ async function renderEmployeeTable() {
             <td class="Col8">
               ${
                 imageUrl
-                  ? `<img src="${imageUrl}" alt="${displayName}" class="employee-image" loading="lazy"
-                    title="${tooltipText}" 
-                    onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
-                    <span style="display:none;" title="${tooltipText}">📷</span>`
+                  ? `<img src="${imageUrl}" alt="${escapeHtml(displayName)}" class="employee-image" loading="lazy"
+                          title="${tooltipText}"
+                          onerror="this.onerror=null;this.style.display='none';this.parentElement.querySelector('.employee-ph-fallback').style.display='flex';">
+                      <div class="employee-ph-fallback ph-cont" style="display:none;" title="${tooltipText}">
+                        <div class="employee-ph">${displayInitials}</div>
+                      </div>`
                   : `<div class="ph-cont" title="${tooltipText}"><div class="employee-ph">${displayInitials}</div></div>`
               }
             </td>

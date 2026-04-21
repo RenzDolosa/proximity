@@ -635,12 +635,14 @@ async function renderEmployeeTable() {
             <td class="Col8">${
               employee.image
                 ? `<img src="${thumbSrc}" alt="${safeFullname}" class="employee-image"
-                    width="48" height="48"
-                    loading="${isAboveFold ? "eager" : "lazy"}"
-                    decoding="async"
-                    ${isAboveFold ? 'fetchpriority="high"' : ""}
-                    onerror="this.src='${imageSrc}'; this.onerror=null;">
-                  <span style="display:none;">📷</span>`
+                      width="48" height="48"
+                      loading="${isAboveFold ? "eager" : "lazy"}"
+                      decoding="async"
+                      ${isAboveFold ? 'fetchpriority="high"' : ""}
+                      onerror="if(this.src !== '${imageSrc}'){this.src='${imageSrc}';}else{this.onerror=null;this.style.display='none';this.parentElement.querySelector('.employee-ph-fallback').style.display='flex';}">
+                    <div class="employee-ph-fallback ph-cont" style="display:none;">
+                      <div class="employee-ph">${escapeHtml(fullnameInitials)}</div>
+                    </div>`
                 : `<div class="ph-cont"><div class="employee-ph">${escapeHtml(fullnameInitials)}</div></div>`
             }</td>
             <td class="Col9" data-qr="${safeQrCode}" onclick="copyQRCodeFromCell(this)" title="Copy Proximity code" style="cursor:pointer;">

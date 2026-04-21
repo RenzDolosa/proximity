@@ -13,7 +13,7 @@ if (!isLoggedIn()) {
 
 function ensureCompanySettingsTable($pdo)
 {
-  $pdo->exec("CREATE TABLE IF NOT EXISTS company_settings_global (
+  $pdo->exec("CREATE TABLE IF NOT EXISTS global_company_settings (
         id           INT AUTO_INCREMENT PRIMARY KEY,
         company_name VARCHAR(255) DEFAULT '',
         company_logo MEDIUMTEXT DEFAULT '',
@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $isAjax) {
   header('Pragma: no-cache');
   $pdo = getDBConnection();
   ensureCompanySettingsTable($pdo);
-  $row = $pdo->query("SELECT company_name, company_logo FROM company_settings_global LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+  $row = $pdo->query("SELECT company_name, company_logo FROM global_company_settings LIMIT 1")->fetch(PDO::FETCH_ASSOC);
   echo json_encode(['success' => true, 'name' => $row['company_name'] ?? '', 'logo' => $row['company_logo'] ?? '']);
   exit;
 }
@@ -46,12 +46,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
   }
   $pdo = getDBConnection();
   ensureCompanySettingsTable($pdo);
-  $count = $pdo->query("SELECT COUNT(*) FROM company_settings_global")->fetchColumn();
+  $count = $pdo->query("SELECT COUNT(*) FROM global_company_settings")->fetchColumn();
   if ($count > 0) {
-    $stmt = $pdo->prepare("UPDATE company_settings_global SET company_name = ?, company_logo = ?");
+    $stmt = $pdo->prepare("UPDATE global_company_settings SET company_name = ?, company_logo = ?");
     $stmt->execute([$name, $logo]);
   } else {
-    $stmt = $pdo->prepare("INSERT INTO company_settings_global (company_name, company_logo) VALUES (?, ?)");
+    $stmt = $pdo->prepare("INSERT INTO global_company_settings (company_name, company_logo) VALUES (?, ?)");
     $stmt->execute([$name, $logo]);
   }
   echo json_encode(['success' => true]);
@@ -758,7 +758,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
   <!-- Company header -->
   <div class="company-header">
     <div class="company-row">
-      <img id="logo-preview" src="" alt="Company logo">
+      <img id="logo-preview" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" alt="Company logo" style="display:none;">
       <div class="company-name-wrap">
         <div id="company-name-input" contenteditable="true" spellcheck="false" data-placeholder="COMPANY NAME"></div>
         <label class="logo-upload-btn" for="logo-file-input" title="Upload logo">
@@ -1041,7 +1041,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
     try {
       const name = document.getElementById('company-name-input').textContent;
       const img = document.getElementById('logo-preview');
-      const logo = (img && img.style.display !== 'none') ? img.src : '';
+      const placeholder = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+      const logo = (img && img.style.display !== 'none' && img.src !== placeholder) ? img.src : '';
       await fetch('', {
         method: 'POST',
         credentials: 'same-origin',
@@ -1091,7 +1092,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
 
   function clearLogo() {
     const img = document.getElementById('logo-preview');
-    img.src = '';
+    img.src = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
     img.style.display = 'none';
     document.getElementById('logo-clear-btn').style.display = 'none';
     saveCompanyData();
