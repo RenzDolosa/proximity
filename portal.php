@@ -169,7 +169,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     .sidebar:hover {
-      width: var(--sidebar-expanded);
+      animation: delayed-side-in 0.3s 0.3s forwards;
+    }
+
+    @keyframes delayed-side-in {
+      to {
+        width: var(--sidebar-expanded);
+      }
     }
 
     .sidebar-logo {
@@ -289,7 +295,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     .sidebar:hover~.topbar,
     .sidebar:hover~* .topbar {
-      left: var(--sidebar-expanded);
+      animation: delayed-top-in 0.3s 0.3s forwards;
+    }
+
+    @keyframes delayed-top-in {
+      to {
+        left: var(--sidebar-expanded);
+      }
     }
 
     .topbar-left {

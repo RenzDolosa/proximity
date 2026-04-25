@@ -16,7 +16,13 @@
 }
 
 .side-bar:hover {
-  transform: translateX(0);
+  animation: delayed-slide-in 0.3s 0.5s forwards;
+}
+
+@keyframes delayed-slide-in {
+  to {
+    transform: translateX(0);
+  }
 }
 
 .side-btn {

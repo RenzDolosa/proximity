@@ -25,7 +25,7 @@
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   "liveServer.settings.donotShowInfoMsg": true,
-  "security.allowedUNCHosts": ["Odt-0126", "Odt-0130"],
+  "security.allowedUNCHosts": ["ODT-0126", "ODT-0127", "ODT-0130"],
   "[sql]": {
     "editor.defaultFormatter": "inferrinizzard.prettier-sql-vscode"
   },
@@ -33,7 +33,7 @@
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   "editor.accessibilitySupport": "on",
-  "liveServer.settings.port": 5500,
+  "liveServer.settings.port": 3306,
   "liveServer.settings.host": "localhost",
   "fiveServer.browser": [
     [
