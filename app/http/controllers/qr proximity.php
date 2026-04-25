@@ -132,9 +132,11 @@ try {
   </div>
 
   <audio id="successSound" data-fallback="../../../resource/assets/sounds/success.mp3" preload="none"></audio>
+  <audio id="checkoutSound" data-fallback="../../../resource/assets/sounds/checkout.mp3" preload="none"></audio>
   <audio id="noResultSound" data-fallback="../../../resource/assets/sounds/noResultsFound.mp3" preload="none"></audio>
   <audio id="warningSound" data-fallback="../../../resource/assets/sounds/ohh-ow.mp3" preload="none"></audio>
   <audio id="inactiveSound" data-fallback="../../../resource/assets/sounds/inactive.mp3" preload="none"></audio>
+
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
   <script>
     const QR_BACKEND_URL = <?php echo json_encode($backendUrl); ?>;

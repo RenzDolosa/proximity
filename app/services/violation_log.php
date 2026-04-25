@@ -97,8 +97,8 @@ if ($databaseConnected) {
     .container {
       position: relative;
       margin: 0 auto;
-      padding: 1rem 2rem;
-      padding-bottom: 80px;
+      padding: 1rem 1rem;
+      padding-bottom: 50px;
     }
 
     /* ── Controls bar (sticky) ────────────────────────────────────── */

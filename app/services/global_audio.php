@@ -27,7 +27,7 @@ function ensureGlobalAudioTable($pdo)
 $isAjax = isset($_SERVER['HTTP_X_REQUESTED_WITH']) &&
   strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
-$audioTypes = ['success', 'not_found', 'inactive', 'violations'];
+$audioTypes = ['success', 'checkout', 'not_found', 'inactive', 'violations'];
 
 // ── AJAX GET ─────────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && $isAjax) {

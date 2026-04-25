@@ -162,9 +162,11 @@ try {
   </div>
 
   <audio id="successSound" data-fallback="../../../resource/assets/sounds/success.mp3" preload="none"></audio>
+  <audio id="checkoutSound" data-fallback="../../../resource/assets/sounds/checkout.mp3" preload="none"></audio>
   <audio id="noResultSound" data-fallback="../../../resource/assets/sounds/noResultsFound.mp3" preload="none"></audio>
   <audio id="warningSound" data-fallback="../../../resource/assets/sounds/ohh-ow.mp3" preload="none"></audio>
   <audio id="inactiveSound" data-fallback="../../../resource/assets/sounds/inactive.mp3" preload="none"></audio>
+
   <script src="../../../resource/js/btn.js"></script>
   <script src="../../../resource/js/req.js"></script>
   <script src="../../../resource/js/ver.js"></script>
@@ -180,6 +182,7 @@ try {
     // Maps global_audio_settings.audio_type  →  <audio> element ID
     const AUDIO_TYPE_MAP = {
       success: "successSound",
+      checkout: "checkoutSound",
       not_found: "noResultSound",
       violations: "warningSound",
       inactive: "inactiveSound",
@@ -284,6 +287,7 @@ try {
     }
 
     const playSuccessSound = () => playSound("successSound");
+    const playCheckoutSound = () => playSound("checkoutSound");
     const playInactiveSound = () => playSound("inactiveSound");
     const playNoResultSound = () => playSound("noResultSound");
     const playWarningSound = () => playSound("warningSound");
@@ -303,9 +307,9 @@ try {
         const employee = employees.find((emp) => emp.id === employeeId);
         if (!employee) throw new Error("Employee not found");
 
-        const hasViolations =
-          employee.violation && employee.violation.trim() !== "";
+        const hasViolations = employee.violation && employee.violation.trim() !== "";
         const hasInactive = employee.status.toLowerCase() === "inactive";
+        const hasCheckedOut = checkStatus === "OUT";
 
         const logData = {
           employee_id: employee.id,
@@ -336,6 +340,7 @@ try {
         if (result.success) {
           if (hasViolations) playWarningSound();
           else if (hasInactive) playInactiveSound();
+          else if (hasCheckedOut) playCheckoutSound();
           else playSuccessSound();
 
           showAlert(`Employee marked as ${checkStatus} successfully!`, "success");

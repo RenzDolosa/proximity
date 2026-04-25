@@ -84,8 +84,8 @@ body {
 .container {
   position: relative;
   margin: 0 auto;
-  padding: 1rem 2rem;
-  padding-bottom: 60px;
+  padding: 1rem 1rem;
+  padding-bottom: 50px;
   /* space below the fixed close button if present */
 }
 

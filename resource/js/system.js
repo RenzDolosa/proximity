@@ -24,10 +24,11 @@ const GLOBAL_AUDIO_ENDPOINT = "global_audio.php";
 
 // Maps global_audio_settings.audio_type  →  <audio> element ID
 const AUDIO_TYPE_MAP = {
-  success: "successSound",
-  not_found: "noResultSound",
+  success:    "successSound",
+  checkout:   "checkoutSound",
+  not_found:  "noResultSound",
   violations: "warningSound",
-  inactive: "inactiveSound",
+  inactive:   "inactiveSound",
 };
 
 // ─────────────────────────────────────────────────────────────────
@@ -321,6 +322,7 @@ function playSound(id) {
 }
 
 const playSuccessSound = () => playSound("successSound");
+const playCheckoutSound = () => playSound("checkoutSound");
 const playInactiveSound = () => playSound("inactiveSound");
 const playNoResultSound = () => playSound("noResultSound");
 const playWarningSound = () => playSound("warningSound");
@@ -445,9 +447,9 @@ async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
     const employee = employees.find((emp) => emp.id === employeeId);
     if (!employee) throw new Error("Employee not found");
 
-    const hasViolations =
-      employee.violation && employee.violation.trim() !== "";
+    const hasViolations = employee.violation && employee.violation.trim() !== "";
     const hasInactive = employee.status.toLowerCase() === "inactive";
+    const hasCheckedOut = checkStatus === "OUT";
 
     const logData = {
       user_id: employee.user_id,
@@ -477,6 +479,7 @@ async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
     if (result.success) {
       if (hasViolations) playWarningSound();
       else if (hasInactive) playInactiveSound();
+      else if (hasCheckedOut) playCheckoutSound();
       else playSuccessSound();
 
       showAlert(
@@ -605,7 +608,7 @@ async function renderEmployeeTable() {
                   employee.violation && employee.violation.trim()
                     ? `<button
                       data-emp-id="${safeId}"
-                      data-fullname="${safeFullname}"
+                      data-fullname="${toProperCase(safeFullname)}"
                       data-violation="${safeViolation}"
                       onclick="openViolationPopupFromBtn(this)"
                       style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
@@ -620,7 +623,7 @@ async function renderEmployeeTable() {
                   parseInt(employee.violation_count) > 0
                     ? `<button
                       data-emp-id="${safeId}"
-                      data-fullname="${safeFullname}"
+                      data-fullname="${toProperCase(safeFullname)}"
                       onclick="openViolationsModalFromBtn(this)"
                       style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
                         font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;

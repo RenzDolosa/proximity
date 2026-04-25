@@ -14,6 +14,12 @@
       color: "#22c55e",
     },
     {
+      key: "checkout",
+      label: "Checked Out sound",
+      icon: "fa-check-circle",
+      color: "#c54822",
+    },
+    {
       key: "not_found",
       label: "Not found sound",
       icon: "fa-search",

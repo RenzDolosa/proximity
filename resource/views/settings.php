@@ -56,6 +56,7 @@ unset($_SESSION['flash_message'], $_SESSION['flash_type']);
 // ── Audio type map ────────────────────────────────────────────────────────────
 const AUDIO_TYPES = [
   'success'    => 'success_audio_path',
+  'checkout'   => 'checkout_audio_path',
   'not_found'  => 'not_found_audio_path',
   'inactive'   => 'inactive_audio_path',
   'violations' => 'violations_audio_path',
@@ -246,9 +247,10 @@ try {
 
 // ── Audio card icon map ───────────────────────────────────────────────────────
 $audioIconMap = [
-  'success_audio_path'    => ['icon' => 'fa-check-circle',       'color' => '#22c55e'],
-  'not_found_audio_path'  => ['icon' => 'fa-search',             'color' => '#f59e0b'],
-  'inactive_audio_path'   => ['icon' => 'fa-user-slash',         'color' => '#64748b'],
+  'success_audio_path'    => ['icon' => 'fa-check-circle',         'color' => '#22c55e'],
+  'checkout_audio_path'   => ['icon' => 'fa-check-circle',         'color' => '#c54822'],
+  'not_found_audio_path'  => ['icon' => 'fa-search',               'color' => '#f59e0b'],
+  'inactive_audio_path'   => ['icon' => 'fa-user-slash',           'color' => '#64748b'],
   'violations_audio_path' => ['icon' => 'fa-exclamation-triangle', 'color' => '#ef4444'],
 ];
 ?>

@@ -18,6 +18,28 @@ let currentAudio = null;
 // 🆕 FILTER STATE - Track active filters
 let activeFilters = {};
 
+// ─────────────────────────────────────────────────────────────────
+// SECURITY: HTML escape helper — use on ALL dynamic content
+// inserted via innerHTML to prevent stored XSS attacks.
+// ─────────────────────────────────────────────────────────────────
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// SECURITY: Standalone toProperCase — replaces String.prototype pollution
+function toProperCase(str) {
+  if (!str) return "";
+  return String(str).replace(/[^\s,\-]+/g, function (txt) {
+    return txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase();
+  });
+}
+
 // Initialize the application
 document.addEventListener("DOMContentLoaded", function () {
   loadCurrentUserId(); // Load and cache user ID first
@@ -498,7 +520,7 @@ async function renderEmployeeTable() {
 
       // Additional employee info to display in tooltip
       const tooltipText = matchedEmployeeData
-        ? `${matchedEmployeeData.fullname}\n${matchedEmployeeData.position}\n${matchedEmployeeData.brand}`
+        ? `${toProperCase(matchedEmployeeData.fullname)}\n${toProperCase(matchedEmployeeData.position)}\n${toProperCase(matchedEmployeeData.brand)}`
         : "No matched employee";
 
       const empid = matchedEmployeeData ? `${matchedEmployeeData.id}` : "";
@@ -590,7 +612,7 @@ async function renderEmployeeTable() {
 
               <!-- FLOATING PANEL (positioned relative to td/tr) -->
               <div class="actions-panel">
-                <small style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); text-align: center; color: #fff;">${matchedEmployeeData?.fullname || "Row SN :" + "\n" + (startIndex + index + 1)}</small>
+                <small style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); text-align: center; color: #fff;">${toProperCase(matchedEmployeeData?.fullname || "Row SN :" + "\n" + (startIndex + index + 1))}</small>
 
                 <!-- EDIT -->
                 <button
@@ -630,18 +652,6 @@ async function renderEmployeeTable() {
 
   // 🆕 Update total available count
   await updateTotalAvailable();
-}
-
-// Escape HTML to prevent XSS
-function escapeHtml(text) {
-  const map = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;",
-  };
-  return text.replace(/[&<>"']/g, (m) => map[m]);
 }
 
 function copyQRCode(code) {

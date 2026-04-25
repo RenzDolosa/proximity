@@ -15,6 +15,7 @@ const GLOBAL_AUDIO_ENDPOINT = "../../services/global_audio.php";
 // Maps global_audio_settings.audio_type  →  <audio> element ID
 const AUDIO_TYPE_MAP = {
   success:    "successSound",
+  checkout:   "checkoutSound",
   not_found:  "noResultSound",
   violations: "warningSound",
   inactive:   "inactiveSound",
@@ -154,6 +155,7 @@ function playSound(id) {
 }
 
 const playSuccessSound  = () => playSound("successSound");
+const playCheckoutSound = () => playSound("checkoutSound");
 const playInactiveSound = () => playSound("inactiveSound");
 const playNoResultSound = () => playSound("noResultSound");
 const playWarningSound  = () => playSound("warningSound");
@@ -326,6 +328,9 @@ function renderResults(results) {
   const hasInactive = results.some(
     (e) => (e.status || "").toLowerCase() === "inactive",
   );
+  const hasCheckedOut = results.some(
+    (e) => (e.check_status || "").toUpperCase() === "OUT",
+  );
 
   resultsBody.innerHTML = results.map(buildCard).join("");
 
@@ -334,9 +339,10 @@ function renderResults(results) {
     resultsBody.innerHTML = "";
   }, 10000);
 
-  if (hasViolations)   playWarningSound();
+  if (hasViolations) playWarningSound();
   else if (hasInactive) playInactiveSound();
-  else                  playSuccessSound();
+  else if (hasCheckedOut) playCheckoutSound();
+  else playSuccessSound();
 
   blockSearchInput();
 }
