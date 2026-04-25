@@ -7,7 +7,7 @@ $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->load();
 
 if ($_ENV['APP_ENV'] === 'local') {
-  define('DB_HOST', '127.0.0.1:3307');
+  define('DB_HOST', '127.0.0.1:3306');
   define('DB_NAME', 'if0_41430152_proximity3pl');
   define('DB_USER', 'root');
   define('DB_PASS', '');
@@ -41,12 +41,10 @@ function createDatabase()
 
   if (strlen($dbName) > MAX_DB_NAME_LENGTH) {
     $errorMsg = "Database name exceeds maximum length of " . MAX_DB_NAME_LENGTH . " characters. Generated name: '$dbName' (" . strlen($dbName) . " chars)";
-    // error_log($errorMsg);
     return ['success' => false, 'error' => $errorMsg];
   }
 
   try {
-    // Connect WITHOUT specifying a database
     $pdo = new PDO(
       "mysql:host=" . DB_HOST . ";charset=utf8mb4",
       DB_USER,
@@ -55,21 +53,14 @@ function createDatabase()
     );
     $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
 
-    // Check if database already exists
     $stmt = $pdo->prepare("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?");
     $stmt->execute([$dbName]);
 
-    if ($stmt->rowCount() > 0) {
-      // error_log("Database already exists: $dbName — skipping creation.");
-      // Still connect and ensure tables exist
-    } else {
-      // Create the database
+    if ($stmt->rowCount() === 0) {
       $escapedDbName = str_replace("`", "``", $dbName);
       $pdo->exec("CREATE DATABASE `{$escapedDbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-      // error_log("Database created successfully: $dbName");
     }
 
-    // Connect to the (new or existing) database
     $dbPdo = new PDO(
       "mysql:host=" . DB_HOST . ";dbname=" . $dbName . ";charset=utf8mb4",
       DB_USER,
@@ -78,7 +69,6 @@ function createDatabase()
     );
     $dbPdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
 
-    // Create tables one by one to avoid multi-statement failures
     $dbPdo->exec("CREATE TABLE IF NOT EXISTS `users` (
         `id` int(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
         `username` varchar(50) NOT NULL,
@@ -136,10 +126,22 @@ function createDatabase()
     $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `session_token` VARCHAR(255) DEFAULT NULL");
     $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `my_database` VARCHAR(50) NOT NULL DEFAULT ''");
 
-    $dbPdo->exec("ALTER TABLE employees ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL");
-    $dbPdo->exec("ALTER TABLE employee_access_log ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL");
-    $dbPdo->exec("ALTER TABLE check_in_out ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL");
-    $dbPdo->exec("ALTER TABLE code ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1");
+    // ── These tables may not exist in the main DB, so skip errors safely ──
+    $alterStatements = [
+      "ALTER TABLE employees ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL",
+      "ALTER TABLE employee_access_log ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL",
+      "ALTER TABLE check_in_out ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL",
+      "ALTER TABLE code ADD COLUMN IF NOT EXISTS is_active TINYINT(1) NOT NULL DEFAULT 1",
+    ];
+
+    foreach ($alterStatements as $sql) {
+      try {
+        $dbPdo->exec($sql);
+      } catch (PDOException $e) {
+        // Table doesn't exist in main DB — safely skip
+      }
+    }
+    // ──────────────────────────────────────────────────────────────────────
 
     $adminHash = '$2y$10$/nqdViJv2DWyfjHhfS8ZDOPT.6QwxO3DWK1ocCwDFPUYvEE20Lkga';
     $dbPdo->exec("INSERT INTO `users` (`id`, `username`, `email`, `password`, `first_name`, `last_name`, `phone`, `my_database`, `user_group`)
@@ -148,12 +150,9 @@ function createDatabase()
 
     $dbPdo->exec("ALTER TABLE `users` MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;");
 
-    // error_log("Tables ready in database: $dbName");
-
     return ['success' => true, 'database_name' => $dbName];
   } catch (PDOException $e) {
     $errorMsg = "Error in createDatabase(): " . $e->getMessage();
-    // error_log($errorMsg);
     return ['success' => false, 'error' => $errorMsg];
   }
 }
