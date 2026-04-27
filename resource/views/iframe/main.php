@@ -616,8 +616,6 @@ if ($databaseConnected) {
       '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00'
     ];
 
-    // Populated by fetchAttendanceData(); defaults to zeros so chart renders
-    // immediately while the fetch is in flight.
     let chartDatasets = {
       volume: {
         today: new Array(24).fill(0),
@@ -636,7 +634,6 @@ if ($databaseConnected) {
     let currentChartTab = 'volume';
     let attendanceChart;
 
-    // Bucket raw log rows into per-hour arrays for today and yesterday
     function buildHourlyBuckets(rows) {
       const out = {
         volume: {
@@ -652,7 +649,6 @@ if ($databaseConnected) {
           yesterday: new Array(24).fill(0)
         }
       };
-
       const todayStr = new Date().toDateString();
       const yd = new Date();
       yd.setDate(yd.getDate() - 1);
@@ -663,55 +659,69 @@ if ($databaseConnected) {
         if (isNaN(ts)) return;
         const h = ts.getHours();
         const day = ts.toDateString();
-
         let bucket = null;
         if (day === todayStr) bucket = 'today';
         else if (day === yesterdayStr) bucket = 'yesterday';
         if (!bucket) return;
-
         out.volume[bucket][h]++;
-
         const status = (row.check_status || '').toUpperCase();
         if (status === 'IN') out.checkin[bucket][h]++;
         if (status === 'OUT') out.checkout[bucket][h]++;
       });
-
       return out;
     }
 
-    // Fetch log rows for the current month (covers today + yesterday)
+    // Fetches ONLY today + yesterday rows — no pagination truncation
     function fetchAttendanceData() {
-      const yearMonth = new Date().toISOString().slice(0, 7); // e.g. "2025-07"
-      const url = '../../../app/services/datalog_backend.php' +
-        '?action=list' +
-        '&access_timestamp=' + encodeURIComponent(yearMonth);
+      const now = new Date();
+      const yd = new Date(now);
+      yd.setDate(yd.getDate() - 1);
 
-      fetch(url, {
-          headers: {
-            'X-Requested-With': 'XMLHttpRequest'
-          }
-        })
-        .then(function(res) {
-          return res.json();
-        })
-        .then(function(json) {
-          if (json.success && Array.isArray(json.data)) {
-            chartDatasets = buildHourlyBuckets(json.data);
-          }
-          renderChart(currentChartTab);
+      // Build the two YYYY-MM strings we need (may be the same month)
+      const months = new Set([
+        now.toISOString().slice(0, 7),
+        yd.toISOString().slice(0, 7)
+      ]);
 
-          const el = document.getElementById('chart-updated');
-          if (el) {
-            el.textContent = 'Updated ' + new Date().toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit'
-            });
-          }
-        })
-        .catch(function(err) {
-          console.warn('Attendance chart: fetch failed, showing zeros.', err);
-          renderChart(currentChartTab);
+      const todayStr = now.toDateString();
+      const yesterdayStr = yd.toDateString();
+
+      const fetches = [...months].map(function(ym) {
+        const url = '../../../app/services/datalog_backend.php' +
+          '?action=list' +
+          '&access_timestamp=' + encodeURIComponent(ym) +
+          '&limit=9999&page=1';
+        return fetch(url, {
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest'
+            }
+          })
+          .then(function(res) {
+            return res.json();
+          })
+          .then(function(json) {
+            return (json.success && Array.isArray(json.data)) ? json.data : [];
+          });
+      });
+
+      Promise.all(fetches).then(function(results) {
+        const allRows = [].concat.apply([], results);
+        // Keep only today and yesterday — discard rest of month
+        const filtered = allRows.filter(function(r) {
+          const d = new Date(r.access_timestamp);
+          return !isNaN(d) && (d.toDateString() === todayStr || d.toDateString() === yesterdayStr);
         });
+        chartDatasets = buildHourlyBuckets(filtered);
+        renderChart(currentChartTab);
+        const el = document.getElementById('chart-updated');
+        if (el) el.textContent = 'Updated ' + new Date().toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }).catch(function(err) {
+        console.warn('Attendance chart: fetch failed, showing zeros.', err);
+        renderChart(currentChartTab);
+      });
     }
 
     function renderChart(tab) {
@@ -820,7 +830,7 @@ if ($databaseConnected) {
 
     function buildDailyBuckets(rows, days) {
       const labels = [];
-      const today = [];
+      const data = [];
       const ref = new Date();
       ref.setHours(0, 0, 0, 0);
       for (let i = days - 1; i >= 0; i--) {
@@ -830,7 +840,7 @@ if ($databaseConnected) {
           month: 'short',
           day: 'numeric'
         }));
-        today.push(0);
+        data.push(0);
       }
       rows.forEach(function(row) {
         const ts = new Date(row.access_timestamp);
@@ -839,30 +849,39 @@ if ($databaseConnected) {
         tsDay.setHours(0, 0, 0, 0);
         const diff = Math.round((ref - tsDay) / 86400000);
         const idx = days - 1 - diff;
-        if (idx >= 0 && idx < days) today[idx]++;
+        if (idx >= 0 && idx < days) data[idx]++;
       });
       return {
-        labels: labels,
-        data: today
+        labels,
+        data
       };
     }
 
+    // Fetches only the exact date window needed for the day-range chart
     function renderDailyChart(days) {
       const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
       const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
       const tickColor = isDark ? '#9ca3af' : '#94a3b8';
 
-      const now = new Date();
+      const ref = new Date();
+      ref.setHours(0, 0, 0, 0);
+      const startDay = new Date(ref);
+      startDay.setDate(startDay.getDate() - (days - 1));
+      const startStr = startDay.toISOString().slice(0, 10); // "YYYY-MM-DD"
+
+      // Only the calendar months the window spans
       const months = new Set();
       for (let i = 0; i < days; i++) {
-        const d = new Date(now);
+        const d = new Date(ref);
         d.setDate(d.getDate() - i);
         months.add(d.toISOString().slice(0, 7));
       }
 
       const fetches = [...months].map(function(ym) {
         const url = '../../../app/services/datalog_backend.php' +
-          '?action=list&access_timestamp=' + encodeURIComponent(ym);
+          '?action=list' +
+          '&access_timestamp=' + encodeURIComponent(ym) +
+          '&limit=9999&page=1';
         return fetch(url, {
             headers: {
               'X-Requested-With': 'XMLHttpRequest'
@@ -877,19 +896,27 @@ if ($databaseConnected) {
       });
 
       Promise.all(fetches).then(function(results) {
-        const rows = [].concat.apply([], results);
+        const allRows = [].concat.apply([], results);
+        // Discard rows outside the requested window
+        const rows = allRows.filter(function(r) {
+          const ts = new Date(r.access_timestamp);
+          if (isNaN(ts)) return false;
+          return ts.toISOString().slice(0, 10) >= startStr;
+        });
+
         const {
           labels,
           data
         } = buildDailyBuckets(rows, days);
+
         if (attendanceChart) attendanceChart.destroy();
         attendanceChart = new Chart(document.getElementById('attendanceChart'), {
           type: 'line',
           data: {
-            labels: labels,
+            labels,
             datasets: [{
               label: 'Attendance',
-              data: data,
+              data,
               borderColor: '#22c55e',
               backgroundColor: 'rgba(34,197,94,0.08)',
               fill: true,
@@ -958,20 +985,15 @@ if ($databaseConnected) {
 
     function setDayRange(days) {
       currentDayRange = days;
-
-      // Reset Today button
       document.getElementById('btn-today').style.background = 'var(--surface)';
       document.getElementById('btn-today').style.color = 'var(--text-muted)';
       document.getElementById('btn-today').style.fontWeight = '400';
-
-      // Highlight active range button
       document.getElementById('btn-15').style.background = days === 15 ? 'var(--accent)' : 'var(--surface)';
       document.getElementById('btn-15').style.color = days === 15 ? '#fff' : 'var(--text-muted)';
       document.getElementById('btn-15').style.fontWeight = days === 15 ? '500' : '400';
       document.getElementById('btn-30').style.background = days === 30 ? 'var(--accent)' : 'var(--surface)';
       document.getElementById('btn-30').style.color = days === 30 ? '#fff' : 'var(--text-muted)';
       document.getElementById('btn-30').style.fontWeight = days === 30 ? '500' : '400';
-
       document.getElementById('chart-title-label').textContent =
         days === 15 ? 'Past 15 Days — Daily Attendance' : 'Recent 30 Days — Daily Attendance';
       document.getElementById('chart-tabs').style.display = 'none';
@@ -983,8 +1005,6 @@ if ($databaseConnected) {
       document.getElementById('chart-tabs').style.display = 'flex';
       document.getElementById('chart-legend').style.display = 'flex';
       document.getElementById('chart-title-label').textContent = 'Hourly Attendance';
-
-      // Highlight Today, reset range buttons
       document.getElementById('btn-today').style.background = 'var(--accent)';
       document.getElementById('btn-today').style.color = '#fff';
       document.getElementById('btn-today').style.fontWeight = '500';
@@ -994,7 +1014,6 @@ if ($databaseConnected) {
       document.getElementById('btn-30').style.background = 'var(--surface)';
       document.getElementById('btn-30').style.color = 'var(--text-muted)';
       document.getElementById('btn-30').style.fontWeight = '400';
-
       currentChartTab = tab;
       ['volume', 'checkin', 'checkout'].forEach(function(t) {
         const el = document.getElementById('tab-' + t);
@@ -1011,7 +1030,6 @@ if ($databaseConnected) {
       renderChart(tab);
     }
 
-    // Kick off — render zeros immediately, then replace with real data
     renderChart('volume');
     fetchAttendanceData();
   </script>
