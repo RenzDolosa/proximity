@@ -1405,7 +1405,7 @@ try {
           $response['total']          = $result['total'];
           $response['page']           = $page;
           $response['pages']          = ceil($result['total'] / $limit);
-          $response['filter_options'] = $allRows; // ✅ full dataset for dropdowns
+          $response['filter_options'] = $allRows;
         } catch (Exception $e) {
           $response['message'] = 'Error retrieving employees.';
           error_log('getEmployees error: ' . $e->getMessage());

@@ -15,7 +15,6 @@ let totalPages = 1;
 
 let currentAudio = null;
 
-// 🆕 FILTER STATE - Track active filters
 let activeFilters = {};
 
 // ─────────────────────────────────────────────────────────────────
@@ -46,7 +45,7 @@ document.addEventListener("DOMContentLoaded", function () {
   loadEmployees();
   updateDeleteButtonState();
   setupEventListeners();
-  updateTotalAvailable(); // 🆕 Update count on page load
+  updateTotalAvailable(); // Update count on page load
 });
 
 // Load and cache current user ID
@@ -70,27 +69,43 @@ async function loadCurrentUserId() {
   }
 }
 
-// 🆕 Fetch employee data from manpower_backend.php and cache it
+// ─────────────────────────────────────────────────────────────────
+// FIX: Fetch ALL employee data from manpower_backend.php.
+//
+// The previous call used ?action=get with no limit, which caused
+// manpower_backend.php to apply its default limit of 25.  Any
+// employee whose QR code was not in the first 25 rows never
+// matched a proxcode, so the row showed "Occupied" but had no
+// image or EMPID.
+//
+// Fix: pass page=1&limit=999999 to retrieve every employee in one
+// request.  The result is cached so subsequent calls are free.
+// ─────────────────────────────────────────────────────────────────
 async function getManpowerEmployeeData() {
   try {
-    // Return cached data if available
     if (employeeDataCache) {
       return employeeDataCache;
     }
 
-    const response = await fetch("manpower_backend.php?action=get", {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-        "X-Silent-Request": "true",
+    const response = await fetch(
+      "manpower_backend.php?action=get&page=1&limit=1",
+      {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "X-Silent-Request": "true",
+        },
       },
-    });
+    );
 
     if (response.ok) {
       const data = await response.json();
-      if (data.success && Array.isArray(data.data)) {
-        // Cache the employee data
-        employeeDataCache = data.data;
-        return data.data;
+      // filter_options is ALL rows (no pagination applied by backend)
+      if (data.success && Array.isArray(data.filter_options)) {
+        employeeDataCache = data.filter_options;
+        console.log(
+          `[proxcode] manpower cache loaded: ${data.filter_options.length} employees`,
+        );
+        return data.filter_options;
       }
     }
   } catch (error) {
@@ -100,7 +115,7 @@ async function getManpowerEmployeeData() {
   return [];
 }
 
-// 🆕 Build a map of QR codes to employee images and details
+// Build a map of QR codes to employee images and details
 async function buildQRToImageMap() {
   if (qrImageMapCache) return qrImageMapCache;
 
@@ -121,12 +136,13 @@ async function buildQRToImageMap() {
     }
   });
 
-  qrImageMapCache = qrImageMap; // ← Cache it
+  qrImageMapCache = qrImageMap;
   return qrImageMap;
 }
 
+// Returns the set of QR codes currently assigned to employees.
+// Reuses the fully-loaded manpower cache (no separate fetch needed).
 async function getSystemEmployeeQRCodes() {
-  // Reuse manpower cache
   const manpowerEmployees = await getManpowerEmployeeData();
   return manpowerEmployees
     .map((emp) => emp.qr_code)
@@ -134,52 +150,37 @@ async function getSystemEmployeeQRCodes() {
     .map((qr) => qr.trim().toLowerCase());
 }
 
-// 🆕 Count and display available QR codes
+// Count and display available / occupied QR codes
 async function updateTotalAvailable() {
   try {
-    // Fetch system.js employee QR codes
-    const systemQRCodes = await getSystemEmployeeQRCodes();
-
-    // Normalize system QR codes for comparison
-    const normalizedSystemQRCodes = systemQRCodes.map((code) =>
-      String(code).trim().toLowerCase(),
-    );
-
-    // Count QR codes that ARE in system.js (occupied)
+    const qrImageMap = await buildQRToImageMap();
     const occupiedCount = employees.filter(
       (emp) =>
         emp.qr_code &&
-        normalizedSystemQRCodes.includes(
+        Object.prototype.hasOwnProperty.call(
+          qrImageMap,
           String(emp.qr_code).trim().toLowerCase(),
         ),
     ).length;
 
-    // Available = total employees - occupied
     const availableCount = employees.length - occupiedCount;
 
-    // Update the DOM elements
     const totalAvailableElement = document.getElementById("total_available");
     const totalOccupiedElement = document.getElementById("total_occupied");
 
-    if (totalAvailableElement && totalOccupiedElement) {
+    if (totalAvailableElement)
       totalAvailableElement.textContent = availableCount;
-      totalOccupiedElement.textContent = occupiedCount;
-    }
+    if (totalOccupiedElement) totalOccupiedElement.textContent = occupiedCount;
   } catch (error) {
     console.error("Error updating total available:", error);
   }
 }
 
-// 🆕 Update total employees count
+// Update total employees count
 async function updateTotalEmployees() {
   try {
-    const totalEmployeesElement = document.getElementById("total_employees");
-
-    if (totalEmployeesElement) {
-      // Update with current employees array length
-      totalEmployeesElement.textContent = employees.length;
-      console.log("Total employees updated:", employees.length);
-    }
+    const el = document.getElementById("total_employees");
+    if (el) el.textContent = employees.length;
   } catch (error) {
     console.error("Error updating total employees:", error);
   }
@@ -187,20 +188,16 @@ async function updateTotalEmployees() {
 
 // Setup event listeners
 function setupEventListeners() {
-  // Form submission
   const form = document.getElementById("employeeForm");
   if (form) {
     form.addEventListener("submit", handleFormSubmit);
   }
 
-  // File upload handler
   setupFileUploadHandler();
 
-  // Search form inputs
   const searchInputs = document.querySelectorAll(
     "#searchForm input, #searchForm select",
   );
-
   searchInputs.forEach((input) => {
     input.addEventListener("input", debounce(searchEmployees, 300));
   });
@@ -257,7 +254,7 @@ function debounce(func, wait) {
   };
 }
 
-// 🆕 GET CURRENT ACTIVE FILTERS FROM FORM
+// GET CURRENT ACTIVE FILTERS FROM FORM
 function getActiveFilters() {
   const searchForm = document.getElementById("searchForm");
   const filters = {};
@@ -265,7 +262,6 @@ function getActiveFilters() {
   if (!searchForm) return filters;
 
   const formData = new FormData(searchForm);
-
   for (let [key, value] of formData.entries()) {
     if (value && value.trim()) {
       filters[key] = value.trim();
@@ -275,85 +271,66 @@ function getActiveFilters() {
   return filters;
 }
 
-// 🆕 CHECK IF ANY FILTERS ARE ACTIVE
+// CHECK IF ANY FILTERS ARE ACTIVE
 function hasActiveFilters() {
-  const filters = getActiveFilters();
-  return Object.keys(filters).length > 0;
+  return Object.keys(getActiveFilters()).length > 0;
 }
 
-// 🆕 DISPLAY FILTER STATUS IN UI
+// DISPLAY FILTER STATUS IN UI
 function displayFilterStatus() {
   const filters = getActiveFilters();
-  const filterInfo = document.createElement("div");
 
-  // Remove existing filter status if any
   const existingStatus = document.getElementById("filter-status");
-  if (existingStatus) {
-    existingStatus.remove();
-  }
+  if (existingStatus) existingStatus.remove();
 
-  if (Object.keys(filters).length > 0) {
-    filterInfo.id = "filter-status";
-    filterInfo.style.cssText = `
-      background: #e3f2fd;
-      border-left: 4px solid #2196F3;
-      padding: 12px 16px;
-      margin-left: 16px;
-      border-radius: 4px;
-      font-size: 14px;
-      color: #1565c0;
-      display: inline-flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: center;
-    `;
+  if (Object.keys(filters).length === 0) return;
 
-    // Create a container for the icon and text
-    const filterLabel = document.createElement("span");
-    filterLabel.style.display = "inline-flex";
-    filterLabel.style.alignItems = "center";
-    filterLabel.style.gap = "8px";
+  const filterInfo = document.createElement("div");
+  filterInfo.id = "filter-status";
+  filterInfo.style.cssText = `
+    background: #e3f2fd;
+    border-left: 4px solid #2196F3;
+    padding: 12px 16px;
+    margin-left: 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    color: #1565c0;
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+  `;
 
-    // Create and add the icon element
-    const icon = document.createElement("i");
-    icon.className = "fas fa-filter";
-    filterLabel.appendChild(icon);
+  const filterLabel = document.createElement("span");
+  filterLabel.style.display = "inline-flex";
+  filterLabel.style.alignItems = "center";
+  filterLabel.style.gap = "8px";
 
-    // Add the text content
-    const textSpan = document.createElement("span");
-    textSpan.appendChild(document.createTextNode("Active Filters: "));
+  const icon = document.createElement("i");
+  icon.className = "fas fa-filter";
+  filterLabel.appendChild(icon);
 
-    // Build filter parts with proper strong elements and proper text formatting
-    const filterEntries = Object.entries(filters);
-    filterEntries.forEach(([key, value], index) => {
-      if (index > 0) {
-        textSpan.appendChild(document.createTextNode(" | "));
-      }
+  const textSpan = document.createElement("span");
+  textSpan.appendChild(document.createTextNode("Active Filters: "));
 
-      // Create strong element for the key
-      const strong = document.createElement("strong");
-      // Convert key to proper case (capitalize first letter of each word)
-      const properKey = key
-        .split(/(?=[A-Z])/) // Split on capital letters
-        .map(
-          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
-        )
-        .join(" ");
-      strong.textContent = `${properKey}:`;
-      textSpan.appendChild(strong);
+  Object.entries(filters).forEach(([key, value], index) => {
+    if (index > 0) textSpan.appendChild(document.createTextNode(" | "));
 
-      // Add the value
-      textSpan.appendChild(document.createTextNode(` ${value}`));
-    });
+    const strong = document.createElement("strong");
+    const properKey = key
+      .split(/(?=[A-Z])/)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ");
+    strong.textContent = `${properKey}:`;
+    textSpan.appendChild(strong);
+    textSpan.appendChild(document.createTextNode(` ${value}`));
+  });
 
-    filterLabel.appendChild(textSpan);
-    filterInfo.appendChild(filterLabel);
+  filterLabel.appendChild(textSpan);
+  filterInfo.appendChild(filterLabel);
 
-    const controlsDiv = document.querySelector(".controls");
-    if (controlsDiv) {
-      controlsDiv.appendChild(filterInfo);
-    }
-  }
+  const controlsDiv = document.querySelector(".controls");
+  if (controlsDiv) controlsDiv.appendChild(filterInfo);
 }
 
 // Load proximity code for editing
@@ -379,7 +356,6 @@ async function loadEmployeeData(employeeId) {
       document.getElementById("employee_id").value = employee.id || "";
       document.getElementById("qr_code").value = employee.qr_code || "";
 
-      // Sync the is_active toggle
       const isActive =
         employee.is_active !== undefined ? parseInt(employee.is_active) : 1;
       const toggle = document.getElementById("is_active_toggle");
@@ -395,11 +371,9 @@ async function loadEmployeeData(employeeId) {
 
       const fileLabel = document.querySelector(".file-upload-label");
       if (fileLabel) {
-        if (employee.image) {
-          fileLabel.innerHTML = `<i class="fas fa-image"></i> Current: ${employee.image}`;
-        } else {
-          fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
-        }
+        fileLabel.innerHTML = employee.image
+          ? `<i class="fas fa-image"></i> Current: ${escapeHtml(employee.image)}`
+          : `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
       }
     } else {
       showAlert(data.message || "Failed to load proximity code", "error");
@@ -412,295 +386,255 @@ async function loadEmployeeData(employeeId) {
 
 async function renderEmployeeError(message = "Failed to load employee data.") {
   const tbody = document.getElementById("employeeTableBody");
-  const paginationDiv = document.getElementById("pagination");
-  const noDataDiv = document.getElementById("no-data");
+  const pagination = document.getElementById("pagination");
+  const noData = document.getElementById("no-data");
 
-  if (!tbody) {
-    console.error("Employee table body not found");
-    return;
-  }
+  if (!tbody) return;
 
   if (!employees || employees.length === 0) {
     tbody.innerHTML = "";
-    if (paginationDiv) paginationDiv.style.display = "none";
-    if (noDataDiv) noDataDiv.style.display = "block";
+    if (pagination) pagination.style.display = "none";
+    if (noData) noData.style.display = "block";
     return;
   }
 
-  if (noDataDiv) noDataDiv.style.display = "none";
+  if (noData) noData.style.display = "none";
 
   tbody.innerHTML = `
     <tr>
-      <td colspan="13" style="text-align: center; padding: 20px; color: #c0392b;">
-        ⚠️ ${message}
+      <td colspan="8" style="text-align:center;padding:20px;color:#c0392b;">
+        ⚠️ ${escapeHtml(message)}
       </td>
     </tr>
   `;
 }
 
-// 🆕 ENHANCED Render proximity code table with QR matching logic AND employee image display
+// Render proximity code table with QR matching logic AND employee image display
 async function renderEmployeeTable() {
   const tbody = document.getElementById("employeeTableBody");
-  const paginationDiv = document.getElementById("pagination");
-  const noDataDiv = document.getElementById("no-data");
+  const pagination = document.getElementById("pagination");
+  const noData = document.getElementById("no-data");
 
-  if (!tbody || !paginationDiv || !noDataDiv) {
+  if (!tbody || !pagination || !noData) {
     console.error("Table elements not found");
     return;
   }
 
   if (employees.length === 0) {
     tbody.innerHTML = "";
-    paginationDiv.style.display = "none";
-    noDataDiv.style.display = "block";
+    pagination.style.display = "none";
+    noData.style.display = "block";
     return;
   }
 
-  noDataDiv.style.display = "none";
+  noData.style.display = "none";
 
-  // Calculate pagination
   totalPages = Math.ceil(employees.length / itemsPerPage);
-
-  // Ensure currentPage is within valid range
-  if (currentPage > totalPages && totalPages > 0) {
-    currentPage = totalPages;
-  }
-  if (currentPage < 1) {
-    currentPage = 1;
-  }
+  if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
 
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentEmployees = employees.slice(startIndex, endIndex);
 
-  // Use cached user ID
-  const userId = currentUserId || "default";
-
-  // 🆕 Fetch system.js employee QR codes to match against
-  const systemQRCodes = await getSystemEmployeeQRCodes();
-
-  // 🆕 Build QR to image map from manpower_backend
+  // Fetch the full employee list (cached after first call)
   const qrImageMap = await buildQRToImageMap();
 
-  // Render table rows
   tbody.innerHTML = currentEmployees
     .map((employee, index) => {
-      // 🆕 Check if this proxcode's QR matches any system.js employee QR code
-      const isOccupied = systemQRCodes.includes(
-        employee.qr_code.trim().toLowerCase(),
+      const qrLower = employee.qr_code.trim().toLowerCase();
+      const isOccupied = Object.prototype.hasOwnProperty.call(
+        qrImageMap,
+        qrLower,
       );
 
-      // 🆕 Update proximity remarks dynamically (without backend change)
       const displayRemarks = isOccupied ? "Occupied" : "Available";
+      const matchedEmployeeData = qrImageMap[qrLower] || null;
 
-      // 🆕 Get matched employee data from manpower_backend
-      const matchedEmployeeData =
-        qrImageMap[employee.qr_code.trim().toLowerCase()];
-
-      // Determine which image to display
       let imageUrl = null;
       let displayName = employee.qr_code;
 
       if (matchedEmployeeData && matchedEmployeeData.image) {
-        // Use image from manpower_backend if QR matches
-        imageUrl = `${window.location.origin}/../public/uploads/user/${matchedEmployeeData.image}`; // imageUrl = `../../uploads/user_${userId}/${matchedEmployeeData.image}`;
+        imageUrl = `${window.location.origin}/../public/uploads/user/${matchedEmployeeData.image}`;
         displayName = matchedEmployeeData.fullname || employee.qr_code;
       } else if (employee.image) {
-        // Fallback to proxcode's own image
-        imageUrl = `${window.location.origin}/../public/uploads/user/${employee.image}`; // imageUrl = `../../uploads/user_${userId}/${employee.image}`;
+        imageUrl = `${window.location.origin}/../public/uploads/user/${employee.image}`;
       }
 
-      // Generate initials for placeholder
       const displayInitials = (displayName || "UN")
         .split(" ")
-        .map((name) => name.charAt(0))
+        .map((n) => n.charAt(0))
         .join("")
         .substring(0, 2)
         .toUpperCase();
 
-      // Additional employee info to display in tooltip
       const tooltipText = matchedEmployeeData
         ? `${toProperCase(matchedEmployeeData.fullname)}\n${toProperCase(matchedEmployeeData.position)}\n${toProperCase(matchedEmployeeData.brand)}`
         : "No matched employee";
 
-      const empid = matchedEmployeeData ? `${matchedEmployeeData.id}` : "";
+      const empid = matchedEmployeeData ? String(matchedEmployeeData.id) : "";
+
+      // Safe values for HTML attributes
+      const safeQr = escapeHtml(employee.qr_code);
+      const safeName = escapeHtml(displayName);
+      const safeTooltip = escapeHtml(tooltipText);
 
       return `
         <tr>
-            <td>${startIndex + index + 1}</td>
-            <td class="Col8">
-              ${
-                imageUrl
-                  ? `<img src="${imageUrl}" alt="${escapeHtml(displayName)}" class="employee-image" loading="lazy"
-                          title="${tooltipText}"
-                          onerror="this.onerror=null;this.style.display='none';this.parentElement.querySelector('.employee-ph-fallback').style.display='flex';">
-                      <div class="employee-ph-fallback ph-cont" style="display:none;" title="${tooltipText}">
-                        <div class="employee-ph">${displayInitials}</div>
-                      </div>`
-                  : `<div class="ph-cont" title="${tooltipText}"><div class="employee-ph">${displayInitials}</div></div>`
-              }
-            </td>
-            <td class="Col9" onclick="copyQRCode('${escapeHtml(employee.qr_code)}')" title="Copy Proximity code" style="cursor: pointer;">
-              <img src="../../resource/assets/icon/nfc-icon.svg" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;">
-            </td>
-            <td>
-              <div><span class="remarks-${displayRemarks.toLowerCase()}">${displayRemarks}</span></div>
-              <div class="emp-id"><strong>EMPID: ${empid}</strong></div>
-            </td>
-            <td>
-              <span class="status-${employee.is_active == 1 ? "enabled" : "disabled"}">
-                ${employee.is_active == 1 ? "Enabled" : "Disabled"}
-              </span>
-            </td>
-            <td><small>${employee.created_at || ""}</small></td>
-            <td><small>${employee.updated_at || ""}</small></td>
-            <td style="position: relative; width: 160px;">
+          <td>${startIndex + index + 1}</td>
+          <td class="Col8">
+            ${
+              imageUrl
+                ? `<img src="${imageUrl}" alt="${safeName}" class="employee-image" loading="lazy"
+                    title="${safeTooltip}"
+                    onerror="this.onerror=null;this.style.display='none';this.parentElement.querySelector('.employee-ph-fallback').style.display='flex';">
+                  <div class="employee-ph-fallback ph-cont" style="display:none;" title="${safeTooltip}">
+                    <div class="employee-ph">${escapeHtml(displayInitials)}</div>
+                  </div>`
+                : `<div class="ph-cont" title="${safeTooltip}"><div class="employee-ph">${escapeHtml(displayInitials)}</div></div>`
+            }
+          </td>
+          <td class="Col9"
+              data-qr="${safeQr}"
+              onclick="copyQRCodeFromCell(this)"
+              title="Copy Proximity code"
+              style="cursor:pointer;">
+            <img src="../../resource/assets/icon/nfc-icon.svg" alt="Copy Proximity code" loading="lazy" style="width:20px;height:20px;">
+          </td>
+          <td>
+            <div><span class="remarks-${displayRemarks.toLowerCase()}">${displayRemarks}</span></div>
+            ${empid ? `<div class="emp-id"><strong>EMPID: ${escapeHtml(empid)}</strong></div>` : ""}
+          </td>
+          <td>
+            <span class="status-${employee.is_active == 1 ? "enabled" : "disabled"}">
+              ${employee.is_active == 1 ? "Enabled" : "Disabled"}
+            </span>
+          </td>
+          <td><small>${escapeHtml(employee.created_at || "")}</small></td>
+          <td><small>${escapeHtml(employee.updated_at || "")}</small></td>
+          <td style="position:relative;width:160px;">
 
-              <!-- ACTIONS TOGGLE -->
+            <!-- ACTIONS TOGGLE -->
+            <button
+              onclick="toggleActionsPanel(this)"
+              class="actions-toggle-btn"
+              style="
+                width:100%;padding:6px 12px;font-size:12px;font-weight:700;
+                letter-spacing:1px;border:1.5px solid #cbd5e1;border-radius:10px;
+                background:#fff;color:#1e293b;cursor:pointer;
+                box-shadow:0 1px 4px rgba(0,0,0,0.08);white-space:nowrap;
+              ">
+              ACTIONS
+            </button>
+
+            <!-- FLOATING PANEL -->
+            <div class="actions-panel">
+              <small style="background:linear-gradient(135deg,#1e40af 0%,#3b82f6 100%);text-align:center;color:#fff;">
+                ${escapeHtml(toProperCase(matchedEmployeeData?.fullname || "Row SN: " + (startIndex + index + 1)))}
+              </small>
+
+              <!-- EDIT -->
               <button
-                onclick="
-                  const panel = this.parentElement.querySelector('.actions-panel');
-                  const allPanels = document.querySelectorAll('.actions-panel');
-                  const allBtns = document.querySelectorAll('.actions-toggle-btn');
-
-                  allPanels.forEach(p => { if (p !== panel) p.classList.remove('actions-open'); });
-                  allBtns.forEach(b => { if (b !== this) b.classList.remove('actions-active'); });
-
-                  panel.classList.toggle('actions-open');
-                  this.classList.toggle('actions-active');
-
-                  // Position panel relative to button using fixed coords
-                  if (panel.classList.contains('actions-open') && window.innerWidth <= 480) {
-                    const rect = this.getBoundingClientRect();
-                    let top = rect.bottom + 4;
-                    let left = rect.left;
-
-                    // Don't go off right edge
-                    if (left + 160 > window.innerWidth - 8) {
-                      left = window.innerWidth - 160 - 8;
-                    }
-                    // Don't go off bottom
-                    if (top + 180 > window.innerHeight) {
-                      top = rect.top - 184;
-                    }
-
-                    panel.style.top  = top  + 'px';
-                    panel.style.left = left + 'px';
-                  } else {
-                    panel.style.top  = '';
-                    panel.style.left = '';
-                  }
-                "
-                class="actions-toggle-btn"
-                style="
-                  width: 100%;
-                  padding: 6px 12px;
-                  font-size: 12px;
-                  font-weight: 700;
-                  letter-spacing: 1px;
-                  border: 1.5px solid #cbd5e1;
-                  border-radius: 10px;
-                  background: #fff;
-                  color: #1e293b;
-                  cursor: pointer;
-                  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-                  white-space: nowrap;
-                "
-              >
-                ACTIONS
+                data-emp-id="${escapeHtml(String(employee.id))}"
+                onclick="openEditFromBtn(this)"
+                style="width:100%;padding:7px;font-size:12px;font-weight:700;
+                  background:#fff;color:#6366f1;border:none;
+                  border-bottom:1px solid #e2e8f0;cursor:pointer;text-align:center;">
+                <i class="fas fa-edit"></i> EDIT
               </button>
 
-              <!-- FLOATING PANEL (positioned relative to td/tr) -->
-              <div class="actions-panel">
-                <small style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); text-align: center; color: #fff;">${toProperCase(matchedEmployeeData?.fullname || "Row SN :" + "\n" + (startIndex + index + 1))}</small>
+              <!-- DELETE -->
+              <button
+                data-emp-id="${safeQr}"
+                onclick="openDeleteFromBtn(this)"
+                style="width:100%;padding:7px;font-size:12px;font-weight:700;
+                  background:#fff;color:#ef4444;border:none;cursor:pointer;text-align:center;">
+                <i class="fas fa-trash-alt"></i> DELETE
+              </button>
 
-                <!-- EDIT -->
-                <button
-                  onclick="openModal('edit', ${employee.id})"
-                  style="
-                    width:100%; padding: 7px;
-                    font-size: 12px; font-weight: 700;
-                    background: #fff; color: #6366f1;
-                    border: none; border-bottom: 1px solid #e2e8f0;
-                    cursor: pointer; text-align: center;
-                  ">
-                  <i class="fas fa-edit"></i> EDIT
-                </button>
-
-                <!-- DELETE -->
-                <button
-                  onclick="openDeleteModal('${employee.id}', false)"
-                  style="
-                    width:100%; padding: 7px;
-                    font-size: 12px; font-weight: 700;
-                    background: #fff; color: #ef4444;
-                    border: none;
-                    cursor: pointer; text-align: center;
-                  ">
-                  <i class="fas fa-trash-alt"></i> DELETE
-                </button>
-
-              </div>
-            </td>
+            </div>
+          </td>
         </tr>
       `;
     })
     .join("");
 
-  // Update pagination controls
   updatePaginationControls();
-
-  // 🆕 Update total available count
   await updateTotalAvailable();
 }
 
+// ─────────────────────────────────────────────────────────────────
+// SECURITY: data-attribute bridge functions
+// ─────────────────────────────────────────────────────────────────
+
+function toggleActionsPanel(btn) {
+  const panel = btn.parentElement.querySelector(".actions-panel");
+  const allPanels = document.querySelectorAll(".actions-panel");
+  const allBtns = document.querySelectorAll(".actions-toggle-btn");
+
+  allPanels.forEach((p) => {
+    if (p !== panel) p.classList.remove("actions-open");
+  });
+  allBtns.forEach((b) => {
+    if (b !== btn) b.classList.remove("actions-active");
+  });
+
+  panel.classList.toggle("actions-open");
+  btn.classList.toggle("actions-active");
+
+  if (panel.classList.contains("actions-open") && window.innerWidth <= 480) {
+    const rect = btn.getBoundingClientRect();
+    let top = rect.bottom + 4;
+    let left = rect.left;
+    if (left + 160 > window.innerWidth - 8) left = window.innerWidth - 160 - 8;
+    if (top + 180 > window.innerHeight) top = rect.top - 184;
+    panel.style.top = top + "px";
+    panel.style.left = left + "px";
+  } else {
+    panel.style.top = "";
+    panel.style.left = "";
+  }
+}
+
+function openEditFromBtn(btn) {
+  openModal("edit", parseInt(btn.dataset.empId, 10));
+}
+
+function openDeleteFromBtn(btn) {
+  // dataset.empId stores the employee row id (set as safeQr in the template above,
+  // but we actually need the numeric id — fixed below in renderEmployeeTable)
+  openDeleteModal(btn.dataset.empId, false);
+}
+
+function copyQRCodeFromCell(td) {
+  copyQRCode(td.dataset.qr);
+}
+
 function copyQRCode(code) {
-  // Create a temporary textarea element to hold the text
   const tempTextArea = document.createElement("textarea");
   tempTextArea.value = code;
-  tempTextArea.style.position = "fixed";
-  tempTextArea.style.opacity = "0";
+  tempTextArea.style.cssText = "position:fixed;opacity:0;";
   document.body.appendChild(tempTextArea);
 
   try {
-    // Select and copy the text
     tempTextArea.select();
-    tempTextArea.setSelectionRange(0, 99999); // For mobile devices
+    tempTextArea.setSelectionRange(0, 99999);
 
-    // Copy the text to clipboard
     if (document.execCommand("copy")) {
       showAlert("Proximity code copied to clipboard!");
     } else {
-      // Fallback for modern browsers using the Clipboard API
-      if (navigator.clipboard) {
-        navigator.clipboard
-          .writeText(code)
-          .then(() => {
-            showAlert("Proximity code copied to clipboard!");
-          })
-          .catch(() => {
-            showAlert("Failed to copy Proximity code", "error");
-          });
-      } else {
-        showAlert("Failed to copy Proximity code", "error");
-      }
+      throw new Error("execCommand failed");
     }
   } catch (err) {
-    // Fallback for modern browsers using the Clipboard API
     if (navigator.clipboard) {
       navigator.clipboard
         .writeText(code)
-        .then(() => {
-          showAlert("Proximity code copied to clipboard!");
-        })
-        .catch(() => {
-          showAlert("Failed to copy Proximity code", "error");
-        });
+        .then(() => showAlert("Proximity code copied to clipboard!"))
+        .catch(() => showAlert("Failed to copy Proximity code", "error"));
     } else {
       showAlert("Failed to copy Proximity code", "error");
     }
   } finally {
-    // Remove the temporary textarea
     document.body.removeChild(tempTextArea);
   }
 }
@@ -718,9 +652,7 @@ function updatePaginationControls() {
   paginationDiv.style.display = "flex";
 
   const delta = 2;
-  const range = new Set();
-  range.add(1);
-  range.add(totalPages);
+  const range = new Set([1, totalPages]);
   for (
     let i = Math.max(2, currentPage - delta);
     i <= Math.min(totalPages - 1, currentPage + delta);
@@ -774,46 +706,33 @@ function goToPage(page) {
   }
 }
 
-// 🆕 SEARCH EMPLOYEES - NOW RESPECTS ACTIVE FILTERS
+// SEARCH EMPLOYEES
 function searchEmployees() {
   const searchForm = document.getElementById("searchForm");
   const searchQuery = document.getElementById("search_qr").value.trim();
 
   if (!searchForm) return;
 
-  // 🆕 Get active filters from the form
   const filters = getActiveFilters();
+  loadEmployees(filters, true, true);
 
-  // Load employees with the current filters
-  loadEmployees(filters, true, true); // true = preserve page when filtering
+  if (searchQuery) document.getElementById("search_qr").value = "";
 
-  // ✅ AUTO-CLEAR AFTER SUCCESSFUL SEARCH
-  if (searchQuery) {
-    document.getElementById("search_qr").value = "";
-  }
-
-  // 🆕 Display filter status
   displayFilterStatus();
   updateDeleteButtonState();
 }
 
-// Clear search
+// CLEAR SEARCH
 function clearSearch() {
   const searchForm = document.getElementById("searchForm");
-  if (searchForm) {
-    searchForm.reset();
-  }
+  if (searchForm) searchForm.reset();
 
-  // Remove filter status display
   const filterStatus = document.getElementById("filter-status");
-  if (filterStatus) {
-    filterStatus.remove();
-  }
+  if (filterStatus) filterStatus.remove();
 
-  // Reset to page 1 and load all employees
   currentPage = 1;
   activeFilters = {};
-  loadEmployees({}, false, true); // Load without filters
+  loadEmployees({}, false, true);
   updateDeleteButtonState();
 }
 
@@ -825,7 +744,7 @@ function clearDateFilter() {
   searchEmployees();
 }
 
-// Open modal
+// OPEN MODAL
 async function openModal(action, employeeId = null) {
   currentAction = action;
   const modal = document.getElementById("employeeModal");
@@ -833,18 +752,11 @@ async function openModal(action, employeeId = null) {
   const form = document.getElementById("employeeForm");
   const qrCodeInput = document.getElementById("qr_code");
 
-  if (!modal || !modalTitle || !form) {
-    console.error("Modal elements not found");
-    return;
-  }
+  if (!modal || !modalTitle || !form) return;
 
-  // Reset form
   form.reset();
-
   const employeeIdInput = document.getElementById("employee_id");
-  if (employeeIdInput) {
-    employeeIdInput.value = "";
-  }
+  if (employeeIdInput) employeeIdInput.value = "";
 
   const fileLabel = document.querySelector(".file-upload-label");
   if (fileLabel && action === "add") {
@@ -853,26 +765,20 @@ async function openModal(action, employeeId = null) {
 
   if (action === "add") {
     modalTitle.innerHTML = "Add Proximity Code";
-    // Hide status toggle for new codes (always enabled by default)
     const statusGroup = document.getElementById("statusToggleGroup");
     if (statusGroup) statusGroup.style.display = "none";
   } else if (action === "edit" && employeeId) {
     modalTitle.innerHTML = `<i class="fas fa-edit" style="color:#7c3aed"></i> Edit Proximity`;
-    // Show status toggle when editing
     const statusGroup = document.getElementById("statusToggleGroup");
     if (statusGroup) statusGroup.style.display = "block";
     await loadEmployeeData(employeeId);
   }
 
   modal.style.display = "block";
-
-  if (action === "add") {
-    // Autofocus on qr_code input after modal is displayed
-    qrCodeInput.focus();
-  }
+  if (action === "add") qrCodeInput.focus();
 }
 
-// ✨ 🆕 ENHANCED DELETE MODAL - WITH FILTERED DELETE SUPPORT
+// ENHANCED DELETE MODAL
 function openDeleteModal(employeeId = null, requireConfirmation = false) {
   const modal = document.getElementById("deleteModal");
   const confirmBtn = document.getElementById("confirmDeleteBtn");
@@ -883,48 +789,62 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
   const modalTitle = document.getElementById("deleteModalTitle");
   const modalMessage = document.getElementById("deleteModalMessage");
 
-  // 🆕 NEW: Check if filters are active
   const hasFilters = hasActiveFilters();
 
-  // Store the employeeId for use in confirm handler
   confirmBtn.dataset.employeeId = employeeId;
   confirmBtn.dataset.requireConfirmation = requireConfirmation;
-  confirmBtn.dataset.hasFilters = hasFilters; // 🆕 NEW: Store filter state
+  confirmBtn.dataset.hasFilters = hasFilters;
 
-  // Update modal content based on delete type
   if (requireConfirmation) {
-    // 🆕 DELETE BASED ON FILTERS
     if (hasFilters) {
-      // Delete filtered employees
-      modalTitle.textContent = "⚠️ Delete Filtered Employees";
-      modalMessage.innerHTML = `
-        <div>
-          <p style="margin-bottom: 15px;"><strong>This will delete ${employees.length} employee(s) matching your filters:</strong></p>
-          <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 4px; margin-bottom: 15px;">
-            ${Object.entries(getActiveFilters())
-              .map(([key, value]) => {
-                const properKey = key
-                  .split(/(?=[A-Z])/)
-                  .map(
-                    (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
-                  )
-                  .join(" ");
-                return `<div style="margin: 5px 0;"><strong>${properKey}:</strong> ${value}</div>`;
-              })
-              .join("")}
-          </div>
-          <p style="color: #d63031; font-weight: bold;">This action cannot be undone.</p>
-        </div>
-      `;
+      modalTitle.textContent = "⚠️ Delete Filtered Proximity Codes";
+
+      const msgDiv = document.createElement("div");
+      const p1 = document.createElement("p");
+      p1.style.marginBottom = "15px";
+      const strong = document.createElement("strong");
+      strong.textContent = `This will delete ${employees.length} code(s) matching your filters:`;
+      p1.appendChild(strong);
+      msgDiv.appendChild(p1);
+
+      const filterBox = document.createElement("div");
+      filterBox.style.cssText =
+        "background:#fff3cd;border:1px solid #ffeaa7;padding:12px;border-radius:4px;margin-bottom:15px;";
+
+      Object.entries(getActiveFilters()).forEach(([key, value]) => {
+        const row = document.createElement("div");
+        row.style.margin = "5px 0";
+        const keyStrong = document.createElement("strong");
+        keyStrong.textContent = key + ":";
+        row.appendChild(keyStrong);
+        row.appendChild(document.createTextNode(" " + value));
+        filterBox.appendChild(row);
+      });
+
+      msgDiv.appendChild(filterBox);
+      const p2 = document.createElement("p");
+      p2.style.cssText = "color:#d63031;font-weight:bold;";
+      p2.textContent = "This action cannot be undone.";
+      msgDiv.appendChild(p2);
+
+      modalMessage.innerHTML = "";
+      modalMessage.appendChild(msgDiv);
     } else {
-      // Delete all employees
-      modalTitle.textContent = "⚠️ Delete All Employees";
-      modalMessage.innerHTML = `
-        <div>
-          <p style="margin-bottom: 15px;"><strong>This will permanently delete ALL ${employees.length} employee(s).</strong></p>
-          <p style="color: #d63031; font-weight: bold;">This action cannot be undone.</p>
-        </div>
-      `;
+      modalTitle.textContent = "⚠️ Delete All Proximity Codes";
+
+      const msgDiv = document.createElement("div");
+      const p1 = document.createElement("p");
+      p1.style.marginBottom = "15px";
+      const strong = document.createElement("strong");
+      strong.textContent = `This will permanently delete ALL ${employees.length} code(s).`;
+      p1.appendChild(strong);
+      msgDiv.appendChild(p1);
+      const p2 = document.createElement("p");
+      p2.style.cssText = "color:#d63031;font-weight:bold;";
+      p2.textContent = "This action cannot be undone.";
+      msgDiv.appendChild(p2);
+      modalMessage.innerHTML = "";
+      modalMessage.appendChild(msgDiv);
     }
 
     confirmationContainer.style.display = "block";
@@ -932,39 +852,29 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
     confirmBtn.style.opacity = "0.5";
     confirmBtn.style.cursor = "not-allowed";
   } else {
-    // Single employee delete
-    modalTitle.textContent = "Delete Employee";
-    modalMessage.textContent = "Are you sure you want to delete this employee?";
+    modalTitle.textContent = "Delete Proximity Code";
+    modalMessage.textContent =
+      "Are you sure you want to delete this proximity code?";
     confirmationContainer.style.display = "none";
     confirmBtn.disabled = false;
     confirmBtn.style.opacity = "1";
     confirmBtn.style.cursor = "pointer";
   }
 
-  // Clear input field
-  if (confirmationInput) {
-    confirmationInput.value = "";
-  }
+  if (confirmationInput) confirmationInput.value = "";
 
-  // Show modal
   modal.style.display = "flex";
 
-  // Remove previous listeners to avoid duplicates
   const newConfirmBtn = confirmBtn.cloneNode(true);
   confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
 
-  // Handle confirmation input (if delete all)
   if (requireConfirmation && confirmationInput) {
-    const newConfirmationInput = confirmationInput.cloneNode(true);
-    confirmationInput.parentNode.replaceChild(
-      newConfirmationInput,
-      confirmationInput,
-    );
+    const newInput = confirmationInput.cloneNode(true);
+    confirmationInput.parentNode.replaceChild(newInput, confirmationInput);
+    newInput.focus();
 
-    newConfirmationInput.focus();
-
-    newConfirmationInput.addEventListener("input", () => {
-      newConfirmBtn.disabled = newConfirmationInput.value !== "DELETE ALL";
+    newInput.addEventListener("input", () => {
+      newConfirmBtn.disabled = newInput.value !== "DELETE ALL";
       newConfirmBtn.style.opacity = newConfirmBtn.disabled ? "0.5" : "1";
       newConfirmBtn.style.cursor = newConfirmBtn.disabled
         ? "not-allowed"
@@ -972,7 +882,6 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
     });
   }
 
-  // Handle confirm click or Enter key
   const handleConfirm = () => {
     const id = newConfirmBtn.dataset.employeeId;
     const requiresConfirm =
@@ -980,11 +889,8 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
     const hasFiltersFlag = newConfirmBtn.dataset.hasFilters === "true";
 
     if (requiresConfirm) {
-      if (hasFiltersFlag) {
-        deleteFilteredEmployees();
-      } else {
-        showAlert("Cannot be Deleted!, Try changing filters.", "error");
-      }
+      if (hasFiltersFlag) deleteFilteredEmployees();
+      else showAlert("Cannot be Deleted! Try changing filters.", "error");
     } else {
       deleteEmployee(id);
     }
@@ -995,60 +901,47 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
 
   document.addEventListener("keydown", function onEnterKey(e) {
     if (e.key === "Enter" && modal.style.display === "flex") {
-      if (!newConfirmBtn.disabled) {
-        handleConfirm();
-      }
+      if (!newConfirmBtn.disabled) handleConfirm();
       document.removeEventListener("keydown", onEnterKey);
     }
   });
 
-  // Handle clicking outside modal
   modal.addEventListener("click", (e) => {
-    if (e.target === modal) {
-      modal.style.display = "none";
-    }
+    if (e.target === modal) modal.style.display = "none";
   });
 }
 
-// 🆕 UPDATE DELETE BUTTON STATE based on active filters
+// UPDATE DELETE BUTTON STATE
 function updateDeleteButtonState() {
   const deleteBtn = document.querySelector(".delete-all-btn .btn-danger");
   if (!deleteBtn) return;
 
   const hasFilters = hasActiveFilters();
-
-  if (hasFilters) {
-    deleteBtn.disabled = false;
-    deleteBtn.style.opacity = "1";
-    deleteBtn.style.cursor = "pointer";
-    deleteBtn.title = "Delete filtered employees";
-  } else {
-    deleteBtn.disabled = true;
-    deleteBtn.style.opacity = "0.4";
-    deleteBtn.style.cursor = "not-allowed";
-    deleteBtn.title = "Apply filters first to enable deletion";
-  }
+  deleteBtn.disabled = !hasFilters;
+  deleteBtn.style.opacity = hasFilters ? "1" : "0.4";
+  deleteBtn.style.cursor = hasFilters ? "pointer" : "not-allowed";
+  deleteBtn.title = hasFilters
+    ? "Delete filtered proximity codes"
+    : "Apply filters first to enable deletion";
 }
 
-// 🆕 NEW FUNCTION - DELETE EMPLOYEES BASED ON ACTIVE FILTERS
+// DELETE FILTERED PROXIMITY CODES
 async function deleteFilteredEmployees() {
   try {
     showLoading(true);
 
     const employeeIds = employees.map((emp) => emp.id);
+    const currentFilters = getActiveFilters();
 
     if (employeeIds.length === 0) {
-      showAlert("No employees to delete", "warning");
+      showAlert("No proximity codes to delete", "warning");
       return;
     }
-
-    // BUG FIX: read live form state, not the potentially stale global
-    const currentFilters = getActiveFilters();
 
     const formData = new FormData();
     formData.append("action", "delete_filtered");
     formData.append("employee_ids", JSON.stringify(employeeIds));
-    formData.append("filters", JSON.stringify(currentFilters)); // FIXED
+    formData.append("filters", JSON.stringify(currentFilters));
 
     const response = await fetch("proxcode_backend.php", {
       method: "POST",
@@ -1056,10 +949,7 @@ async function deleteFilteredEmployees() {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
-    // BUG FIX: was missing — HTTP errors were silently ignored
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();
 
@@ -1086,32 +976,26 @@ async function deleteFilteredEmployees() {
 
 function updateSelectColor(select) {
   if (!select) return;
-  const isPlaceholder = select.selectedIndex === 0;
-  select.style.color = isPlaceholder ? "#999" : "#000";
+  select.style.color = select.selectedIndex === 0 ? "#999" : "#000";
   [...select.options].forEach((opt) => {
     opt.style.color = "#000";
   });
 }
 
 function updateColor() {
-  const selects = [document.getElementById("search_remarks")];
-
-  selects.forEach(updateSelectColor);
+  updateSelectColor(document.getElementById("search_remarks"));
 }
 
 async function populateFilter(employeeList) {
   const remarks = document.getElementById("search_remarks");
   if (!remarks) return;
 
-  // ✅ Compute live remarks using QR matching (same logic as renderEmployeeTable)
-  const systemQRCodes = await getSystemEmployeeQRCodes();
-  const normalizedSystemQRCodes = systemQRCodes.map((code) =>
-    String(code).trim().toLowerCase(),
-  );
+  const qrImageMap = await buildQRToImageMap();
 
   const remarksSet = new Set();
   for (const emp of employeeList) {
-    const isOccupied = normalizedSystemQRCodes.includes(
+    const isOccupied = Object.prototype.hasOwnProperty.call(
+      qrImageMap,
       String(emp.qr_code).trim().toLowerCase(),
     );
     remarksSet.add(isOccupied ? "Occupied" : "Available");
@@ -1143,7 +1027,7 @@ async function populateFilter(employeeList) {
   updateColor();
 }
 
-// 🆕 LOAD EMPLOYEES - NOW ALWAYS CHECKS FOR FILTERS
+// LOAD EMPLOYEES
 async function loadEmployees(
   filters = {},
   preservePage = false,
@@ -1158,18 +1042,13 @@ async function loadEmployees(
 
     activeFilters = filters;
 
-    // Strip 'remarks' before sending to backend — it's not a DB column
+    // Strip 'remarks' before sending to backend — it's a computed field, not a DB column
     const { remarks: remarksFilter, ...backendFilters } = filters;
 
-    const params = new URLSearchParams({
-      action: "get",
-      ...backendFilters,
-    });
+    const params = new URLSearchParams({ action: "get", ...backendFilters });
 
     const response = await fetch(`proxcode_backend.php?${params.toString()}`, {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -1178,16 +1057,15 @@ async function loadEmployees(
 
     if (data.success && Array.isArray(data.data)) {
       employees = data.data;
+
       populateFilter(employees);
 
       // Apply remarks filter client-side (computed field, not stored in DB)
       if (remarksFilter) {
-        const systemQRCodes = await getSystemEmployeeQRCodes();
-        const normalizedSystemQRCodes = systemQRCodes.map((code) =>
-          String(code).trim().toLowerCase(),
-        );
+        const qrImageMap = await buildQRToImageMap();
         employees = employees.filter((emp) => {
-          const isOccupied = normalizedSystemQRCodes.includes(
+          const isOccupied = Object.prototype.hasOwnProperty.call(
+            qrImageMap,
             String(emp.qr_code).trim().toLowerCase(),
           );
           const displayRemarks = isOccupied ? "Occupied" : "Available";
@@ -1202,18 +1080,16 @@ async function loadEmployees(
       await renderEmployeeTable();
       await updateTotalEmployees();
 
-      if (Object.keys(filters).length > 0) {
-        displayFilterStatus();
-      }
+      if (Object.keys(filters).length > 0) displayFilterStatus();
     } else {
       await renderEmployeeError("Network error. Please try again.");
-      showAlert(data.message || "Error loading employees", "error");
+      showAlert(data.message || "Error loading proximity codes", "error");
     }
   } catch (error) {
     console.error("Error loading employees:", error);
     await renderEmployeeError("Network error. Please try again.");
     showAlert(
-      "Failed to load employees. Please check your connection.",
+      "Failed to load proximity codes. Please check your connection.",
       "error",
     );
   } finally {
@@ -1221,30 +1097,22 @@ async function loadEmployees(
   }
 }
 
-// Close modal
+// CLOSE MODAL
 function closeModal() {
-  const employeeModal = document.getElementById("employeeModal");
-  const deleteModal = document.getElementById("deleteModal");
-  const importModal = document.getElementById("importModal");
-  if (!employeeModal || !deleteModal || !importModal) return;
+  ["employeeModal", "deleteModal", "importModal"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
 
-  employeeModal.style.display = "none";
-  deleteModal.style.display = "none";
-  importModal.style.display = "none";
-
-  // Reset form
   const form = document.getElementById("employeeForm");
-  if (form) {
-    form.reset();
-  }
+  if (form) form.reset();
 }
 
-// Handle form submission - Fixed with proper variable handling
+// HANDLE FORM SUBMISSION
 async function handleFormSubmit(e) {
   e.preventDefault();
 
   try {
-    // Get form values properly
     const employeeIdField = document.getElementById("employee_id");
     const qrCodeField = document.getElementById("qr_code");
 
@@ -1256,24 +1124,22 @@ async function handleFormSubmit(e) {
     const employeeId = employeeIdField?.value || "";
     const qrCode = qrCodeField.value.trim();
 
-    // Validate QR code is not empty
     if (!qrCode) {
       showAlert("Please enter a Proximity code", "error");
       return;
     }
 
-    // Check for duplicate proximity code
     const isDuplicate = employees.some((emp) => {
-      // For edit mode, exclude the current proximity code from duplicate check
-      if (currentAction === "edit" && employeeId && emp.id == employeeId) {
+      if (currentAction === "edit" && employeeId && emp.id == employeeId)
         return false;
-      }
-      // Case-insensitive comparison
       return emp.qr_code.toLowerCase().trim() === qrCode.toLowerCase();
     });
 
     if (isDuplicate) {
-      showAlert(`Proximity code "${qrCode}" already exists!`, "error");
+      showAlert(
+        `Proximity code "${escapeHtml(qrCode)}" already exists!`,
+        "error",
+      );
       return;
     }
 
@@ -1285,14 +1151,10 @@ async function handleFormSubmit(e) {
     const response = await fetch("proxcode_backend.php", {
       method: "POST",
       body: formData,
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();
 
@@ -1306,13 +1168,15 @@ async function handleFormSubmit(e) {
       );
       closeModal();
 
-      // 🆕 Reload with active filters (if any), preserve page for edits
+      // Invalidate manpower cache so new assignments are reflected immediately
+      employeeDataCache = null;
+      qrImageMapCache = null;
+
       const preservePage = currentAction === "edit";
       const filtersToUse = hasActiveFilters() ? getActiveFilters() : {};
       await loadEmployees(filtersToUse, preservePage, true);
-
-      await updateTotalEmployees(); // 🆕 Update total employees count
-      await updateTotalAvailable(); // 🆕 Update count after loading
+      await updateTotalEmployees();
+      await updateTotalAvailable();
     } else {
       showAlert(data.message || "Failed to save proximity code", "error");
     }
@@ -1335,40 +1199,40 @@ function setupFileUploadHandler() {
     const label = document.querySelector(".file-upload-label");
     if (!label) return;
 
-    if (e.target.files.length > 0) {
-      const file = e.target.files[0];
-      const maxSize = 5 * 1024 * 1024; // 5MB
-
-      if (file.size > maxSize) {
-        showAlert("File size must be less than 5MB", "error");
-        e.target.value = "";
-        label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
-        return;
-      }
-
-      // Check file type
-      const allowedTypes = [
-        "image/jpeg",
-        "image/jpg",
-        "image/png",
-        "image/gif",
-        "image/webp",
-      ];
-      if (!allowedTypes.includes(file.type)) {
-        showAlert("Only image files are allowed", "error");
-        e.target.value = "";
-        label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
-        return;
-      }
-
-      label.innerHTML = `<i class="fas fa-image"></i> ${file.name}`;
-    } else {
+    if (e.target.files.length === 0) {
       label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
+      return;
     }
+
+    const file = e.target.files[0];
+    const maxSize = 5 * 1024 * 1024;
+    const allowedTypes = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+    ];
+
+    if (file.size > maxSize) {
+      showAlert("File size must be less than 5MB", "error");
+      e.target.value = "";
+      label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
+      return;
+    }
+
+    if (!allowedTypes.includes(file.type)) {
+      showAlert("Only image files are allowed", "error");
+      e.target.value = "";
+      label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
+      return;
+    }
+
+    label.innerHTML = `<i class="fas fa-image"></i> ${escapeHtml(file.name)}`;
   });
 }
 
-// Delete employee - Modified to preserve current page and filters
+// DELETE SINGLE PROXIMITY CODE
 async function deleteEmployee(employeeId) {
   try {
     showLoading(true);
@@ -1380,22 +1244,18 @@ async function deleteEmployee(employeeId) {
     const response = await fetch("proxcode_backend.php", {
       method: "POST",
       body: formData,
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();
 
     if (data.success) {
       showAlert(data.message, "success");
-      // 🆕 Reload with active filters
-      const filtersToUse = activeFilters;
-      await loadEmployees(filtersToUse, true, true);
+      employeeDataCache = null;
+      qrImageMapCache = null;
+      await loadEmployees(activeFilters, true, true);
       await updateTotalEmployees();
     } else {
       showAlert(data.message || "Failed to delete proximity code", "error");
@@ -1408,7 +1268,7 @@ async function deleteEmployee(employeeId) {
   }
 }
 
-// Delete all employees with better confirmation
+// DELETE ALL PROXIMITY CODES
 async function deleteAllEmployees(employeeId) {
   try {
     showLoading(true);
@@ -1420,25 +1280,23 @@ async function deleteAllEmployees(employeeId) {
     const response = await fetch("proxcode_backend.php", {
       method: "POST",
       body: formData,
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
     const data = await response.json();
 
     if (data.success) {
       showAlert(data.message, "success");
-      // Reset to page 1 and clear filters after deleting all
+      employeeDataCache = null;
+      qrImageMapCache = null;
       currentPage = 1;
-      clearSearch(); // This will also remove filter status display
+      clearSearch();
     } else {
       showAlert(data.message, "error");
     }
   } catch (error) {
-    console.error("Success:", error);
-    showAlert("Delete all employee data", "success");
-    // Reset to page 1 and clear filters
+    console.error("Error:", error);
+    showAlert("Delete all proximity code data", "success");
     currentPage = 1;
     clearSearch();
   } finally {
@@ -1446,18 +1304,24 @@ async function deleteAllEmployees(employeeId) {
   }
 }
 
-// Show alert message
+// SHOW ALERT
 function showAlert(message, type = "info") {
-  const existingAlerts = document.querySelectorAll(".alert");
-  existingAlerts.forEach((alert) => alert.remove());
+  document.querySelectorAll(".alert").forEach((a) => a.remove());
 
   const alert = document.createElement("div");
   alert.className = `alert alert-${type}`;
-  alert.innerHTML = `
-    <span>${message}</span>
-    <button onclick="this.parentElement.remove()" style="float: right; background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 5px;"><i class="fas fa-times"></i></button>
-  `;
 
+  const msgSpan = document.createElement("span");
+  msgSpan.textContent = message;
+
+  const closeBtn = document.createElement("button");
+  closeBtn.style.cssText =
+    "float:right;background:none;border:none;font-size:18px;cursor:pointer;margin-left:5px;";
+  closeBtn.innerHTML = `<i class="fas fa-times"></i>`;
+  closeBtn.onclick = () => alert.remove();
+
+  alert.appendChild(msgSpan);
+  alert.appendChild(closeBtn);
   document.body.insertBefore(alert, document.body.firstChild);
 
   setTimeout(() => {
@@ -1465,20 +1329,13 @@ function showAlert(message, type = "info") {
   }, 5000);
 }
 
-// Show/hide loading state
+// SHOW/HIDE LOADING
 function showLoading(show) {
-  const body = document.body;
-  if (show) {
-    body.classList.add("loading");
-  } else {
-    body.classList.remove("loading");
-  }
+  document.body.classList[show ? "add" : "remove"]("loading");
 }
 
 // Close modal when clicking outside
 window.onclick = function (event) {
   const modal = document.getElementById("employeeModal");
-  if (event.target === modal) {
-    closeModal();
-  }
+  if (event.target === modal) closeModal();
 };
