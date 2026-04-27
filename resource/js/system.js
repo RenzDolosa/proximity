@@ -150,17 +150,16 @@ function setupEventListeners() {
   document.addEventListener("click", autoFocusProximity);
   document.addEventListener("focusin", autoFocusProximity);
 
-  // Position/Brand — text suggestions from employees array
   setupFieldSuggestions("position", "position-suggestions", () =>
-    employees.map((e) => e.position),
+    allEmployees.map((e) => e.position),
   );
 
   setupFieldSuggestions("brand", "brand-suggestions", () =>
-    employees.map((e) => e.brand),
+    allEmployees.map((e) => e.brand),
   );
 
   setupFieldSuggestions("violation", "violation-suggestions", () =>
-    employees.map((e) => e.violation),
+    allEmployees.map((e) => e.violation),
   );
 
   // Proximity code — available codes from proxcode_backend, with icon + badge
@@ -172,27 +171,48 @@ function setupEventListeners() {
     badge: "Available",
     onFocus: async () => {
       try {
-        const res = await fetch("proxcode_backend.php?action=get", {
-          headers: { "X-Requested-With": "XMLHttpRequest" },
-        });
-        const json = await res.json();
-        if (!json.success || !Array.isArray(json.data)) return;
+        const [proxRes, allEmpRes] = await Promise.all([
+          fetch("proxcode_backend.php?action=get", {
+            headers: { "X-Requested-With": "XMLHttpRequest" },
+          }),
+          fetch("manpower_backend.php?action=get&page=1&limit=1", {
+            headers: {
+              "X-Requested-With": "XMLHttpRequest",
+              "X-Silent-Request": "true",
+            },
+          }),
+        ]);
+
+        const proxJson = await proxRes.json();
+        const allEmpJson = await allEmpRes.json();
+
+        if (!proxJson.success || !Array.isArray(proxJson.data)) return;
 
         const currentCode =
           document.getElementById("qr_code")?.value.trim().toLowerCase() || "";
+
+        // Use filter_options (ALL employees, no pagination) so codes assigned
+        // to employees on other pages are correctly excluded from suggestions.
+        const allEmployees =
+          allEmpJson.success && Array.isArray(allEmpJson.filter_options)
+            ? allEmpJson.filter_options
+            : employees;
+
         const assignedSet = new Set(
-          employees
+          allEmployees
             .map((e) => (e.qr_code || "").trim().toLowerCase())
             .filter(Boolean),
         );
 
-        availableCodes = json.data
-          .filter(
-            (c) =>
+        // Only show codes that are:
+        availableCodes = proxJson.data
+          .filter((c) => {
+            const cLower = (c.qr_code || "").trim().toLowerCase();
+            return (
               c.is_active == 1 &&
-              (!assignedSet.has((c.qr_code || "").trim().toLowerCase()) ||
-                (c.qr_code || "").trim().toLowerCase() === currentCode),
-          )
+              (!assignedSet.has(cLower) || cLower === currentCode)
+            );
+          })
           .map((c) => c.qr_code);
       } catch (e) {
         console.warn("QR suggestions: failed to load", e);
@@ -1867,6 +1887,7 @@ async function loadEmployees(
       totalRecords = data.total;
 
       if (Array.isArray(data.filter_options)) {
+        allEmployees = data.filter_options;
         populateFilter(data.filter_options);
       }
 
