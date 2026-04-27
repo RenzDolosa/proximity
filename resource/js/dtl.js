@@ -17,6 +17,7 @@ let isUserActive = false;
 let currentPage = 1;
 const itemsPerPage = 25;
 let totalPages = 1;
+let totalRecords = 0;
 
 let activeFilters = {};
 
@@ -191,7 +192,9 @@ function startAutoUpdate(intervalMs) {
     }
   }, intervalMs);
 
-  console.log(`Auto-update started with ${formatInterval(intervalMs)} interval`);
+  console.log(
+    `Auto-update started with ${formatInterval(intervalMs)} interval`,
+  );
 }
 
 // Stop auto-update
@@ -318,9 +321,12 @@ function showAutoUpdateNotification() {
 async function loadEmployeesAuto(filters = {}) {
   try {
     // Always use the currently active filters — never override with form state
-    const filtersToUse = Object.keys(activeFilters).length > 0
-      ? activeFilters
-      : (hasActiveFilters() ? getActiveFilters() : {});
+    const filtersToUse =
+      Object.keys(activeFilters).length > 0
+        ? activeFilters
+        : hasActiveFilters()
+          ? getActiveFilters()
+          : {};
 
     // Build params using the SAME translation logic as loadEmployees
     const params = new URLSearchParams({ action: "get" });
@@ -375,13 +381,19 @@ async function loadEmployeesAuto(filters = {}) {
       updateAutoUpdateUI();
       resetNetworkErrorCount();
     } else {
-      console.warn("Auto-update failed:", data.message || "Invalid data format");
+      console.warn(
+        "Auto-update failed:",
+        data.message || "Invalid data format",
+      );
     }
   } catch (error) {
     console.error("Auto-update error:", error);
     if (error.name === "TimeoutError") {
       console.warn("Auto-update timeout - server may be slow");
-    } else if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
+    } else if (
+      error.message.includes("Failed to fetch") ||
+      error.message.includes("NetworkError")
+    ) {
       console.warn("Auto-update: Network connection issue");
       handleNetworkError();
     } else if (error.name === "AbortError") {
@@ -704,20 +716,8 @@ async function renderEmployeeTable() {
 
   if (noDataDiv) noDataDiv.style.display = "none";
 
-  // Calculate pagination
-  totalPages = Math.ceil(employees.length / itemsPerPage);
-
-  // Ensure currentPage is within valid range
-  if (currentPage > totalPages && totalPages > 0) {
-    currentPage = totalPages;
-  }
-  if (currentPage < 1) {
-    currentPage = 1;
-  }
-
+  const currentEmployees = employees; // already paginated by server
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentEmployees = employees.slice(startIndex, endIndex);
 
   // Get current user ID asynchronously
   const currentUserId = await getCurrentUserId();
@@ -937,6 +937,7 @@ function updatePaginationControls() {
   const sorted = [...range].sort((a, b) => a - b);
   let prev = null;
   let buttonsHTML = "";
+  // ✅ REMOVED: let totalRecords = 0; — now uses the global variable
 
   for (const p of sorted) {
     if (prev !== null && p - prev > 1) {
@@ -954,28 +955,28 @@ function updatePaginationControls() {
     <button class="page-arrow-btn" onclick="nextPage()" ${currentPage >= totalPages ? "disabled" : ""}>
       <i class="fas fa-arrow-right"></i>
     </button>
-    <span id="page-info">${employees.length} total &nbsp;|&nbsp; Page ${currentPage} of ${totalPages}</span>
+    <span id="page-info">${totalRecords} total &nbsp;|&nbsp; Page ${currentPage} of ${totalPages}</span>
   `;
 }
 
 function previousPage() {
   if (currentPage > 1) {
     currentPage--;
-    renderEmployeeTable();
+    loadEmployees(activeFilters, true, true);
   }
 }
 
 function nextPage() {
   if (currentPage < totalPages) {
     currentPage++;
-    renderEmployeeTable();
+    loadEmployees(activeFilters, true, true);
   }
 }
 
 function goToPage(page) {
   if (page >= 1 && page <= totalPages) {
     currentPage = page;
-    renderEmployeeTable();
+    loadEmployees(activeFilters, true, true);
   }
 }
 
@@ -1582,6 +1583,9 @@ async function loadEmployees(
 
     const params = new URLSearchParams({ action: "get" });
 
+    params.append("page", currentPage);
+    params.append("limit", itemsPerPage);
+
     for (const [key, value] of Object.entries(filters)) {
       if (key === "position" && value === "__none__") {
         params.append("position_none", "1");
@@ -1616,7 +1620,12 @@ async function loadEmployees(
 
     if (data.success && Array.isArray(data.data)) {
       employees = data.data;
-      populateFilter(employees);
+      totalPages = data.pages;
+      totalRecords = data.total;
+
+      if (Array.isArray(data.filter_options)) {
+        populateFilter(data.filter_options);
+      }
 
       // Only reset to page 1 if not preserving page and not filtering
       if (!preservePage && Object.keys(filters).length === 0) {

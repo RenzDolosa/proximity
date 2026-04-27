@@ -14,6 +14,7 @@ let employees = [];
 let currentPage = 1;
 const itemsPerPage = 25;
 let totalPages = 1;
+let totalRecords = 0;
 
 let currentAudio = null;
 
@@ -24,11 +25,11 @@ const GLOBAL_AUDIO_ENDPOINT = "global_audio.php";
 
 // Maps global_audio_settings.audio_type  →  <audio> element ID
 const AUDIO_TYPE_MAP = {
-  success:    "successSound",
-  checkout:   "checkoutSound",
-  not_found:  "noResultSound",
+  success: "successSound",
+  checkout: "checkoutSound",
+  not_found: "noResultSound",
   violations: "warningSound",
-  inactive:   "inactiveSound",
+  inactive: "inactiveSound",
 };
 
 // ─────────────────────────────────────────────────────────────────
@@ -388,41 +389,25 @@ async function loadEmployeeData(employeeId) {
 
 // Update total employees count
 async function updateTotalEmployees() {
-  try {
-    const totalEmployeesElement = document.getElementById("total_employees");
-    if (totalEmployeesElement) {
-      // SECURITY: textContent is safe
-      totalEmployeesElement.textContent = employees.length;
-    }
-  } catch (error) {
-    console.error("Error updating total employees:", error);
-  }
+  const el = document.getElementById("total_employees");
+  if (el) el.textContent = totalRecords;
 }
 
 // Update active employees count
 async function updateActiveEmployees() {
   try {
-    const activeEmployeesElement = document.getElementById("active_employees");
-    const inactiveEmployeesElement =
-      document.getElementById("inactive_employees");
-
-    if (!activeEmployeesElement || !inactiveEmployeesElement) return 0;
-    if (!Array.isArray(employees)) return 0;
-
-    const activeCount = employees.filter(
-      (emp) => emp.status && emp.status.toLowerCase() === "active",
-    ).length;
-
-    const inactiveCount = employees.length - activeCount;
-
-    // SECURITY: textContent is safe
-    activeEmployeesElement.textContent = activeCount;
-    inactiveEmployeesElement.textContent = inactiveCount;
-
-    return activeCount;
-  } catch (error) {
-    console.error("Error updating active employees:", error);
-    return 0;
+    const res = await fetch("manpower_backend.php?action=stats", {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
+    const data = await res.json();
+    if (data.success) {
+      const el1 = document.getElementById("active_employees");
+      const el2 = document.getElementById("inactive_employees");
+      if (el1) el1.textContent = data.data.active;
+      if (el2) el2.textContent = data.data.inactive;
+    }
+  } catch (e) {
+    console.error("Error updating employee counts", e);
   }
 }
 
@@ -447,7 +432,8 @@ async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
     const employee = employees.find((emp) => emp.id === employeeId);
     if (!employee) throw new Error("Employee not found");
 
-    const hasViolations = employee.violation && employee.violation.trim() !== "";
+    const hasViolations =
+      employee.violation && employee.violation.trim() !== "";
     const hasInactive = employee.status.toLowerCase() === "inactive";
     const hasCheckedOut = checkStatus === "OUT";
 
@@ -547,14 +533,8 @@ async function renderEmployeeTable() {
 
   noDataDiv.style.display = "none";
 
-  totalPages = Math.ceil(employees.length / itemsPerPage);
-
-  if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
-  if (currentPage < 1) currentPage = 1;
-
+  const currentEmployees = employees;
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentEmployees = employees.slice(startIndex, endIndex);
 
   tbody.innerHTML = currentEmployees
     .map((employee, index) => {
@@ -950,28 +930,28 @@ function updatePaginationControls() {
     <button class="page-arrow-btn" onclick="nextPage()" ${currentPage >= totalPages ? "disabled" : ""}>
       <i class="fas fa-arrow-right"></i>
     </button>
-    <span id="page-info">${employees.length} total &nbsp;|&nbsp; Page ${currentPage} of ${totalPages}</span>
+    <span id="page-info">${totalRecords} total &nbsp;|&nbsp; Page ${currentPage} of ${totalPages}</span>
   `;
 }
 
 function previousPage() {
   if (currentPage > 1) {
     currentPage--;
-    renderEmployeeTable();
+    loadEmployees(activeFilters, true, true);
   }
 }
 
 function nextPage() {
   if (currentPage < totalPages) {
     currentPage++;
-    renderEmployeeTable();
+    loadEmployees(activeFilters, true, true);
   }
 }
 
 function goToPage(page) {
   if (page >= 1 && page <= totalPages) {
     currentPage = page;
-    renderEmployeeTable();
+    loadEmployees(activeFilters, true, true);
   }
 }
 
@@ -1854,6 +1834,9 @@ async function loadEmployees(
 
     const params = new URLSearchParams({ action: "get" });
 
+    params.append("page", currentPage);
+    params.append("limit", itemsPerPage);
+
     for (const [key, value] of Object.entries(filters)) {
       if (key === "position" && value === "__none__") {
         params.append("position_none", "1");
@@ -1880,7 +1863,12 @@ async function loadEmployees(
 
     if (data.success && Array.isArray(data.data)) {
       employees = data.data;
-      populateFilter(employees);
+      totalPages = data.pages;
+      totalRecords = data.total;
+
+      if (Array.isArray(data.filter_options)) {
+        populateFilter(data.filter_options);
+      }
 
       if (!preservePage && Object.keys(filters).length === 0) {
         currentPage = 1;

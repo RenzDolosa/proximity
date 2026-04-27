@@ -132,6 +132,8 @@ function createDatabase()
       "ALTER TABLE employee_access_log ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL",
       "ALTER TABLE check_in_out ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL",
       "ALTER TABLE code ADD COLUMN IF NOT EXISTS is_active TINYINT(1) NOT NULL DEFAULT 1",
+      "ALTER TABLE employee_access_log ADD INDEX idx_timestamp (access_timestamp DESC)",
+      "ALTER TABLE employee_access_log ADD INDEX idx_status (status)",
     ];
 
     foreach ($alterStatements as $sql) {

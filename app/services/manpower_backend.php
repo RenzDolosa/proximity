@@ -24,7 +24,8 @@ if (!isset($_GET['serve_file']) && !isset($_GET['api_info']) && !isset($_GET['he
 // ── Safe fallback sanitizeInput() ─────────────────────────────────────────────
 // config.php should define this; this guard ensures it is never missing.
 if (!function_exists('sanitizeInput')) {
-  function sanitizeInput($input) {
+  function sanitizeInput($input)
+  {
     if (is_null($input)) return '';
     // Strip tags first, then encode remaining HTML-special chars
     return htmlspecialchars(strip_tags(trim((string)$input)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -40,14 +41,31 @@ date_default_timezone_set(APP_TIMEZONE);
 
 // ── Whitelists ────────────────────────────────────────────────────────────────
 const ALLOWED_POST_ACTIONS = [
-  'add', 'create', 'edit', 'update', 'delete', 'delete_filtered',
-  'delete_all', 'import', 'get_stats', 'get_status_history',
-  'bulk_status_update', 'search_qr', 'restore_data', 'backup_data',
+  'add',
+  'create',
+  'edit',
+  'update',
+  'delete',
+  'delete_filtered',
+  'delete_all',
+  'import',
+  'get_stats',
+  'get_status_history',
+  'bulk_status_update',
+  'search_qr',
+  'restore_data',
+  'backup_data',
 ];
 
 const ALLOWED_GET_ACTIONS = [
-  'get', 'list', 'get_single', 'get_access_logs',
-  'check_qr', 'stats', 'user_info', 'get_violations',
+  'get',
+  'list',
+  'get_single',
+  'get_access_logs',
+  'check_qr',
+  'stats',
+  'user_info',
+  'get_violations',
 ];
 
 const ALLOWED_STATUSES   = ['Active', 'Inactive'];
@@ -57,7 +75,8 @@ const MAX_BULK_DELETE    = 5000;                        // safety cap for bulk d
 const MAX_IMPORT_ROWS    = 2000;                        // safety cap for import
 
 // ── MIME-type validation helper ───────────────────────────────────────────────
-function validateImageMime($tmpPath) {
+function validateImageMime($tmpPath)
+{
   $allowed_mimes = [
     'image/jpeg',
     'image/jpg',
@@ -84,7 +103,8 @@ function validateImageMime($tmpPath) {
 
 // ── Safe json_decode wrapper ──────────────────────────────────────────────────
 // Limits nesting depth and throws on malformed JSON.
-function safeJsonDecode($json, $assoc = true, $depth = 32) {
+function safeJsonDecode($json, $assoc = true, $depth = 32)
+{
   if (!is_string($json) || $json === '') return null;
   try {
     $decoded = json_decode($json, $assoc, $depth, JSON_THROW_ON_ERROR);
@@ -193,81 +213,118 @@ class EmployeeManager
     return false;
   }
 
-  public function getEmployees($filters = [])
+  public function getEmployees($filters = [], $page = null, $limit = 25)
   {
-    $query  = "SELECT e.*, 
-             (SELECT COUNT(*) FROM violations v WHERE v.employee_id = e.id) AS violation_count
-           FROM " . $this->table . " e WHERE 1=1";
+    // ── Build WHERE conditions separately ──────────────────────────────
+    $where  = "WHERE 1=1";
     $params = [];
 
     if (!empty($filters['user_id'])) {
-      $query .= " AND user_id LIKE :user_id";
-      $params[':user_id']     = '%' . $filters['user_id'] . '%';
+      $where .= " AND user_id LIKE :user_id";
+      $params[':user_id']    = '%' . $filters['user_id'] . '%';
     }
     if (!empty($filters['id'])) {
-      $query .= " AND id LIKE :id";
-      $params[':id']          = '%' . $filters['id'] . '%';
+      $where .= " AND id LIKE :id";
+      $params[':id']         = '%' . $filters['id'] . '%';
     }
     if (!empty($filters['fullname'])) {
-      $query .= " AND fullname LIKE :fullname";
-      $params[':fullname']    = '%' . $filters['fullname'] . '%';
+      $where .= " AND fullname LIKE :fullname";
+      $params[':fullname']   = '%' . $filters['fullname'] . '%';
     }
     if (!empty($filters['position'])) {
-      $query .= " AND position LIKE :position";
-      $params[':position'] = $filters['position'];
+      $where .= " AND position LIKE :position";
+      $params[':position']   = $filters['position'];
     }
     if (!empty($filters['position_none'])) {
-      $query .= " AND (position IS NULL OR TRIM(position) = '' OR LOWER(TRIM(position)) = 'none')";
+      $where .= " AND (position IS NULL OR TRIM(position) = '' OR LOWER(TRIM(position)) = 'none')";
     }
     if (!empty($filters['brand'])) {
-      $query .= " AND brand LIKE :brand";
-      $params[':brand'] = $filters['brand'];
+      $where .= " AND brand LIKE :brand";
+      $params[':brand']      = $filters['brand'];
     }
     if (!empty($filters['brand_none'])) {
-      $query .= " AND (brand IS NULL OR TRIM(brand) = '' OR LOWER(TRIM(brand)) = 'none')";
+      $where .= " AND (brand IS NULL OR TRIM(brand) = '' OR LOWER(TRIM(brand)) = 'none')";
     }
     if (!empty($filters['status'])) {
-      $query .= " AND status = :status";
-      $params[':status'] = $filters['status'];
+      $where .= " AND status = :status";
+      $params[':status']     = $filters['status'];
     }
     if (!empty($filters['status_none'])) {
-      $query .= " AND (status IS NULL OR TRIM(status) = '' OR LOWER(TRIM(status)) = 'none')";
+      $where .= " AND (status IS NULL OR TRIM(status) = '' OR LOWER(TRIM(status)) = 'none')";
     }
     if (!empty($filters['shift'])) {
-      $query .= " AND shift = :shift";
-      $params[':shift'] = $filters['shift'];
+      $where .= " AND shift = :shift";
+      $params[':shift']      = $filters['shift'];
     }
     if (!empty($filters['shift_none'])) {
-      $query .= " AND (shift IS NULL OR TRIM(shift) = '' OR LOWER(TRIM(shift)) = 'none')";
+      $where .= " AND (shift IS NULL OR TRIM(shift) = '' OR LOWER(TRIM(shift)) = 'none')";
     }
     if (!empty($filters['violation'])) {
-      $query .= " AND violation LIKE :violation";
-      $params[':violation']   = '%' . $filters['violation'] . '%';
+      $where .= " AND violation LIKE :violation";
+      $params[':violation']  = '%' . $filters['violation'] . '%';
     }
     if (!empty($filters['violation_none'])) {
-      $query .= " AND (violation IS NULL OR TRIM(violation) = '' OR LOWER(TRIM(violation)) = 'none')";
+      $where .= " AND (violation IS NULL OR TRIM(violation) = '' OR LOWER(TRIM(violation)) = 'none')";
     }
     if (!empty($filters['qr_code'])) {
-      $query .= " AND qr_code LIKE :qr_code";
-      $params[':qr_code'] = $filters['qr_code'];
+      $where .= " AND qr_code LIKE :qr_code";
+      $params[':qr_code']    = $filters['qr_code'];
     }
     if (!empty($filters['created_at'])) {
-      $query .= " AND DATE(created_at) = :created_at";
+      $where .= " AND DATE(created_at) = :created_at";
       $params[':created_at'] = $filters['created_at'];
     }
     if (!empty($filters['updated_at'])) {
-      $query .= " AND DATE(updated_at) = :updated_at";
+      $where .= " AND DATE(updated_at) = :updated_at";
       $params[':updated_at'] = $filters['updated_at'];
     }
 
-    $query .= " ORDER BY created_at DESC";
-
-    $stmt = $this->conn->prepare($query);
-    foreach ($params as $key => $value) {
-      $stmt->bindValue($key, $value);
+    // ── If $page is null, return ALL rows (used for filter_options) ────
+    if ($page === null) {
+      $stmt = $this->conn->prepare(
+        "SELECT e.*,
+                (SELECT COUNT(*) FROM violations v WHERE v.employee_id = e.id) AS violation_count
+             FROM {$this->table} e $where
+             ORDER BY created_at DESC"
+      );
+      foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+      }
+      $stmt->execute();
+      return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
-    $stmt->execute();
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // ── COUNT — simple and clean, no str_replace ───────────────────────
+    $countStmt = $this->conn->prepare(
+      "SELECT COUNT(*) FROM {$this->table} e $where"
+    );
+    foreach ($params as $key => $value) {
+      $countStmt->bindValue($key, $value);
+    }
+    $countStmt->execute();
+    $total = (int) $countStmt->fetchColumn();
+
+    // ── PAGINATED DATA ─────────────────────────────────────────────────
+    $offset   = ($page - 1) * $limit;
+    $dataStmt = $this->conn->prepare(
+      "SELECT e.*,
+            (SELECT COUNT(*) FROM violations v WHERE v.employee_id = e.id) AS violation_count
+         FROM {$this->table} e
+         $where
+         ORDER BY created_at DESC
+         LIMIT :limit OFFSET :offset"
+    );
+    foreach ($params as $key => $value) {
+      $dataStmt->bindValue($key, $value);
+    }
+    $dataStmt->bindValue(':limit',  $limit,  PDO::PARAM_INT);
+    $dataStmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $dataStmt->execute();
+
+    return [
+      'data'  => $dataStmt->fetchAll(PDO::FETCH_ASSOC),
+      'total' => $total,
+    ];
   }
 
   public function updateEmployee($old_id, $data)
@@ -1295,7 +1352,7 @@ try {
         break;
     }
 
-  // ── GET handler ──────────────────────────────────────────────────────────
+    // ── GET handler ──────────────────────────────────────────────────────────
   } elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $action = $_GET['action'] ?? '';
 
@@ -1325,39 +1382,33 @@ try {
         if (!empty($_GET['violation_none'])) $filters['violation_none'] = '1';
         if (!empty($_GET['qr_code']))        $filters['qr_code']        = sanitizeInput($_GET['qr_code']);
         if (!empty($_GET['created_at'])) {
-          // SECURITY: validate date format
           $d = $_GET['created_at'];
-          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) {
-            $filters['created_at'] = $d;
-          }
-        } elseif (!empty($_GET['created_from']) && !empty($_GET['created_to'])) {
-          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['created_from']) &&
-              preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['created_to'])) {
-            $filters['created_from'] = $_GET['created_from'];
-            $filters['created_to']   = $_GET['created_to'];
-          }
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['created_at'] = $d;
         }
-
         if (!empty($_GET['updated_at'])) {
           $d = $_GET['updated_at'];
-          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) {
-            $filters['updated_at'] = $d;
-          }
-        } elseif (!empty($_GET['updated_from']) && !empty($_GET['updated_to'])) {
-          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['updated_from']) &&
-              preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['updated_to'])) {
-            $filters['updated_from'] = $_GET['updated_from'];
-            $filters['updated_to']   = $_GET['updated_to'];
-          }
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['updated_at'] = $d;
         }
 
+        $page  = max(1, (int)($_GET['page']  ?? 1));
+        $limit = max(1, (int)($_GET['limit'] ?? 25));
+
         try {
-          $employees           = $employeeManager->getEmployees($filters);
-          $response['success'] = true;
-          $response['data']    = $employees;
-          $response['total']   = count($employees);
+          // ── Paginated data ──
+          $result = $employeeManager->getEmployees($filters, $page, $limit);
+
+          // ── All distinct values for filter dropdowns (page=null = no pagination) ──
+          $allRows = $employeeManager->getEmployees($filters, null);
+
+          $response['success']        = true;
+          $response['data']           = $result['data'];
+          $response['total']          = $result['total'];
+          $response['page']           = $page;
+          $response['pages']          = ceil($result['total'] / $limit);
+          $response['filter_options'] = $allRows; // ✅ full dataset for dropdowns
         } catch (Exception $e) {
           $response['message'] = 'Error retrieving employees.';
+          error_log('getEmployees error: ' . $e->getMessage());
         }
         break;
 
