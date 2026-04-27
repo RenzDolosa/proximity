@@ -89,20 +89,6 @@ async function fetchAllCodesForExport() {
   }
 }
 
-/**
- * Returns the set of QR codes currently assigned to employees
- * (from the in-memory employees array populated by system.js).
- * Used by proximity-code export to mark codes as Occupied/Available.
- *
- * @returns {string[]}  Array of lowercase, trimmed QR code strings
- */
-function getSystemEmployeeQRCodes() {
-  if (typeof employees === "undefined" || !Array.isArray(employees)) return [];
-  return employees
-    .map((e) => (e.qr_code || "").trim().toLowerCase())
-    .filter(Boolean);
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // EMPLOYEE EXPORT ENTRY POINTS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -770,21 +756,49 @@ async function exportFilteredCodes() {
     return;
   }
 
-  // When filters ARE active, the current employees array holds matching employees.
-  // Extract their QR codes and cross-reference against all proxcodes.
   showAlert("Fetching filtered proximity codes…", "info");
 
   try {
-    const allCodes = await fetchAllCodesForExport();
+    // Build server-side filter params (qr_code, created_at are DB columns)
+    const serverParams = new URLSearchParams({ action: "get" });
+    if (currentFilters.qr_code)    serverParams.append("qr_code",    currentFilters.qr_code);
+    if (currentFilters.created_at) serverParams.append("created_at", currentFilters.created_at);
 
-    if (!allCodes || allCodes.length === 0) {
+    const res = await fetch(`proxcode_backend.php?${serverParams.toString()}`, {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
+    const json = await res.json();
+
+    if (!json.success || !Array.isArray(json.data)) {
       showAlert("No proximity codes found!", "warning");
       return;
     }
 
-    // The user is filtering employees, not proxcodes directly.
-    // Export all proxcodes but mark occupancy using the filtered employee set.
-    await exportProximityCodes(allCodes, "Filtered");
+    let filteredCodes = json.data;
+
+    // Apply remarks filter client-side — it's a computed field (Occupied/Available)
+    const remarksFilter = currentFilters.remarks;
+    if (remarksFilter) {
+      let qrImageMap = {};
+      if (typeof buildQRToImageMap === "function") {
+        try { qrImageMap = await buildQRToImageMap(); } catch (e) {}
+      }
+      filteredCodes = filteredCodes.filter((c) => {
+        const isOccupied = Object.prototype.hasOwnProperty.call(
+          qrImageMap,
+          (c.qr_code || "").trim().toLowerCase(),
+        );
+        const remarks = isOccupied ? "Occupied" : "Available";
+        return remarks.toLowerCase() === remarksFilter.toLowerCase();
+      });
+    }
+
+    if (filteredCodes.length === 0) {
+      showAlert("No proximity codes match the current filters!", "warning");
+      return;
+    }
+
+    await exportProximityCodes(filteredCodes, "Filtered");
   } catch (error) {
     console.error("Export filtered codes error:", error);
     showAlert("Error exporting filtered codes: " + error.message, "error");
@@ -829,12 +843,9 @@ async function exportProximityCodes(proxcodes, type = "Data") {
       }
     }
 
-    // Collect assigned QR codes so we can mark occupancy
-    const assignedSet = new Set(getSystemEmployeeQRCodes());
-
     proxcodes.forEach((proxcode, index) => {
       const qrLower        = (proxcode.qr_code || "").trim().toLowerCase();
-      const isOccupied     = assignedSet.has(qrLower);
+      const isOccupied     = Object.prototype.hasOwnProperty.call(qrImageMap, qrLower);
       const displayRemarks = isOccupied ? "Occupied" : "Available";
       const matchedEmp     = qrImageMap[qrLower];
       const empId          = matchedEmp ? String(matchedEmp.id) : "";

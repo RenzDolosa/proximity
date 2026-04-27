@@ -319,17 +319,28 @@ if ($databaseConnected) {
                 <label class="fl-label" for="qr_code">Proximity Code</label>
               </div>
               <div class="form-group fl-group">
-                <textarea id="violation" name="violation" rows="3" placeholder="&#10;Kindly specify any violations, if applicable."></textarea>
+                <textarea id="violation" name="violation" rows="3"
+                  placeholder="Kindly specify any violations, if applicable."
+                  style="transition: padding-top 0.3s ease;"></textarea>
+                <label class="fl-label" for="violation">Violation</label>
                 <script>
                   const violation = document.getElementById('violation');
-                  violation.addEventListener('focus', function() {
-                    this.placeholder = 'Kindly specify any violations, if applicable.';
-                  });
+
                   violation.addEventListener('blur', function() {
-                    this.placeholder = '\nKindly specify any violations, if applicable.';
+                    if (!this.value.trim()) {
+                      this.style.paddingTop = '40px';
+                    }
                   });
+
+                  violation.addEventListener('focus', function() {
+                    this.style.paddingTop = '';
+                  });
+
+                  // Smooth on load too
+                  if (!violation.value.trim()) {
+                    violation.style.paddingTop = '40px';
+                  }
                 </script>
-                <label class="fl-label" for="violation">Violation</label>
               </div>
             </div>
             <div class="right-column">
