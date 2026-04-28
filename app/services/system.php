@@ -321,26 +321,8 @@ if ($databaseConnected) {
               <div class="form-group fl-group">
                 <textarea id="violation" name="violation" rows="3"
                   placeholder="Kindly specify any violations, if applicable."
-                  style="transition: padding-top 0.3s ease;"></textarea>
+                  style="transition: padding-top 0.15s ease-in-out, padding-bottom 0.15s ease-in-out;"></textarea>
                 <label class="fl-label" for="violation">Violation</label>
-                <script>
-                  const violation = document.getElementById('violation');
-
-                  violation.addEventListener('blur', function() {
-                    if (!this.value.trim()) {
-                      this.style.paddingTop = '40px';
-                    }
-                  });
-
-                  violation.addEventListener('focus', function() {
-                    this.style.paddingTop = '';
-                  });
-
-                  // Smooth on load too
-                  if (!violation.value.trim()) {
-                    violation.style.paddingTop = '40px';
-                  }
-                </script>
               </div>
             </div>
             <div class="right-column">

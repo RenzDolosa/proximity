@@ -5,6 +5,8 @@
 // 3. json_decode inputs validated before use
 // 4. restore_mode whitelisted
 // 5. Proximity code (qr_code) output escaped
+// FIX: setupFieldSuggestions now applies toProperCase to display labels
+//      to match the search filter dropdown formatting (Image 1 vs Images 2-4).
 
 // Global variables
 let currentAction = "add";
@@ -49,7 +51,9 @@ function escapeHtml(str) {
 // SECURITY: Standalone toProperCase — replaces String.prototype pollution
 function toProperCase(str) {
   if (!str) return "";
-  return String(str).replace(/[^\s,\-]+/g, function (txt) {
+  // Insert space before uppercase letters that follow lowercase letters (PascalCase/camelCase split)
+  const spaced = String(str).replace(/([a-z])([A-Z])/g, "$1 $2");
+  return spaced.replace(/[^\s,\-]+/g, function (txt) {
     return txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase();
   });
 }
@@ -1160,21 +1164,35 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
       return;
     }
 
+    // ── FIX: Apply toProperCase to display label so modal suggestions
+    //         match the search filter dropdown formatting.
+    //         Guard the highlight regex so an empty query doesn't insert
+    //         <mark/> tags between every character of the label string.
     list.innerHTML = unique
       .map((name, i) => {
         const safe = escapeHtml(name);
-        const properName = escapeHtml(toProperCase(name));
-        const label = options.raw ? safe : escapeHtml(toProperCase(name));
-        const regex = new RegExp(
-          `(${lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
-          "gi",
-        );
-        const hl = label.replace(
-          regex,
-          '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
-        );
+        // Display label: proper-cased for position/brand/violation; raw for qr_code (options.raw)
+        const displayLabel = options.raw ? safe : escapeHtml(toProperCase(name));
 
-        return `<li data-value="${properName}" data-index="${i}"
+        // Only apply highlight markup when the user has actually typed something
+        let hl = displayLabel;
+        if (lower) {
+          const regex = new RegExp(
+            `(${lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+            "gi",
+          );
+          hl = displayLabel.replace(
+            regex,
+            '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
+          );
+        }
+
+        // data-value uses the display label so saving the form normalises
+        // PascalCase values (e.g. "PetmateDamage" → "Petmate Damage").
+        // For raw fields (qr_code) the original value is preserved.
+        const inputValue = displayLabel;
+
+        return `<li data-value="${inputValue}" data-index="${i}"
         onmousedown="document.getElementById('${inputId}').value=this.dataset.value;document.getElementById('${listId}').style.display='none';"
         onmouseover="this.parentElement.querySelectorAll('li').forEach((l,j)=>l.style.background=j===${i}?'#f0f9ff':'');"
         style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f5f9;
@@ -1255,7 +1273,38 @@ document.addEventListener("click", function (e) {
   }
 });
 
-// Open modal
+// ── Violation padding — runs ONCE on page load ──
+const violation = document.getElementById("violation");
+
+function updateViolationPadding() {
+  const hasData = violation.value.trim();
+  violation.style.paddingTop = hasData ? "" : "40px";
+  violation.style.paddingBottom = "";
+}
+
+violation.addEventListener("blur", updateViolationPadding);
+
+violation.addEventListener("input", function () {
+  if (violation.value.trim()) {
+    violation.style.paddingTop = "";
+    violation.style.paddingBottom = "40px";
+  }
+});
+
+violation.addEventListener("focus", function () {
+  violation.style.paddingTop = "";
+  violation.style.paddingBottom = "40px";
+});
+
+let _lastValue = violation.value;
+setInterval(function () {
+  if (violation.value !== _lastValue) {
+    _lastValue = violation.value;
+    if (document.activeElement !== violation) updateViolationPadding();
+  }
+}, 100);
+
+// ── Open modal ──────────────────────────────────────────────────────
 async function openModal(action, employeeId = null) {
   currentAction = action;
   const modal = document.getElementById("employeeModal");
@@ -1282,11 +1331,13 @@ async function openModal(action, employeeId = null) {
     modalTitle.innerHTML = `<i class="fas fa-user-plus"></i> Add Employee`;
     document.getElementById("status").value = "Active";
     modal.style.display = "block";
+    updateViolationPadding(); // field is empty after reset
     qrCodeInput.focus();
   } else if (action === "edit" && employeeId) {
     modalTitle.innerHTML = `<i class="fas fa-edit" style="color:#7c3aed"></i> Edit Employee`;
     modal.style.display = "block";
-    await loadEmployeeData(employeeId);
+    await loadEmployeeData(employeeId); // value is set here
+    updateViolationPadding(); // now check with actual data
     const idField = document.getElementById("employee_id");
     if (idField) {
       idField.focus();

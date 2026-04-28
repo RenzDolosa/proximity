@@ -846,7 +846,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
       Attach File
     </label>
     <input type="file" id="attach-file-input" multiple accept="image/*,.pdf,.doc,.docx" onchange="addAttachments(this)" style="display:none;">
-    <span style="font-size:10px;color:#666;font-family:Arial,sans-serif;margin-left:4px;">Click any field to edit &nbsp;·&nbsp; Line 1 = company name &nbsp;·&nbsp; Line 2 = subtitle</span>
+    <span style="font-size:10px;color:#666;font-family:Arial,sans-serif;margin-left:4px;">Click any field to edit &nbsp;·&nbsp;</span>
     <div id="autofill-notice" style="display:none;margin-left:auto;font-size:10px;font-family:Arial,sans-serif;color:#2e7d32;background:#e8f5e9;border-radius:3px;padding:2px 8px;">
       ✓ Auto-filled from employee record
     </div>

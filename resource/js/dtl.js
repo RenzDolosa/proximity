@@ -331,6 +331,9 @@ async function loadEmployeesAuto(filters = {}) {
     // Build params using the SAME translation logic as loadEmployees
     const params = new URLSearchParams({ action: "get" });
 
+    params.append("page", currentPage);
+    params.append("limit", itemsPerPage);
+
     for (const [key, value] of Object.entries(filtersToUse)) {
       if (key === "position" && value === "__none__") {
         params.append("position_none", "1");
