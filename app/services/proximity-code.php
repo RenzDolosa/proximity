@@ -186,7 +186,7 @@ if ($databaseConnected) {
       <div class="table-scroll-wrap">
         <table>
           <thead>
-            <tr>
+            <tr style="border-bottom: 2px solid #e9ecef;">
               <th>SN</th>
               <th class="Col8">Image</th>
               <th class="Col9">Proximity Code</th>

@@ -234,7 +234,7 @@ if ($databaseConnected) {
       <div class="table-scroll-wrap">
         <table>
           <thead>
-            <tr>
+            <tr style="border-bottom: 2px solid #e9ecef;">
               <th>SN</th>
               <th>Fullname</th>
               <th>Brand / Department</th>

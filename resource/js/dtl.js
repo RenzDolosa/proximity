@@ -837,12 +837,16 @@ async function renderEmployeeTable() {
 }
 
 function openViolationPopupFromBtn(btn) {
-  // Read values from data attributes (already HTML-escaped in the template)
-  // but pass RAW values from the employees array to avoid double-escaping in the popup logic
   const empId = btn.dataset.empId;
-  const employee = employees.find((e) => String(e.id) === String(empId));
+  const employee = employees.find(
+    (e) => String(e.employee_id) === String(empId),
+  );
   if (!employee) return;
-  openViolationPopup(employee.fullname, employee.violation, employee.id);
+  openViolationPopup(
+    employee.fullname,
+    employee.violation,
+    employee.employee_id,
+  );
 }
 
 function copyQRCodeFromCell(td) {
@@ -1876,7 +1880,7 @@ async function deleteEmployee(employeeId) {
       showAlert(data.message, "success");
       employeeDataCache = null;
       qrImageMapCache = null;
-      await loadEmployees(filters, preservePage, true);
+      await loadEmployees(activeFilters, true, true);
     } else {
       showAlert(data.message, "error");
     }
@@ -1914,7 +1918,7 @@ async function deleteAllEmployees(employeeId) {
       showAlert(data.message, "success");
       employeeDataCache = null;
       qrImageMapCache = null;
-      await loadEmployees(filters, preservePage, true);
+      currentPage = 1;
       clearSearch();
     } else {
       showAlert(data.message, "error");

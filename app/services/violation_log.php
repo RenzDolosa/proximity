@@ -575,7 +575,9 @@ if ($databaseConnected) {
               <th>Description</th>
               <th>Violation Date</th>
               <th>Recorded</th>
-              <th>Actions</th>
+              <?php if (canAccess($permissions, 'delete-violation')) : ?>
+                <th>Actions</th>
+              <?php endif; ?>
             </tr>
           </thead>
           <tbody id="violationTableBody">
@@ -636,6 +638,12 @@ if ($databaseConnected) {
       <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
     </div>
   </div>
+
+  <script>
+    window.PERMISSIONS = {
+      delete: <?= json_encode(canAccess($permissions, 'delete-violation')) ?>
+    };
+  </script>
 
   <script src="../../resource/js/btn.js"></script>
   <script>
@@ -878,6 +886,8 @@ if ($databaseConnected) {
             <td class="desc-cell">${esc(v.violation_description || '—')}</td>
             <td><small>${vDate}</small></td>
             <td><small style="color:#aaa;">${created}</small></td>
+
+            ${window.PERMISSIONS.delete ? `
             <td>
               <button
                 class="btn btn-danger"
@@ -887,6 +897,7 @@ if ($databaseConnected) {
                 <i class="fas fa-trash-alt"></i> Delete
               </button>
             </td>
+            ` : ''}
           </tr>`;
       }).join('');
 
