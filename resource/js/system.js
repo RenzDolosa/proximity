@@ -594,7 +594,7 @@ async function renderEmployeeTable() {
       const numericId = parseInt(employee.id, 10);
 
       return `
-        <tr>
+          <tr>
             <td>${startIndex + index + 1}</td>
             <td>
               <div><strong>${toProperCase(safeFullname)}</strong></div>
@@ -656,6 +656,11 @@ async function renderEmployeeTable() {
               <img src="../../resource/assets/icon/nfc-icon.svg" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;"></td>
             <td><small>${safeCreatedAt}</small></td>
             <td><small>${safeUpdatedAt}</small></td>
+
+            ${(window.PERMISSIONS.manualInOut ||
+              window.PERMISSIONS.logs        ||
+              window.PERMISSIONS.edit        ||
+              window.PERMISSIONS.delete) ? `
             <td style="position: relative; width: 160px;">
 
               <!-- ACTIONS TOGGLE -->
@@ -685,6 +690,7 @@ async function renderEmployeeTable() {
               <div class="actions-panel">
                 <small style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); text-align: center; color: #fff;">${toProperCase(safeFullname)}</small>
 
+                ${window.PERMISSIONS.manualInOut ? `
                 <!-- IN / OUT -->
                 <div style="display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #e2e8f0;">
                   <button
@@ -719,7 +725,9 @@ async function renderEmployeeTable() {
                     <span style="width:7px;height:7px;background:#fff;border-radius:50%;display:inline-block;"></span> OUT
                   </button>
                 </div>
+                ` : ''}
 
+                ${window.PERMISSIONS.logs ? `
                 <!-- LOGS -->
                 <button
                   data-emp-id="${safeId}"
@@ -734,7 +742,9 @@ async function renderEmployeeTable() {
                   ">
                   <i class="fas fa-history"></i> LOGS
                 </button>
+                ` : ''}
 
+                ${window.PERMISSIONS.edit ? `
                 <!-- EDIT -->
                 <button
                   data-emp-id="${numericId}"
@@ -748,7 +758,9 @@ async function renderEmployeeTable() {
                   ">
                   <i class="fas fa-edit"></i> EDIT
                 </button>
+                ` : ''}
 
+                ${window.PERMISSIONS.delete ? `
                 <!-- DELETE -->
                 <button
                   data-emp-id="${safeId}"
@@ -762,10 +774,12 @@ async function renderEmployeeTable() {
                   ">
                   <i class="fas fa-trash-alt"></i> DELETE
                 </button>
+                ` : ''}
 
               </div>
             </td>
-        </tr>
+            ` : ''}
+          </tr>
       `;
     })
     .join("");
@@ -1164,10 +1178,6 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
       return;
     }
 
-    // ── FIX: Apply toProperCase to display label so modal suggestions
-    //         match the search filter dropdown formatting.
-    //         Guard the highlight regex so an empty query doesn't insert
-    //         <mark/> tags between every character of the label string.
     list.innerHTML = unique
       .map((name, i) => {
         const safe = escapeHtml(name);

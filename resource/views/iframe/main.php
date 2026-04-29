@@ -255,7 +255,7 @@ if ($databaseConnected) {
                 </div>
               <?php endif; ?>
 
-              <?php if ($access['proximity code']): ?>
+              <?php if ($access['proximity-code']): ?>
                 <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=proximity');">
                   <div class="sc-icon">
                     <img src="../../../resource/assets/logo/nfc-logo.svg" alt="NFC"

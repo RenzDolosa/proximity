@@ -117,11 +117,11 @@ if ($databaseConnected) {
       <form id="searchForm">
         <div class="search-row">
           <div class="search-group" style="position: relative;">
-            <input type="text" id="search_fullname" name="fullname" 
-                  placeholder="Fullname" autocomplete="off"
-                  oninput="showFullnameSuggestions(this.value)"
-                  onkeydown="handleSuggestionNav(event)"
-                  onfocus="showFullnameSuggestions(this.value)">
+            <input type="text" id="search_fullname" name="fullname"
+              placeholder="Fullname" autocomplete="off"
+              oninput="showFullnameSuggestions(this.value)"
+              onkeydown="handleSuggestionNav(event)"
+              onfocus="showFullnameSuggestions(this.value)">
             <ul id="fullname-suggestions" style="
               display: none;
               position: absolute;
@@ -193,21 +193,26 @@ if ($databaseConnected) {
           <div class="clear-btn">
             <button type="button" class="btn btn-secondary" onclick="clearSearch()"><i class="fas fa-search-minus"></i> Clear</button>
           </div>
-          <div class="dropdown">
-            <button class="btn add-dropdown" id="exportTrigger" onclick="toggleExportOptions()">
-              <i class="fas fa-file-excel"></i> Export Data
-              <span class="add-arrow">▼</span>
-            </button>
-            <div class="add-options-menu" id="exportOptionsMenu">
-              <button onclick="exportAllData(); hideExportOptions();"><i class="fas fa-download"></i> Export All Data</button>
-              <button onclick="exportFilteredData(); hideExportOptions();"><i class="fas fa-download"></i> Export Filtered Data</button>
-              <button onclick="exportWithImages(); hideExportOptions();"><i class="fas fa-download"></i> Export with Images</button>
-              <button onclick="hideExportOptions();"><i class="fas fa-times"></i> Cancel</button>
+          <?php if (canAccess($permissions, 'export-datalog')) : ?>
+            <div class="dropdown">
+              <button class="btn add-dropdown" id="exportTrigger" onclick="toggleExportOptions()">
+                <i class="fas fa-file-excel"></i> Export Data
+                <span class="add-arrow">▼</span>
+              </button>
+
+              <div class="add-options-menu" id="exportOptionsMenu">
+                <button onclick="exportAllData(); hideExportOptions();"><i class="fas fa-download"></i> Export All Data</button>
+                <button onclick="exportFilteredData(); hideExportOptions();"><i class="fas fa-download"></i> Export Filtered Data</button>
+                <button onclick="exportWithImages(); hideExportOptions();"><i class="fas fa-download"></i> Export with Images</button>
+                <button onclick="hideExportOptions();"><i class="fas fa-times"></i> Cancel</button>
+              </div>
             </div>
-          </div>
-          <div class="delete-all-btn">
-            <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All Data</button>
-          </div>
+          <?php endif; ?>
+          <?php if (canAccess($permissions, 'delete-datalog')) : ?>
+            <div class="delete-all-btn">
+              <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All Data</button>
+            </div>
+          <?php endif; ?>
           <!-- Auto-update controls -->
           <div class="auto-update-controls">
             <label style="margin: 0;">

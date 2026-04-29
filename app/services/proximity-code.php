@@ -1,19 +1,18 @@
 <?php
-// app/services/proximitycode.php --> proximity table
+// app/services/proximity-code.php --> proximity table
 
 require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../config/db.php';
 
-
 $permissions = getUserGroupPermissions();
-if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') && !canAccess($permissions, 'proximity code')) {
+if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') && !canAccess($permissions, 'proximity-code')) {
   echo '<!DOCTYPE html><html><body><script>
         if (window.top !== window.self) { window.top.history.back(); } else { window.history.back(); }
     </script></body></html>';
   exit;
 }
 
-requireAccess('proximity code', 'system.php');
+requireAccess('proximity-code', 'system.php');
 $access = getMenuAccess();
 
 // Get dashboard statistics if database is connected
@@ -115,32 +114,45 @@ if ($databaseConnected) {
           <div class="clear-btn">
             <button type="button" class="btn btn-secondary" onclick="clearSearch()"><i class="fas fa-search-minus"></i> Clear</button>
           </div>
-          <div class="dropdown">
-            <button class="btn add-dropdown" id="addTrigger" onclick="toggleAddOptions();">
-              <i class="fas fa-ellipsis-v"></i> Add Proximity
-              <span class="add-arrow">▼</span>
-            </button>
-            <div class="add-options-menu" id="addOptionsMenu">
-              <button onclick="openModal('add'); hideAddOptions();"><i class="fas fa-plus"></i> Add Proximity Code</button>
-              <button onclick="openImportModal(); hideAddOptions();"><i class="fas fa-upload"></i> Import Proximity Code</button>
-              <button onclick="hideAddOptions();"><i class="fas fa-times"></i> Cancel</button>
+          <?php if (
+            canAccess($permissions, 'add-proximity')    ||
+            canAccess($permissions, 'import-proximity')
+          ) : ?>
+            <div class="dropdown">
+              <button class="btn add-dropdown" id="addTrigger" onclick="toggleAddOptions();">
+                <i class="fas fa-ellipsis-v"></i> Add Proximity
+                <span class="add-arrow">▼</span>
+              </button>
+              <div class="add-options-menu" id="addOptionsMenu">
+                <?php if (canAccess($permissions, 'add-proximity')) : ?>
+                  <button onclick="openModal('add'); hideAddOptions();"><i class="fas fa-plus"></i> Add Proximity Code</button>
+                <?php endif; ?>
+                <?php if (canAccess($permissions, 'import-proximity')) : ?>
+                  <button onclick="openImportModal(); hideAddOptions();"><i class="fas fa-upload"></i> Import Proximity Code</button>
+                <?php endif; ?>
+                <button onclick="hideAddOptions();"><i class="fas fa-times"></i> Cancel</button>
+              </div>
             </div>
-          </div>
-          <div class="dropdown">
-            <button class="btn add-dropdown" id="exportTrigger" onclick="toggleExportOptions()">
-              <i class="fas fa-file-excel"></i> Export Data
-              <span class="add-arrow">▼</span>
-            </button>
-            <div class="add-options-menu" id="exportOptionsMenu">
-              <button onclick="exportAllCodes(); hideExportOptions();"><i class="fas fa-download"></i> Export All Data</button>
-              <button onclick="exportFilteredCodes(); hideExportOptions();"><i class="fas fa-download"></i> Export Filtered Data</button>
-              <button onclick="hideExportOptions();"><i class="fas fa-times"></i> Cancel</button>
+          <?php endif; ?>
+          <?php if (canAccess($permissions, 'export-proximity')) : ?>
+            <div class="dropdown">
+              <button class="btn add-dropdown" id="exportTrigger" onclick="toggleExportOptions()">
+                <i class="fas fa-file-excel"></i> Export Data
+                <span class="add-arrow">▼</span>
+              </button>
+              <div class="add-options-menu" id="exportOptionsMenu">
+                <button onclick="exportAllCodes(); hideExportOptions();"><i class="fas fa-download"></i> Export All Data</button>
+                <button onclick="exportFilteredCodes(); hideExportOptions();"><i class="fas fa-download"></i> Export Filtered Data</button>
+                <button onclick="hideExportOptions();"><i class="fas fa-times"></i> Cancel</button>
+              </div>
             </div>
-          </div>
-          <div class="delete-all-btn">
-            <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All
-              Data</button>
-          </div>
+          <?php endif; ?>
+          <?php if (canAccess($permissions, 'delete-proximity')) : ?>
+            <div class="delete-all-btn">
+              <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All
+                Data</button>
+            </div>
+          <?php endif; ?>
           <div class="filter-status" id="filter-status"></div>
         </div>
       </div>
@@ -182,7 +194,12 @@ if ($databaseConnected) {
               <th>Status</th>
               <th>Register</th>
               <th>Update</th>
-              <th>Actions</th>
+              <?php if (
+                canAccess($permissions, 'edit-proximity')   ||
+                canAccess($permissions, 'delete-proximity')
+              ) : ?>
+                <th>Actions</th>
+              <?php endif; ?>
             </tr>
           </thead>
           <tbody id="employeeTableBody">
@@ -415,6 +432,13 @@ if ($databaseConnected) {
       });
 
     })();
+  </script>
+
+  <script>
+    window.PERMISSIONS = {
+      edit: <?= json_encode(canAccess($permissions, 'edit-proximity')) ?>,
+      delete: <?= json_encode(canAccess($permissions, 'delete-proximity')) ?>
+    };
   </script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>

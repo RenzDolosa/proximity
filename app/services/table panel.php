@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../config/db.php';
 
 $permissions = getUserGroupPermissions();
-if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') && !canAccess($permissions, 'proximity code')) {
+if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') && !canAccess($permissions, 'proximity-code')) {
   echo '<!DOCTYPE html><html><body><script>
         if (window.top !== window.self) { window.top.history.back(); } else { window.history.back(); }
     </script></body></html>';
@@ -22,7 +22,7 @@ $firstTab = null;
 // If a specific tab was requested and user has access, use it
 if ($requestedTab === 'datalog' && $access['datalog']) {
   $firstTab = 'scanned';
-} elseif ($requestedTab === 'proximity' && $access['proximity code']) {
+} elseif ($requestedTab === 'proximity' && $access['proximity-code']) {
   $firstTab = 'proximity';
 } elseif ($requestedTab === 'employees' && $access['system']) {
   $firstTab = 'employees';
@@ -30,7 +30,7 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
   // Fall back to default order
   if ($access['system'])         $firstTab = 'employees';
   elseif ($access['datalog'])    $firstTab = 'scanned';
-  elseif ($access['proximity code']) $firstTab = 'proximity';
+  elseif ($access['proximity-code']) $firstTab = 'proximity';
 }
 ?>
 <!DOCTYPE html>
@@ -177,7 +177,7 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
       </button>
     <?php endif; ?>
 
-    <?php if ($access['proximity code']): ?>
+    <?php if ($access['proximity-code']): ?>
       <button class="tab-btn <?= $firstTab === 'proximity' ? 'active' : '' ?>" onclick="switchTab('proximity', this)">
         <i class="fas fa-id-card"></i> Proximity Codes
       </button>
@@ -189,7 +189,7 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
   <iframe id="frame-scanned" class="tab-frame <?= $firstTab === 'scanned'   ? 'active' : '' ?>"
     src="<?= $firstTab === 'scanned'   ? 'datalog.php' : '' ?>"></iframe>
   <iframe id="frame-proximity" class="tab-frame <?= $firstTab === 'proximity' ? 'active' : '' ?>"
-    src="<?= $firstTab === 'proximity' ? 'proximity code.php' : '' ?>"></iframe>
+    src="<?= $firstTab === 'proximity' ? 'proximity-code.php' : '' ?>"></iframe>
 
   <script src="../../resource/js/req.js"></script>
   <script src="../../resource/js/ver.js"></script>
@@ -197,7 +197,7 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
     const srcs = {
       employees: 'system.php',
       scanned: 'datalog.php',
-      proximity: 'proximity code.php',
+      proximity: 'proximity-code.php',
     };
 
     function focusFrameSearchInput(frame) {

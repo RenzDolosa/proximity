@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../config/db.php';
 
 $permissions = getUserGroupPermissions();
-if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') && !canAccess($permissions, 'proximity code')) {
+if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') && !canAccess($permissions, 'proximity-code')) {
   echo '<!DOCTYPE html><html><body><script>
         if (window.top !== window.self) { window.top.history.back(); } else { window.history.back(); }
     </script></body></html>';
@@ -162,32 +162,45 @@ if ($databaseConnected) {
           <div class="clear-btn">
             <button type="button" class="btn btn-secondary" onclick="clearSearch()"><i class="fas fa-search-minus"></i> Clear</button>
           </div>
-          <div class="dropdown">
-            <button class="btn add-dropdown" id="addTrigger" onclick="toggleAddOptions();">
-              <i class="fas fa-ellipsis-v"></i> Add Employee
-              <span class="add-arrow">▼</span>
-            </button>
-            <div class="add-options-menu" id="addOptionsMenu">
-              <button onclick="openModal('add'); hideAddOptions();"><i class="fas fa-plus"></i> Add Employee</button>
-              <button onclick="openImportModal(); hideAddOptions();"><i class="fas fa-upload"></i> Import Employee</button>
-              <button onclick="hideAddOptions();"><i class="fas fa-times"></i> Cancel</button>
+          <?php if (
+            canAccess($permissions, 'add-system')    ||
+            canAccess($permissions, 'import-system')
+          ) : ?>
+            <div class="dropdown">
+              <button class="btn add-dropdown" id="addTrigger" onclick="toggleAddOptions();">
+                <i class="fas fa-ellipsis-v"></i> Add Employee
+                <span class="add-arrow">▼</span>
+              </button>
+              <div class="add-options-menu" id="addOptionsMenu">
+                <?php if (canAccess($permissions, 'add-system')) : ?>
+                  <button onclick="openModal('add'); hideAddOptions();"><i class="fas fa-plus"></i> Add Employee</button>
+                <?php endif; ?>
+                <?php if (canAccess($permissions, 'import-system')) : ?>
+                  <button onclick="openImportModal(); hideAddOptions();"><i class="fas fa-upload"></i> Import Employee</button>
+                <?php endif; ?>
+                <button onclick="hideAddOptions();"><i class="fas fa-times"></i> Cancel</button>
+              </div>
             </div>
-          </div>
-          <div class="dropdown">
-            <button class="btn add-dropdown" id="exportTrigger" onclick="toggleExportOptions()">
-              <i class="fas fa-file-excel"></i> Export Data
-              <span class="add-arrow">▼</span>
-            </button>
-            <div class="add-options-menu" id="exportOptionsMenu">
-              <button onclick="exportAllData(); hideExportOptions();"><i class="fas fa-download"></i> Export All Data</button>
-              <button onclick="exportFilteredData(); hideExportOptions();"><i class="fas fa-download"></i> Export Filtered Data</button>
-              <button onclick="exportWithImages(); hideExportOptions();"><i class="fas fa-download"></i> Export with Images</button>
-              <button onclick="hideExportOptions();"><i class="fas fa-times"></i> Cancel</button>
+          <?php endif; ?>
+          <?php if (canAccess($permissions, 'export-system')) : ?>
+            <div class="dropdown">
+              <button class="btn add-dropdown" id="exportTrigger" onclick="toggleExportOptions()">
+                <i class="fas fa-file-excel"></i> Export Data
+                <span class="add-arrow">▼</span>
+              </button>
+              <div class="add-options-menu" id="exportOptionsMenu">
+                <button onclick="exportAllData(); hideExportOptions();"><i class="fas fa-download"></i> Export All Data</button>
+                <button onclick="exportFilteredData(); hideExportOptions();"><i class="fas fa-download"></i> Export Filtered Data</button>
+                <button onclick="exportWithImages(); hideExportOptions();"><i class="fas fa-download"></i> Export with Images</button>
+                <button onclick="hideExportOptions();"><i class="fas fa-times"></i> Cancel</button>
+              </div>
             </div>
-          </div>
-          <div class="delete-all-btn">
-            <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All Data</button>
-          </div>
+          <?php endif; ?>
+          <?php if (canAccess($permissions, 'delete-system')) : ?>
+            <div class="delete-all-btn">
+              <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All Data</button>
+            </div>
+          <?php endif; ?>
           <div class="filter-status" id="filter-status"></div>
         </div>
       </div>
@@ -232,7 +245,14 @@ if ($databaseConnected) {
               <th class="Col9">Proximity Code</th>
               <th>Register</th>
               <th>Update</th>
-              <th>Actions</th>
+              <?php if (
+                canAccess($permissions, 'manual in out-system') ||
+                canAccess($permissions, 'logs-system')          ||
+                canAccess($permissions, 'edit-system')          ||
+                canAccess($permissions, 'delete-system')
+              ) : ?>
+                <th>Actions</th>
+              <?php endif; ?>
             </tr>
           </thead>
           <tbody id="employeeTableBody">
@@ -701,6 +721,15 @@ if ($databaseConnected) {
       });
 
     })();
+  </script>
+
+  <script>
+    window.PERMISSIONS = {
+      manualInOut: <?= json_encode(canAccess($permissions, 'manual in out-system')) ?>,
+      logs: <?= json_encode(canAccess($permissions, 'logs-system')) ?>,
+      edit: <?= json_encode(canAccess($permissions, 'edit-system')) ?>,
+      delete: <?= json_encode(canAccess($permissions, 'delete-system')) ?>
+    };
   </script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>

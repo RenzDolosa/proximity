@@ -13,7 +13,7 @@ const PAGE_ICONS = [
   'settings'           => 'fa-cog',
   'phpmyadmin'         => 'fa-database',
   'proximity'          => 'fa-th-large',
-  'proximity code'     => 'fa-barcode',
+  'proximity-code'     => 'fa-barcode',
   'qr proximity'       => 'fa-qrcode',
   'manual input'       => 'fa-keyboard',
   'portal'             => 'fa-th-large',
@@ -25,13 +25,30 @@ const PAGE_ICONS = [
   'scan test'          => 'fa-search',
   'm-i v2'             => 'fa-keyboard',
   'test'               => 'fa-flask',
+  // Buttons and actions: (not pages)
+  'add-system'                => 'fa-user-plus',
+  'edit-system'               => 'fa-edit',
+  'logs-system'               => 'fa-history',
+  'import-system'             => 'fa-upload',
+  'delete-system'             => 'fa-trash-alt',
+  'export-system'             => 'fa-download',
+  'manual in out-system'      => 'fa-clipboard-list',
+  'delete-datalog'            => 'fa-trash-alt',
+  'export-datalog'            => 'fa-download',
+  'add-proximity'             => 'fa-user-plus',
+  'edit-proximity'            => 'fa-edit',
+  'import-proximity'          => 'fa-upload',
+  'delete-proximity'          => 'fa-trash-alt',
+  'export-proximity'          => 'fa-download',
+  'delete-violation'          => 'fa-trash-alt',
+  'export-violation'          => 'fa-download',
 ];
 
 const PAGE_KEY_OVERRIDES = [
-  'account'            => 'account info',       // account.php → key "account info"
+  'account'            => 'account info',
   'employee dashboard' => 'employee dashboard',
   'admin panel'        => 'admin panel',
-  'proximity code'     => 'proximity code',
+  'proximity-code'     => 'proximity-code',
   'scan test'          => 'scan test',
   'm-i v2'             => 'm-i v2',
   'manual input'       => 'manual input',
@@ -55,14 +72,14 @@ require_once 'config.php';
 // ── Auth guard FIRST (before anything else) ───────────────────────────────────
 if (!isset($_SESSION['user_id']) || !isLoggedIn()) {
   $rootUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
-           . '://' . $_SERVER['HTTP_HOST'] . '/index.php';
+    . '://' . $_SERVER['HTTP_HOST'] . '/index.php';
 
   $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
-         && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+    && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
   // Also detect fetch() calls — they don't send X-Requested-With by default
   $acceptsJson = isset($_SERVER['HTTP_ACCEPT'])
-              && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json');
+    && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json');
 
   $wantsJson = isset($_GET['action']) || $isAjax || $acceptsJson;
 
@@ -79,12 +96,12 @@ if (!isset($_SESSION['user_id']) || !isLoggedIn()) {
   }
 
   $isEmbedded = isset($_SERVER['HTTP_SEC_FETCH_DEST'])
-             && $_SERVER['HTTP_SEC_FETCH_DEST'] === 'iframe';
+    && $_SERVER['HTTP_SEC_FETCH_DEST'] === 'iframe';
 
   if ($isEmbedded) {
     echo '<!DOCTYPE html><html><body>'
-       . '<script>window.top.location.href = ' . json_encode($rootUrl) . ';</script>'
-       . '</body></html>';
+      . '<script>window.top.location.href = ' . json_encode($rootUrl) . ';</script>'
+      . '</body></html>';
     exit;
   }
 
@@ -107,15 +124,15 @@ if (isset($_GET['logout'])) {
   session_destroy();
 
   $rootUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
-           . '://' . $_SERVER['HTTP_HOST'] . '/index.php';
+    . '://' . $_SERVER['HTTP_HOST'] . '/index.php';
 
   $isEmbedded = isset($_SERVER['HTTP_SEC_FETCH_DEST'])
-             && $_SERVER['HTTP_SEC_FETCH_DEST'] === 'iframe';
+    && $_SERVER['HTTP_SEC_FETCH_DEST'] === 'iframe';
 
   if ($isEmbedded) {
     echo '<!DOCTYPE html><html><body>'
-       . '<script>window.top.location.href = ' . json_encode($rootUrl) . ';</script>'
-       . '</body></html>';
+      . '<script>window.top.location.href = ' . json_encode($rootUrl) . ';</script>'
+      . '</body></html>';
     exit;
   }
 
@@ -500,25 +517,45 @@ function scanPortalPages(
           'key'      => 'system',
           'label'    => 'System',
           'icon'     => 'fa-users-cog',
-          'children' => [],
+          'children' => [
+            ['key' => 'add-system',            'label' => 'Add',             'icon' => 'fa-user-plus',       'children' => []],
+            ['key' => 'edit-system',           'label' => 'Edit',            'icon' => 'fa-edit',            'children' => []],
+            ['key' => 'logs-system',           'label' => 'Logs',            'icon' => 'fa-history',         'children' => []],
+            ['key' => 'import-system',         'label' => 'Import',          'icon' => 'fa-upload',          'children' => []],
+            ['key' => 'delete-system',         'label' => 'Delete',          'icon' => 'fa-trash-alt',       'children' => []],
+            ['key' => 'export-system',         'label' => 'Export',          'icon' => 'fa-download',        'children' => []],
+            ['key' => 'manual in out-system',  'label' => 'In/Out Action',   'icon' => 'fa-clipboard-list',  'children' => []],
+          ],
         ],
         [
           'key'      => 'datalog',
           'label'    => 'Datalog',
           'icon'     => 'fa-clipboard-list',
-          'children' => [],
+          'children' => [
+            ['key' => 'delete-datalog',        'label' => 'Delete',          'icon' => 'fa-trash-alt',       'children' => []],
+            ['key' => 'export-datalog',        'label' => 'Export',          'icon' => 'fa-download',        'children' => []],
+          ],
         ],
         [
-          'key'      => 'proximity code',
+          'key'      => 'proximity-code',
           'label'    => 'Proximity Codes',
           'icon'     => 'fa-barcode',
-          'children' => [],
+          'children' => [
+            ['key' => 'add-proximity',         'label' => 'Add',             'icon' => 'fa-user-plus',       'children' => []],
+            ['key' => 'edit-proximity',        'label' => 'Edit',            'icon' => 'fa-edit',            'children' => []],
+            ['key' => 'import-proximity',      'label' => 'Import',          'icon' => 'fa-upload',          'children' => []],
+            ['key' => 'delete-proximity',      'label' => 'Delete',          'icon' => 'fa-trash-alt',       'children' => []],
+            ['key' => 'export-proximity',      'label' => 'Export',          'icon' => 'fa-download',        'children' => []],
+          ],
         ],
         [
           'key'      => 'violation',
           'label'    => 'Violations',
           'icon'     => 'fa-exclamation-triangle',
-          'children' => [],
+          'children' => [
+            ['key' => 'delete-violation',      'label' => 'Delete',          'icon' => 'fa-trash-alt',       'children' => []],
+            ['key' => 'export-violation',      'label' => 'Export',          'icon' => 'fa-download',        'children' => []],
+          ],
         ],
       ],
     ],

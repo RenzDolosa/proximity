@@ -512,7 +512,9 @@ async function renderEmployeeTable() {
           </td>
           <td><small>${escapeHtml(employee.created_at || "")}</small></td>
           <td><small>${escapeHtml(employee.updated_at || "")}</small></td>
-          <td style="position:relative;width:160px;">
+
+          ${(window.PERMISSIONS.edit || window.PERMISSIONS.delete) ? `
+          <td style="position: relative; width: 160px;">
 
             <!-- ACTIONS TOGGLE -->
             <button
@@ -533,6 +535,7 @@ async function renderEmployeeTable() {
                 ${escapeHtml(toProperCase(matchedEmployeeData?.fullname || "Row SN: " + (startIndex + index + 1)))}
               </small>
 
+              ${window.PERMISSIONS.edit ? `
               <!-- EDIT -->
               <button
                 data-emp-id="${escapeHtml(String(employee.id))}"
@@ -542,18 +545,22 @@ async function renderEmployeeTable() {
                   border-bottom:1px solid #e2e8f0;cursor:pointer;text-align:center;">
                 <i class="fas fa-edit"></i> EDIT
               </button>
+              ` : ''}
 
+              ${window.PERMISSIONS.delete ? `
               <!-- DELETE -->
               <button
-                data-emp-id="${safeQr}"
+                data-emp-id="${escapeHtml(String(employee.id))}"
                 onclick="openDeleteFromBtn(this)"
                 style="width:100%;padding:7px;font-size:12px;font-weight:700;
                   background:#fff;color:#ef4444;border:none;cursor:pointer;text-align:center;">
                 <i class="fas fa-trash-alt"></i> DELETE
               </button>
+              ` : ''}
 
             </div>
           </td>
+          ` : ''}
         </tr>
       `;
     })
