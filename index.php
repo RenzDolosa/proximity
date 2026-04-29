@@ -5,8 +5,8 @@ require_once 'config/config.php';
 require_once 'app/http/auth/login.php';
 
 if (isLoggedIn()) {
-    header('Location: portal.php');
-    exit;
+  header('Location: portal.php');
+  exit;
 }
 
 $url = $_GET['url'] ?? 'home';

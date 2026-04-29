@@ -376,12 +376,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     .user-avatar {
       width: 28px;
       height: 28px;
-      background: var(--accent);
+      background: var(--accent-light);
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: white;
+      color: var(--accent);
       font-size: 12px;
       font-weight: 600;
       flex-shrink: 0;
@@ -656,11 +656,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       padding: 8px;
       white-space: nowrap;
       opacity: 0;
+      pointer-events: none;
       transition: opacity 0.2s ease 0.05s;
     }
 
     .sidebar:hover .version-tag {
       opacity: 1;
+      pointer-events: auto;
     }
 
     .bottom-nav {
@@ -677,6 +679,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       z-index: 200;
       padding: 0 4px;
       padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .user-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+      display: block;
     }
 
     @media (max-width: 640px) {
@@ -858,7 +868,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <!-- User pill with dropdown -->
       <div class="user-wrapper" id="userWrapper">
         <div class="user-pill" id="userPill">
-          <div class="user-avatar"><?= strtoupper(substr($firstName . " " . $lastName ?? 'U', 0, 1)); ?></div>
+          <div class="user-avatar" id="topbarAvatar">
+            <?php if (!empty($_SESSION['avatar'])): ?>
+              <img src="/<?= htmlspecialchars($_SESSION['avatar']); ?>"
+                style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+            <?php else: ?>
+              <?= strtoupper(substr($firstName, 0, 1)); ?>
+            <?php endif; ?>
+          </div>
           <?= htmlspecialchars($firstName . " " . $lastName ?? 'User'); ?>
           <i class="fas fa-chevron-down user-chevron" id="userChevron"></i>
         </div>
