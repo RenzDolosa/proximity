@@ -1460,7 +1460,7 @@ function renderBindRows(array $pages, int $depth = 0): void
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 14px;
+      padding: 5px 7px;
       border-radius: 8px;
       border: 1px solid #f0f0f0;
       margin-bottom: 8px;
@@ -1527,7 +1527,7 @@ function renderBindRows(array $pages, int $depth = 0): void
       margin-left: 12px;
       border-left: 2px solid #ede9fe;
       padding-left: 4px;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
 
     .bind-child-row {
@@ -1553,18 +1553,18 @@ function renderBindRows(array $pages, int $depth = 0): void
     /* Radio pill group */
     .radio-pill-group {
       display: flex;
-      gap: 6px;
+      gap: 3px;
     }
 
     .radio-pill {
       display: flex;
       align-items: center;
-      gap: 5px;
-      padding: 5px 12px;
+      gap: 3px;
+      padding: 3px 6px;
       border-radius: 20px;
       cursor: pointer;
       border: 1.5px solid #e5e7eb;
-      font-size: 12px;
+      font-size: 8px;
       font-weight: 600;
       transition: all .15s;
       user-select: none;
@@ -1937,7 +1937,7 @@ function renderBindRows(array $pages, int $depth = 0): void
         flex: 1;
         justify-content: center;
         font-size: 11px;
-        padding: 5px 8px;
+        padding: 3px 4px;
       }
 
       /* ── Log detail modal ── */

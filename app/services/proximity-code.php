@@ -225,30 +225,45 @@ if ($databaseConnected) {
   <!-- Proximity Code Modal -->
   <div id="employeeModal" class="modal">
     <div class="modal-content">
-      <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
-      <h2 id="modalTitle" style="padding-bottom: 10px;">Add Proximity Code</h2>
-      <form id="employeeForm" enctype="multipart/form-data">
-        <input type="hidden" id="employee_id" name="id">
-        <div class="form-group fl-group">
-          <input type="text" id="qr_code" name="qr_code" placeholder=" " autocomplete="off">
-          <label class="fl-label" for="qr_code">Proximity Code <span style="color:#e74c3c">*</span></label>
-        </div>
-        <div class="form-group">
-          <div style="display:flex; align-items: center; gap: 12px; margin-top: 6px;">
-            <span style="font-weight:500;">Status</span>
-            <label class="toggle-switch">
-              <input type="checkbox" id="is_active_toggle" name="is_active_toggle" checked>
-              <span class="toggle-slider"></span>
-            </label>
-            <span id="statusLabel" style="font-weight:600; color:#16a34a;">Enabled</span>
-            <input type="hidden" id="is_active" name="is_active" value="1">
+
+      <!-- HEADER -->
+      <div class="modal-header">
+        <h2 id="modalTitle"><i class="fas fa-id-card"></i> Add Proximity Code</h2>
+        <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
+      </div>
+
+      <!-- BODY (scrollable) -->
+      <div class="modal-body">
+        <form id="employeeForm" enctype="multipart/form-data">
+          <input type="hidden" id="employee_id" name="id">
+          <div class="form-group fl-group">
+            <input type="text" id="qr_code" name="qr_code" placeholder=" " autocomplete="off">
+            <label class="fl-label" for="qr_code">Proximity Code <span style="color:#e74c3c">*</span></label>
           </div>
-        </div>
-        <div class="form-row" style="margin-top: 2rem;">
-          <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> Save Proximity Code</button>
-          <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
-        </div>
-      </form>
+          <div class="form-group">
+            <div style="display:flex; align-items: center; gap: 12px; margin-top: 6px;">
+              <span style="font-weight:500;">Status</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="is_active_toggle" name="is_active_toggle" checked>
+                <span class="toggle-slider"></span>
+              </label>
+              <span id="statusLabel" style="font-weight:600; color:#16a34a;">Enabled</span>
+              <input type="hidden" id="is_active" name="is_active" value="1">
+            </div>
+          </div>
+        </form>
+      </div><!-- /.modal-body -->
+
+      <!-- FOOTER -->
+      <div class="modal-footer">
+        <button type="submit" form="employeeForm" class="btn btn-success">
+          <i class="fas fa-save"></i> Save Proximity Code
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">
+          <i class="fas fa-times"></i> Cancel
+        </button>
+      </div>
+
     </div>
   </div>
 
@@ -278,63 +293,79 @@ if ($databaseConnected) {
   <!-- CSV / Excel Import Modal -->
   <div id="importModal" class="modal">
     <div class="modal-content">
-      <div id="importProgress" style="display: none;">
-        <h4>Import Progress:</h4>
-        <div class="progress-bar">
-          <div class="progress-fill" id="progressFill"></div>
-        </div>
-        <div id="importStatus"></div>
-      </div>
-      <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
-      <h2>Import Proximity Codes from File</h2>
 
-      <div class="import-instructions">
-        <h4>Supported File Formats:</h4>
-        <p><strong>&#128196; CSV (.csv)</strong> | <strong>&#128202; Excel (.xlsx, .xls)</strong></p>
-
-        <h4>File Format Requirements:</h4>
-        <p>Your file should have the following columns in this order:</p>
-        <ul>
-          <li><strong>proximity code</strong> - If have Proximity Code (required)</li>
-        </ul>
-        <!-- <p><em>Note: If blank Proximity Codes will be automatically generated for each employee.</em></p> -->
+      <!-- HEADER -->
+      <div class="modal-header">
+        <h2><i class="fas fa-upload"></i> Import Proximity Codes from File</h2>
+        <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
       </div>
 
-      <form id="importForm" enctype="multipart/form-data">
-        <div class="form-group">
-          <div class="form-row">
-            <label for="dataFile">
-              <div class="download-label">Select File</div>
-            </label>
-            <a href="#" onclick="excelProxCodeTemplate()" style="display: flex; align-items: center; gap: 5px; margin-left: auto; text-decoration: none; color: #007bff;">
-              <i class="fas fa-download"></i> Download Excel Template
-            </a>
+      <!-- BODY (scrollable) -->
+      <div class="modal-body">
+        <div id="importProgress" style="display: none;">
+          <h4>Import Progress:</h4>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
           </div>
-          <div class="file-upload">
-            <input type="file" id="dataFile" name="dataFile" accept=".csv,.xlsx,.xls" required>
-            <label for="dataFile" class="file-upload-label">
-              <i class="fas fa-file"></i> Click to select file (.csv, .xlsx, .xls)
+          <div id="importStatus"></div>
+        </div>
+
+        <div class="import-instructions">
+          <h4>Supported File Formats:</h4>
+          <p><strong>&#128196; CSV (.csv)</strong> | <strong>&#128202; Excel (.xlsx, .xls)</strong></p>
+
+          <h4>File Format Requirements:</h4>
+          <p>Your file should have the following columns in this order:</p>
+          <ul>
+            <li><strong>proximity code</strong> - If have Proximity Code (required)</li>
+          </ul>
+          <!-- <p><em>Note: If blank Proximity Codes will be automatically generated for each employee.</em></p> -->
+        </div>
+
+        <form id="importForm" enctype="multipart/form-data">
+          <div class="form-group">
+            <div class="form-row">
+              <label for="dataFile">
+                <div class="download-label">Select File</div>
+              </label>
+              <a href="#" onclick="excelProxCodeTemplate()" style="display: flex; align-items: center; gap: 5px; margin-left: auto; text-decoration: none; color: #007bff;">
+                <i class="fas fa-download"></i> Download Excel Template
+              </a>
+            </div>
+            <div class="file-upload">
+              <input type="file" id="dataFile" name="dataFile" accept=".csv,.xlsx,.xls" required>
+              <label for="dataFile" class="file-upload-label">
+                <i class="fas fa-file"></i> Click to select file (.csv, .xlsx, .xls)
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label style="display: grid; grid-template-columns: 300px 20px">
+              Skip first row (if it contains headers)
+              <input type="checkbox" id="skipHeader" name="skipHeader" checked>
             </label>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label style="display: grid; grid-template-columns: 300px 20px">
-            Skip first row (if it contains headers)
-            <input type="checkbox" id="skipHeader" name="skipHeader" checked>
-          </label>
-        </div>
+          <div id="importPreview" style="display: none;">
+            <h4>Preview (First 5 rows):</h4>
+          </div>
+        </form>
+      </div><!-- /.modal-body -->
 
-        <div id="importPreview" style="display: none;">
-          <h4>Preview (First 5 rows):</h4>
-        </div>
+      <!-- FOOTER -->
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" onclick="previewFile()">
+          <i class="fas fa-list-ul"></i> Preview
+        </button>
+        <button type="submit" class="btn btn-import">
+          <i class="fas fa-upload"></i> Import
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">
+          <i class="fas fa-times"></i> Cancel
+        </button>
+      </div>
 
-        <div class="form-row" style="margin-top: 2rem;">
-          <button type="button" class="btn btn-primary" onclick="previewFile()"><i class="fas fa-list-ul"></i> Preview</button>
-          <button type="submit" class="btn btn-import"><i class="fas fa-upload"></i> Import</button>
-          <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
-        </div>
-      </form>
     </div>
   </div>
 

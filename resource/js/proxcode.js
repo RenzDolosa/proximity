@@ -771,7 +771,7 @@ async function openModal(action, employeeId = null) {
   }
 
   if (action === "add") {
-    modalTitle.innerHTML = "Add Proximity Code";
+    modalTitle.innerHTML = `<i class="fas fa-id-card"></i> Add Proximity Code`;
     const statusGroup = document.getElementById("statusToggleGroup");
     if (statusGroup) statusGroup.style.display = "none";
   } else if (action === "edit" && employeeId) {

@@ -888,9 +888,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <div class="dropdown-item" id="changePassBtn">
             <i class="fas fa-lock"></i> Change Password
           </div>
+          <?php if ($access['readme']) : ?>
           <div class="dropdown-item" onclick="document.querySelector('.frames').src='resource/views/iframe/readme.php'; closeDropdown();">
             <i class="fas fa-book-open"></i> README
           </div>
+          <?php endif; ?>
           <hr class="dropdown-divider">
           <a class="dropdown-item danger" href="?logout=1">
             <i class="fas fa-sign-out-alt"></i> Logout

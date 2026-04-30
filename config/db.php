@@ -25,6 +25,7 @@ const PAGE_ICONS = [
   'scan test'          => 'fa-search',
   'm-i v2'             => 'fa-keyboard',
   'test'               => 'fa-flask',
+  'readme'             => 'fa-book',
   // Buttons and actions: (not pages)
   'add-system'                => 'fa-user-plus',
   'edit-system'               => 'fa-edit',
@@ -415,46 +416,63 @@ function scanPortalPages(
   array $baseDirs = [],
   array $exclude = [
     // 'index.php',
+    // 'login.php',
     // 'database.php',
-    // 'f-pass.php',
     // 'add_to_log.php',
     'config.php',
     'db.php',
     'req.php',
     'migrate_to_webp.php',
-    // 'ea-dtl.php',
-    // 'eas.php',
-    // 'export_proxcode.php',
     // 'get_user_id.php',
     // 'ip.php',
-    // 'login.php',
-    // 'manpower_backend.php',
-    // 'migrate_to_webp.php',
-    // 'proxcode_backend.php',
-    // 'qr_search_backend.php',
-    // 'scanTest_search_backend.php',
-    // 'settings.php',
-    // 'admin panel.php',
-    // 'table panel.php',
-    // 'reg.php',
+
+    'main.php',
+    'table panel.php',
+    'datalog.php',
+    'datalog_backend.php',
+    'system.php',
+    'manpower_backend.php',
+    'proximity-code.php',
+    'proxcode_backend.php',
+    'violation_log.php',
+    'violation_log_backend.php',
+
+    'ea-dtl.php',
+    'eas.php',
+    'export_proxcode.php',
+    'global_audio.php',
+
+    'qr_search_backend.php',
+    'scanTest_search_backend.php',
+
+    'settings.php',
+    'admin panel.php',
+    'f-pass.php',
+    'reg.php',
   ]
 ): array {
 
   // ── Define which folders are GROUPED (children under a parent) ────────────
   $groupedFolders = [
     'portal' => [
-      'folder'   => __DIR__ . '/resource/views/iframe',
+      'folder'   => __DIR__ . '/../resource/views/iframe',
       'children' => [
         [
           'key'      => 'main',
           'label'    => 'Main',
           'icon'     => 'fa-home',
           'children' => [],
+        ],
+        [
+          'key'      => 'development',
+          'label'    => 'Development',
+          'icon'     => 'fa-test-tube',
+          'children' => [],
         ]
       ],
     ],
     'main' => [
-      'folder'   => __DIR__ . '/../tests',
+      'folder'   => __DIR__ . '/../app/services',
       'children' => [
         [
           'key'      => 'settings',
@@ -468,23 +486,21 @@ function scanPortalPages(
           'icon'     => 'fa-table',
           'children' => [],
         ],
-        [
-          'key'      => 'scan test',
-          'label'    => 'Scan Test',
-          'icon'     => 'fa-search',
-          'children' => [],
-        ]
       ],
     ],
+    'development' => [
+      'folder'   => __DIR__ . '/../tests',
+      'children' => [],
+    ],
     'settings' => [
-      'folder'   => __DIR__ . '/resource/views',
+      'folder'   => __DIR__ . '/../resource/views',
       'children' => [
-        [
-          'key'      => 'reg',
-          'label'    => 'Register',
-          'icon'     => 'fa-user-plus',
-          'children' => [],
-        ],
+        // [
+        //   'key'      => 'reg',
+        //   'label'    => 'Register',
+        //   'icon'     => 'fa-user-plus',
+        //   'children' => [],
+        // ],
         [
           'key'      => 'admin panel',
           'label'    => 'Admin Panel',
@@ -496,18 +512,18 @@ function scanPortalPages(
             ['key' => 'phpmyadmin',  'label' => 'PHP MyAdmin',  'icon' => 'fa-database',       'children' => []],
           ],
         ],
-        [
-          'key'      => 'employee dashboard',
-          'label'    => 'Employee Dashboard',
-          'icon'     => 'fa-tachometer-alt',
-          'children' => [],
-        ],
-        [
-          'key'      => 'account info',
-          'label'    => 'Account Info',
-          'icon'     => 'fa-user-circle',
-          'children' => [],
-        ]
+        // [
+        //   'key'      => 'employee dashboard',
+        //   'label'    => 'Employee Dashboard',
+        //   'icon'     => 'fa-tachometer-alt',
+        //   'children' => [],
+        // ],
+        // [
+        //   'key'      => 'account info',
+        //   'label'    => 'Account Info',
+        //   'icon'     => 'fa-user-circle',
+        //   'children' => [],
+        // ]
       ],
     ],
     'table panel' => [
@@ -560,21 +576,8 @@ function scanPortalPages(
       ],
     ],
     'proximity' => [
-      'folder'   => __DIR__ . '/http/controllers',
-      'children' => [
-        [
-          'key'      => 'manual input',
-          'label'    => 'Manual Input',
-          'icon'     => 'fa-keyboard',
-          'children' => [],
-        ],
-        [
-          'key'      => 'qr proximity',
-          'label'    => 'QR Proximity',
-          'icon'     => 'fa-qrcode',
-          'children' => [],
-        ]
-      ],
+      'folder'   => __DIR__ . '/../app/http/controllers',
+      'children' => [],
     ],
   ];
 
@@ -589,8 +592,8 @@ function scanPortalPages(
   // ── STEP 1: Flat folders (iframe, udev, root) ─────────────────────────────
   if (empty($baseDirs)) {
     $baseDirs = [
-      __DIR__ . '/resource/views/iframe',
-      __DIR__ . '/app/services',
+      __DIR__ . '/../resource/views/iframe',
+      __DIR__ . '/../app/services',
       __DIR__ . '/../tests',
     ];
   }
