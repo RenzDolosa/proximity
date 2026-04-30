@@ -1,11 +1,11 @@
 <?php
 // resource/views/iframe/readme.php --> renders Readme.md (built-in parser, no dependencies)
 
-require_once __DIR__ . '/../../../config/config.php';
+require_once __DIR__ . '/../../config/config.php';
 
 // Auth guard
 if (!isset($_SESSION['user_id'])) {
-  header('Location: ../../../index.php');
+  header('Location: ../../index.php');
   exit;
 }
 
@@ -162,7 +162,7 @@ function inline(string $s): string
   return $s;
 }
 
-$readmePath = __DIR__ . '/../../../Readme.md';
+$readmePath = __DIR__ . '/../../Readme.md';
 $html = '';
 
 if (file_exists($readmePath)) {

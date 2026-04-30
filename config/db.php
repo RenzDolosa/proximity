@@ -25,7 +25,7 @@ const PAGE_ICONS = [
   'scan test'          => 'fa-search',
   'm-i v2'             => 'fa-keyboard',
   'test'               => 'fa-flask',
-  'readme'             => 'fa-book',
+  'readme'             => 'fa-book-open',
   // Buttons and actions: (not pages)
   'add-system'                => 'fa-user-plus',
   'edit-system'               => 'fa-edit',
@@ -468,7 +468,13 @@ function scanPortalPages(
           'label'    => 'Development',
           'icon'     => 'fa-test-tube',
           'children' => [],
-        ]
+        ],
+        [
+          'key'      => 'readme',
+          'label'    => 'ReadMe',
+          'icon'     => 'fa-book-open',
+          'children' => [],
+        ],
       ],
     ],
     'main' => [
@@ -495,12 +501,6 @@ function scanPortalPages(
     'settings' => [
       'folder'   => __DIR__ . '/../resource/views',
       'children' => [
-        // [
-        //   'key'      => 'reg',
-        //   'label'    => 'Register',
-        //   'icon'     => 'fa-user-plus',
-        //   'children' => [],
-        // ],
         [
           'key'      => 'admin panel',
           'label'    => 'Admin Panel',
@@ -512,18 +512,6 @@ function scanPortalPages(
             ['key' => 'phpmyadmin',  'label' => 'PHP MyAdmin',  'icon' => 'fa-database',       'children' => []],
           ],
         ],
-        // [
-        //   'key'      => 'employee dashboard',
-        //   'label'    => 'Employee Dashboard',
-        //   'icon'     => 'fa-tachometer-alt',
-        //   'children' => [],
-        // ],
-        // [
-        //   'key'      => 'account info',
-        //   'label'    => 'Account Info',
-        //   'icon'     => 'fa-user-circle',
-        //   'children' => [],
-        // ]
       ],
     ],
     'table panel' => [
