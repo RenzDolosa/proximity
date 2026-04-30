@@ -1,4 +1,5 @@
 .env
+.vscode
 fiveserver.config.js
 public
 backup
