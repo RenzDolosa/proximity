@@ -185,13 +185,13 @@ if ($databaseConnected) {
           <?php if (canAccess($permissions, 'export-system')) : ?>
             <div class="dropdown">
               <button class="btn add-dropdown" id="exportTrigger" onclick="toggleExportOptions()">
-                <i class="fas fa-file-excel"></i> Export Data
+                <img src="/../../resource/assets/icon/excel.svg" style="height: 20px; filter: invert(1);"> Export Data
                 <span class="add-arrow">▼</span>
               </button>
               <div class="add-options-menu" id="exportOptionsMenu">
-                <button onclick="exportAllData(); hideExportOptions();"><i class="fas fa-download"></i> Export All Data</button>
-                <button onclick="exportFilteredData(); hideExportOptions();"><i class="fas fa-download"></i> Export Filtered Data</button>
-                <button onclick="exportWithImages(); hideExportOptions();"><i class="fas fa-download"></i> Export with Images</button>
+                <button style="display:flex; align-items:center;" onclick="exportAllData(); hideExportOptions();"><img src="/../../resource/assets/icon/excel.svg" style="height: 20px; margin-right: 5px;">Export All Data</button>
+                <button style="display:flex; align-items:center;" onclick="exportFilteredData(); hideExportOptions();"><img src="/../../resource/assets/icon/excel.svg" style="height: 20px; margin-right: 5px;">Export Filtered Data</button>
+                <button style="display:flex; align-items:center;" onclick="exportWithImages(); hideExportOptions();"><img src="/../../resource/assets/icon/excel.svg" style="height: 20px; margin-right: 5px;">Export with Images</button>
                 <button onclick="hideExportOptions();"><i class="fas fa-times"></i> Cancel</button>
               </div>
             </div>

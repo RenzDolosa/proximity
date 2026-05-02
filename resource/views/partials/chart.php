@@ -1,5 +1,5 @@
 <?php
-// resource/views/partials/leaderboard.php
+// resource/views/partials/chart.php
 
 require_once __DIR__ . '/../../../config/config.php';
 require_once __DIR__ . '/../../../config/db.php';

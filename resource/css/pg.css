@@ -11,10 +11,10 @@
   flex-wrap: wrap;
   gap: 6px;
   margin: 0;
-  padding: 10px 16px;
+  padding: 5.5px 16px;
   background: white;
-  border-top-left-radius: 8px;
-  border-top-right-radius: 8px;
+  /* border-top-left-radius: 8px;
+  border-top-right-radius: 8px; */
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.12);
   z-index: 999;
 }

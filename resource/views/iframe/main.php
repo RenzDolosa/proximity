@@ -523,6 +523,32 @@ if ($databaseConnected) {
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 
   <script>
+    function drawHlines(chart) {
+      const yScale = chart.scales.y;
+      if (!yScale) return;
+      const ctx = chart.ctx;
+      const {
+        left,
+        right
+      } = chart.chartArea;
+      const max = yScale.max;
+
+      ctx.save();
+      ctx.setLineDash([5, 5]);
+      ctx.strokeStyle = 'rgba(0,0,0,0.20)';
+      ctx.lineWidth = 1.5;
+
+      for (let v = 50; v <= max; v += 50) {
+        const y = yScale.getPixelForValue(v);
+        ctx.beginPath();
+        ctx.moveTo(left, y);
+        ctx.lineTo(right, y);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
     // ── Live clock ──────────────────────────────────────────────────────────────
     function updateTime() {
       const now = new Date();
@@ -810,7 +836,12 @@ if ($databaseConnected) {
             y: {
               min: 0,
               grid: {
-                color: gridColor,
+                color: function(context) {
+                  return context.tick.value % 50 === 0 ?
+                    'rgba(0,0,0,0.15)' :
+                    'transparent';
+                },
+                lineWidth: 1.5,
                 drawBorder: false
               },
               ticks: {
@@ -818,12 +849,17 @@ if ($databaseConnected) {
                 font: {
                   size: 11
                 },
-                stepSize: 5
+                stepSize: 50
               }
             }
           }
         }
       });
+
+      setTimeout(function() {
+        drawHlines(attendanceChart);
+      }, 0);
+
     }
 
     let currentDayRange = 15;
@@ -968,13 +1004,20 @@ if ($databaseConnected) {
               y: {
                 min: 0,
                 grid: {
-                  color: gridColor
+                  color: function(context) {
+                    return context.tick.value % 50 === 0 ?
+                      'rgba(0,0,0,0.15)' :
+                      'transparent';
+                  },
+                  lineWidth: 1.5,
+                  drawBorder: false
                 },
                 ticks: {
                   color: tickColor,
                   font: {
                     size: 11
-                  }
+                  },
+                  stepSize: 500
                 }
               }
             }
