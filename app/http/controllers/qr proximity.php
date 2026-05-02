@@ -80,7 +80,7 @@ try {
 
   <background>
     <div class="background-image" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; z-index: 0; pointer-events: none;">
-      <img src="../../../resource/assets/logo/proximity-logo.svg" loading="lazy" alt="Proximity Code" style="width: 45%; height: 90vh; object-fit: contain;">
+      <img src="../../../resource/assets/logo/proximity-logo.svg" loading="lazy" alt="Proximity Code" style="width: 50%; height: 100vh; object-fit: contain;">
     </div>
   </background>
   <div class="side-bar" style="top: 0;">
@@ -138,9 +138,9 @@ try {
   <audio id="inactiveSound" data-fallback="../../../resource/assets/sounds/inactive.mp3" preload="none"></audio>
 
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
-  <script>
-    const QR_BACKEND_URL = <?php echo json_encode($backendUrl); ?>;
-  </script>
+  <!-- <script>
+    const QR_BACKEND_URL = <php echo json_encode($backendUrl); >;
+  </script> -->
   <script src="../../../resource/js/qp.js"></script>
   <script src="../../../resource/js/req.js"></script>
   <script src="../../../resource/js/ver.js"></script>

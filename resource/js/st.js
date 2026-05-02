@@ -1,4 +1,4 @@
-// resource/js/st.js --> qr proximity scanner tester
+// resource/js/qp.js --> qr proximity scanner/viewer
 
 const searchInput = document.getElementById("searchInput");
 const body = document.body;
@@ -8,7 +8,6 @@ let currentResults = [];
 let displayTimeout;
 let currentAudio = null;
 let activeController = null;
-let cachedUserId = null;
 
 // ── Global-audio endpoint (relative to the scan controller page) ─────────
 const GLOBAL_AUDIO_ENDPOINT = "../../services/global_audio.php";
@@ -22,18 +21,14 @@ const AUDIO_TYPE_MAP = {
   inactive:   "inactiveSound",
 };
 
-async function fetchUserId() {
-  try {
-    const r = await fetch("../../helper/get_user_id.php", {
-      credentials: "include",
-    });
-    if (r.ok) {
-      const j = await r.json();
-      cachedUserId = j.user_id || "default";
-    }
-  } catch {
-    cachedUserId = "default";
-  }
+// ─────────────────────────────────────────────────────────────────
+//  SECURITY: Read the CSRF token from the meta tag injected by PHP.
+//  This token is attached to every POST request so the backend can
+//  verify the request originated from this page, not a foreign site.
+// ─────────────────────────────────────────────────────────────────
+function getCsrfToken() {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  return meta ? meta.content : '';
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -58,11 +53,9 @@ async function loadGlobalAudio() {
       const entry = json.audio?.[audioType];
 
       if (entry?.data && entry.data.length > 0) {
-        // Database has a custom sound — use it directly as a data-URL
         el.src     = entry.data;
         el.preload = "auto";
       } else {
-        // Nothing uploaded yet — fall back to the bundled file
         const fallback = el.dataset.fallback;
         if (fallback) {
           el.src     = fallback;
@@ -74,7 +67,6 @@ async function loadGlobalAudio() {
   } catch (e) {
     console.warn("Could not load global audio; using bundled fallbacks.", e);
 
-    // On any error, make sure every element at least has its fallback src
     Object.values(AUDIO_TYPE_MAP).forEach((elementId) => {
       const el = document.getElementById(elementId);
       if (el && !el.src && el.dataset.fallback) {
@@ -102,10 +94,10 @@ function imageUrl(filename) {
 function setupEventListeners() {
   searchInput.addEventListener("input", function (e) {
     clearTimeout(searchTimeout);
+    clearTimeout(searchInput.autoClearTimeout);
     const query = e.target.value.trim();
     if (query === "") return;
 
-    clearTimeout(searchInput.autoClearTimeout);
     searchInput.autoClearTimeout = setTimeout(() => {
       searchInput.value = "";
       searchInput.focus();
@@ -156,7 +148,7 @@ function stopCurrentAudio() {
 function playSound(id) {
   stopCurrentAudio();
   const sound = document.getElementById(id);
-  if (!sound || !sound.src) return;       // guard: src not yet set
+  if (!sound) return;
   currentAudio = sound;
   sound.currentTime = 0;
   sound.play().catch((e) => console.log("Audio play error:", e));
@@ -187,65 +179,127 @@ function blockSearchInput(durationMs = 1000) {
   }, durationMs);
 }
 
-// ── Matches any non-whitespace string of 4+ chars as a potential QR code ──
-const QR_PATTERN = /^[^\s]{4,}$/;
+// ─────────────────────────────────────────────────────────────────
+//  QR code detection heuristic.
+//  A QR code from a physical scanner typically:
+//    - is 8+ characters long
+//    - contains at least one digit (human names are all-alpha)
+//    - is 10+ characters long OR contains a hyphen/underscore separator
+// ─────────────────────────────────────────────────────────────────
+function looksLikeQRCode(query) {
+  if (query.length < 8) return false;
 
+  const hasDigit = /\d/.test(query);
+  if (!hasDigit) return false;
+
+  const isLong      = query.length >= 10;
+  const hasSeparator = /[-_]/.test(query);
+
+  return isLong || hasSeparator;
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  Core search
+// ─────────────────────────────────────────────────────────────────
 async function searchEmployees(query) {
   if (activeController) activeController.abort();
   activeController = new AbortController();
-  const signal = activeController.signal;
+  const { signal } = activeController;
+
+  const messageEl    = document.getElementById("message");
+  const resultsTable = document.getElementById("resultsTable");
+  const resultsBody  = document.getElementById("resultsBody");
 
   try {
-    const isLikelyQR = QR_PATTERN.test(query);
-    let response, data;
+    resultsTable.style.display = "none";
 
-    if (isLikelyQR) {
-      response = await fetch("../../services/scanTest_search_backend.php", {
-        method: "POST",
-        signal,
-        credentials: "include",
-        headers: {
-          "X-Requested-With": "XMLHttpRequest",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ action: "get_by_qr", qr_code: query }),
+    let url, method, fetchBody;
+
+    if (looksLikeQRCode(query)) {
+      // Physical scanner path — auto-toggles check-in/out status.
+      // SECURITY: 'source: scanner' tells the backend this came from the
+      // scanner code path, not a manual text search. The backend uses this
+      // to decide whether to allow the status toggle.
+      url    = "../../services/scanTest_search_backend.php";
+      method = "POST";
+      fetchBody = JSON.stringify({
+        action:      "get_by_qr",
+        qr_code:     query,
+        source:      "scanner",  // SECURITY: identifies this as a scanner request
       });
-
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      data = await response.json();
-
-      if (data.success && data.data) {
-        currentResults = [data.data];
-        renderResults(currentResults, query);
-        return;
-      }
+    } else {
+      // Manual text search path — read-only, no status toggle
+      url    = `../../services/scanTest_search_backend.php?q=${encodeURIComponent(query)}`;
+      method = "GET";
     }
 
-    const url = `../../services/scanTest_search_backend.php?q=${encodeURIComponent(query)}`;
-    response = await fetch(url, {
-      method: "GET",
+    const response = await fetch(url, {
+      method,
       signal,
-      credentials: "include",
-      headers: { "X-Requested-With": "XMLHttpRequest" },
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        ...(method === "POST"
+          ? {
+              "Content-Type": "application/json",
+              // SECURITY: Attach CSRF token to every POST request.
+              // The backend rejects any POST that doesn't include this token,
+              // preventing cross-site request forgery attacks.
+              "X-CSRF-Token": getCsrfToken(),
+            }
+          : {}),
+      },
+      ...(method === "POST" ? { body: fetchBody } : {}),
     });
 
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    data = await response.json();
+    if (response.status === 401) {
+      messageEl.innerHTML =
+        '<p class="no-results-message">Session expired. Please log in again.</p>';
+      playNoResultSound();
+      blockSearchInput();
+      return;
+    }
 
-    if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-      currentResults = data.data;
-      renderResults(currentResults, query);
+    if (response.status === 403) {
+      messageEl.innerHTML =
+        '<p class="no-results-message">Request blocked. Please refresh the page.</p>';
+      playNoResultSound();
+      blockSearchInput();
+      return;
+    }
+
+    if (response.status === 429) {
+      messageEl.innerHTML =
+        '<p class="no-results-message">Too many searches. Please slow down.</p>';
+      playNoResultSound();
+      blockSearchInput(3000);
+      return;
+    }
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const data = await response.json();
+    
+    if (data.success) {
+      currentResults = Array.isArray(data.data) ? data.data : [data.data];
+
+      if (currentResults.length === 0) {
+        messageEl.innerHTML = `<p class="no-results-message">No results found. 🔍</p>`;
+        playNoResultSound();
+        blockSearchInput();
+        return;
+      }
+
+      renderResults(currentResults);
     } else {
-      currentResults = [];
-      document.getElementById("message").innerHTML =
-        '<p class="no-results-message">No results found. 🔍</p>';
+      messageEl.innerHTML = `<p class="no-results-message">No results found. 🔍</p>`;
       playNoResultSound();
       blockSearchInput();
     }
   } catch (error) {
     if (error.name === "AbortError") return;
     console.error("Search error:", error);
-    showMessage("Failed to search. Please check your connection.", "error");
+    messageEl.innerHTML =
+      '<div class="error-message">Failed to search. Please check your connection.</div>';
     currentResults = [];
   }
 }
@@ -269,13 +323,13 @@ function renderResults(results) {
   resultsTable.style.display = "block";
 
   const hasViolations = results.some(
-    (e) => e.violation && e.violation.trim() !== ""
+    (e) => e.violation && e.violation.trim() !== "",
   );
   const hasInactive = results.some(
-    (e) => (e.status || "").toLowerCase() === "inactive"
+    (e) => (e.status || "").toLowerCase() === "inactive",
   );
   const hasCheckedOut = results.some(
-    (e) => (e.check_status || "").toUpperCase() === "OUT"
+    (e) => (e.check_status || "").toUpperCase() === "OUT",
   );
 
   resultsBody.innerHTML = results.map(buildCard).join("");
@@ -286,24 +340,44 @@ function renderResults(results) {
   }, 10000);
 
   if (hasViolations) playWarningSound();
-  else if (hasInactive) playInactiveSound();
-  else if (hasCheckedOut) playCheckoutSound();
+  else if (hasInactive) { 
+    messageEl.innerHTML = `<p class="inactive-message">⛔ Employee Inactive</p>`;
+    playInactiveSound();
+  } else if (hasCheckedOut) playCheckoutSound();
   else playSuccessSound();
 
   blockSearchInput();
 }
 
 // ─────────────────────────────────────────────────────────────────
+//  Format helpers
+// ─────────────────────────────────────────────────────────────────
+function formatTimestamp(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  return isNaN(d)
+    ? ts
+    : d.toLocaleString(undefined, {
+        year:   "numeric",
+        month:  "short",
+        day:    "numeric",
+        hour:   "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+}
+
+// ─────────────────────────────────────────────────────────────────
 //  Card builder
 // ─────────────────────────────────────────────────────────────────
 function buildCard(employee) {
-  const fullname   = escapeHtml(employee.fullname  || "Unknown");
-  const position   = escapeHtml(employee.position  || "Unknown");
-  const brand      = escapeHtml(employee.brand     || "N/A");
-  const status     = escapeHtml(employee.status    || "Unknown");
-  const shift      = escapeHtml(employee.shift     || "N/A");
-  const violation  = employee.violation ? escapeHtml(employee.violation) : null;
-  const checkStatus = "Test Scan";
+  const fullname    = escapeHtml(employee.fullname    || "Unknown");
+  const position    = escapeHtml(employee.position    || "Unknown");
+  const brand       = escapeHtml(employee.brand       || "N/A");
+  const status      = escapeHtml(employee.status      || "unknown");
+  const shift       = escapeHtml(employee.shift       || "N/A");
+  const violation   = employee.violation ? escapeHtml(employee.violation) : null;
+  const checkStatus = escapeHtml((employee.check_status || "OUT").toUpperCase());
 
   const initials = (employee.fullname || "UN")
     .split(" ")
@@ -332,7 +406,7 @@ function buildCard(employee) {
           <p>Brand: ${brand}</p>
           <p>Status: ${status}</p>
           <p>Shift: ${shift}</p>
-          <p class="check-status-${checkStatus.toLowerCase()}">Check: ${checkStatus}</p>
+          <p class="check-status">Test Scan</p>
         </div>
       </div>
       <div class="${violation ? "with-violation" : "without-violation"}">
@@ -351,21 +425,10 @@ function escapeHtml(text) {
   return d.innerHTML;
 }
 
-function showMessage(text, type = "info") {
-  const className = type === "error" ? "error-message" : "info-message";
-  document.getElementById("message").innerHTML =
-    `<div class="${className}">${text}</div>`;
-  if (type === "success")
-    setTimeout(() => {
-      document.getElementById("message").innerHTML = "";
-    }, 1000);
-}
-
 // ─────────────────────────────────────────────────────────────────
 //  Init
 // ─────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
-  fetchUserId();
   loadGlobalAudio();
   setupEventListeners();
 });

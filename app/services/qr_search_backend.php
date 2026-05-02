@@ -603,6 +603,10 @@ class LiveSearchHandler
       if ($result) {
         $result = $this->cleanEmployee($result);
 
+        if (isset($result['status']) && strtolower(trim($result['status'])) === 'inactive') {
+          return ['__inactive__' => true];
+        }
+
         if ($autoToggle && $this->logger) {
           $previousStatus = $this->logger->getEmployeeCheckStatus(
             $result['id'],
@@ -799,6 +803,13 @@ try {
 
         $employee = $searchHandler->getEmployeeByQR($qr_code, $autoToggle);
 
+        if (isset($employee['__inactive__'])) {
+          $response['success']    = false;
+          $response['error_code'] = 'EMPLOYEE_INACTIVE';
+          $response['message']    = 'Access denied. Employee is inactive.';
+          break;
+        }
+        
         if ($employee) {
           $response['success'] = true;
           $response['data']    = $employee;

@@ -333,12 +333,39 @@ input[type="text"] {
   background-size: 300% 300%;
   background-clip: text;
   -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  -webkit-text-fill-color: #c0392b !important;
   text-shadow: none;
   opacity: 0;
   animation:
     fadeOut 3s ease-out,
     gradientShift 4s ease-in-out infinite;
+  z-index: 1000;
+  white-space: nowrap;
+}
+
+.inactive-message {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 8vmin;
+  font-weight: 900;
+    background: linear-gradient(
+    45deg,
+    #ff6b6b,
+    #4ecdc4,
+    #45b7d1,
+    #96ceb4,
+    #ffeaa7,
+    #fd79a8
+  );
+  background-size: 300% 300%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: #c0392b !important;
+  text-shadow: none;
+  opacity: 0;
+  animation: fadeOut 3s ease-out;
   z-index: 1000;
   white-space: nowrap;
 }

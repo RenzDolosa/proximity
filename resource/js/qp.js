@@ -279,6 +279,13 @@ async function searchEmployees(query) {
 
     const data = await response.json();
 
+    if (!data.success && data.error_code === 'EMPLOYEE_INACTIVE') {
+      messageEl.innerHTML = `<p class="no-results-message inactive-message">⛔ Employee Inactive</p>`;
+      playInactiveSound();
+      blockSearchInput();
+      return;
+    }
+    
     if (data.success) {
       currentResults = Array.isArray(data.data) ? data.data : [data.data];
 

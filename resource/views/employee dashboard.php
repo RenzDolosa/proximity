@@ -374,7 +374,7 @@ if ($databaseConnected) {
           <div class="card-header">
             <span class="card-title"><i class="fas fa-history" style="color:#6366f1;margin-right:6px;"></i>Recent Activity</span>
           </div>
-          <div class="card-body" style="padding: 0 150px 20px 150px;">
+          <div class="card-body" style="padding: 0 50px 20px;">
             <?php if (!empty($recentLogs)): ?>
               <div class="activity-list">
                 <?php foreach (array_slice($recentLogs, 0, 10) as $log):

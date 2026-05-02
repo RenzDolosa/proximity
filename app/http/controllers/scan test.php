@@ -43,7 +43,7 @@ $email = $_SESSION['email'] ?? '';
 
   <background>
     <div class="background-image" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; z-index: 0; pointer-events: none;">
-      <img src="../../../resource/assets/logo/proximity-logo.svg" loading="lazy" alt="Proximity Code" style="width: 45%; height: 90vh; object-fit: contain;">
+      <img src="../../../resource/assets/logo/proximity-logo.svg" loading="lazy" alt="Proximity Code" style="width: 50%; height: 100vh; object-fit: contain;">
     </div>
   </background>
 

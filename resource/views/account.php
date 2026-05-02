@@ -293,7 +293,7 @@ try {
                   <div class="stat-icon-sm" style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i></div>
                   <div class="stat-value"><?= number_format($userStats['total_violations']); ?></div>
                 </div>
-                <div class="stat-label">Total Violators</div>
+                <div class="stat-label">Total Incidents</div>
               </div>
               <div class="stat-card">
                 <div class="stat-top">
