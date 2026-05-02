@@ -17,6 +17,11 @@ if (!isLoggedIn()) {
 
 $user = getCurrentUser();
 
+function formatLocalTime(string $timestamp, string $format = 'F j, Y g:i A'): string
+{
+  return (new DateTime($timestamp, new DateTimeZone(APP_TIMEZONE)))->format($format);
+}
+
 // ── Database connectivity check ───────────────────────────────────────────────
 try {
   $userDb            = getUserDBConnection($userId);
@@ -405,22 +410,22 @@ $audioIconMap = [
             <div class="info-grid">
               <div class="info-item">
                 <div class="info-label">Username</div>
-                <div class="info-value"><?= htmlspecialchars($user['username'], ENT_QUOTES) ?></div>
+                <div class="info-value"><?= htmlspecialchars($user['username'], ENT_QUOTES); ?></div>
               </div>
               <div class="info-item">
                 <div class="info-label">Email</div>
-                <div class="info-value" style="font-size:12px;"><?= htmlspecialchars($user['email'], ENT_QUOTES) ?></div>
+                <div class="info-value"><?= htmlspecialchars($user['email'], ENT_QUOTES); ?></div>
               </div>
               <div class="info-item">
                 <div class="info-label">Account Created</div>
-                <div class="info-value" style="font-size:12px;">
-                  <?= $accountInfo['created_at'] ? date('M j, Y g:i A', strtotime($accountInfo['created_at'])) : 'N/A' ?>
+                <div class="info-value">
+                  <?= htmlspecialchars($accountInfo['created_at'] ? formatLocalTime($accountInfo['created_at']) : 'N/A'); ?>
                 </div>
               </div>
               <div class="info-item">
                 <div class="info-label">Last Login</div>
-                <div class="info-value" style="font-size:12px;">
-                  <?= $accountInfo['last_login'] ? date('M j, Y g:i A', strtotime($accountInfo['last_login'])) : 'N/A' ?>
+                <div class="info-value">
+                  <?= htmlspecialchars($accountInfo['last_login'] ? formatLocalTime($accountInfo['last_login']) : 'N/A'); ?>
                 </div>
               </div>
             </div>

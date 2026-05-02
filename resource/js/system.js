@@ -514,6 +514,12 @@ async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
     const hasInactive = employee.status.toLowerCase() === "inactive";
     const hasCheckedOut = checkStatus === "OUT";
 
+    if (hasInactive) {
+      playInactiveSound();
+      showAlert("Access denied. Employee is inactive.", "error");
+      return;
+    }
+    
     const logData = {
       user_id: employee.user_id,
       employee_id: employee.id,

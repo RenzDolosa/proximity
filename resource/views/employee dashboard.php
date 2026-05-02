@@ -23,6 +23,7 @@ $stats = [
   'today_in'           => 0,
   'today_out'          => 0,
   'total_proxcode'     => 0,
+  'total_main_gate'    => 0,
 ];
 
 try {
@@ -57,7 +58,7 @@ if ($databaseConnected) {
       'active_employees'   => "SELECT COUNT(*) FROM employees WHERE status = 'Active'",
       'inactive_employees' => "SELECT COUNT(*) FROM employees WHERE status = 'Inactive'",
       'total_department'   => "SELECT COUNT(DISTINCT brand) FROM employees WHERE brand IS NOT NULL AND TRIM(brand) != ''",
-      'total_position' => "SELECT COUNT(DISTINCT position) FROM employees WHERE position IS NOT NULL AND TRIM(position) != ''",
+      'total_position'     => "SELECT COUNT(DISTINCT position) FROM employees WHERE position IS NOT NULL AND TRIM(position) != ''",
       'total_scanned'      => "SELECT COUNT(*) FROM employee_access_log",
       'active_scan'        => "SELECT COUNT(*) FROM employee_access_log WHERE status = 'Active'",
       'inactive_scan'      => "SELECT COUNT(*) FROM employee_access_log WHERE status = 'Inactive'",
@@ -65,6 +66,7 @@ if ($databaseConnected) {
       'today_in'           => "SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'IN' AND DATE(access_timestamp) = CURDATE()",
       'today_out'          => "SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'OUT' AND DATE(access_timestamp) = CURDATE()",
       'total_proxcode'     => "SELECT COUNT(*) FROM code",
+      'total_main_gate'    => "SELECT COUNT(*) FROM users WHERE user_group = 'Main Gate'",
     ];
 
     foreach ($queries as $key => $sql) {
@@ -312,10 +314,10 @@ if ($databaseConnected) {
               </div>
               <div class="stat-card">
                 <div class="stat-top">
-                  <div class="stat-icon-sm" style="color:#f59e0b;"></div>
-                  <div class="stat-value"></div>
+                  <div class="stat-icon-sm" style="color:#3b82f6;"><i class="fas fa-door-open"></i></div>
+                  <div class="stat-value"><?= number_format($stats['total_main_gate']); ?></div>
                 </div>
-                <div class="stat-label"></div>
+                <div class="stat-label">Main Gate Scanners</div>
               </div>
               <div class="stat-card">
                 <div class="stat-top">

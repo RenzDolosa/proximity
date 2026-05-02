@@ -326,29 +326,23 @@ try {
 
             <div class="info-grid">
               <div class="info-item">
-                <div class="info-label">Connection</div>
-                <div class="info-value" style="color:<?= $databaseConnected ? '#16a34a' : '#dc2626'; ?>;">
-                  <?= $databaseConnected ? '✓ Connected' : '✗ Offline'; ?>
-                </div>
-              </div>
-              <div class="info-item">
                 <div class="info-label">Username</div>
-                <div class="info-value"><?= htmlspecialchars($user['username']); ?></div>
+                <div class="info-value"><?= htmlspecialchars($user['username'], ENT_QUOTES); ?></div>
               </div>
               <div class="info-item">
                 <div class="info-label">Email</div>
-                <div class="info-value"><?= htmlspecialchars($user['email']); ?></div>
+                <div class="info-value"><?= htmlspecialchars($user['email'], ENT_QUOTES); ?></div>
               </div>
               <div class="info-item">
                 <div class="info-label">Account Created</div>
                 <div class="info-value">
-                  <?= $accountInfo['created_at'] ? formatLocalTime($accountInfo['created_at']) : 'N/A'; ?>
+                  <?= htmlspecialchars($accountInfo['created_at'] ? formatLocalTime($accountInfo['created_at']) : 'N/A'); ?>
                 </div>
               </div>
               <div class="info-item">
                 <div class="info-label">Last Login</div>
                 <div class="info-value">
-                  <?= $accountInfo['last_login'] ? formatLocalTime($accountInfo['last_login']) : 'N/A'; ?>
+                  <?= htmlspecialchars($accountInfo['last_login'] ? formatLocalTime($accountInfo['last_login']) : 'N/A'); ?>
                 </div>
               </div>
             </div>

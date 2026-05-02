@@ -311,6 +311,12 @@ try {
         const hasInactive = employee.status.toLowerCase() === "inactive";
         const hasCheckedOut = checkStatus === "OUT";
 
+        if (hasInactive) {
+          playInactiveSound();
+          showAlert("Access denied. Employee is inactive.", "error");
+          return;
+        }
+        
         const logData = {
           employee_id: employee.id,
           fullname: employee.fullname,

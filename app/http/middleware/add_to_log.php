@@ -419,6 +419,17 @@ try {
         $input['employee_id'] = $existingEmployee['id'];
       }
 
+      $employeeStatus = trim($input['status'] ?? '');
+      if (strtolower($employeeStatus) === 'inactive') {
+        http_response_code(200);
+        echo json_encode([
+          'success'    => false,
+          'error_code' => 'EMPLOYEE_INACTIVE',
+          'message'    => 'Access denied. Employee is inactive.',
+        ]);
+        exit();
+      }
+      
       // Prepare log data
       $logData = [
         'employee_id' => $input['employee_id'] ?? null,
