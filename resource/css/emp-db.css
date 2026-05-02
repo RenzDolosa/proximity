@@ -45,7 +45,7 @@ body {
 
 .shortcut-item {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   gap: 3px;
   padding: 6px 14px;
@@ -139,6 +139,12 @@ body {
   gap: 10px;
 }
 
+.two-col-card {
+  display: grid;
+  grid-template-columns: minmax(360px, 420px) 1fr 1fr;
+  gap: 10px;
+}
+
 /* ── Cards ── */
 .card {
   background: var(--surface);
@@ -151,7 +157,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 6px 8px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -168,7 +174,7 @@ body {
 /* ── Stats grid ── */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   gap: 3px;
 }
 
@@ -176,7 +182,7 @@ body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 12px 14px;
+  padding: 6px 7px;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -409,16 +415,24 @@ body {
   white-space: nowrap;
 }
 
-.lb-table thead th:first-child { text-align: left; }
-.lb-table thead th:nth-child(2) { text-align: left; }
+.lb-table thead th:first-child {
+  text-align: left;
+}
+.lb-table thead th:nth-child(2) {
+  text-align: left;
+}
 
 .lb-table tbody tr {
   border-bottom: 1px solid var(--border);
   transition: background 0.1s;
 }
 
-.lb-table tbody tr:last-child { border-bottom: none; }
-.lb-table tbody tr:hover { background: var(--bg); }
+.lb-table tbody tr:last-child {
+  border-bottom: none;
+}
+.lb-table tbody tr:hover {
+  background: var(--bg);
+}
 
 .lb-table tbody td {
   padding: 4px 3px;
@@ -445,25 +459,46 @@ body {
 }
 
 .lb-table th:first-child,
-.lb-table td:first-child { width: 36px; }
+.lb-table td:first-child {
+  width: 36px;
+}
 
 .lb-table th:nth-child(2),
-.lb-table td:nth-child(2) { width: auto; }
+.lb-table td:nth-child(2) {
+  width: auto;
+}
 
 .lb-table th:nth-child(3),
 .lb-table td:nth-child(3),
 .lb-table th:nth-child(4),
 .lb-table td:nth-child(4),
 .lb-table th:nth-child(5),
-.lb-table td:nth-child(5) { width: 38px; }
+.lb-table td:nth-child(5) {
+  width: 38px;
+}
 
-.lb-rank-1 { color: #f59e0b !important; }
-.lb-rank-2 { color: #94a3b8 !important; }
-.lb-rank-3 { color: #b45309 !important; }
+.lb-rank-1 {
+  color: #f59e0b !important;
+}
+.lb-rank-2 {
+  color: #94a3b8 !important;
+}
+.lb-rank-3 {
+  color: #b45309 !important;
+}
 
-.lb-in  { color: #22c55e; font-weight: 400; }
-.lb-out { color: #f59e0b; font-weight: 400; }
-.lb-total { font-weight: 600; color: var(--text); }
+.lb-in {
+  color: #22c55e;
+  font-weight: 400;
+}
+.lb-out {
+  color: #f59e0b;
+  font-weight: 400;
+}
+.lb-total {
+  font-weight: 600;
+  color: var(--text);
+}
 
 .lb-footer {
   display: flex;
@@ -476,14 +511,18 @@ body {
   color: var(--text);
 }
 
-.lb-footer .lb-in  { font-size: 10px; }
-.lb-footer .lb-out { font-size: 10px; }
+.lb-footer .lb-in {
+  font-size: 10px;
+}
+.lb-footer .lb-out {
+  font-size: 10px;
+}
 
 .lb-scroll {
   overflow-y: auto;
   flex: 1;
-  margin: 0 -16px;          /* pull to card edges */
-  padding: 0 16px;          /* restore inner padding for content */
+  margin: 0 -16px; /* pull to card edges */
+  padding: 0 16px; /* restore inner padding for content */
   scrollbar-gutter: stable; /* reserve space so content doesn't shift */
 }
 
@@ -514,6 +553,11 @@ body {
 
   /* ── Two-col → single column ── */
   .two-col {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .two-col-card {
     grid-template-columns: 1fr;
     gap: 5px;
   }
@@ -619,7 +663,7 @@ body {
 
   /* ── Card header ── */
   .card-header {
-    padding: 10px 12px;
+    padding: 5px 6px;
   }
 
   .card-title {

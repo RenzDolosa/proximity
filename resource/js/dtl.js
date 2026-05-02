@@ -1565,7 +1565,7 @@ function populateFilter(employeeList) {
   buildSelect(shift, "Shift", "No Shift", shiftMap);
   buildSelect(violation, "Violation", "No Violation", violationMap);
   buildSelect(inOut, "In/Out Status", "No In/Out Status", inOutMap);
-  buildSelect(userId, "Gate", "No Gate", userIdMap);
+  buildSelect(userId, "Operator", "No Operator", userIdMap);
 
   updateColor();
 }

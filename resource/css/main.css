@@ -45,7 +45,7 @@ body {
 
 .shortcut-item {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   gap: 3px;
   padding: 6px 14px;
@@ -175,7 +175,7 @@ body {
 /* ── Two-column layout ── */
 .two-col {
   display: grid;
-  grid-template-columns: minmax(480px, 540px) 1fr;
+  grid-template-columns: minmax(360px, 420px) 1fr;
   gap: 10px;
 }
 

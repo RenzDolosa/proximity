@@ -286,7 +286,7 @@ if ($databaseConnected) {
               <th class="Col9">Proximity Code</th>
               <th>Timestamp</th>
               <th>Check Status</th>
-              <th>Gate</th>
+              <th>Operator</th>
             </tr>
           </thead>
           <tbody id="employeeTableBody">

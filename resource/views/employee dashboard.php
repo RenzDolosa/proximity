@@ -14,6 +14,8 @@ $stats = [
   'total_employees'    => 0,
   'active_employees'   => 0,
   'inactive_employees' => 0,
+  'total_department'   => 0,
+  'total_position'     => 0,
   'total_scanned'      => 0,
   'active_scan'        => 0,
   'inactive_scan'      => 0,
@@ -54,6 +56,8 @@ if ($databaseConnected) {
       'total_employees'    => "SELECT COUNT(*) FROM employees",
       'active_employees'   => "SELECT COUNT(*) FROM employees WHERE status = 'Active'",
       'inactive_employees' => "SELECT COUNT(*) FROM employees WHERE status = 'Inactive'",
+      'total_department'   => "SELECT COUNT(DISTINCT brand) FROM employees WHERE brand IS NOT NULL AND TRIM(brand) != ''",
+      'total_position' => "SELECT COUNT(DISTINCT position) FROM employees WHERE position IS NOT NULL AND TRIM(position) != ''",
       'total_scanned'      => "SELECT COUNT(*) FROM employee_access_log",
       'active_scan'        => "SELECT COUNT(*) FROM employee_access_log WHERE status = 'Active'",
       'inactive_scan'      => "SELECT COUNT(*) FROM employee_access_log WHERE status = 'Inactive'",
@@ -182,22 +186,102 @@ if ($databaseConnected) {
 
   <div class="page-body">
 
-    <!-- Welcome banner -->
-    <div class="welcome-banner">
-      <div class="wb-left">
-        <h2><i class="fas fa-chart-line" style="margin-right:8px;opacity:.8;"></i>Employee Data Insights</h2>
-        <p>Connected to <strong><?= htmlspecialchars($myDatabase); ?></strong></p>
-        <?php if ($databaseConnected): ?>
-          <div class="status-pill ok"><i class="fas fa-circle"></i> Database connected</div>
-        <?php else: ?>
-          <div class="status-pill err"><i class="fas fa-exclamation-circle"></i> Connection error</div>
-        <?php endif; ?>
+    <div class="two-col-card">
+
+      <!-- Welcome banner -->
+      <div class="welcome-banner">
+        <div class="wb-left">
+          <h2><i class="fas fa-chart-line" style="margin-right:8px;opacity:.8;"></i>Employee Data Insights</h2>
+          <p>Connected to <strong><?= htmlspecialchars($myDatabase); ?></strong></p>
+          <?php if ($databaseConnected): ?>
+            <div class="status-pill ok"><i class="fas fa-circle"></i> Database connected</div>
+          <?php else: ?>
+            <div class="status-pill err"><i class="fas fa-exclamation-circle"></i> Connection error</div>
+          <?php endif; ?>
+        </div>
+        <div class="wb-right">
+          <i class="fas fa-clock" style="margin-right:4px;"></i>
+          <span id="wb-time"></span><br>
+          <span id="wb-date" style="margin-top:3px;display:block;"></span>
+        </div>
       </div>
-      <div class="wb-right">
-        <i class="fas fa-clock" style="margin-right:4px;"></i>
-        <span id="wb-time"></span><br>
-        <span id="wb-date" style="margin-top:3px;display:block;"></span>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><i class="fas fa-users" style="color:#3b82f6;margin-right:6px;"></i>Employee Stats</span>
+        </div>
+        <div class="card-body">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-top">
+                <div class="stat-icon-sm" style="color:#3b82f6;"><i class="fas fa-users"></i></div>
+                <div class="stat-value"><?= number_format($stats['total_employees']); ?></div>
+              </div>
+              <div class="stat-label">Total Employees</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-top">
+                <div class="stat-icon-sm" style="color:#22c55e;"><i class="fas fa-user-check"></i></div>
+                <div class="stat-value"><?= number_format($stats['active_employees']); ?></div>
+              </div>
+              <div class="stat-label">Active</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-top">
+                <div class="stat-icon-sm" style="color:#ef4444;"><i class="fas fa-user-times"></i></div>
+                <div class="stat-value"><?= number_format($stats['inactive_employees']); ?></div>
+              </div>
+              <div class="stat-label">Inactive</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-top">
+                <div class="stat-icon-sm" style="color:#8b5cf6;"><i class="fas fa-id-card"></i></div>
+                <div class="stat-value"><?= number_format($stats['total_proxcode']); ?></div>
+              </div>
+              <div class="stat-label">Proximity Codes</div>
+            </div>
+          </div>
+        </div>
       </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><i class="fas fa-fingerprint" style="color:#f59e0b;margin-right:6px;"></i>Access Log Stats</span>
+        </div>
+        <div class="card-body">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-top">
+                <div class="stat-icon-sm" style="color:#3b82f6;"><i class="fas fa-list"></i></div>
+                <div class="stat-value"><?= number_format($stats['total_scanned']); ?></div>
+              </div>
+              <div class="stat-label">Total Scanned</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-top">
+                <div class="stat-icon-sm" style="color:#22c55e;"><i class="fas fa-check-circle"></i></div>
+                <div class="stat-value"><?= number_format($stats['active_scan']); ?></div>
+              </div>
+              <div class="stat-label">Active Scans</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-top">
+                <div class="stat-icon-sm" style="color:#ef4444;"><i class="fas fa-times-circle"></i></div>
+                <div class="stat-value"><?= number_format($stats['inactive_scan']); ?></div>
+              </div>
+              <div class="stat-label">Inactive Scans</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-top">
+                <div class="stat-icon-sm" style="color:#f97316;"><i class="fas fa-calendar-day"></i></div>
+                <div class="stat-value"><?= number_format($stats['today_attendance']); ?></div>
+              </div>
+              <div class="stat-label">Today &nbsp;<span style="font-weight:400;font-size:10px;">In:<?= $stats['today_in']; ?> Out:<?= $stats['today_out']; ?></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- Two-column: Stats + Recent Activity -->
@@ -214,69 +298,31 @@ if ($databaseConnected) {
             <div class="stats-grid">
               <div class="stat-card">
                 <div class="stat-top">
-                  <div class="stat-icon-sm" style="color:#3b82f6;"><i class="fas fa-users"></i></div>
-                  <div class="stat-value"><?= number_format($stats['total_employees']); ?></div>
+                  <div class="stat-icon-sm" style="color:#22c55e;"><i class="fas fa-building"></i></div>
+                  <div class="stat-value"><?= number_format($stats['total_department']); ?></div>
                 </div>
-                <div class="stat-label">Total Employees</div>
+                <div class="stat-label">Total Departments</div>
               </div>
               <div class="stat-card">
                 <div class="stat-top">
-                  <div class="stat-icon-sm" style="color:#22c55e;"><i class="fas fa-user-check"></i></div>
-                  <div class="stat-value"><?= number_format($stats['active_employees']); ?></div>
+                  <div class="stat-icon-sm" style="color:#f59e0b;"><i class="fas fa-briefcase"></i></div>
+                  <div class="stat-value"><?= number_format($stats['total_position']); ?></div>
                 </div>
-                <div class="stat-label">Active</div>
+                <div class="stat-label">Total Positions</div>
               </div>
               <div class="stat-card">
                 <div class="stat-top">
-                  <div class="stat-icon-sm" style="color:#ef4444;"><i class="fas fa-user-times"></i></div>
-                  <div class="stat-value"><?= number_format($stats['inactive_employees']); ?></div>
+                  <div class="stat-icon-sm" style="color:#f59e0b;"></div>
+                  <div class="stat-value"></div>
                 </div>
-                <div class="stat-label">Inactive</div>
+                <div class="stat-label"></div>
               </div>
               <div class="stat-card">
                 <div class="stat-top">
-                  <div class="stat-icon-sm" style="color:#8b5cf6;"><i class="fas fa-id-card"></i></div>
-                  <div class="stat-value"><?= number_format($stats['total_proxcode']); ?></div>
+                  <div class="stat-icon-sm" style="color:#f59e0b;"></div>
+                  <div class="stat-value"></div>
                 </div>
-                <div class="stat-label">Proximity Codes</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title"><i class="fas fa-fingerprint" style="color:#f59e0b;margin-right:6px;"></i>Access Log Stats</span>
-          </div>
-          <div class="card-body">
-            <div class="stats-grid">
-              <div class="stat-card">
-                <div class="stat-top">
-                  <div class="stat-icon-sm" style="color:#3b82f6;"><i class="fas fa-list"></i></div>
-                  <div class="stat-value"><?= number_format($stats['total_scanned']); ?></div>
-                </div>
-                <div class="stat-label">Total Scanned</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-top">
-                  <div class="stat-icon-sm" style="color:#22c55e;"><i class="fas fa-check-circle"></i></div>
-                  <div class="stat-value"><?= number_format($stats['active_scan']); ?></div>
-                </div>
-                <div class="stat-label">Active Scans</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-top">
-                  <div class="stat-icon-sm" style="color:#ef4444;"><i class="fas fa-times-circle"></i></div>
-                  <div class="stat-value"><?= number_format($stats['inactive_scan']); ?></div>
-                </div>
-                <div class="stat-label">Inactive Scans</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-top">
-                  <div class="stat-icon-sm" style="color:#f97316;"><i class="fas fa-calendar-day"></i></div>
-                  <div class="stat-value"><?= number_format($stats['today_attendance']); ?></div>
-                </div>
-                <div class="stat-label">Today &nbsp;<span style="font-weight:400;font-size:10px;">In:<?= $stats['today_in']; ?> Out:<?= $stats['today_out']; ?></span></div>
+                <div class="stat-label"></div>
               </div>
             </div>
           </div>
@@ -374,15 +420,35 @@ if ($databaseConnected) {
           <div class="card-header">
             <span class="card-title"><i class="fas fa-history" style="color:#6366f1;margin-right:6px;"></i>Recent Activity</span>
           </div>
+
           <div class="card-body" style="padding: 0 50px 20px;">
+
+            <!-- Header row aligned to match activity-item layout -->
+            <div style="
+              display: flex;
+              align-items: center;
+              padding: 8px 0 6px;
+              border-bottom: 1px solid var(--border);
+              font-size: 11px;
+              font-weight: 600;
+              color: var(--text-muted);
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+            ">
+              <div style="width: 40px; flex-shrink: 0;">Image</div>
+              <div style="flex: 1; padding-left: 12px;">Fullname</div>
+              <div style="width: 70px; text-align: end;">Operators</div>
+              <div style="width: 110px; text-align: end;">Status</div>
+            </div>
+
             <?php if (!empty($recentLogs)): ?>
               <div class="activity-list">
                 <?php foreach (array_slice($recentLogs, 0, 10) as $log):
-                  $userImage  = $log['profile_image'] ?? $log['image'] ?? null;
-                  $imagePath  = $userImage ? "../../public/uploads/user/" . htmlspecialchars($userImage) : null;
-                  $imgSrc     = ($imagePath && file_exists($imagePath)) ? $imagePath : "../assets/logo/3PL.svg";
-                  $status     = strtolower($log['status'] ?? 'unknown');
-                  $check      = strtolower($log['check_status'] ?? 'unknown');
+                  $userImage   = $log['profile_image'] ?? $log['image'] ?? null;
+                  $imagePath   = $userImage ? "../../public/uploads/user/" . htmlspecialchars($userImage) : null;
+                  $imgSrc      = ($imagePath && file_exists($imagePath)) ? $imagePath : "../assets/logo/3PL.svg";
+                  $status      = strtolower($log['status'] ?? 'unknown');
+                  $check       = strtolower($log['check_status'] ?? 'unknown');
                   $statusClass = in_array($status, ['active', 'inactive']) ? "badge-{$status}" : 'badge-unknown';
                   $checkClass  = in_array($check, ['in', 'out']) ? "badge-{$check}" : 'badge-unknown';
                 ?>
@@ -391,7 +457,7 @@ if ($databaseConnected) {
                       alt="<?= htmlspecialchars($log['fullname'] ?? 'User'); ?>"
                       class="activity-avatar"
                       onerror="this.src='../assets/logo/3PL.svg';">
-                    <div class="activity-info" style="padding-left: 50px;">
+                    <div class="activity-info" style="padding-left: 12px;">
                       <div class="activity-name">
                         <strong><?= htmlspecialchars(mb_convert_case($log['fullname'] ?? 'Unknown Employee', MB_CASE_TITLE, 'UTF-8')); ?></strong>
                       </div>
@@ -399,7 +465,7 @@ if ($databaseConnected) {
                         <small><?= date('M j, Y g:i A', strtotime($log['access_timestamp'])); ?></small>
                       </div>
                     </div>
-                    <div style="text-align: end;">
+                    <div style="text-align: end; flex-shrink: 0;">
                       <?= htmlspecialchars($log['gate_name'] ?? ($log['user_first_name'] ?? 'Gate')); ?>
                       <div style="color: var(--text-muted);"><small>Gate</small></div>
                     </div>
@@ -418,7 +484,7 @@ if ($databaseConnected) {
             <?php endif; ?>
 
             <?php if ($access['datalog']): ?>
-              <div style="margin-top:16px;text-align:center;border-top:1px solid var(--border);padding-top:14px;">
+              <div style="margin-top: 16px; text-align: center; border-top: 1px solid var(--border); padding-top: 14px;">
                 <a href="../../app/services/table panel.php?tab=datalog" class="btn-link">
                   <i class="fas fa-history" style="margin-right:4px;"></i>View All Logs
                 </a>

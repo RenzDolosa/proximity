@@ -138,6 +138,16 @@ function setupEventListeners() {
   const proximityInput = document.getElementById("search_qr");
 
   function autoFocusProximity() {
+    // Never steal focus while any modal is open
+    const modalOpen =
+      document.getElementById("employeeModal")?.style.display === "block" ||
+      document.getElementById("deleteModal")?.style.display === "flex" ||
+      document.getElementById("importModal")?.style.display === "block" ||
+      document.getElementById("logsModal")?.style.display === "block" ||
+      document.getElementById("violationsModal")?.style.display === "block";
+
+    if (modalOpen) return;
+
     const active = document.activeElement;
     const isTyping =
       active &&
@@ -154,16 +164,51 @@ function setupEventListeners() {
   document.addEventListener("click", autoFocusProximity);
   document.addEventListener("focusin", autoFocusProximity);
 
+  // Position → A–Z, only show after user types
   setupFieldSuggestions("position", "position-suggestions", () =>
-    allEmployees.map((e) => e.position),
+    [...allEmployees]
+      .sort((a, b) => (a.position || "").localeCompare(b.position || ""))
+      .map((e) => e.position),
   );
 
+  // Brand / Department → A–Z, only show after user types
   setupFieldSuggestions("brand", "brand-suggestions", () =>
-    allEmployees.map((e) => e.brand),
+    [...allEmployees]
+      .sort((a, b) => (a.brand || "").localeCompare(b.brand || ""))
+      .map((e) => e.brand),
   );
 
+  // Violation — only show after user types
   setupFieldSuggestions("violation", "violation-suggestions", () =>
     allEmployees.map((e) => e.violation),
+  );
+
+  // Fullname → A–Z by lastname, only show after user types
+  setupFieldSuggestions(
+    "fullname",
+    "fullname-suggestions",
+    () =>
+      [...allEmployees]
+        .sort((a, b) => {
+          const lastName = (name) => {
+            const parts = (name || "").trim().split(/\s+/);
+            return parts[parts.length - 1].toLowerCase();
+          };
+          return lastName(a.fullname).localeCompare(lastName(b.fullname));
+        })
+        .map((e) => e.fullname),
+    { requireInput: true },
+  );
+
+  // EMPID → high to low, only show after user types
+  setupFieldSuggestions(
+    "employee_id",
+    "empid-suggestions",
+    () =>
+      [...allEmployees]
+        .sort((a, b) => Number(b.id) - Number(a.id))
+        .map((e) => String(e.id)),
+    { raw: true },
   );
 
   // Proximity code — available codes from proxcode_backend, with icon + badge
@@ -217,7 +262,15 @@ function setupEventListeners() {
               (!assignedSet.has(cLower) || cLower === currentCode)
             );
           })
-          .map((c) => c.qr_code);
+          .map((c) => c.qr_code)
+          .sort((a, b) => {
+            const numA = Number(a);
+            const numB = Number(b);
+            const bothNumeric = !isNaN(numA) && !isNaN(numB);
+            return bothNumeric
+              ? numA - numB
+              : String(a).localeCompare(String(b));
+          });
       } catch (e) {
         console.warn("QR suggestions: failed to load", e);
       }
@@ -657,10 +710,12 @@ async function renderEmployeeTable() {
             <td><small>${safeCreatedAt}</small></td>
             <td><small>${safeUpdatedAt}</small></td>
 
-            ${(window.PERMISSIONS.manualInOut ||
-              window.PERMISSIONS.logs        ||
-              window.PERMISSIONS.edit        ||
-              window.PERMISSIONS.delete) ? `
+            ${
+              window.PERMISSIONS.manualInOut ||
+              window.PERMISSIONS.logs ||
+              window.PERMISSIONS.edit ||
+              window.PERMISSIONS.delete
+                ? `
             <td style="position: relative; width: 160px;">
 
               <!-- ACTIONS TOGGLE -->
@@ -690,7 +745,9 @@ async function renderEmployeeTable() {
               <div class="actions-panel">
                 <small style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); text-align: center; color: #fff;">${toProperCase(safeFullname)}</small>
 
-                ${window.PERMISSIONS.manualInOut ? `
+                ${
+                  window.PERMISSIONS.manualInOut
+                    ? `
                 <!-- IN / OUT -->
                 <div style="display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #e2e8f0;">
                   <button
@@ -725,9 +782,13 @@ async function renderEmployeeTable() {
                     <span style="width:7px;height:7px;background:#fff;border-radius:50%;display:inline-block;"></span> OUT
                   </button>
                 </div>
-                ` : ''}
+                `
+                    : ""
+                }
 
-                ${window.PERMISSIONS.logs ? `
+                ${
+                  window.PERMISSIONS.logs
+                    ? `
                 <!-- LOGS -->
                 <button
                   data-emp-id="${safeId}"
@@ -742,9 +803,13 @@ async function renderEmployeeTable() {
                   ">
                   <i class="fas fa-history"></i> LOGS
                 </button>
-                ` : ''}
+                `
+                    : ""
+                }
 
-                ${window.PERMISSIONS.edit ? `
+                ${
+                  window.PERMISSIONS.edit
+                    ? `
                 <!-- EDIT -->
                 <button
                   data-emp-id="${numericId}"
@@ -758,9 +823,13 @@ async function renderEmployeeTable() {
                   ">
                   <i class="fas fa-edit"></i> EDIT
                 </button>
-                ` : ''}
+                `
+                    : ""
+                }
 
-                ${window.PERMISSIONS.delete ? `
+                ${
+                  window.PERMISSIONS.delete
+                    ? `
                 <!-- DELETE -->
                 <button
                   data-emp-id="${safeId}"
@@ -774,11 +843,15 @@ async function renderEmployeeTable() {
                   ">
                   <i class="fas fa-trash-alt"></i> DELETE
                 </button>
-                ` : ''}
+                `
+                    : ""
+                }
 
               </div>
             </td>
-            ` : ''}
+            `
+                : ""
+            }
           </tr>
       `;
     })
@@ -1182,7 +1255,9 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
       .map((name, i) => {
         const safe = escapeHtml(name);
         // Display label: proper-cased for position/brand/violation; raw for qr_code (options.raw)
-        const displayLabel = options.raw ? safe : escapeHtml(toProperCase(name));
+        const displayLabel = options.raw
+          ? safe
+          : escapeHtml(toProperCase(name));
 
         // Only apply highlight markup when the user has actually typed something
         let hl = displayLabel;
@@ -1219,6 +1294,7 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
 
   // Focus: optionally run async loader first
   input.addEventListener("focus", async () => {
+    if (options.requireInput && !input.value.trim()) return;
     show(input.value);
     if (options.onFocus) {
       await options.onFocus();
@@ -2013,6 +2089,23 @@ function closeModal() {
   if (imageInput) imageInput.value = "";
 }
 
+// ── Field error highlight ────────────────────────────────────────────────────
+function markFieldError(inputId) {
+  const el = document.getElementById(inputId);
+  if (!el) return;
+  el.style.borderColor = "#ef4444";
+  el.style.boxShadow = "0 0 0 2px rgba(239,68,68,0.2)";
+  el.addEventListener(
+    "input",
+    function clearErr() {
+      el.style.borderColor = "";
+      el.style.boxShadow = "";
+      el.removeEventListener("input", clearErr);
+    },
+    { once: true },
+  );
+}
+
 // Handle form submission
 async function handleFormSubmit(e) {
   e.preventDefault();
@@ -2046,37 +2139,142 @@ async function handleFormSubmit(e) {
       return;
     }
 
-    if (currentAction === "edit" && empid !== originalId) {
-      const idTaken = employees.some((emp) => String(emp.id) === String(empid));
-      if (idTaken) {
+    // ── Server-side uniqueness checks ─────────────────────────────────────
+    // Check EMPID, Fullname, and Proximity Code against the full database,
+    // not just the current page — avoids false negatives on paginated data.
+    try {
+      const checkRes = await fetch(
+        `manpower_backend.php?action=get&page=1&limit=1` +
+          `&id=${encodeURIComponent(empid)}`,
+        {
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "X-Silent-Request": "true",
+          },
+        },
+      );
+      const checkData = await checkRes.json();
+
+      if (checkData.success && checkData.total > 0) {
+        // Allow if editing the same record
+        const conflict = checkData.data.find(
+          (e) =>
+            String(e.id) === String(empid) &&
+            String(e.id) !== String(originalId),
+        );
+        if (conflict) {
+          showAlert(
+            `Employee ID "${escapeHtml(empid)}" is already in use.`,
+            "error",
+          );
+          markFieldError("employee_id");
+          document.getElementById("employee_id").focus();
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("EMPID check failed, falling back to local check:", e);
+      // Fallback to local check
+      if (currentAction === "edit" && empid !== originalId) {
+        const idTaken = employees.some(
+          (emp) => String(emp.id) === String(empid),
+        );
+        if (idTaken) {
+          showAlert(
+            `Employee ID "${escapeHtml(empid)}" is already in use.`,
+            "error",
+          );
+          markFieldError("employee_id");
+          document.getElementById("employee_id").focus();
+          return;
+        }
+      }
+    }
+
+    try {
+      const nameRes = await fetch(
+        `manpower_backend.php?action=get&page=1&limit=1` +
+          `&fullname=${encodeURIComponent(fullname)}`,
+        {
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "X-Silent-Request": "true",
+          },
+        },
+      );
+      const nameData = await nameRes.json();
+
+      if (nameData.success && nameData.total > 0) {
+        const conflict = nameData.data.find(
+          (e) =>
+            e.fullname.toLowerCase().trim() === fullname.toLowerCase().trim() &&
+            String(e.id) !== String(originalId),
+        );
+        if (conflict) {
+          showAlert(
+            `Employee "${escapeHtml(fullname)}" already exists.`,
+            "error",
+          );
+          markFieldError("fullname");
+          document.getElementById("fullname").focus();
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Fullname check failed, falling back to local check:", e);
+      const isDuplicate = employees.some((emp) => {
+        if (
+          currentAction === "edit" &&
+          originalId &&
+          String(emp.id) === String(originalId)
+        )
+          return false;
+        return (
+          emp.fullname.toLowerCase().trim() === fullname.toLowerCase().trim()
+        );
+      });
+      if (isDuplicate) {
         showAlert(
-          `Employee ID "${escapeHtml(empid)}" is already in use`,
+          `Employee "${escapeHtml(fullname)}" already exists.`,
           "error",
         );
+        markFieldError("fullname");
+        document.getElementById("fullname").focus();
         return;
       }
     }
 
-    const isDuplicate = employees.some((emp) => {
-      if (
-        currentAction === "edit" &&
-        originalId &&
-        String(emp.id) === String(originalId)
-      ) {
-        return false;
-      }
-      return (
-        emp.fullname.toLowerCase().trim() === fullname.toLowerCase().trim()
-      );
-    });
+    const qrCode = document.getElementById("qr_code").value.trim();
+    if (qrCode) {
+      try {
+        const qrRes = await fetch(
+          `manpower_backend.php?action=check_qr&qr_code=${encodeURIComponent(qrCode)}`,
+          {
+            headers: {
+              "X-Requested-With": "XMLHttpRequest",
+              "X-Silent-Request": "true",
+            },
+          },
+        );
+        const qrData = await qrRes.json();
 
-    if (isDuplicate) {
-      showAlert(
-        `Employee with name "${escapeHtml(fullname)}" already exists!`,
-        "error",
-      );
-      return;
+        if (qrData.success && qrData.exists) {
+          // Allow if it belongs to the employee being edited
+          if (String(qrData.data?.id) !== String(originalId)) {
+            showAlert(
+              `Proximity Code "${escapeHtml(qrCode)}" is already assigned to another employee.`,
+              "error",
+            );
+            markFieldError("qr_code");
+            document.getElementById("qr_code").focus();
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("Proximity code check failed:", e);
+      }
     }
+    // ── End uniqueness checks ─────────────────────────────────────────────
 
     const imageInput = document.getElementById("image");
     if (imageInput.files.length > 0) {

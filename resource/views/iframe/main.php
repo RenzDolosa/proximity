@@ -219,7 +219,7 @@ if ($databaseConnected) {
       <div class="welcome-banner">
         <div class="wb-left">
           <h2><i class="fas fa-server" style="margin-right:8px;opacity:.8;"></i>Management Panel</h2>
-          <p>Welcome back, <strong><?= htmlspecialchars($username ?? 'User'); ?></strong> &nbsp;&middot;&nbsp; <?= htmlspecialchars($email ?? ''); ?></p>
+          <p>Welcome back, <strong><?= htmlspecialchars($username ?? 'User'); ?></strong></p>
           <?php if ($databaseConnected): ?>
             <div class="status-pill ok"><i class="fas fa-circle"></i> Database connected</div>
           <?php else: ?>

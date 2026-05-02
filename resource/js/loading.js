@@ -248,16 +248,6 @@ function showLoadingForCustomOperation(operationName, duration = 2000) {
 
 // ── Enhanced form submission handling ──
 document.addEventListener('DOMContentLoaded', function() {
-  // Handle employee form submission
-  const employeeForm = document.getElementById('employeeForm');
-  if (employeeForm) {
-    employeeForm.addEventListener('submit', function() {
-      LoadingManager.show({
-        text: 'Saving',
-        subtext: 'Storing employee information...'
-      });
-    });
-  }
 
   // Handle export buttons
   document.querySelectorAll('[data-action="export"]').forEach(button => {
