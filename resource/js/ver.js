@@ -1,7 +1,7 @@
 // resource/js/ver.js --> global version system
 
 const ver = document.getElementById('version');
-ver.innerHTML = `<i class="fas fa-code-branch"></i> Version: 2.2.10`;
+ver.innerHTML = `<i class="fas fa-code-branch"></i> Version: 2.2.11`;
 ver.style.display = 'block';
 ver.style.fontFamily = 'Roboto, Arial, sans-serif';
 ver.style.fontSize = '1.5vmin';
