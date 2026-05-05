@@ -21,6 +21,9 @@ let totalRecords = 0;
 
 let activeFilters = {};
 
+const count = employees.length;
+const label = count > 1 ? "employee's" : "employee";
+
 // ─────────────────────────────────────────────────────────────────
 // SECURITY: HTML escape helper — use on ALL dynamic content
 // inserted via innerHTML to prevent stored XSS attacks.
@@ -740,7 +743,8 @@ async function renderEmployeeTable() {
       const safeViolation = escapeHtml(employee.violation);
       const safeQrCode = escapeHtml(employee.qr_code);
       const safeImage = escapeHtml(employee.image);
-      const safeId = escapeHtml(String(employee.employee_id));
+      const safeId = escapeHtml(String(employee.id));
+      const safeEmpId = escapeHtml(String(employee.employee_id));
       // 🆕 Get matched employee data from manpower_backend
       const matchedEmployeeData =
         qrImageMap[employee.qr_code.trim().toLowerCase()];
@@ -776,23 +780,25 @@ async function renderEmployeeTable() {
 
       return `
           <tr>
-              <td>${startIndex + index + 1}</td>
+              <td style="text-align: center; width: 50px;">${startIndex + index + 1}</td>
               <td>
                 <div><strong>${toProperCase(safeFullname)}</strong></div>
-                <div class="emp-id"><strong>EMPID: ${safeId}</strong></div>
+                <div class="emp-id"><strong>EMPID: ${safeEmpId}</strong></div>
               </td>
               <td>
                 <div>${toProperCase(safeBrand)}</div>
                 <div class="emp-position"><strong>Position: ${toProperCase(safePosition)}</strong></div>
               </td>
-              <td><span class="status-${safeStatus.toLowerCase()}">${safeStatus}</span></td>
-              <td>${safeShift}</td>
+              <td>
+                <div>${safeShift}</div>
+                <div class="emp-status"><strong>Status: <span class="status-${safeStatus.toLowerCase()}">${safeStatus}</span></strong></div>
+              </td>
               <td class="Col7">
                 <div style="display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;justify-content:center;">
                   ${
                     employee.violation && employee.violation.trim()
                       ? `<button
-                        data-emp-id="${safeId}"
+                        data-emp-id="${safeEmpId}"
                         data-fullname="${safeFullname}"
                         data-violation="${safeViolation}"
                         onclick="openViolationPopupFromBtn(this)"
@@ -827,13 +833,111 @@ async function renderEmployeeTable() {
                 employee.check_status || "N/A"
               }</div></div></td>
               <td>${employee.gate_name || employee.user_id || "N/A"}</td>
+
+              ${
+              window.PERMISSIONS.delete
+                ? `
+            <td style="position: relative; width: 160px;">
+
+              <!-- ACTIONS TOGGLE -->
+              <button
+                onclick="toggleActionsPanel(this)"
+                data-emp-id="${safeId}"
+                class="actions-toggle-btn"
+                style="
+                  width: 100%;
+                  padding: 6px 12px;
+                  font-size: 12px;
+                  font-weight: 700;
+                  letter-spacing: 1px;
+                  border: 1.5px solid #cbd5e1;
+                  border-radius: 10px;
+                  background: #fff;
+                  color: #1e293b;
+                  cursor: pointer;
+                  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+                  white-space: nowrap;
+                "
+              >
+                ACTIONS
+              </button>
+
+              <!-- FLOATING PANEL -->
+              <div class="actions-panel">
+                <small style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); text-align: center; color: #fff;">${toProperCase(safeFullname)}</small>
+
+                ${
+                  window.PERMISSIONS.delete
+                    ? `
+                <!-- DELETE -->
+                <button
+                  data-emp-id="${safeId}"
+                  onclick="openDeleteFromBtn(this)"
+                  style="
+                    width:100%; padding: 7px;
+                    font-size: 12px; font-weight: 700;
+                    background: #fff; color: #ef4444;
+                    border: none;
+                    cursor: pointer; text-align: center;
+                  ">
+                  <i class="fas fa-trash-alt"></i> DELETE
+                </button>
+                `
+                    : ""
+                }
+
+              </div>
+            </td>
+            `
+                : ""
+            }
           </tr>
       `;
     })
     .join("");
 
-  // Update pagination controls
   updatePaginationControls();
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SECURITY: data-attribute bridge functions
+// These replace inline onclick string interpolation, preventing
+// injection of arbitrary JS through employee field values.
+// ─────────────────────────────────────────────────────────────────
+
+function toggleActionsPanel(btn) {
+  const panel = btn.parentElement.querySelector(".actions-panel");
+  const allPanels = document.querySelectorAll(".actions-panel");
+  const allBtns = document.querySelectorAll(".actions-toggle-btn");
+
+  allPanels.forEach((p) => {
+    if (p !== panel) p.classList.remove("actions-open");
+  });
+  allBtns.forEach((b) => {
+    if (b !== btn) b.classList.remove("actions-active");
+  });
+
+  panel.classList.toggle("actions-open");
+  btn.classList.toggle("actions-active");
+
+  if (panel.classList.contains("actions-open") && window.innerWidth <= 480) {
+    const rect = btn.getBoundingClientRect();
+    let top = rect.bottom + 4;
+    let left = rect.left;
+
+    if (left + 160 > window.innerWidth - 8) left = window.innerWidth - 160 - 8;
+    if (top + 180 > window.innerHeight) top = rect.top - 184;
+
+    panel.style.top = top + "px";
+    panel.style.left = left + "px";
+  } else {
+    panel.style.top = "";
+    panel.style.left = "";
+  }
+}
+
+function openDeleteFromBtn(btn) {
+  openDeleteModal(btn.dataset.empId, false);
 }
 
 function openViolationPopupFromBtn(btn) {
@@ -1176,7 +1280,7 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
       const p1 = document.createElement("p");
       p1.style.marginBottom = "15px";
       const strong = document.createElement("strong");
-      strong.textContent = `This will delete ${employees.length} employee(s) matching your filters:`;
+      strong.textContent = `This will delete ${count} ${label} matching your filters:`;
       p1.appendChild(strong);
       msgDiv.appendChild(p1);
 
@@ -1215,7 +1319,7 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
       const p1 = document.createElement("p");
       p1.style.marginBottom = "15px";
       const strong = document.createElement("strong");
-      strong.textContent = `This will permanently delete ALL ${employees.length} employee(s).`;
+      strong.textContent = `This will permanently delete ALL ${count} ${label}.`;
       p1.appendChild(strong);
       msgDiv.appendChild(p1);
       const p2 = document.createElement("p");
@@ -1301,7 +1405,7 @@ function updateDeleteButtonState() {
   const deleteBtn = document.querySelector(".delete-all-btn .btn-danger");
   if (!deleteBtn) return;
 
-  const hasFilters = Object.keys(activeFilters).length > 0;
+  const hasFilters = hasActiveFilters();
   const hasData = employees && employees.length > 0;
   const canDelete = hasFilters && hasData;
 
@@ -1314,7 +1418,7 @@ function updateDeleteButtonState() {
   } else if (!hasData) {
     deleteBtn.title = "No matching records to delete";
   } else {
-    deleteBtn.title = `Delete ${employees.length} filtered employee(s)`;
+    deleteBtn.title = `Delete ${count} filtered ${label}`;
   }
 }
 
@@ -1323,15 +1427,44 @@ async function deleteFilteredEmployees() {
   try {
     showLoading(true);
 
-    // 🆕 Get employee IDs from current filtered employees array
-    const employeeIds = employees.map((emp) => emp.id);
+    // Fetch ALL filtered log IDs from backend (no pagination)
+    const params = new URLSearchParams({ action: "get", page: 1, limit: 99999 });
 
-    if (employeeIds.length === 0) {
-      showAlert("No employees to delete", "warning");
+    for (const [key, value] of Object.entries(activeFilters)) {
+      if (key === "position" && value === "__none__") {
+        params.append("position_none", "1");
+      } else if (key === "brand" && value === "__none__") {
+        params.append("brand_none", "1");
+      } else if (key === "status" && value === "__none__") {
+        params.append("status_none", "1");
+      } else if (key === "shift" && value === "__none__") {
+        params.append("shift_none", "1");
+      } else if (key === "violation" && value === "__none__") {
+        params.append("violation_none", "1");
+      } else if (key === "user_id" && value === "__none__") {
+        params.append("user_id_none", "1");
+      } else if (key === "user_id") {
+        params.append("gate_name", value);
+      } else {
+        params.append(key, value);
+      }
+    }
+
+    const allRes = await fetch(`datalog_backend.php?${params.toString()}`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
+      },
+    });
+    const allData = await allRes.json();
+
+    if (!allData.success || !Array.isArray(allData.data) || allData.data.length === 0) {
+      showAlert("No log entries to delete", "warning");
       return;
     }
 
-    // 🆕 Send filtered employee IDs to backend
+    const employeeIds = allData.data.map((emp) => emp.id);
+
     const formData = new FormData();
     formData.append("action", "delete_filtered");
     formData.append("employee_ids", JSON.stringify(employeeIds));
@@ -1346,11 +1479,12 @@ async function deleteFilteredEmployees() {
     const data = await response.json();
 
     if (data.success) {
+      const deletedCount = data.deleted_count || employeeIds.length;
+      const deletedLabel = deletedCount > 1 ? "employee's" : "employee";
       showAlert(
-        `Successfully deleted ${escapeHtml(String(data.deleted_count || employeeIds.length))} employee(s) matching your filters.`,
+        `Successfully deleted ${escapeHtml(String(deletedCount))} ${deletedLabel} matching your filters.`,
         "success",
       );
-
       currentPage = 1;
       clearSearch();
     } else {
@@ -1582,7 +1716,6 @@ async function loadEmployees(
     // 🆕 If no filters passed, check for active filters in form
     if (Object.keys(filters).length === 0 && hasActiveFilters()) {
       filters = getActiveFilters();
-      console.log("📋 Using active filters from form:", filters);
     }
 
     // 🆕 Store the active filters
@@ -1859,7 +1992,7 @@ function setupFileUploadHandler() {
   });
 }
 
-// Delete employee
+// Delete single employee
 async function deleteEmployee(employeeId) {
   try {
     showLoading(true);

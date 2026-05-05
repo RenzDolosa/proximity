@@ -12,10 +12,12 @@ let systemQRCodesCache = null;
 let currentPage = 1;
 const itemsPerPage = 25;
 let totalPages = 1;
-
-let currentAudio = null;
+let totalRecords = 0;
 
 let activeFilters = {};
+
+const count = employees.length;
+const label = count > 1 ? "code's" : "code";
 
 // ─────────────────────────────────────────────────────────────────
 // SECURITY: HTML escape helper — use on ALL dynamic content
@@ -273,7 +275,8 @@ function getActiveFilters() {
 
 // CHECK IF ANY FILTERS ARE ACTIVE
 function hasActiveFilters() {
-  return Object.keys(getActiveFilters()).length > 0;
+  const filters = getActiveFilters();
+  return Object.keys(filters).length > 0;
 }
 
 // DISPLAY FILTER STATUS IN UI
@@ -481,7 +484,7 @@ async function renderEmployeeTable() {
 
       return `
         <tr>
-          <td>${startIndex + index + 1}</td>
+          <td style="text-align: center; width: 50px;">${startIndex + index + 1}</td>
           <td class="Col8">
             ${
               imageUrl
@@ -810,7 +813,7 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
       const p1 = document.createElement("p");
       p1.style.marginBottom = "15px";
       const strong = document.createElement("strong");
-      strong.textContent = `This will delete ${employees.length} code(s) matching your filters:`;
+      strong.textContent = `This will delete ${count} ${label} matching your filters:`;
       p1.appendChild(strong);
       msgDiv.appendChild(p1);
 
@@ -843,7 +846,7 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
       const p1 = document.createElement("p");
       p1.style.marginBottom = "15px";
       const strong = document.createElement("strong");
-      strong.textContent = `This will permanently delete ALL ${employees.length} code(s).`;
+      strong.textContent = `This will permanently delete ALL ${count} ${label}.`;
       p1.appendChild(strong);
       msgDiv.appendChild(p1);
       const p2 = document.createElement("p");
@@ -924,12 +927,20 @@ function updateDeleteButtonState() {
   if (!deleteBtn) return;
 
   const hasFilters = hasActiveFilters();
-  deleteBtn.disabled = !hasFilters;
-  deleteBtn.style.opacity = hasFilters ? "1" : "0.4";
-  deleteBtn.style.cursor = hasFilters ? "pointer" : "not-allowed";
-  deleteBtn.title = hasFilters
-    ? "Delete filtered proximity codes"
-    : "Apply filters first to enable deletion";
+  const hasData = employees && employees.length > 0;
+  const canDelete = hasFilters && hasData;
+
+  deleteBtn.disabled = !canDelete;
+  deleteBtn.style.opacity = canDelete ? "1" : "0.4";
+  deleteBtn.style.cursor = canDelete ? "pointer" : "not-allowed";
+
+  if (!hasFilters) {
+    deleteBtn.title = "Apply filters first to enable deletion";
+  } else if (!hasData) {
+    deleteBtn.title = "No matching records to delete";
+  } else {
+    deleteBtn.title = `Delete ${count} filtered ${label}`;
+  }
 }
 
 // DELETE FILTERED PROXIMITY CODES
@@ -961,10 +972,13 @@ async function deleteFilteredEmployees() {
     const data = await response.json();
 
     if (data.success) {
+      const deletedCount = data.deleted_count || employeeIds.length;
+      const deletedLabel = deletedCount > 1 ? "code's" : "code";
       showAlert(
-        `Successfully deleted ${data.deleted_count || employeeIds.length} code(s) matching your filters.`,
+        `Successfully deleted ${escapeHtml(String(deletedCount))} ${deletedLabel} matching your filters.`,
         "success",
       );
+
       currentPage = 1;
       clearSearch();
     } else {

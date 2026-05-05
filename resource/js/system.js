@@ -1,12 +1,4 @@
 // resource/js/system.js --> system table
-// SECURITY FIXES APPLIED:
-// 1. escapeHtml() used on ALL dynamic innerHTML insertions
-// 2. String.prototype.toProperCase() replaced with standalone toProperCase()
-// 3. json_decode inputs validated before use
-// 4. restore_mode whitelisted
-// 5. Proximity code (qr_code) output escaped
-// FIX: setupFieldSuggestions now applies toProperCase to display labels
-//      to match the search filter dropdown formatting (Image 1 vs Images 2-4).
 
 // Global variables
 let currentAction = "add";
@@ -21,6 +13,9 @@ let totalRecords = 0;
 let currentAudio = null;
 
 let activeFilters = {};
+
+const count = employees.length;
+const label = count > 1 ? "employee's" : "employee";
 
 // ── Global-audio endpoint ─────────────────────────────────────────
 const GLOBAL_AUDIO_ENDPOINT = "global_audio.php";
@@ -519,7 +514,7 @@ async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
       showAlert("Access denied. Employee is inactive.", "error");
       return;
     }
-    
+
     const logData = {
       user_id: employee.user_id,
       employee_id: employee.id,
@@ -654,7 +649,7 @@ async function renderEmployeeTable() {
 
       return `
           <tr>
-            <td>${startIndex + index + 1}</td>
+            <td style="text-align: center; width: 50px;">${startIndex + index + 1}</td>
             <td>
               <div><strong>${toProperCase(safeFullname)}</strong></div>
               <div class="emp-id"><strong>EMPID: ${safeId}</strong></div>
@@ -663,8 +658,10 @@ async function renderEmployeeTable() {
               <div>${toProperCase(safeBrand)}</div>
               <div class="emp-position"><strong>Position: ${toProperCase(safePosition)}</strong></div>
             </td>
-            <td><span class="status-${safeStatus.toLowerCase()}">${safeStatus}</span></td>
-            <td>${safeShift}</td>
+            <td>
+              <div>${safeShift}</div>
+              <div class="emp-status"><strong>Status: <span class="status-${safeStatus.toLowerCase()}">${safeStatus}</span></strong></div>
+            </td>
             <td class="Col7">
               <div style="display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;justify-content:center;">
                 ${
@@ -1465,7 +1462,7 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
       const p1 = document.createElement("p");
       p1.style.marginBottom = "15px";
       const strong = document.createElement("strong");
-      strong.textContent = `This will delete ${employees.length} employee(s) matching your filters:`;
+      strong.textContent = `This will delete ${count} ${label} matching your filters:`;
       p1.appendChild(strong);
       msgDiv.appendChild(p1);
 
@@ -1504,7 +1501,7 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
       const p1 = document.createElement("p");
       p1.style.marginBottom = "15px";
       const strong = document.createElement("strong");
-      strong.textContent = `This will permanently delete ALL ${employees.length} employee(s).`;
+      strong.textContent = `This will permanently delete ALL ${count} ${label}.`;
       p1.appendChild(strong);
       msgDiv.appendChild(p1);
       const p2 = document.createElement("p");
@@ -1590,7 +1587,7 @@ function updateDeleteButtonState() {
   const deleteBtn = document.querySelector(".delete-all-btn .btn-danger");
   if (!deleteBtn) return;
 
-  const hasFilters = Object.keys(activeFilters).length > 0;
+  const hasFilters = hasActiveFilters();
   const hasData = employees && employees.length > 0;
   const canDelete = hasFilters && hasData;
 
@@ -1603,7 +1600,7 @@ function updateDeleteButtonState() {
   } else if (!hasData) {
     deleteBtn.title = "No matching records to delete";
   } else {
-    deleteBtn.title = `Delete ${employees.length} filtered employee(s)`;
+    deleteBtn.title = `Delete ${count} filtered ${label}`;
   }
 }
 
@@ -1612,12 +1609,47 @@ async function deleteFilteredEmployees() {
   try {
     showLoading(true);
 
-    const employeeIds = employees.map((emp) => emp.id);
+    // Fetch ALL filtered employee IDs from backend (no pagination)
+    const params = new URLSearchParams({
+      action: "get",
+      page: 1,
+      limit: 99999,
+    });
 
-    if (employeeIds.length === 0) {
+    for (const [key, value] of Object.entries(activeFilters)) {
+      if (key === "position" && value === "__none__") {
+        params.append("position_none", "1");
+      } else if (key === "brand" && value === "__none__") {
+        params.append("brand_none", "1");
+      } else if (key === "status" && value === "__none__") {
+        params.append("status_none", "1");
+      } else if (key === "shift" && value === "__none__") {
+        params.append("shift_none", "1");
+      } else if (key === "violation" && value === "__none__") {
+        params.append("violation_none", "1");
+      } else {
+        params.append(key, value);
+      }
+    }
+
+    const allRes = await fetch(`manpower_backend.php?${params.toString()}`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
+      },
+    });
+    const allData = await allRes.json();
+
+    if (
+      !allData.success ||
+      !Array.isArray(allData.data) ||
+      allData.data.length === 0
+    ) {
       showAlert("No employees to delete", "warning");
       return;
     }
+
+    const employeeIds = allData.data.map((emp) => emp.id);
 
     const formData = new FormData();
     formData.append("action", "delete_filtered");
@@ -1633,11 +1665,12 @@ async function deleteFilteredEmployees() {
     const data = await response.json();
 
     if (data.success) {
+      const deletedCount = data.deleted_count || employeeIds.length;
+      const deletedLabel = deletedCount > 1 ? "employee's" : "employee";
       showAlert(
-        `Successfully deleted ${escapeHtml(String(data.deleted_count || employeeIds.length))} employee(s) matching your filters.`,
+        `Successfully deleted ${escapeHtml(String(deletedCount))} ${deletedLabel} matching your filters.`,
         "success",
       );
-
       currentPage = 1;
       clearSearch();
     } else {

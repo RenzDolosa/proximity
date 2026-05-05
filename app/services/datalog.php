@@ -244,7 +244,7 @@ if ($databaseConnected) {
     <div class="data-table">
       <div class="table-header">
         <h3>Scanned Records</h3>
-        <div class="emp-status">
+        <div class="emp-records">
           <div style="display: flex; gap: 10px;">
             <div class="total-emp"><i class="fas fa-users"></i></div>
             <p>Total Scanned</p>
@@ -279,7 +279,6 @@ if ($databaseConnected) {
               <th>SN</th>
               <th>Fullname</th>
               <th>Brand / Department</th>
-              <th>Status</th>
               <th>Shift</th>
               <th class="Col7">Remarks</th> <!-- Violation -->
               <th class="Col8">Image</th>
@@ -287,6 +286,11 @@ if ($databaseConnected) {
               <th>Timestamp</th>
               <th>Check Status</th>
               <th>Operator</th>
+              <?php if (
+                canAccess($permissions, 'delete-single-datalog')
+              ) : ?>
+                <th>Actions</th>
+              <?php endif; ?>
             </tr>
           </thead>
           <tbody id="employeeTableBody">
@@ -421,6 +425,12 @@ if ($databaseConnected) {
       });
 
     })();
+  </script>
+
+  <script>
+    window.PERMISSIONS = {
+      delete: <?= json_encode(canAccess($permissions, 'delete-single-datalog')) ?>
+    };
   </script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>

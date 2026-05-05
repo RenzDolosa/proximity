@@ -1014,15 +1014,20 @@ try {
             }
             $filterStr = implode(', ', $filterParts) ?: 'All';
 
+            $emp_label   = $deleted_count > 1 ? "employee's" : "employee";
+            $img_label   = $deleted_images > 1 ? "images" : "image";
+
             $response['success']        = true;
-            $response['message']        = "Deleted $deleted_count employee(s) matching filters: $filterStr. Removed $deleted_images image(s).";
+            $response['message']        = "Deleted $deleted_count $emp_label matching filters: $filterStr. Removed $deleted_images $img_label.";
             $response['deleted_count']  = $deleted_count;
             $response['deleted_images'] = $deleted_images;
 
-            logSystemAction($database->getCurrentUserId(), 'FILTERED_EMPLOYEES_DELETED', "Deleted $deleted_count employees with filters: $filterStr");
+            logSystemAction($database->getCurrentUserId(), 'FILTERED_EMPLOYEES_DELETED', "Deleted $deleted_count $emp_label with filters: $filterStr");
           } else {
             $db->rollBack();
-            $response['message'] = 'Failed to delete employees';
+            $emp_label   = $deleted_count > 1 ? "employee's" : "employee";
+
+            $response['message'] = "Failed to delete $emp_label";
           }
         } catch (Exception $e) {
           if (isset($db)) $db->rollBack();
@@ -1047,11 +1052,16 @@ try {
 
             $db->commit();
 
+            $emp_label   = $all_employees > 1 ? "employee's" : "employee";
+            $img_label   = $deleted_images > 1 ? "images" : "image";
+
             $response['success'] = true;
-            $response['message'] = 'All employee data deleted successfully. ' . count($all_employees) . ' employees and ' . $deleted_images . ' images removed.';
+            $response['message'] = "All employee data deleted successfully. $all_employees $emp_label and $deleted_images $img_label removed.";
           } else {
             $db->rollBack();
-            $response['message'] = 'Failed to delete employee data';
+            $emp_label   = $all_employees > 1 ? "employee's" : "employee";
+            
+            $response['message'] = "Failed to delete $emp_label data";
           }
         } catch (Exception $e) {
           if (isset($db)) $db->rollBack();

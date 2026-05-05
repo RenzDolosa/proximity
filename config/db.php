@@ -32,16 +32,20 @@ const PAGE_ICONS = [
   'logs-system'               => 'fa-history',
   'import-system'             => 'fa-upload',
   'delete-system'             => 'fa-trash-alt',
+  'delete-single-system'      => 'fa-trash-alt',
   'export-system'             => 'fa-download',
   'manual in out-system'      => 'fa-clipboard-list',
   'delete-datalog'            => 'fa-trash-alt',
+  'delete-single-datalog'     => 'fa-trash-alt',
   'export-datalog'            => 'fa-download',
   'add-proximity'             => 'fa-user-plus',
   'edit-proximity'            => 'fa-edit',
   'import-proximity'          => 'fa-upload',
   'delete-proximity'          => 'fa-trash-alt',
+  'delete-single-proximity'   => 'fa-trash-alt',
   'export-proximity'          => 'fa-download',
   'delete-violation'          => 'fa-trash-alt',
+  'delete-single-violation'   => 'fa-trash-alt',
   'export-violation'          => 'fa-download',
 ];
 
@@ -506,10 +510,10 @@ function scanPortalPages(
           'label'    => 'Admin Panel',
           'icon'     => 'fa-user-shield',
           'children' => [
-            ['key' => 'users',       'label' => 'Manage Users', 'icon' => 'fa-users',         'children' => []],
-            ['key' => 'groups',      'label' => 'User Groups',  'icon' => 'fa-users-cog',      'children' => []],
-            ['key' => 'system logs', 'label' => 'System Logs',  'icon' => 'fa-clipboard-list', 'children' => []],
-            ['key' => 'phpmyadmin',  'label' => 'PHP MyAdmin',  'icon' => 'fa-database',       'children' => []],
+            ['key' => 'users',                    'label' => 'Manage Users',    'icon' => 'fa-users',          'children' => []],
+            ['key' => 'groups',                   'label' => 'User Groups',     'icon' => 'fa-users-cog',      'children' => []],
+            ['key' => 'system logs',              'label' => 'System Logs',     'icon' => 'fa-clipboard-list', 'children' => []],
+            ['key' => 'phpmyadmin',               'label' => 'PHP MyAdmin',     'icon' => 'fa-database',       'children' => []],
           ],
         ],
       ],
@@ -522,13 +526,14 @@ function scanPortalPages(
           'label'    => 'System',
           'icon'     => 'fa-users-cog',
           'children' => [
-            ['key' => 'add-system',            'label' => 'Add',             'icon' => 'fa-user-plus',       'children' => []],
-            ['key' => 'edit-system',           'label' => 'Edit',            'icon' => 'fa-edit',            'children' => []],
-            ['key' => 'logs-system',           'label' => 'Logs',            'icon' => 'fa-history',         'children' => []],
-            ['key' => 'import-system',         'label' => 'Import',          'icon' => 'fa-upload',          'children' => []],
-            ['key' => 'delete-system',         'label' => 'Delete',          'icon' => 'fa-trash-alt',       'children' => []],
-            ['key' => 'export-system',         'label' => 'Export',          'icon' => 'fa-download',        'children' => []],
-            ['key' => 'manual in out-system',  'label' => 'In/Out Action',   'icon' => 'fa-clipboard-list',  'children' => []],
+            ['key' => 'add-system',               'label' => 'Add',             'icon' => 'fa-user-plus',       'children' => []],
+            ['key' => 'edit-system',              'label' => 'Edit',            'icon' => 'fa-edit',            'children' => []],
+            ['key' => 'logs-system',              'label' => 'Logs',            'icon' => 'fa-history',         'children' => []],
+            ['key' => 'import-system',            'label' => 'Import',          'icon' => 'fa-upload',          'children' => []],
+            ['key' => 'delete-system',            'label' => 'Delete',          'icon' => 'fa-trash-alt',       'children' => []],
+            ['key' => 'delete-single-system',     'label' => 'Delete Single',   'icon' => 'fa-trash-alt',       'children' => []],
+            ['key' => 'export-system',            'label' => 'Export',          'icon' => 'fa-download',        'children' => []],
+            ['key' => 'manual in out-system',     'label' => 'In/Out Action',   'icon' => 'fa-clipboard-list',  'children' => []],
           ],
         ],
         [
@@ -536,8 +541,9 @@ function scanPortalPages(
           'label'    => 'Datalog',
           'icon'     => 'fa-clipboard-list',
           'children' => [
-            ['key' => 'delete-datalog',        'label' => 'Delete',          'icon' => 'fa-trash-alt',       'children' => []],
-            ['key' => 'export-datalog',        'label' => 'Export',          'icon' => 'fa-download',        'children' => []],
+            ['key' => 'delete-datalog',           'label' => 'Delete',          'icon' => 'fa-trash-alt',       'children' => []],
+            ['key' => 'delete-single-datalog',    'label' => 'Delete Single',   'icon' => 'fa-trash-alt',       'children' => []],
+            ['key' => 'export-datalog',           'label' => 'Export',          'icon' => 'fa-download',        'children' => []],
           ],
         ],
         [
@@ -545,11 +551,12 @@ function scanPortalPages(
           'label'    => 'Proximity Codes',
           'icon'     => 'fa-barcode',
           'children' => [
-            ['key' => 'add-proximity',         'label' => 'Add',             'icon' => 'fa-user-plus',       'children' => []],
-            ['key' => 'edit-proximity',        'label' => 'Edit',            'icon' => 'fa-edit',            'children' => []],
-            ['key' => 'import-proximity',      'label' => 'Import',          'icon' => 'fa-upload',          'children' => []],
-            ['key' => 'delete-proximity',      'label' => 'Delete',          'icon' => 'fa-trash-alt',       'children' => []],
-            ['key' => 'export-proximity',      'label' => 'Export',          'icon' => 'fa-download',        'children' => []],
+            ['key' => 'add-proximity',            'label' => 'Add',             'icon' => 'fa-user-plus',       'children' => []],
+            ['key' => 'edit-proximity',           'label' => 'Edit',            'icon' => 'fa-edit',            'children' => []],
+            ['key' => 'import-proximity',         'label' => 'Import',          'icon' => 'fa-upload',          'children' => []],
+            ['key' => 'delete-proximity',         'label' => 'Delete',          'icon' => 'fa-trash-alt',       'children' => []],
+            ['key' => 'delete-single-proximity',  'label' => 'Delete Single',   'icon' => 'fa-trash-alt',       'children' => []],
+            ['key' => 'export-proximity',         'label' => 'Export',          'icon' => 'fa-download',        'children' => []],
           ],
         ],
         [
@@ -557,8 +564,9 @@ function scanPortalPages(
           'label'    => 'Violations',
           'icon'     => 'fa-exclamation-triangle',
           'children' => [
-            ['key' => 'delete-violation',      'label' => 'Delete',          'icon' => 'fa-trash-alt',       'children' => []],
-            ['key' => 'export-violation',      'label' => 'Export',          'icon' => 'fa-download',        'children' => []],
+            ['key' => 'delete-violation',         'label' => 'Delete',          'icon' => 'fa-trash-alt',       'children' => []],
+            ['key' => 'delete-single-violation',  'label' => 'Delete Single',   'icon' => 'fa-trash-alt',       'children' => []],
+            ['key' => 'export-violation',         'label' => 'Export',          'icon' => 'fa-download',        'children' => []],
           ],
         ],
       ],
@@ -577,11 +585,12 @@ function scanPortalPages(
     }
   }
 
-  // ── STEP 1: Flat folders (iframe, udev, root) ─────────────────────────────
+  // ── Flat folders (iframe, udev, root) ────────────────────────────────────
   if (empty($baseDirs)) {
     $baseDirs = [
-      __DIR__ . '/../resource/views/iframe',
+      __DIR__ . '/../app/http/controllers',
       __DIR__ . '/../app/services',
+      __DIR__ . '/../resource/views/iframe',
       __DIR__ . '/../tests',
     ];
   }
@@ -613,7 +622,7 @@ function scanPortalPages(
     }
   }
 
-  // ── STEP 2: Root-level .php files ────────────────────────────────────────
+  // ── Root-level .php files ──────────────────────────────────────────────────
   $rootDir = __DIR__ . '/';
   foreach (glob($rootDir . '/*.php') ?: [] as $file) {
     $name        = basename($file, '.php');
@@ -631,7 +640,7 @@ function scanPortalPages(
     ];
   }
 
-  // ── STEP 3: Grouped folders → parent with children ───────────────────────
+  // ── Grouped folders → parent with children ───────────────────────────────────
   foreach ($groupedFolders as $parentKey => $config) {
 
     $children = $config['children'];  // start with any hardcoded children

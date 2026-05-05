@@ -3,25 +3,56 @@
 
 require_once __DIR__ . '/../../config/config.php';
 
-// Safety-net: re-assert PHP timezone in case this file is ever bootstrapped
-// without config.php. config.php already defines APP_TIMEZONE / APP_TIMEZONE_TZ
-// and calls date_default_timezone_set(), so this is a no-op in normal operation.
+// ── Security headers ──────────────────────────────────────────────────────────
+// Send before any output. Skip for file-serving responses (handled later).
+if (!isset($_GET['serve_file']) && !isset($_GET['api_info']) && !isset($_GET['health_check'])) {
+  header('X-Content-Type-Options: nosniff');
+  header('X-Frame-Options: DENY');
+  header('Referrer-Policy: strict-origin-when-cross-origin');
+  // Tighten CSP to match your actual CDN/asset sources
+  header("Content-Security-Policy: default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com;");
+}
+
+// ── Safe fallback sanitizeInput() ─────────────────────────────────────────────
+if (!function_exists('sanitizeInput')) {
+  function sanitizeInput($input)
+  {
+    if (is_null($input)) return '';
+    // Strip tags first, then encode remaining HTML-special chars
+    return htmlspecialchars(strip_tags(trim((string)$input)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+  }
+}
+
+// Safety-net: re-assert PHP timezone
 if (!defined('APP_TIMEZONE')) {
   define('APP_TIMEZONE',    'Asia/Manila');
   define('APP_TIMEZONE_TZ', '+08:00');
 }
 date_default_timezone_set(APP_TIMEZONE);
 
+// ── Safe json_decode wrapper ──────────────────────────────────────────────────
+// Limits nesting depth and throws on malformed JSON.
+function safeJsonDecode($json, $assoc = true, $depth = 32)
+{
+  if (!is_string($json) || $json === '') return null;
+  try {
+    $decoded = json_decode($json, $assoc, $depth, JSON_THROW_ON_ERROR);
+    return $decoded;
+  } catch (JsonException $e) {
+    error_log("safeJsonDecode error: " . $e->getMessage());
+    return null;
+  }
+}
+
 if (isset($_GET['serve_file'])) {
-  header('Content-Type: ' . $content_type);
-  header('Content-Disposition: inline; filename="' . $filename . '"');
-  header('Content-Length: ' . filesize($filepath));
-  header('Cache-Control: public, max-age=86400');
-  header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 86400) . ' GMT');
-  header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($filepath)) . ' GMT');
-  header('X-Content-Type-Options: nosniff');
-  header('X-Frame-Options: DENY');
-  header('Content-Security-Policy: default-src \'self\'');
+  header('Content-Type: ' . ($content_type ?? 'application/octet-stream'));
+  if (!empty($filename)) header('Content-Disposition: inline; filename="' . $filename . '"');
+  if (!empty($filepath) && file_exists($filepath)) {
+    header('Content-Length: ' . filesize($filepath));
+    header('Cache-Control: public, max-age=86400');
+    header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 86400) . ' GMT');
+    header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($filepath)) . ' GMT');
+  }
 }
 
 class Database

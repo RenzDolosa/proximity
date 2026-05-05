@@ -213,7 +213,7 @@ if ($databaseConnected) {
     <div class="data-table">
       <div class="table-header">
         <h3>Employee Records</h3>
-        <div class="emp-status">
+        <div class="emp-records">
           <div style="display: flex; gap: 10px;">
             <div class="total-emp"><i class="fas fa-users"></i></div>
             <p>Total Employees</p>
@@ -238,7 +238,6 @@ if ($databaseConnected) {
               <th>SN</th>
               <th>Fullname</th>
               <th>Brand / Department</th>
-              <th>Status</th>
               <th>Shift</th>
               <th class="Col7">Remarks</th>
               <th class="Col8">Image</th>
@@ -249,7 +248,7 @@ if ($databaseConnected) {
                 canAccess($permissions, 'manual in out-system') ||
                 canAccess($permissions, 'logs-system')          ||
                 canAccess($permissions, 'edit-system')          ||
-                canAccess($permissions, 'delete-system')
+                canAccess($permissions, 'delete-single-system')
               ) : ?>
                 <th>Actions</th>
               <?php endif; ?>
@@ -728,7 +727,7 @@ if ($databaseConnected) {
       manualInOut: <?= json_encode(canAccess($permissions, 'manual in out-system')) ?>,
       logs: <?= json_encode(canAccess($permissions, 'logs-system')) ?>,
       edit: <?= json_encode(canAccess($permissions, 'edit-system')) ?>,
-      delete: <?= json_encode(canAccess($permissions, 'delete-system')) ?>
+      delete: <?= json_encode(canAccess($permissions, 'delete-single-system')) ?>
     };
   </script>
 

@@ -165,7 +165,7 @@ if ($databaseConnected) {
     <div class="data-table">
       <div class="table-header">
         <h3>Proximity Records</h3>
-        <div class="emp-status">
+        <div class="emp-records">
           <div style="display: flex; gap: 10px;">
             <div class="total-emp"><i class="fas fa-id-card"></i></div>
             <p>Total Proximity</p>
@@ -196,7 +196,7 @@ if ($databaseConnected) {
               <th>Update</th>
               <?php if (
                 canAccess($permissions, 'edit-proximity')   ||
-                canAccess($permissions, 'delete-proximity')
+                canAccess($permissions, 'delete-single-proximity')
               ) : ?>
                 <th>Actions</th>
               <?php endif; ?>
@@ -468,7 +468,7 @@ if ($databaseConnected) {
   <script>
     window.PERMISSIONS = {
       edit: <?= json_encode(canAccess($permissions, 'edit-proximity')) ?>,
-      delete: <?= json_encode(canAccess($permissions, 'delete-proximity')) ?>
+      delete: <?= json_encode(canAccess($permissions, 'delete-single-proximity')) ?>
     };
   </script>
 
