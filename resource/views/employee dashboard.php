@@ -439,7 +439,7 @@ if ($databaseConnected) {
             ">
               <div style="width: 40px; flex-shrink: 0;">Image</div>
               <div style="flex: 1; padding-left: 12px;">Fullname</div>
-              <div style="width: 70px; text-align: end;">Operators</div>
+              <div style="width: 70px; text-align: end; padding-left: 12px;">Operators</div>
               <div style="width: 110px; text-align: end;">Status</div>
             </div>
 
@@ -467,7 +467,7 @@ if ($databaseConnected) {
                         <small><?= date('M j, Y g:i A', strtotime($log['access_timestamp'])); ?></small>
                       </div>
                     </div>
-                    <div style="text-align: end; flex-shrink: 0;">
+                    <div style="text-align: end; flex-shrink: 0; padding-right: 20px;">
                       <?= htmlspecialchars($log['gate_name'] ?? ($log['user_first_name'] ?? 'Gate')); ?>
                       <div style="color: var(--text-muted);"><small>Gate</small></div>
                     </div>
