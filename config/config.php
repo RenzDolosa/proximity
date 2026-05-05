@@ -779,23 +779,20 @@ function registerUser($username, $email, $password, $firstName, $lastName, $user
       'success' => true,
       'user_id' => $userId,
       'database_created' => true,
-      'database_name' => $dbResult['database_name'], // Returns: user_1, user_2, etc.
-      'custom_name' => $myDatabase, // User's custom name (for display)
+      'database_name' => $dbResult['database_name'],
+      'custom_name' => $myDatabase,
       'message' => 'Registration successful! Your personal database has been created.'
     ];
   } catch (PDOException $e) {
-    // Rollback transaction on error
     try {
-      if ($pdo->inTransaction()) {
+      if (isset($pdo) && $pdo->inTransaction()) {
         $pdo->rollBack();
       }
-    } catch (Exception $rollbackError) {
-      // error_log("Error during rollback: " . $rollbackError->getMessage());
+    } catch (PDOException $rollbackError) {
+      // silent
     }
 
-    $errorMsg = "Registration error: " . $e->getMessage();
-    // error_log($errorMsg);
-    return ['success' => false, 'errors' => ['Database error occurred during registration. ' . $e->getMessage()]];
+    return ['success' => false, 'errors' => ['Database error: ' . $e->getMessage()]];
   }
 }
 
