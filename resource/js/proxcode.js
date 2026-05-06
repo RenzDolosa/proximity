@@ -43,11 +43,12 @@ function toProperCase(str) {
 
 // Initialize the application
 document.addEventListener("DOMContentLoaded", function () {
-  loadCurrentUserId(); // Load and cache user ID first
+  loadCurrentUserId();
   loadEmployees();
   updateDeleteButtonState();
   setupEventListeners();
-  updateTotalAvailable(); // Update count on page load
+  updateTotalAvailable();
+  syncOrphanStatuses();
 });
 
 // Load and cache current user ID
@@ -336,6 +337,43 @@ function displayFilterStatus() {
   if (controlsDiv) controlsDiv.appendChild(filterInfo);
 }
 
+async function syncOrphanStatuses() {
+  try {
+    const response = await fetch("proxcode_backend.php?action=sync_orphans", {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
+      },
+    });
+
+    if (!response.ok) return;
+
+    const data = await response.json();
+
+    if (data.success && data.synced_count > 0) {
+      const label = data.synced_count === 1 ? "employee" : "employees";
+      showAlert(
+        `${escapeHtml(String(data.synced_count))} ${label} set to Inactive — ` +
+          `their proximity code is missing or disabled.`,
+        "info",
+      );
+
+      // Invalidate caches so occupancy counts reflect the change
+      employeeDataCache = null;
+      qrImageMapCache = null;
+
+      await loadEmployees(
+        hasActiveFilters() ? getActiveFilters() : {},
+        true,
+        true,
+      );
+      await updateTotalAvailable();
+    }
+  } catch (error) {
+    console.warn("[proxcode] syncOrphanStatuses failed:", error);
+  }
+}
+
 // Load proximity code for editing
 async function loadEmployeeData(employeeId) {
   try {
@@ -516,7 +554,9 @@ async function renderEmployeeTable() {
           <td><small>${escapeHtml(employee.created_at || "")}</small></td>
           <td><small>${escapeHtml(employee.updated_at || "")}</small></td>
 
-          ${(window.PERMISSIONS.edit || window.PERMISSIONS.delete) ? `
+          ${
+            window.PERMISSIONS.edit || window.PERMISSIONS.delete
+              ? `
           <td style="position: relative; width: 160px;">
 
             <!-- ACTIONS TOGGLE -->
@@ -538,7 +578,9 @@ async function renderEmployeeTable() {
                 ${escapeHtml(toProperCase(matchedEmployeeData?.fullname || "Row SN: " + (startIndex + index + 1)))}
               </small>
 
-              ${window.PERMISSIONS.edit ? `
+              ${
+                window.PERMISSIONS.edit
+                  ? `
               <!-- EDIT -->
               <button
                 data-emp-id="${escapeHtml(String(employee.id))}"
@@ -548,9 +590,13 @@ async function renderEmployeeTable() {
                   border-bottom:1px solid #e2e8f0;cursor:pointer;text-align:center;">
                 <i class="fas fa-edit"></i> EDIT
               </button>
-              ` : ''}
+              `
+                  : ""
+              }
 
-              ${window.PERMISSIONS.delete ? `
+              ${
+                window.PERMISSIONS.delete
+                  ? `
               <!-- DELETE -->
               <button
                 data-emp-id="${escapeHtml(String(employee.id))}"
@@ -559,11 +605,15 @@ async function renderEmployeeTable() {
                   background:#fff;color:#ef4444;border:none;cursor:pointer;text-align:center;">
                 <i class="fas fa-trash-alt"></i> DELETE
               </button>
-              ` : ''}
+              `
+                  : ""
+              }
 
             </div>
           </td>
-          ` : ''}
+          `
+              : ""
+          }
         </tr>
       `;
     })
@@ -777,6 +827,17 @@ async function openModal(action, employeeId = null) {
     modalTitle.innerHTML = `<i class="fas fa-id-card"></i> Add Proximity Code`;
     const statusGroup = document.getElementById("statusToggleGroup");
     if (statusGroup) statusGroup.style.display = "none";
+
+    // RESET toggle to Enabled state for every new Add
+    const toggle = document.getElementById("is_active_toggle");
+    const hiddenInput = document.getElementById("is_active");
+    const statusLabel = document.getElementById("statusLabel");
+    if (toggle) toggle.checked = true;
+    if (hiddenInput) hiddenInput.value = "1";
+    if (statusLabel) {
+      statusLabel.textContent = "Enabled";
+      statusLabel.style.color = "#16a34a";
+    }
   } else if (action === "edit" && employeeId) {
     modalTitle.innerHTML = `<i class="fas fa-edit" style="color:#7c3aed"></i> Edit Proximity`;
     const statusGroup = document.getElementById("statusToggleGroup");
@@ -1005,24 +1066,30 @@ function updateSelectColor(select) {
 
 function updateColor() {
   updateSelectColor(document.getElementById("search_remarks"));
+  updateSelectColor(document.getElementById("search_status"));
 }
 
 async function populateFilter(employeeList) {
   const remarks = document.getElementById("search_remarks");
-  if (!remarks) return;
+  const statusSelect = document.getElementById("search_status");
+  if (!remarks && !statusSelect) return;
 
   const qrImageMap = await buildQRToImageMap();
 
   const remarksSet = new Set();
+  const statusSet = new Set();
+
   for (const emp of employeeList) {
     const isOccupied = Object.prototype.hasOwnProperty.call(
       qrImageMap,
       String(emp.qr_code).trim().toLowerCase(),
     );
     remarksSet.add(isOccupied ? "Occupied" : "Available");
+    statusSet.add(emp.is_active == 1 ? "Enabled" : "Disabled");
   }
 
   function buildSelect(select, placeholder, noneLabel, values) {
+    if (!select) return;
     const current = select.value;
     select.innerHTML =
       `<option value="" disabled selected hidden>${placeholder}</option>` +
@@ -1045,6 +1112,7 @@ async function populateFilter(employeeList) {
   }
 
   buildSelect(remarks, "Remarks", "No Remarks", remarksSet);
+  buildSelect(statusSelect, "Status", "No Status", statusSet);
   updateColor();
 }
 
@@ -1064,9 +1132,18 @@ async function loadEmployees(
     activeFilters = filters;
 
     // Strip 'remarks' before sending to backend — it's a computed field, not a DB column
-    const { remarks: remarksFilter, ...backendFilters } = filters;
+    const {
+      remarks: remarksFilter,
+      status: statusFilter,
+      ...backendFilters
+    } = filters;
 
     const params = new URLSearchParams({ action: "get", ...backendFilters });
+
+    if (statusFilter) {
+      if (statusFilter === "Enabled") params.set("is_active", "1");
+      else if (statusFilter === "Disabled") params.set("is_active", "0");
+    }
 
     const response = await fetch(`proxcode_backend.php?${params.toString()}`, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -1094,12 +1171,20 @@ async function loadEmployees(
         });
       }
 
+      if (statusFilter) {
+        const wantEnabled = statusFilter.toLowerCase() === "enabled";
+        employees = employees.filter((emp) =>
+          wantEnabled ? emp.is_active == 1 : emp.is_active == 0,
+        );
+      }
+
       if (!preservePage && Object.keys(filters).length === 0) {
         currentPage = 1;
       }
 
       await renderEmployeeTable();
       await updateTotalEmployees();
+      await syncOrphanStatuses();
 
       if (Object.keys(filters).length > 0) displayFilterStatus();
     } else {
@@ -1198,6 +1283,7 @@ async function handleFormSubmit(e) {
       await loadEmployees(filtersToUse, preservePage, true);
       await updateTotalEmployees();
       await updateTotalAvailable();
+      await syncOrphanStatuses();
     } else {
       showAlert(data.message || "Failed to save proximity code", "error");
     }
@@ -1278,6 +1364,7 @@ async function deleteEmployee(employeeId) {
       qrImageMapCache = null;
       await loadEmployees(activeFilters, true, true);
       await updateTotalEmployees();
+      await syncOrphanStatuses();
     } else {
       showAlert(data.message || "Failed to delete proximity code", "error");
     }

@@ -55,6 +55,16 @@ if (isset($_GET['serve_file'])) {
   }
 }
 
+const ALLOWED_GET_ACTIONS = [
+  'get',
+  'list',
+  'get_single',
+  'check_qr',
+  'stats',
+  'user_info',
+  'sync_orphans',   // ← ADD THIS LINE
+];
+
 class Database
 {
   private $mainConn;
@@ -150,6 +160,11 @@ class EmployeeManager
       $params[':qr_code'] = '%' . $filters['qr_code'] . '%';
     }
 
+    if (isset($filters['is_active']) && $filters['is_active'] !== '') {
+      $query .= " AND is_active = :is_active";
+      $params[':is_active'] = (int)$filters['is_active'];
+    }
+
     if (!empty($filters['created_at'])) {
       $query .= " AND created_at LIKE :created_at";
       $params[':created_at'] = '%' . $filters['created_at'] . '%';
@@ -215,17 +230,14 @@ class EmployeeManager
         );
       }
 
-      if (!$employee['is_active']) {
-        $syncResult = $this->syncEmployeeStatusWithCode(
-          $employee['qr_code'],
-          $employee['is_active']
-        );
-
-        if (!$syncResult['success']) {
-          error_log("Failed to sync employee status: " . $syncResult['message']);
-        } else {
-          error_log("Employee synced: " . $syncResult['message']);
-        }
+      $syncResult = $this->syncEmployeeStatusWithCode(
+        $employee['qr_code'],
+        $employee['is_active']
+      );
+      if (!$syncResult['success']) {
+        error_log("Failed to sync employee status: " . $syncResult['message']);
+      } else {
+        error_log("Employee synced: " . $syncResult['message']);
       }
 
       return $employee;
@@ -236,92 +248,128 @@ class EmployeeManager
   private function syncEmployeeStatusWithCode($qr_code, $codeIsActive)
   {
     try {
-      $mainConn = getMainDBConnection();
       $userConn = getUserDBConnection($this->userId);
 
-      // Get employee by QR code from user's database
-      $query = "SELECT id, fullname, status, qr_code FROM employees WHERE qr_code = :qr_code";
-      $stmt = $userConn->prepare($query);
+      // Find employee by QR code
+      $stmt = $userConn->prepare(
+        "SELECT id, fullname, status
+         FROM employees
+         WHERE LOWER(TRIM(qr_code)) = LOWER(TRIM(:qr_code))
+         LIMIT 1"
+      );
       $stmt->execute([':qr_code' => $qr_code]);
       $employee = $stmt->fetch(PDO::FETCH_ASSOC);
 
       if (!$employee) {
         return [
-          'success' => false,
-          'message' => 'Employee not found for QR code: ' . $qr_code
+          'success' => true,
+          'message' => "No employee assigned to QR: $qr_code — nothing to sync",
         ];
       }
 
-      // If code is disabled and employee is not already inactive, disable the employee
-      if ($codeIsActive == 0 && $employee['status'] !== 'Inactive') {
-        $oldStatus = $employee['status'];
-        $newStatus = 'Inactive';
-
-        $updateQuery = "UPDATE employees 
-                     SET status = :status, updated_at = :updated_at 
-                     WHERE qr_code = :qr_code";
-
-        $updateStmt = $userConn->prepare($updateQuery);
-        $result = $updateStmt->execute([
-          ':status' => $newStatus,
-          ':qr_code' => $qr_code,
-          ':updated_at' => date('Y-m-d H:i:s'),
-        ]);
-
-        if ($result) {
-          // Log status change in status_history table
-          try {
-            $historyQuery = "INSERT INTO status_history (employee_id, old_status, new_status, changed_by, change_reason, created_at)
-                          VALUES (:employee_id, :old_status, :new_status, :changed_by, :change_reason, :created_at)";
-            $historyStmt = $userConn->prepare($historyQuery);
-            $historyStmt->execute([
-              ':employee_id' => $employee['id'],
-              ':old_status' => $oldStatus,
-              ':new_status' => $newStatus,
-              ':changed_by' => $_SESSION['username'] ?? 'System',
-              ':change_reason' => 'Auto-disabled: Proximity code was disabled',
-              ':created_at' => date('Y-m-d H:i:s'),
-            ]);
-          } catch (Exception $e) {
-            error_log("Failed to log status change in history: " . $e->getMessage());
-          }
-
-          // Log system action
-          logSystemAction(
-            $this->userId,
-            'EMPLOYEE_AUTO_DISABLED',
-            "Employee {$employee['fullname']} auto-disabled due to proximity code disable (QR: {$qr_code})"
-          );
-
+      // ── Code DISABLED → set employee Inactive ────────────────────────────
+      if ((int)$codeIsActive === 0) {
+        if ($employee['status'] === 'Inactive') {
           return [
             'success' => true,
-            'message' => "Employee {$employee['fullname']} auto-disabled (status: {$oldStatus} → {$newStatus})"
-          ];
-        } else {
-          return [
-            'success' => false,
-            'message' => 'Failed to update employee status'
+            'message' => "Employee {$employee['fullname']} already Inactive",
           ];
         }
-      } elseif ($codeIsActive == 0) {
-        // Code is disabled but employee already inactive
+
+        $oldStatus = $employee['status'];
+        $now       = date('Y-m-d H:i:s');
+
+        $upd = $userConn->prepare(
+          "UPDATE employees
+           SET status = 'Inactive', updated_at = :ts
+           WHERE id = :id"
+        );
+        $upd->execute([':ts' => $now, ':id' => $employee['id']]);
+
+        // Log to status_history
+        try {
+          $hist = $userConn->prepare(
+            "INSERT INTO status_history
+               (employee_id, old_status, new_status, changed_by, change_reason, created_at)
+             VALUES (:eid, :old, 'Inactive', :by, :reason, :ts)"
+          );
+          $hist->execute([
+            ':eid'    => $employee['id'],
+            ':old'    => $oldStatus,
+            ':by'     => $_SESSION['username'] ?? 'System',
+            ':reason' => 'Auto-disabled: Proximity code was disabled',
+            ':ts'     => $now,
+          ]);
+        } catch (Exception $e) {
+          error_log("status_history insert failed (syncEmployeeStatusWithCode): " . $e->getMessage());
+        }
+
+        logSystemAction(
+          $this->userId,
+          'EMPLOYEE_AUTO_DISABLED',
+          "Employee {$employee['fullname']} set Inactive — proximity code disabled (QR: $qr_code)"
+        );
+
         return [
-          'success' => true,
-          'message' => "Employee {$employee['fullname']} already inactive, no sync needed"
-        ];
-      } else {
-        // Code is being enabled - don't force employee to active
-        return [
-          'success' => true,
-          'message' => "Proximity code enabled. Employee {$employee['fullname']} status unchanged (current: {$employee['status']})"
+          'success'       => true,
+          'message'       => "Employee {$employee['fullname']} set Inactive ($oldStatus → Inactive)",
+          'employee_id'   => $employee['id'],
+          'employee_name' => $employee['fullname'],
+          'old_status'    => $oldStatus,
+          'new_status'    => 'Inactive',
         ];
       }
-    } catch (Exception $e) {
-      error_log("Error syncing employee status with code: " . $e->getMessage());
+
+      // ── Code ENABLED → restore employee to Active ─────────────────────────
+      if ($employee['status'] === 'Active') {
+        return [
+          'success' => true,
+          'message' => "Employee {$employee['fullname']} already Active",
+        ];
+      }
+
+      $oldStatus = $employee['status'];
+      $now       = date('Y-m-d H:i:s');
+
+      $upd = $userConn->prepare(
+        "UPDATE employees SET status = 'Active', updated_at = :ts WHERE id = :id"
+      );
+      $upd->execute([':ts' => $now, ':id' => $employee['id']]);
+
+      try {
+        $hist = $userConn->prepare(
+          "INSERT INTO status_history
+       (employee_id, old_status, new_status, changed_by, change_reason, created_at)
+     VALUES (:eid, :old, 'Active', :by, :reason, :ts)"
+        );
+        $hist->execute([
+          ':eid'    => $employee['id'],
+          ':old'    => $oldStatus,
+          ':by'     => $_SESSION['username'] ?? 'System',
+          ':reason' => 'Auto-enabled: Proximity code was re-enabled',
+          ':ts'     => $now,
+        ]);
+      } catch (Exception $e) {
+        error_log("status_history insert failed (syncEmployeeStatusWithCode enable): " . $e->getMessage());
+      }
+
+      logSystemAction(
+        $this->userId,
+        'EMPLOYEE_AUTO_ENABLED',
+        "Employee {$employee['fullname']} set Active — proximity code re-enabled (QR: $qr_code)"
+      );
+
       return [
-        'success' => false,
-        'message' => 'Error syncing status: ' . $e->getMessage()
+        'success'       => true,
+        'message'       => "Employee {$employee['fullname']} restored to Active ($oldStatus → Active)",
+        'employee_id'   => $employee['id'],
+        'employee_name' => $employee['fullname'],
+        'old_status'    => $oldStatus,
+        'new_status'    => 'Active',
       ];
+    } catch (Exception $e) {
+      error_log("syncEmployeeStatusWithCode error: " . $e->getMessage());
+      return ['success' => false, 'message' => 'Sync error: ' . $e->getMessage()];
     }
   }
 
@@ -857,13 +905,10 @@ try {
           $response['success'] = true;
           $response['message'] = "Proximity code {$statusLabel} successfully";
 
-          if (!$result['is_active']) {
-            $response['message'] .= " (Employee auto-disabled)";
-            $response['employee_synced'] = true;
-          } else {
-            $response['message'] .= " (Employee status unchanged - manual control)";
-            $response['employee_synced'] = false;
-          }
+          $response['message'] .= $result['is_active']
+            ? " (Employee auto-enabled → Active)"
+            : " (Employee auto-disabled → Inactive)";
+          $response['employee_synced'] = true;
 
           $response['data'] = $result;
           $response['is_active'] = (int)$result['is_active'];
@@ -888,6 +933,10 @@ try {
 
         if (!empty($_GET['qr_code'])) {
           $filters['qr_code'] = $_GET['qr_code'];
+        }
+
+        if (isset($_GET['is_active']) && $_GET['is_active'] !== '') {
+          $filters['is_active'] = (int)$_GET['is_active'];
         }
 
         if (!empty($_GET['created_at'])) {
@@ -978,6 +1027,186 @@ try {
           'first_name' => $_SESSION['first_name']  ?? '',
           'last_name'  => $_SESSION['last_name']   ?? '',
         ];
+        break;
+
+      case 'sync_orphans':
+        // ── Set Inactive any employee whose QR code is:
+        //      (a) not present in the `code` table at all, OR
+        //      (b) present but has is_active = 0
+        try {
+          $userConn = $database->getUserConnection();
+
+          // (a) QR code missing from `code` table entirely
+          $stmtMissing = $userConn->prepare(
+            "SELECT e.id, e.fullname, e.status, e.qr_code
+             FROM employees e
+             WHERE e.qr_code IS NOT NULL
+               AND TRIM(e.qr_code) <> ''
+               AND e.status <> 'Inactive'
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM code c
+                 WHERE LOWER(TRIM(c.qr_code)) = LOWER(TRIM(e.qr_code))
+               )"
+          );
+          $stmtMissing->execute();
+          $missing = $stmtMissing->fetchAll(PDO::FETCH_ASSOC);
+
+          // (b) QR code exists in `code` but is disabled
+          $stmtDisabled = $userConn->prepare(
+            "SELECT e.id, e.fullname, e.status, e.qr_code
+             FROM employees e
+             INNER JOIN code c
+               ON LOWER(TRIM(c.qr_code)) = LOWER(TRIM(e.qr_code))
+             WHERE c.is_active = 0
+               AND e.status <> 'Inactive'"
+          );
+          $stmtDisabled->execute();
+          $disabled = $stmtDisabled->fetchAll(PDO::FETCH_ASSOC);
+
+          // Merge; deduplicate by employee id
+          $seen       = [];
+          $toProcess  = [];
+          foreach (array_merge($missing, $disabled) as $row) {
+            if (!isset($seen[$row['id']])) {
+              $seen[$row['id']] = true;
+              $toProcess[]      = $row;
+            }
+          }
+
+          $synced  = 0;
+          $details = [];
+          $now     = date('Y-m-d H:i:s');
+
+          foreach ($toProcess as $emp) {
+            $updStmt = $userConn->prepare(
+              "UPDATE employees
+               SET status = 'Inactive', updated_at = :ts
+               WHERE id = :id AND status <> 'Inactive'"
+            );
+            $updStmt->execute([':ts' => $now, ':id' => $emp['id']]);
+
+            if ($updStmt->rowCount() > 0) {
+              // Determine reason
+              $isMissing = !in_array(
+                $emp['id'],
+                array_column($disabled, 'id'),
+                true
+              );
+              $reason = $isMissing
+                ? 'Auto-disabled: Proximity code not registered in code table'
+                : 'Auto-disabled: Proximity code is disabled';
+
+              try {
+                $histStmt = $userConn->prepare(
+                  "INSERT INTO status_history
+                     (employee_id, old_status, new_status, changed_by, change_reason, created_at)
+                   VALUES (:eid, :old, 'Inactive', :by, :reason, :ts)"
+                );
+                $histStmt->execute([
+                  ':eid'    => $emp['id'],
+                  ':old'    => $emp['status'],
+                  ':by'     => $_SESSION['username'] ?? 'System',
+                  ':reason' => $reason,
+                  ':ts'     => $now,
+                ]);
+              } catch (Exception $e) {
+                error_log("status_history insert failed (sync_orphans): " . $e->getMessage());
+              }
+
+              logSystemAction(
+                $database->getCurrentUserId(),
+                'EMPLOYEE_ORPHAN_SYNCED',
+                "Employee {$emp['fullname']} → Inactive — $reason (QR: {$emp['qr_code']})"
+              );
+
+              $details[] = [
+                'employee_id'  => $emp['id'],
+                'fullname'     => $emp['fullname'],
+                'qr_code'      => $emp['qr_code'],
+                'old_status'   => $emp['status'],
+                'new_status'   => 'Inactive',
+                'reason'       => $reason,
+              ];
+              $synced++;
+            }
+          }
+
+          $stmtRestore = $userConn->prepare(
+            "SELECT e.id, e.fullname, e.status, e.qr_code
+   FROM employees e
+   INNER JOIN code c
+     ON LOWER(TRIM(c.qr_code)) = LOWER(TRIM(e.qr_code))
+   WHERE c.is_active = 1
+     AND e.status = 'Inactive'"
+          );
+          $stmtRestore->execute();
+          $toRestore = $stmtRestore->fetchAll(PDO::FETCH_ASSOC);
+
+          foreach ($toRestore as $emp) {
+            // Only auto-restore if last status_history reason was an auto-disable
+            $histStmt = $userConn->prepare(
+              "SELECT change_reason FROM status_history
+     WHERE employee_id = :id
+     ORDER BY created_at DESC LIMIT 1"
+            );
+            $histStmt->execute([':id' => $emp['id']]);
+            $lastReason = $histStmt->fetchColumn();
+
+            if (!$lastReason || strpos($lastReason, 'Auto-disabled') === false) {
+              continue; // manually set Inactive — don't touch
+            }
+
+            $updStmt = $userConn->prepare(
+              "UPDATE employees SET status = 'Active', updated_at = :ts WHERE id = :id AND status = 'Inactive'"
+            );
+            $updStmt->execute([':ts' => $now, ':id' => $emp['id']]);
+
+            if ($updStmt->rowCount() > 0) {
+              try {
+                $histInsert = $userConn->prepare(
+                  "INSERT INTO status_history
+           (employee_id, old_status, new_status, changed_by, change_reason, created_at)
+         VALUES (:eid, 'Inactive', 'Active', :by, :reason, :ts)"
+                );
+                $histInsert->execute([
+                  ':eid'    => $emp['id'],
+                  ':by'     => $_SESSION['username'] ?? 'System',
+                  ':reason' => 'Auto-enabled: Proximity code is active and registered',
+                  ':ts'     => $now,
+                ]);
+              } catch (Exception $e) {
+                error_log("status_history insert failed (sync_orphans restore): " . $e->getMessage());
+              }
+
+              logSystemAction(
+                $database->getCurrentUserId(),
+                'EMPLOYEE_ORPHAN_RESTORED',
+                "Employee {$emp['fullname']} → Active — code re-enabled (QR: {$emp['qr_code']})"
+              );
+
+              $details[] = [
+                'employee_id'  => $emp['id'],
+                'fullname'     => $emp['fullname'],
+                'qr_code'      => $emp['qr_code'],
+                'old_status'   => 'Inactive',
+                'new_status'   => 'Active',
+                'reason'       => 'Auto-enabled: code exists and is active',
+              ];
+              $synced++;
+            }
+          }
+
+          $response['success']      = true;
+          $response['synced_count'] = $synced;
+          $response['details']      = $details;
+          $response['message']      = $synced > 0
+            ? "Synced $synced employee(s) to Inactive."
+            : "All employees are in sync — no changes needed.";
+        } catch (Exception $e) {
+          $response['message'] = 'sync_orphans error: ' . $e->getMessage();
+          error_log("sync_orphans error: " . $e->getMessage());
+        }
         break;
 
       default:

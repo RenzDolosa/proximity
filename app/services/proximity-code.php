@@ -98,6 +98,11 @@ if ($databaseConnected) {
             </select>
           </div>
           <div class="search-group">
+            <select id="search_status" name="status">
+              <option value="">Default: ALL</option>
+            </select>
+          </div>
+          <div class="search-group">
             <input type="text" id="search_date" name="created_at" placeholder="Date">
           </div>
           <div class="search-group" style="position: fixed; left: 0; top: 0; opacity: 0;">

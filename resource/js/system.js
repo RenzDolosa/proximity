@@ -104,6 +104,7 @@ document.addEventListener("DOMContentLoaded", function () {
   loadEmployees();
   setupEventListeners();
   updateDeleteButtonState();
+  syncOrphanStatuses();
 });
 
 // Setup event listeners
@@ -399,6 +400,26 @@ const playCheckoutSound = () => playSound("checkoutSound");
 const playInactiveSound = () => playSound("inactiveSound");
 const playNoResultSound = () => playSound("noResultSound");
 const playWarningSound = () => playSound("warningSound");
+
+async function syncOrphanStatuses() {
+  try {
+    const response = await fetch("proxcode_backend.php?action=sync_orphans", {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
+      },
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    if (data.success && data.synced_count > 0) {
+      // Silently reload so restored Active statuses show immediately
+      await loadEmployees(hasActiveFilters() ? getActiveFilters() : {}, true, true);
+      await updateActiveEmployees();
+    }
+  } catch (error) {
+    console.warn("[system] syncOrphanStatuses failed:", error);
+  }
+}
 
 // Load employee data for editing
 async function loadEmployeeData(employeeId) {
@@ -2074,7 +2095,8 @@ async function loadEmployees(
       await renderEmployeeTable();
       await updateTotalEmployees();
       await updateActiveEmployees();
-      updateDeleteButtonState();
+      await updateDeleteButtonState();
+      await syncOrphanStatuses();
 
       if (Object.keys(filters).length > 0) {
         displayFilterStatus();
@@ -2374,6 +2396,7 @@ async function handleFormSubmit(e) {
 
       await updateTotalEmployees();
       await updateActiveEmployees();
+      await syncOrphanStatuses();
     } else {
       showAlert(data.message || "Failed to save employee", "error");
     }
@@ -2533,6 +2556,7 @@ async function deleteEmployee(employeeId) {
       await loadEmployees(activeFilters, true, true);
       await updateTotalEmployees();
       await updateActiveEmployees();
+      await syncOrphanStatuses();
     } else {
       showAlert(data.message, "error");
     }

@@ -323,7 +323,7 @@ if ($databaseConnected) {
               <label class="fl-label" for="shift">Shift <span style="color:#e74c3c">*</span></label>
             </div>
             <div class="form-group fl-group">
-              <select id="status" name="status" class="has-value" onchange="this.classList.toggle('has-value', this.value !== '')">
+              <select id="status" name="status" class="has-value" style="cursor: not-allowed;" onchange="this.classList.toggle('has-value', this.value !== '')" disabled>
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
               </select>
