@@ -413,7 +413,11 @@ async function syncOrphanStatuses() {
     const data = await response.json();
     if (data.success && data.synced_count > 0) {
       // Silently reload so restored Active statuses show immediately
-      await loadEmployees(hasActiveFilters() ? getActiveFilters() : {}, true, true);
+      await loadEmployees(
+        hasActiveFilters() ? getActiveFilters() : {},
+        true,
+        true,
+      );
       await updateActiveEmployees();
     }
   } catch (error) {
@@ -1326,6 +1330,15 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     }
   });
 
+  input.addEventListener("blur", (e) => {
+    setTimeout(() => {
+      if (!list.contains(document.activeElement)) {
+        list.style.display = "none";
+        idx = -1;
+      }
+    }, 150);
+  });
+
   input.addEventListener("input", () => show(input.value));
 
   window.addEventListener(
@@ -1341,6 +1354,11 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
 
   input.addEventListener("keydown", (e) => {
     const items = list.querySelectorAll("li");
+    if (e.key === "Tab") {
+      list.style.display = "none";
+      idx = -1;
+      return;
+    }
     if (!items.length || list.style.display === "none") return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -1365,12 +1383,17 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     }
   });
 
-  document.addEventListener("click", (e) => {
+  if (input._outsideClickHandler) {
+    document.removeEventListener("click", input._outsideClickHandler);
+  }
+  input._outsideClickHandler = (e) => {
     if (!input.contains(e.target) && !list.contains(e.target)) {
       list.style.display = "none";
       idx = -1;
     }
-  });
+  };
+  document.removeEventListener("click", input._outsideClickHandler);
+  document.addEventListener("click", input._outsideClickHandler);
 }
 
 // Close suggestions when clicking outside

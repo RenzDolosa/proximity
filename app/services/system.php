@@ -329,6 +329,18 @@ if ($databaseConnected) {
               </select>
               <label class="fl-label" for="status">Status</label>
             </div>
+            <div class="form-group fl-group">
+              <input type="text" id="birth" name="birth" placeholder=" " autocomplete="off">
+              <label class="fl-label" for="birth">Birth Date <span style="color:#e74c3c">*</span></label>
+            </div>
+            <div class="form-group fl-group">
+              <select id="gender" name="gender" class="has-value" onchange="this.classList.toggle('has-value', this.value !== '')">
+                <option value="">Select Gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+              <label class="fl-label" for="gender">Gender</label>
+            </div>
           </div>
 
           <div class="form-layout">
