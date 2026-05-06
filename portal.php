@@ -844,6 +844,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <version_compare>
         <div class="version-tag" id="version"></div>
       </version_compare>
+      <div class="nav-item" onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=about';">
+        <i class="fas fa-info-circle"></i> <span class="nav-item-label">About Us</span>
+      </div>
       <div class="nav-item" onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=settings';">
         <i class="fas fa-cog"></i> <span class="nav-item-label">Settings</span>
       </div>
@@ -991,6 +994,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=settings';">
       <i class="fas fa-cog"></i>
       <span class="bn-label">Settings</span>
+    </button>
+
+    <!-- About -->
+    <button class="bn-item" id="bn-about"
+      onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=about';">
+      <i class="fas fa-info-circle"></i>
+      <span class="bn-label">About</span>
     </button>
 
   </nav>

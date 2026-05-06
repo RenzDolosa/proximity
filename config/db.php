@@ -26,6 +26,7 @@ const PAGE_ICONS = [
   'm-i v2'             => 'fa-keyboard',
   'test'               => 'fa-flask',
   'readme'             => 'fa-book-open',
+  'about'              => 'fa-info-circle',
   // Buttons and actions: (not pages)
   'add-system'                => 'fa-user-plus',
   'edit-system'               => 'fa-edit',

@@ -14,7 +14,7 @@ $userGroup = $_SESSION['user_group'] ?? '';
 $page = $_GET['page'] ?? null;
 
 // Pages that are full standalone HTML — render them in an iframe wrapper, not included directly
-$iframePages = ['admin panel', 'account', 'employee dashboard', 'settings'];
+$iframePages = ['admin panel', 'account', 'employee dashboard', 'settings', 'about'];
 
 // Pages safe to include directly (they output only a fragment, no full HTML shell)
 $includedPages = ['account', 'employee dashboard', 'f-pass', 'reg', 'settings'];
