@@ -2,178 +2,79 @@
 
 // Configuration
 const CONFIG = {
-  BACKEND_URL: '../../app/services/proxcode_backend.php',
+  BACKEND_URL: "proxcode_backend.php",
   MAX_FILE_SIZE: 10 * 1024 * 1024,
-  TIMEOUT: 30000
+  TIMEOUT: 30000,
 };
 
 // ===== HELPER FUNCTIONS =====
 
-/**
- * Show alert message to user
- */
-
-// Handle import form submission
-async function handleImportSubmit(e) {
-  e.preventDefault();
-
-  const fileInput = document.getElementById("dataFile");
-  const file = fileInput.files[0];
-
-  if (!file) {
-    showAlert("Please select a file", "error");
-    return;
-  }
-
-  const fileExtension = file.name.split(".").pop().toLowerCase();
-
-  if (!["csv", "xlsx", "xls"].includes(fileExtension)) {
-    showAlert("Please select a valid file format (.csv, .xlsx, .xls)", "error");
-    return;
-  }
-
-  try {
-    showImportProgress(true);
-    updateImportStatus("Reading file...");
-
-    let dataRows;
-
-    if (fileExtension === "csv") {
-      dataRows = await processCSVFile(file);
-    } else {
-      dataRows = await processExcelFile(file);
-    }
-
-    if (dataRows.length === 0) {
-      showAlert("No data found in file", "error");
-      showImportProgress(false);
-      return;
-    }
-
-    updateImportStatus(`Processing ${dataRows.length} proximity codes...`);
-
-    const employees = [];
-    const errors = [];
-
-    dataRows.forEach((row, index) => {
-      const rowNumber = document.getElementById("skipHeader").checked
-        ? index + 2
-        : index + 1;
-
-      // Validate required fields
-      if (!row[0]) {
-        errors.push(`Row ${rowNumber}: Missing required fields (fullname)`);
-        return;
-      }
-
-      // // Validate shift value
-      // const validShifts = ['Day Shift', 'Night Shift', 'Graveyard Shift'];
-      // if (row[4] && !validShifts.includes(row[4])) {
-      //     errors.push(`Row ${rowNumber}: Invalid shift value "${row[4]}". Must be one of: ${validShifts.join(', ')}`);
-      //     return;
-      // }
-
-      employees.push({
-        qr: row[6] || "",
-      });
-    });
-
-    if (errors.length > 0) {
-      showAlert(
-        `Found ${errors.length} errors:\n${errors.slice(0, 5).join("\n")}${
-          errors.length > 5 ? "\n... and more" : ""
-        }`,
-        "error"
-      );
-      showImportProgress(false);
-      return;
-    }
-
-    // Send to backend
-    const formData = new FormData();
-    formData.append("action", "import");
-    formData.append("code", JSON.stringify(employees));
-
-    updateImportStatus("Importing proximity codes to database...");
-
-    const response = await fetch("../../app/service/proxcode_backend.php", {
-      method: "POST",
-      body: formData,
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
-    });
-
-    const data = await response.json();
-
-    if (data.success) {
-      updateProgress(100);
-
-      let statusMessage = `Successfully imported ${data.imported_count} proximity codes!`;
-      let alertMessage = `Import completed! ${data.imported_count} proximity codes imported successfully.`;
-
-      // Add duplicate information if any
-      if (data.duplicates_count && data.duplicates_count > 0) {
-        statusMessage += ` (${data.duplicates_count} duplicates allowed)`;
-        alertMessage += `\n${data.duplicates_count} duplicate proximity codes were imported as separate records.`;
-      }
-
-      // Add error information if any
-      if (data.errors && data.errors.length > 0) {
-        alertMessage += `\n\nNote: ${data.errors.length} records had issues but import continued.`;
-      }
-
-      updateImportStatus(statusMessage);
-      showAlert(alertMessage, "success");
-
-      setTimeout(() => {
-        closeModal();
-        loadEmployees(); // Refresh the table
-      }, 2000);
-    } else {
-      showAlert(data.message, "error");
-    }
-  } catch (error) {
-    console.error("Import error:", error);
-    showAlert("Import failed: " + error.message, "error");
-  } finally {
-    setTimeout(() => {
-      showImportProgress(false);
-    }, 3000);
-  }
-}
-
-/**
- * Escape HTML to prevent XSS
- */
 function escapeHtml(text) {
-  if (typeof text !== 'string') {
-    text = String(text);
-  }
+  if (typeof text !== "string") text = String(text);
   const map = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;'
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
   };
-  return text.replace(/[&<>"']/g, m => map[m]);
+  return text.replace(/[&<>"']/g, (m) => map[m]);
 }
 
-/**
- * Safe element selector with error checking
- */
 function safeGetElement(id) {
   const el = document.getElementById(id);
-  if (!el) {
-    console.warn(`Element with id "${id}" not found`);
-  }
+  if (!el) console.warn(`Element with id "${id}" not found`);
   return el;
 }
 
-// ===== MODAL FUNCTIONS =====
+// ===== WIRE IMPORT BUTTON =====
+// Robust wiring that works regardless of DOMContentLoaded timing.
+// Re-wires every time the modal opens (clone-replace strips stale listeners).
 
-// Open import modal
+function _wireImportButton() {
+  const importBtn = document.querySelector(".btn-import");
+  if (!importBtn) return;
+
+  // Force button to never trigger a native form submit
+  importBtn.type = "button";
+
+  // Clone-replace to strip any previous listeners, then re-add ours
+  const fresh = importBtn.cloneNode(true);
+  importBtn.parentNode.replaceChild(fresh, importBtn);
+  fresh.type = "button";
+  fresh.addEventListener("click", handleImportSubmit);
+
+  // File-input label update (idempotent via flag)
+  const fileInput = safeGetElement("dataFile");
+  if (fileInput && !fileInput._ipcBound) {
+    fileInput._ipcBound = true;
+    fileInput.addEventListener("change", function (e) {
+      const lbl = document.querySelector("#dataFile + .file-upload-label");
+      if (!lbl) return;
+      if (e.target.files.length > 0) {
+        const name = e.target.files[0].name;
+        const ext = name.split(".").pop().toLowerCase();
+        const icon =
+          ext === "csv"
+            ? `<i class="fas fa-file-alt"></i>`
+            : `<i class="fas fa-file-excel"></i>`;
+        lbl.innerHTML = `${icon} ${escapeHtml(name)}`;
+      } else {
+        lbl.innerHTML = `<i class="fas fa-file-alt"></i> Click to select file (.csv, .xlsx, .xls)`;
+      }
+    });
+  }
+}
+
+// Wire on first load
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", _wireImportButton);
+} else {
+  _wireImportButton(); // DOM already ready (script loaded late)
+}
+
+// ===== MODAL =====
+
 function openImportModal() {
   const modal = safeGetElement("importModal");
   const form = safeGetElement("importForm");
@@ -185,264 +86,268 @@ function openImportModal() {
   if (form) form.reset();
   if (preview) preview.style.display = "none";
   if (progress) progress.style.display = "none";
-  if (label) {
+  if (label)
     label.innerHTML = `<i class="fas fa-file"></i> Click to select file (.csv, .xlsx, .xls)`;
-  }
+
+  // Re-wire after modal opens — handles cases where DOM wasn't ready at script load
+  _wireImportButton();
 }
 
-// ===== FILE HANDLING =====
+// ===== PREVIEW =====
 
-// Update file label when file is selected
-document.addEventListener("DOMContentLoaded", function () {
-  const fileInput = safeGetElement("dataFile");
-  const form = safeGetElement("importForm");
-
-  if (fileInput) {
-    fileInput.addEventListener("change", function (e) {
-      const label = document.querySelector("#dataFile + .file-upload-label");
-      if (label) {
-        if (e.target.files.length > 0) {
-          const fileName = e.target.files[0].name;
-          const fileExtension = fileName.split(".").pop().toLowerCase();
-          const fileIcon = fileExtension === "csv" 
-            ? `<i class="fas fa-file-alt"></i>` 
-            : `<i class="fas fa-file-excel"></i>`;
-          label.innerHTML = `${fileIcon} ${escapeHtml(fileName)}`;
-        } else {
-          label.innerHTML = `<i class="fas fa-file-alt"></i> Click to select file (.csv, .xlsx, .xls)`;
-        }
-      }
-    });
-  }
-
-  if (form) {
-    form.addEventListener("submit", handleImportSubmit);
-  }
-});
-
-// Preview file content (CSV or Excel)
 async function previewFile() {
   const fileInput = safeGetElement("dataFile");
-  
   if (!fileInput) {
     showAlert("File input element not found", "error");
     return;
   }
 
   const file = fileInput.files[0];
-
   if (!file) {
     showAlert("Please select a file first", "error");
     return;
   }
 
-  // Validate file size
   if (file.size > CONFIG.MAX_FILE_SIZE) {
-    showAlert(`File size exceeds maximum limit of ${CONFIG.MAX_FILE_SIZE / 1024 / 1024}MB`, "error");
+    showAlert(
+      `File size exceeds ${CONFIG.MAX_FILE_SIZE / 1024 / 1024}MB limit`,
+      "error",
+    );
     return;
   }
 
-  const fileExtension = file.name.split(".").pop().toLowerCase();
-
-  if (!["csv", "xlsx", "xls"].includes(fileExtension)) {
+  const ext = file.name.split(".").pop().toLowerCase();
+  if (!["csv", "xlsx", "xls"].includes(ext)) {
     showAlert("Please select a valid file format (.csv, .xlsx, .xls)", "error");
     return;
   }
 
   try {
-    let data;
-
-    if (fileExtension === "csv") {
-      data = await parseCSVFile(file);
-    } else {
-      // Check if XLSX library is available
-      if (typeof XLSX === 'undefined') {
-        showAlert("Excel library not loaded. Please ensure SheetJS is included in your HTML.", "error");
-        console.error("XLSX library not found. Include: <script src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js'></script>");
-        return;
-      }
-      data = await parseExcelFile(file);
-    }
+    const data =
+      ext === "csv"
+        ? await _parseCSVPreview(file)
+        : await _parseExcelPreview(file);
 
     if (!data || data.length === 0) {
       showAlert("No data found in file", "error");
       return;
     }
-
-    displayPreview(data);
-  } catch (error) {
-    console.error("Preview error:", error);
-    showAlert("Error reading file: " + error.message, "error");
+    _displayPreview(data);
+  } catch (err) {
+    console.error("Preview error:", err);
+    showAlert("Error reading file: " + err.message, "error");
   }
 }
 
-// Parse CSV file
-async function parseCSVFile(file) {
-  try {
-    const text = await file.text();
-    const lines = text.split("\n").filter((line) => line.trim());
-
-    if (lines.length === 0) {
-      throw new Error("CSV file is empty");
-    }
-
-    const skipHeaderCheckbox = safeGetElement("skipHeader");
-    const skipHeader = skipHeaderCheckbox ? skipHeaderCheckbox.checked : false;
-    const startIndex = skipHeader ? 1 : 0;
-    const previewLines = lines.slice(startIndex, Math.min(startIndex + 5, lines.length));
-
-    return previewLines.map((line) => parseCSVLine(line));
-  } catch (error) {
-    throw new Error("Failed to parse CSV: " + error.message);
-  }
+async function _parseCSVPreview(file) {
+  const text = await file.text();
+  const lines = text.split("\n").filter((l) => l.trim());
+  if (!lines.length) throw new Error("CSV file is empty");
+  const skip = safeGetElement("skipHeader")?.checked ?? true;
+  const start = skip ? 1 : 0;
+  return lines
+    .slice(start, Math.min(start + 5, lines.length))
+    .map(_parseCSVLine);
 }
 
-// Parse Excel file
-async function parseExcelFile(file) {
+async function _parseExcelPreview(file) {
   return new Promise((resolve, reject) => {
-    if (typeof XLSX === 'undefined') {
+    if (typeof XLSX === "undefined") {
       reject(new Error("XLSX library not loaded"));
       return;
     }
-
     const reader = new FileReader();
-    reader.onload = function (e) {
+    reader.onload = (e) => {
       try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: "array" });
-
-        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-          reject(new Error("Excel file has no sheets"));
+        const wb = XLSX.read(new Uint8Array(e.target.result), {
+          type: "array",
+        });
+        if (!wb.SheetNames.length) {
+          reject(new Error("No sheets found"));
           return;
         }
-
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-        if (!jsonData || jsonData.length === 0) {
-          reject(new Error("Excel sheet is empty"));
+        const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {
+          header: 1,
+        });
+        if (!json.length) {
+          reject(new Error("Sheet is empty"));
           return;
         }
-
-        const skipHeaderCheckbox = safeGetElement("skipHeader");
-        const skipHeader = skipHeaderCheckbox ? skipHeaderCheckbox.checked : false;
-        const startIndex = skipHeader ? 1 : 0;
-        const previewData = jsonData.slice(startIndex, Math.min(startIndex + 5, jsonData.length));
-
-        resolve(previewData);
-      } catch (error) {
-        reject(new Error("Failed to parse Excel file: " + error.message));
+        const skip = safeGetElement("skipHeader")?.checked ?? true;
+        const start = skip ? 1 : 0;
+        resolve(json.slice(start, Math.min(start + 5, json.length)));
+      } catch (err) {
+        reject(new Error("Failed to parse Excel: " + err.message));
       }
     };
-    reader.onerror = () => reject(new Error("Failed to read Excel file"));
+    reader.onerror = () => reject(new Error("Failed to read file"));
     reader.readAsArrayBuffer(file);
   });
 }
 
-// Display preview data
-function displayPreview(data) {
-  const previewContainer = safeGetElement("importPreview");
-  
-  if (!previewContainer) {
-    console.error("Preview container not found");
+function _displayPreview(data) {
+  const container = safeGetElement("importPreview");
+  if (!container) return;
+
+  if (!data || !data.length) {
+    container.innerHTML = '<p style="color:#dc3545;">No data to preview</p>';
+    container.style.display = "block";
     return;
   }
 
-  if (!data || data.length === 0) {
-    previewContainer.innerHTML = '<p style="color: #dc3545;">No data to preview</p>';
-    previewContainer.style.display = "block";
-    return;
-  }
-
-  let previewHTML = '<table class="preview-table"><thead><tr>';
-  previewHTML += '<th>SN</th>';
-  previewHTML += '<th>Proximity Code</th>';
-  previewHTML += '</tr></thead><tbody>';
-
-  data.forEach((row, index) => {
-    previewHTML += "<tr>";
-
-    // Handle both array and object format
-    let qrValue = "";
-    if (Array.isArray(row)) {
-      qrValue = (row[0] || "").toString().trim();
-    } else if (typeof row === 'object' && row !== null) {
-      qrValue = (row.qr_code || row['Proximity Code'] || "").toString().trim();
-    }
-
-    const qrDisplay = qrValue 
-      ? escapeHtml(qrValue)
-      : '<em style="color: #6c757d;">Skipped Row</em>';
-    previewHTML += `<td><span class="badge badge-info">${index + 1}</span></td>`;
-    previewHTML += `<td>${qrDisplay}</td>`;
-    previewHTML += "</tr>";
+  let html =
+    '<h4>Preview (First 5 rows):</h4><table class="preview-table"><thead><tr><th>SN</th><th>Proximity Code</th></tr></thead><tbody>';
+  data.forEach((row, i) => {
+    let qr = "";
+    if (Array.isArray(row)) qr = (row[0] || "").toString().trim();
+    else if (row && typeof row === "object")
+      qr = (row.qr_code || row["Proximity Code"] || "").toString().trim();
+    html += `<tr><td><span class="badge badge-info">${i + 1}</span></td><td>${
+      qr ? escapeHtml(qr) : '<em style="color:#6c757d;">Empty / Skipped</em>'
+    }</td></tr>`;
   });
-
-  previewHTML += "</tbody></table>";
-
-  previewContainer.innerHTML = previewHTML;
-  previewContainer.style.display = "block";
+  html += "</tbody></table>";
+  container.innerHTML = html;
+  container.style.display = "block";
 }
 
-// Parse CSV line (handles quotes and commas)
-function parseCSVLine(line) {
+// ===== CSV LINE PARSER =====
+
+function _parseCSVLine(line) {
   const result = [];
-  let current = "";
-  let inQuotes = false;
-
+  let current = "",
+    inQuotes = false;
   for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-
-    if (char === '"') {
+    const c = line[i];
+    if (c === '"') {
       if (i + 1 < line.length && line[i + 1] === '"') {
-        // Handle escaped quotes ""
         current += '"';
         i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === "," && !inQuotes) {
+      } else inQuotes = !inQuotes;
+    } else if (c === "," && !inQuotes) {
       result.push(current.trim());
       current = "";
     } else {
-      current += char;
+      current += c;
     }
   }
-
   result.push(current.trim());
   return result;
 }
 
-// ===== IMPORT HANDLING =====
+// ===== FULL FILE PROCESSORS =====
 
-// Handle import form submission
+async function _processCSVFull(file) {
+  const text = await file.text();
+  const lines = text.split("\n").filter((l) => l.trim());
+  if (!lines.length) throw new Error("CSV file is empty");
+  const skip = safeGetElement("skipHeader")?.checked ?? true;
+  return (skip ? lines.slice(1) : lines).map(_parseCSVLine);
+}
+
+async function _processExcelFull(file) {
+  return new Promise((resolve, reject) => {
+    if (typeof XLSX === "undefined") {
+      reject(new Error("XLSX library not loaded"));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(new Uint8Array(e.target.result), {
+          type: "array",
+        });
+        if (!wb.SheetNames.length) {
+          reject(new Error("No sheets found"));
+          return;
+        }
+        const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {
+          header: 1,
+        });
+        const skip = safeGetElement("skipHeader")?.checked ?? true;
+        const rows = (skip ? json.slice(1) : json).filter(
+          (r) =>
+            r &&
+            Array.isArray(r) &&
+            r.some((c) => c !== null && c !== undefined && c !== ""),
+        );
+        if (!rows.length) {
+          reject(new Error("No data rows found"));
+          return;
+        }
+        resolve(rows);
+      } catch (err) {
+        reject(new Error("Failed to process Excel: " + err.message));
+      }
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ===== POST-IMPORT REFRESH =====
+// Called after a successful import.
+// Busts all caches, reloads the table, then runs syncOrphanStatuses so that
+// employee statuses are immediately updated to reflect the newly imported codes.
+
+async function _refreshAfterImport() {
+  // 1. Bust proxcode caches (defined in proxcode.js)
+  if (typeof employeeDataCache !== "undefined") employeeDataCache = null;
+  if (typeof qrImageMapCache !== "undefined") qrImageMapCache = null;
+
+  // 2. Reload the proximity code table (silently — no loading spinner flash)
+  if (typeof loadEmployees === "function") {
+    await loadEmployees({}, false, true);
+  } else if (typeof refreshTable === "function") {
+    await refreshTable();
+  }
+
+  // 3. Update Available / Occupied counters
+  if (typeof updateTotalAvailable === "function") {
+    await updateTotalAvailable();
+  }
+
+  // 4. ── THE KEY FIX ──
+  // syncOrphanStatuses compares the code table against the employees table
+  // and sets employee statuses to Active/Inactive accordingly.
+  // Without this call, statuses stay stale after a bulk import.
+  if (typeof syncOrphanStatuses === "function") {
+    await syncOrphanStatuses();
+  }
+
+  // 5. If we're on the system/manpower page, refresh those counts too
+  if (typeof updateActiveEmployees === "function") {
+    await updateActiveEmployees();
+  }
+}
+
+// ===== MAIN IMPORT HANDLER =====
+
 async function handleImportSubmit(e) {
-  e.preventDefault();
+  if (e) e.preventDefault();
 
   const fileInput = safeGetElement("dataFile");
-
   if (!fileInput) {
     showAlert("File input element not found", "error");
     return;
   }
 
   const file = fileInput.files[0];
-
   if (!file) {
     showAlert("Please select a file", "error");
     return;
   }
 
-  // Validate file size
   if (file.size > CONFIG.MAX_FILE_SIZE) {
-    showAlert(`File size exceeds maximum limit of ${CONFIG.MAX_FILE_SIZE / 1024 / 1024}MB`, "error");
+    showAlert(
+      `File size exceeds ${CONFIG.MAX_FILE_SIZE / 1024 / 1024}MB limit`,
+      "error",
+    );
     return;
   }
 
-  const fileExtension = file.name.split(".").pop().toLowerCase();
-
-  if (!["csv", "xlsx", "xls"].includes(fileExtension)) {
+  const ext = file.name.split(".").pop().toLowerCase();
+  if (!["csv", "xlsx", "xls"].includes(ext)) {
     showAlert("Please select a valid file format (.csv, .xlsx, .xls)", "error");
     return;
   }
@@ -453,72 +358,60 @@ async function handleImportSubmit(e) {
     updateProgress(10);
 
     let dataRows;
-
-    if (fileExtension === "csv") {
-      dataRows = await processCSVFile(file);
+    if (ext === "csv") {
+      dataRows = await _processCSVFull(file);
     } else {
-      if (typeof XLSX === 'undefined') {
+      if (typeof XLSX === "undefined") {
         showAlert("Excel library not loaded", "error");
         showImportProgress(false);
         return;
       }
-      dataRows = await processExcelFile(file);
+      dataRows = await _processExcelFull(file);
     }
 
-    if (!dataRows || dataRows.length === 0) {
+    if (!dataRows || !dataRows.length) {
       showAlert("No data found in file", "error");
       showImportProgress(false);
       return;
     }
 
     updateProgress(20);
-    updateImportStatus(`Processing ${dataRows.length} proximity codes...`);
+    updateImportStatus(`Processing ${dataRows.length} row(s)...`);
 
-    const employees = [];
+    const proximityCodes = [];
     const errors = [];
+    const skip = safeGetElement("skipHeader")?.checked ?? true;
 
-    // Process each row
     dataRows.forEach((row, index) => {
-      const skipHeaderCheckbox = safeGetElement("skipHeader");
-      const skipHeader = skipHeaderCheckbox ? skipHeaderCheckbox.checked : false;
-      const rowNumber = skipHeader ? index + 2 : index + 1;
-
-      // Extract QR code from row (handle both array and object format)
+      const rowNumber = skip ? index + 2 : index + 1;
       let qrCode = "";
       if (Array.isArray(row)) {
         qrCode = (row[0] || "").toString().trim();
-      } else if (typeof row === 'object' && row !== null) {
-        qrCode = (row.qr_code || row['Proximity Code'] || "").toString().trim();
+      } else if (row && typeof row === "object") {
+        qrCode = (row.qr_code || row["Proximity Code"] || "").toString().trim();
       }
 
-      // Validate and add to proximity codes array
       if (qrCode) {
-        employees.push({
-          qr_code: qrCode
-        });
+        proximityCodes.push({ qr_code: qrCode });
       } else {
         errors.push(`Row ${rowNumber}: Missing proximity code`);
       }
     });
 
-    // Check if we have valid records
-    if (employees.length === 0) {
+    if (proximityCodes.length === 0) {
       showAlert(
-        `No valid proximity codes found.\n${errors.slice(0, 5).join("\n")}${
-          errors.length > 5 ? "\n... and more" : ""
-        }`,
-        "error"
+        `No valid proximity codes found.\n${errors.slice(0, 5).join("\n")}${errors.length > 5 ? "\n...and more" : ""}`,
+        "error",
       );
       showImportProgress(false);
       return;
     }
 
-    // If there are errors but we have records, ask for confirmation
     if (errors.length > 0) {
       const proceed = confirm(
-        `Found ${errors.length} rows with issues.\nContinue with ${employees.length} valid records?\n\n${errors.slice(0, 3).join("\n")}${
-          errors.length > 3 ? "\n... and more" : ""
-        }`
+        `Found ${errors.length} empty row(s) that will be skipped.\n` +
+          `Continue importing ${proximityCodes.length} valid code(s)?\n\n` +
+          `${errors.slice(0, 3).join("\n")}${errors.length > 3 ? "\n...and more" : ""}`,
       );
       if (!proceed) {
         showImportProgress(false);
@@ -527,222 +420,100 @@ async function handleImportSubmit(e) {
     }
 
     updateProgress(40);
-    updateImportStatus("Preparing data for upload...");
+    updateImportStatus("Preparing upload...");
 
-    // FIXED: Changed 'employees' to 'code' to match PHP backend expectation
-    // PHP Backend expects: $_POST['code']
+    // Backend expects: action=import, code=JSON array of {qr_code} objects
     const formData = new FormData();
     formData.append("action", "import");
-    formData.append("code", JSON.stringify(employees));  // ✅ FIXED: Was 'employees', now 'code'
+    formData.append("code", JSON.stringify(proximityCodes));
 
     updateProgress(60);
     updateImportStatus("Uploading to database...");
+    console.log(
+      `[ipc] Sending ${proximityCodes.length} record(s) to ${CONFIG.BACKEND_URL}`,
+    );
 
-    console.log("Sending import request with", employees.length, "records to", CONFIG.BACKEND_URL);
-    console.log("Data structure:", JSON.stringify(employees, null, 2));
-
-    // Send to backend
     const response = await fetch(CONFIG.BACKEND_URL, {
       method: "POST",
       body: formData,
-      headers: {
-        "X-Requested-With": "XMLHttpRequest"
-      },
-      timeout: CONFIG.TIMEOUT
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
-    // Check HTTP response status
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
-    }
+    if (!response.ok)
+      throw new Error(`HTTP ${response.status} ${response.statusText}`);
 
     updateProgress(80);
-
-    // Parse JSON response
     const data = await response.json();
-    console.log("Backend response:", data);
+    console.log("[ipc] Response:", data);
 
     if (data.success) {
       updateProgress(100);
 
-      const importedCount = data.imported_count || employees.length;
-      const duplicatesCount = data.duplicates_count || 0;
+      const imported = data.imported_count || proximityCodes.length;
+      const duplicates = data.duplicates_count || 0;
 
-      let statusMessage = `Successfully imported ${importedCount} proximity codes!`;
-      let alertMessage = `Import completed!\n${importedCount} codes imported successfully.`;
-
-      // Add duplicate information if any
-      if (duplicatesCount > 0) {
-        statusMessage += ` (${duplicatesCount} duplicates skipped)`;
-        alertMessage += `\n${duplicatesCount} duplicate codes were skipped.`;
+      let statusMsg = `Successfully imported ${imported} code(s)!`;
+      let alertMsg = `Import completed!\n${imported} code(s) imported.`;
+      if (duplicates > 0) {
+        statusMsg += ` (${duplicates} duplicate(s) skipped)`;
+        alertMsg += `\n${duplicates} duplicate(s) skipped.`;
+      }
+      if (data.warnings?.length) {
+        alertMsg += `\n\nWarnings:\n${data.warnings.slice(0, 3).join("\n")}`;
       }
 
-      // Add warning information if any
-      if (data.warnings && Array.isArray(data.warnings) && data.warnings.length > 0) {
-        alertMessage += `\n\nWarnings:\n${data.warnings.slice(0, 3).join("\n")}`;
-      }
+      updateImportStatus(statusMsg);
+      showAlert(alertMsg, "success");
 
-      updateImportStatus(statusMessage);
-      showAlert(alertMessage, "success");
-
-      setTimeout(() => {
+      // Close modal first, then refresh everything including employee statuses
+      setTimeout(async () => {
         closeModal();
-
-        // Refresh the proximity code list if function exists
-        if (typeof loadEmployees === 'function') {
-          console.log("Calling loadEmployees()");
-          loadEmployees();
-        } else if (typeof refreshTable === 'function') {
-          console.log("Calling refreshTable()");
-          refreshTable();
-        } else {
-          console.warn("No refresh function found (loadEmployees or refreshTable)");
-        }
+        await _refreshAfterImport();
       }, 2000);
     } else {
       showAlert(data.message || "Import failed. Please try again.", "error");
-      console.error("Backend error response:", data);
+      console.error("[ipc] Backend error:", data);
     }
-  } catch (error) {
-    console.error("Import error:", error);
-    showAlert("Import failed: " + error.message, "error");
+  } catch (err) {
+    console.error("[ipc] Import error:", err);
+    showAlert("Import failed: " + err.message, "error");
   } finally {
-    setTimeout(() => {
-      showImportProgress(false);
-    }, 1000);
+    setTimeout(() => showImportProgress(false), 1000);
   }
 }
 
-// Process CSV file for import
-async function processCSVFile(file) {
-  const text = await file.text();
-  const lines = text.split("\n").filter((line) => line.trim());
+// ===== PROGRESS HELPERS =====
 
-  if (lines.length === 0) {
-    throw new Error("CSV file is empty");
-  }
-
-  const skipHeaderCheckbox = safeGetElement("skipHeader");
-  const skipHeader = skipHeaderCheckbox ? skipHeaderCheckbox.checked : false;
-  const dataLines = skipHeader ? lines.slice(1) : lines;
-
-  return dataLines.map((line) => parseCSVLine(line));
-}
-
-// Process Excel file for import
-async function processExcelFile(file) {
-  return new Promise((resolve, reject) => {
-    if (typeof XLSX === 'undefined') {
-      reject(new Error("XLSX library not loaded"));
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = function (e) {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: "array" });
-
-        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-          reject(new Error("No sheets found in Excel file"));
-          return;
-        }
-
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-        const skipHeaderCheckbox = safeGetElement("skipHeader");
-        const skipHeader = skipHeaderCheckbox ? skipHeaderCheckbox.checked : false;
-        const dataRows = skipHeader ? jsonData.slice(1) : jsonData;
-
-        // Filter out completely empty rows
-        const filteredRows = dataRows.filter(
-          (row) =>
-            row &&
-            Array.isArray(row) &&
-            row.some(
-              (cell) => cell !== null && cell !== undefined && cell !== ""
-            )
-        );
-
-        if (filteredRows.length === 0) {
-          reject(new Error("No data rows found in Excel file"));
-          return;
-        }
-
-        resolve(filteredRows);
-      } catch (error) {
-        reject(new Error("Failed to process Excel file: " + error.message));
-      }
-    };
-    reader.onerror = () => reject(new Error("Failed to read Excel file"));
-    reader.readAsArrayBuffer(file);
-  });
-}
-
-// ===== PROGRESS FUNCTIONS =====
-
-// Show/hide import progress
 function showImportProgress(show) {
-  const progressElement = safeGetElement("importProgress");
-  if (progressElement) {
-    progressElement.style.display = show ? "block" : "none";
-    if (show) {
-      updateProgress(0);
-    }
+  const el = safeGetElement("importProgress");
+  if (el) {
+    el.style.display = show ? "block" : "none";
+    if (show) updateProgress(0);
   }
 }
 
-// Update import progress
 function updateProgress(percent) {
-  const progressFill = safeGetElement("progressFill");
-  if (progressFill) {
-    progressFill.style.width = percent + "%";
-    progressFill.textContent = percent + "%";
+  const fill = safeGetElement("progressFill");
+  if (fill) {
+    fill.style.width = percent + "%";
+    fill.textContent = percent + "%";
   }
 }
 
-// Update import status message
-function updateImportStatus(message) {
-  const statusElement = safeGetElement("importStatus");
-  if (statusElement) {
-    statusElement.textContent = message;
-  }
+function updateImportStatus(msg) {
+  const el = safeGetElement("importStatus");
+  if (el) el.textContent = msg;
 }
 
-// Show alert message
-function showAlert(message, type = "info") {
-  const existingAlerts = document.querySelectorAll(".alert");
-  existingAlerts.forEach((alert) => alert.remove());
-
-  const alert = document.createElement("div");
-  alert.className = `alert alert-${type}`;
-  alert.innerHTML = `
-    <span>${message}</span>
-    <button onclick="this.parentElement.remove()" style="float: right; background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 5px;"><i class="fas fa-times"></i></button>
-  `;
-
-  document.body.insertBefore(alert, document.body.firstChild);
-
-  setTimeout(() => {
-    if (alert.parentElement) alert.remove();
-  }, 5000);
-}
-
-// ===== MODAL CLICK HANDLER =====
-
-// Update the window click handler to include import modal
-window.onclick = function (event) {
-  const employeeModal = safeGetElement("employeeModal");
-  const importModal = safeGetElement("importModal");
-
-  if (employeeModal && event.target === employeeModal) {
-    if (typeof closeModal === 'function') {
-      closeModal();
+// ===== MODAL CLICK-OUTSIDE =====
+// Chain onto proxcode.js's window.onclick without overwriting it.
+(function () {
+  const prev = window.onclick;
+  window.onclick = function (event) {
+    if (typeof prev === "function") prev(event);
+    const importModal = safeGetElement("importModal");
+    if (importModal && event.target === importModal) {
+      if (typeof closeModal === "function") closeModal();
     }
-  }
-  if (importModal && event.target === importModal) {
-    closeModal();
-  }
-};
+  };
+})();

@@ -12,7 +12,6 @@ function openImportModal() {
 
 // Update file label when file is selected
 document.addEventListener("DOMContentLoaded", function () {
-  // Add this to your existing setupEventListeners function
   document.getElementById("dataFile").addEventListener("change", function (e) {
     const label = document.querySelector("#dataFile + .file-upload-label");
     if (e.target.files.length > 0) {
@@ -28,7 +27,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
-  // Import form submission
   document
     .getElementById("importForm")
     .addEventListener("submit", handleImportSubmit);
@@ -159,7 +157,7 @@ function displayPreview(data) {
     const statusValue = col[4] || "";
     const statusDisplay = statusValue
       ? statusValue
-      : '<em style="color: #6c757d;">Default (Active)</em>';
+      : '<em style="color: #6c757d;">Auto (from Proximity Code)</em>';
     previewHTML = previewHTML.replace(
       `<td>${statusValue}</td>`,
       `<td>${statusDisplay}</td>`,
@@ -184,7 +182,6 @@ function displayPreview(data) {
       `<td>${violationDisplay}</td>`,
     );
 
-    // Show QR code column with indication if it will be auto-generated
     const qrValue = col[7] || "";
     const qrDisplay = qrValue
       ? qrValue
@@ -269,7 +266,6 @@ async function handleImportSubmit(e) {
         ? index + 2
         : index + 1;
 
-      // Validate required fields
       if (!row[0]) {
         errors.push(`Row ${rowNumber}: Missing required fields (empid)`);
         return;
@@ -290,19 +286,12 @@ async function handleImportSubmit(e) {
         return;
       }
 
-      // // Validate shift value
-      // const validShifts = ['Day Shift', 'Night Shift', 'Graveyard Shift'];
-      // if (row[4] && !validShifts.includes(row[4])) {
-      //     errors.push(`Row ${rowNumber}: Invalid shift value "${row[4]}". Must be one of: ${validShifts.join(', ')}`);
-      //     return;
-      // }
-
       employees.push({
         id: row[0] || "",
         fullname: row[1] || "",
         position: row[2] || "",
         brand: row[3] || "",
-        status: row[4] || "Active",
+        status: row[4] || "Active", // backend will override with code-table truth
         shift: row[5] || "",
         violation: row[6] || "",
         qr: row[7] || "",
@@ -343,13 +332,11 @@ async function handleImportSubmit(e) {
       let statusMessage = `Successfully imported ${data.imported_count} employees!`;
       let alertMessage = `Import completed! ${data.imported_count} employees imported successfully.`;
 
-      // Add duplicate information if any
       if (data.duplicates_count && data.duplicates_count > 0) {
         statusMessage += ` (${data.duplicates_count} duplicates allowed)`;
         alertMessage += `\n${data.duplicates_count} duplicate employees were imported as separate records.`;
       }
 
-      // Add error information if any
       if (data.errors && data.errors.length > 0) {
         alertMessage += `\n\nNote: ${data.errors.length} records had issues but import continued.`;
       }
@@ -357,9 +344,27 @@ async function handleImportSubmit(e) {
       updateImportStatus(statusMessage);
       showAlert(alertMessage, "success");
 
-      setTimeout(() => {
+      // ── Close modal, refresh table, then sync statuses ─────────────────
+      // syncOrphanStatuses() ensures every employee's status is correct
+      // relative to the code table — catches any edge cases the server-side
+      // syncStatusByQR() may not have covered (e.g. QR code added after import).
+      setTimeout(async () => {
         closeModal();
-        loadEmployees(); // Refresh the table
+        await loadEmployees(
+          typeof activeFilters !== "undefined" &&
+            Object.keys(activeFilters).length > 0
+            ? activeFilters
+            : {},
+          true,
+          true,
+        );
+        await updateTotalEmployees();
+        await updateActiveEmployees();
+
+        // Final sync pass — reconciles any remaining status mismatches
+        if (typeof syncOrphanStatuses === "function") {
+          await syncOrphanStatuses();
+        }
       }, 2000);
     } else {
       showAlert(data.message, "error");
@@ -399,7 +404,6 @@ async function processExcelFile(file) {
         const skipHeader = document.getElementById("skipHeader").checked;
         const dataRows = skipHeader ? jsonData.slice(1) : jsonData;
 
-        // Filter out empty rows
         const filteredRows = dataRows.filter(
           (row) =>
             row &&

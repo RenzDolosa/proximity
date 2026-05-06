@@ -8,31 +8,28 @@
 // 5. action values validated against an explicit whitelist
 // 6. employee_ids array size capped to prevent mass-delete abuse
 // 7. sanitizeInput() defined here as a safe fallback if config.php's version is absent
+// ── FIX: syncStatusByQR() added — employee status is now always derived from
+//         the `code` table, never taken raw from POST/import data.
 
 require_once __DIR__ . '/../../config/config.php';
 
 // ── Security headers ──────────────────────────────────────────────────────────
-// Send before any output. Skip for file-serving responses (handled later).
 if (!isset($_GET['serve_file']) && !isset($_GET['api_info']) && !isset($_GET['health_check'])) {
   header('X-Content-Type-Options: nosniff');
   header('X-Frame-Options: DENY');
   header('Referrer-Policy: strict-origin-when-cross-origin');
-  // Tighten CSP to match your actual CDN/asset sources
   header("Content-Security-Policy: default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com;");
 }
 
 // ── Safe fallback sanitizeInput() ─────────────────────────────────────────────
-// config.php should define this; this guard ensures it is never missing.
 if (!function_exists('sanitizeInput')) {
   function sanitizeInput($input)
   {
     if (is_null($input)) return '';
-    // Strip tags first, then encode remaining HTML-special chars
     return htmlspecialchars(strip_tags(trim((string)$input)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
   }
 }
 
-// Safety-net: re-assert PHP timezone
 if (!defined('APP_TIMEZONE')) {
   define('APP_TIMEZONE',    'Asia/Manila');
   define('APP_TIMEZONE_TZ', '+08:00');
@@ -70,22 +67,15 @@ const ALLOWED_GET_ACTIONS = [
 
 const ALLOWED_STATUSES   = ['Active', 'Inactive'];
 const ALLOWED_SHIFTS     = ['Day Shift', 'Night Shift', 'Graveyard Shift'];
-const ALLOWED_RESTORE    = ['replace', 'merge'];       // whitelist for restore_mode
-const MAX_BULK_DELETE    = 5000;                        // safety cap for bulk deletes
-const MAX_IMPORT_ROWS    = 2000;                        // safety cap for import
+const ALLOWED_RESTORE    = ['replace', 'merge'];
+const MAX_BULK_DELETE    = 5000;
+const MAX_IMPORT_ROWS    = 2000;
 
 // ── MIME-type validation helper ───────────────────────────────────────────────
 function validateImageMime($tmpPath)
 {
-  $allowed_mimes = [
-    'image/jpeg',
-    'image/jpg',
-    'image/png',
-    'image/gif',
-    'image/webp',
-  ];
+  $allowed_mimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
 
-  // Use finfo (preferred) or getimagesize as fallback
   if (function_exists('finfo_open')) {
     $finfo = finfo_open(FILEINFO_MIME_TYPE);
     $mime  = finfo_file($finfo, $tmpPath);
@@ -93,7 +83,6 @@ function validateImageMime($tmpPath)
   } elseif (function_exists('mime_content_type')) {
     $mime = mime_content_type($tmpPath);
   } else {
-    // Last resort: getimagesize (not spoofable via extension alone)
     $info = @getimagesize($tmpPath);
     $mime = $info ? $info['mime'] : '';
   }
@@ -102,17 +91,96 @@ function validateImageMime($tmpPath)
 }
 
 // ── Safe json_decode wrapper ──────────────────────────────────────────────────
-// Limits nesting depth and throws on malformed JSON.
 function safeJsonDecode($json, $assoc = true, $depth = 32)
 {
   if (!is_string($json) || $json === '') return null;
   try {
-    $decoded = json_decode($json, $assoc, $depth, JSON_THROW_ON_ERROR);
-    return $decoded;
+    return json_decode($json, $assoc, $depth, JSON_THROW_ON_ERROR);
   } catch (JsonException $e) {
     error_log("safeJsonDecode error: " . $e->getMessage());
     return null;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ── syncStatusByQR ────────────────────────────────────────────────────────────
+// Derives the correct employee status from the `code` table and persists it.
+//
+// Rules:
+//   • qr_code is empty/null          → Inactive
+//   • qr_code not found in `code`    → Inactive
+//   • qr_code found but is_active=0  → Inactive
+//   • qr_code found and is_active=1  → Active
+//
+// Called after every add, edit, and each import row so the `employees` table
+// is always consistent with the `code` table — regardless of what POST data
+// contained in the `status` field.
+//
+// Parameters:
+//   $conn        – PDO connection to the user database (contains both tables)
+//   $employeeId  – the employee's id (string or int)
+//   $qrCode      – the employee's qr_code value (may be empty)
+//   $changedBy   – username string for status_history audit trail
+//
+// Returns: 'Active' | 'Inactive'
+// ─────────────────────────────────────────────────────────────────────────────
+function syncStatusByQR($conn, $employeeId, $qrCode, $changedBy = 'System')
+{
+  // Determine desired status
+  $qrTrimmed = trim((string)$qrCode);
+
+  if ($qrTrimmed === '') {
+    $newStatus = 'Inactive';
+  } else {
+    $stmt = $conn->prepare(
+      "SELECT is_active FROM code
+       WHERE LOWER(TRIM(qr_code)) = LOWER(TRIM(:qr))
+       LIMIT 1"
+    );
+    $stmt->execute([':qr' => $qrTrimmed]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    // Active only when row exists AND is_active = 1
+    $newStatus = ($row && (int)$row['is_active'] === 1) ? 'Active' : 'Inactive';
+  }
+
+  $now = date('Y-m-d H:i:s');
+
+  // Read the current status so we can log the transition
+  $cur = $conn->prepare("SELECT status FROM employees WHERE id = :id");
+  $cur->execute([':id' => $employeeId]);
+  $oldStatus = $cur->fetchColumn() ?: 'Active';
+
+  // Only write + log if there is an actual change
+  if ($oldStatus !== $newStatus) {
+    $upd = $conn->prepare(
+      "UPDATE employees SET status = :status, updated_at = :ts WHERE id = :id"
+    );
+    $upd->execute([':status' => $newStatus, ':ts' => $now, ':id' => $employeeId]);
+
+    // Audit trail
+    try {
+      $hist = $conn->prepare(
+        "INSERT INTO status_history
+           (employee_id, old_status, new_status, changed_by, change_reason, created_at)
+         VALUES (:eid, :old, :new, :by, :reason, :ts)"
+      );
+      $hist->execute([
+        ':eid'    => $employeeId,
+        ':old'    => $oldStatus,
+        ':new'    => $newStatus,
+        ':by'     => $changedBy,
+        ':reason' => $newStatus === 'Active'
+          ? 'Auto-set Active: QR code is registered and enabled'
+          : 'Auto-set Inactive: QR code is missing or disabled',
+        ':ts'     => $now,
+      ]);
+    } catch (Exception $e) {
+      error_log("syncStatusByQR – status_history insert failed: " . $e->getMessage());
+    }
+  }
+
+  return $newStatus;
 }
 
 if (isset($_GET['serve_file'])) {
@@ -175,7 +243,7 @@ class Database
 class EmployeeManager
 {
   private $conn;
-  private $table = 'employees';   // hardcoded — never user-supplied
+  private $table = 'employees';
   private $userId;
 
   public function __construct($db)
@@ -215,7 +283,6 @@ class EmployeeManager
 
   public function getEmployees($filters = [], $page = null, $limit = 25)
   {
-    // ── Build WHERE conditions separately ──────────────────────────────
     $where  = "WHERE 1=1";
     $params = [];
 
@@ -279,7 +346,6 @@ class EmployeeManager
       $params[':updated_at'] = $filters['updated_at'];
     }
 
-    // ── If $page is null, return ALL rows (used for filter_options) ────
     if ($page === null) {
       $stmt = $this->conn->prepare(
         "SELECT e.*,
@@ -294,7 +360,6 @@ class EmployeeManager
       return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    // ── COUNT — simple and clean, no str_replace ───────────────────────
     $countStmt = $this->conn->prepare(
       "SELECT COUNT(*) FROM {$this->table} e $where"
     );
@@ -304,7 +369,6 @@ class EmployeeManager
     $countStmt->execute();
     $total = (int) $countStmt->fetchColumn();
 
-    // ── PAGINATED DATA ─────────────────────────────────────────────────
     $offset   = ($page - 1) * $limit;
     $dataStmt = $this->conn->prepare(
       "SELECT e.*,
@@ -505,7 +569,6 @@ class EmployeeManager
     if (!is_array($employeeIds) || empty($employeeIds)) {
       return 0;
     }
-    // SECURITY: cap the array size to prevent accidental mass-delete via large payloads
     $employeeIds = array_slice($employeeIds, 0, MAX_BULK_DELETE);
 
     try {
@@ -573,7 +636,6 @@ class FileUploader
       return false;
     }
 
-    // SECURITY: Validate actual MIME type — not just extension
     if (!validateImageMime($file['tmp_name'])) {
       throw new Exception("Invalid file type. The uploaded file does not appear to be a valid image.");
     }
@@ -589,7 +651,6 @@ class FileUploader
       throw new Exception("File too large. Maximum size is 5MB.");
     }
 
-    // Always save as .webp
     if ($existingFilename && !empty($existingFilename)) {
       $filename = preg_replace('/\.[^.]+$/', '.webp', $existingFilename);
       $filepath = $this->upload_dir . $filename;
@@ -678,7 +739,6 @@ class FileUploader
   {
     if (!$filename) return false;
 
-    // SECURITY: basename() prevents path traversal
     $filename = basename($filename);
 
     $deleted = false;
@@ -698,7 +758,6 @@ class FileUploader
 
   public function getImagePath($filename)
   {
-    // SECURITY: basename() prevents path traversal attacks
     return $this->upload_dir . basename($filename);
   }
 }
@@ -721,7 +780,7 @@ class QRCodeGenerator
 
     $random = '';
     for ($i = 0; $i < max(0, $remainingLength); $i++) {
-      $random .= $chars[random_int(0, strlen($chars) - 1)]; // SECURITY: random_int > rand
+      $random .= $chars[random_int(0, strlen($chars) - 1)];
     }
 
     return $prefix . $random . $uniquePart;
@@ -782,13 +841,14 @@ try {
   if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
-    // SECURITY: Validate action against whitelist
     if (!in_array($action, ALLOWED_POST_ACTIONS, true)) {
       $response['message'] = 'Invalid action specified.';
       goto send_response;
     }
 
     switch ($action) {
+
+      // ── ADD ───────────────────────────────────────────────────────────────
       case 'add':
       case 'create':
         $image_filename = null;
@@ -804,7 +864,7 @@ try {
 
         $qr_code = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
 
-        // SECURITY: validate status and shift against whitelists
+        // status / shift are placeholders — syncStatusByQR() will correct status below
         $raw_status = $_POST['status'] ?? 'Active';
         $raw_shift  = $_POST['shift']  ?? '';
         $status = in_array($raw_status, ALLOWED_STATUSES, true) ? $raw_status : 'Active';
@@ -839,17 +899,25 @@ try {
         $employee_id = $employeeManager->createEmployee($employee_data);
 
         if ($employee_id !== false) {
+          // ── Derive correct status from code table ──────────────────────────
+          $conn       = $database->getUserConnection();
+          $changedBy  = $_SESSION['username'] ?? 'System';
+          $finalStatus = syncStatusByQR($conn, $employee_id, $employee_data['qr_code'], $changedBy);
+
           $response['success'] = true;
           $response['message'] = 'Employee created successfully';
-          $response['data']    = ['id' => $employee_id, 'qr_code' => $employee_data['qr_code']];
+          $response['data']    = [
+            'id'      => $employee_id,
+            'qr_code' => $employee_data['qr_code'],
+            'status'  => $finalStatus,          // reflects code-table state
+          ];
           logSystemAction($database->getCurrentUserId(), 'EMPLOYEE_CREATED', "Created employee: " . $employee_data['fullname']);
 
           if (!empty($employee_data['violation'])) {
             try {
-              $conn = $database->getUserConnection();
               $stmt = $conn->prepare(
                 "INSERT INTO violations (employee_id, violation_type, violation_description, violation_date)
-             VALUES (?, 'Initial Remarks', ?, ?)"
+                 VALUES (?, 'Initial Remarks', ?, ?)"
               );
               $stmt->execute([$employee_id, $employee_data['violation'], date('Y-m-d')]);
             } catch (Exception $e) {
@@ -861,6 +929,7 @@ try {
         }
         break;
 
+      // ── EDIT ──────────────────────────────────────────────────────────────
       case 'edit':
       case 'update':
         $old_id = $_POST['original_id'] ?? 0;
@@ -897,11 +966,13 @@ try {
           break;
         }
 
-        // SECURITY: validate status and shift
+        // status / shift are placeholders — syncStatusByQR() corrects status below
         $raw_status = $_POST['status'] ?? $current_employee['status'];
         $raw_shift  = $_POST['shift']  ?? $current_employee['shift'];
         $status = in_array($raw_status, ALLOWED_STATUSES, true) ? $raw_status : $current_employee['status'];
         $shift  = in_array($raw_shift,  ALLOWED_SHIFTS,   true) ? $raw_shift  : $current_employee['shift'];
+
+        $new_qr_code = sanitizeInput(!empty($_POST['qr_code']) ? $_POST['qr_code'] : $current_employee['qr_code']);
 
         $employee_data = [
           'user_id'   => $database->getCurrentUserId(),
@@ -909,34 +980,40 @@ try {
           'fullname'  => sanitizeInput($_POST['fullname']  ?? $current_employee['fullname']),
           'position'  => sanitizeInput($_POST['position']  ?? $current_employee['position']),
           'brand'     => sanitizeInput($_POST['brand']     ?? $current_employee['brand']),
-          'status'    => $status,
+          'status'    => $status,               // will be overwritten by syncStatusByQR()
           'shift'     => $shift,
           'violation' => sanitizeInput($_POST['violation'] ?? $current_employee['violation']),
           'image'     => sanitizeInput($image_filename),
-          'qr_code'   => sanitizeInput(!empty($_POST['qr_code']) ? $_POST['qr_code'] : $current_employee['qr_code']),
+          'qr_code'   => $new_qr_code,
         ];
 
         try {
           $employeeManager->updateEmployee($old_id, $employee_data);
+
+          // ── Derive correct status from code table ──────────────────────────
+          $conn       = $database->getUserConnection();
+          $changedBy  = $_SESSION['username'] ?? 'System';
+          $finalStatus = syncStatusByQR($conn, $new_id, $new_qr_code, $changedBy);
+
           $response['success'] = true;
           $response['message'] = 'Employee updated successfully';
+          $response['data']    = ['status' => $finalStatus];
 
           $oldViolation = trim($current_employee['violation'] ?? '');
           $newViolation = trim($employee_data['violation'] ?? '');
 
           if ($oldViolation !== $newViolation) {
             try {
-              $conn = $database->getUserConnection();
               if (!empty($newViolation)) {
                 $stmt = $conn->prepare(
                   "INSERT INTO violations (employee_id, violation_type, violation_description, violation_date)
-                 VALUES (?, 'Remarks Updated', ?, ?)"
+                   VALUES (?, 'Remarks Updated', ?, ?)"
                 );
                 $stmt->execute([$new_id, $newViolation, date('Y-m-d')]);
               } elseif (!empty($oldViolation) && empty($newViolation)) {
                 $stmt = $conn->prepare(
                   "INSERT INTO violations (employee_id, violation_type, violation_description, violation_date)
-                 VALUES (?, 'Remarks Cleared', ?, ?)"
+                   VALUES (?, 'Remarks Cleared', ?, ?)"
                 );
                 $stmt->execute([$new_id, "Previous: $oldViolation", date('Y-m-d')]);
               }
@@ -966,14 +1043,12 @@ try {
 
       case 'delete_filtered':
         try {
-          // SECURITY: safeJsonDecode with depth limit
           $employee_ids = safeJsonDecode($_POST['employee_ids'] ?? '[]');
           $filters      = safeJsonDecode($_POST['filters']       ?? '{}');
 
           if (!is_array($employee_ids)) $employee_ids = [];
           if (!is_array($filters))      $filters      = [];
 
-          // SECURITY: cap bulk-delete count
           if (count($employee_ids) > MAX_BULK_DELETE) {
             $response['message'] = 'Too many IDs in a single request.';
             break;
@@ -1009,7 +1084,6 @@ try {
 
             $filterParts = [];
             foreach ($filters as $key => $value) {
-              // SECURITY: sanitize filter labels before logging
               $filterParts[] = sanitizeInput($key) . ": " . sanitizeInput($value);
             }
             $filterStr = implode(', ', $filterParts) ?: 'All';
@@ -1025,9 +1099,7 @@ try {
             logSystemAction($database->getCurrentUserId(), 'FILTERED_EMPLOYEES_DELETED', "Deleted $deleted_count $emp_label with filters: $filterStr");
           } else {
             $db->rollBack();
-            $emp_label   = $deleted_count > 1 ? "employee's" : "employee";
-
-            $response['message'] = "Failed to delete $emp_label";
+            $response['message'] = "Failed to delete employee(s)";
           }
         } catch (Exception $e) {
           if (isset($db)) $db->rollBack();
@@ -1052,16 +1124,15 @@ try {
 
             $db->commit();
 
-            $emp_label   = $all_employees > 1 ? "employee's" : "employee";
+            $emp_count   = count($all_employees);
+            $emp_label   = $emp_count > 1 ? "employee's" : "employee";
             $img_label   = $deleted_images > 1 ? "images" : "image";
 
             $response['success'] = true;
-            $response['message'] = "All employee data deleted successfully. $all_employees $emp_label and $deleted_images $img_label removed.";
+            $response['message'] = "All employee data deleted successfully. $emp_count $emp_label and $deleted_images $img_label removed.";
           } else {
             $db->rollBack();
-            $emp_label   = $all_employees > 1 ? "employee's" : "employee";
-            
-            $response['message'] = "Failed to delete $emp_label data";
+            $response['message'] = "Failed to delete employee data";
           }
         } catch (Exception $e) {
           if (isset($db)) $db->rollBack();
@@ -1070,8 +1141,8 @@ try {
         }
         break;
 
+      // ── IMPORT ───────────────────────────────────────────────────────────
       case 'import':
-        // SECURITY: safeJsonDecode with depth limit
         $employees_data = safeJsonDecode($_POST['employees'] ?? '');
 
         if (!is_array($employees_data) || empty($employees_data)) {
@@ -1079,7 +1150,6 @@ try {
           break;
         }
 
-        // SECURITY: cap import row count
         if (count($employees_data) > MAX_IMPORT_ROWS) {
           $response['message'] = 'Import exceeds maximum allowed rows (' . MAX_IMPORT_ROWS . ').';
           break;
@@ -1087,6 +1157,7 @@ try {
 
         $imported_count = 0;
         $errors         = [];
+        $changedBy      = $_SESSION['username'] ?? 'System';
 
         try {
           $db = $database->getUserConnection();
@@ -1098,7 +1169,7 @@ try {
                 ? trim($employee_data['qr'])
                 : QRCodeGenerator::generateQRCode($database->getCurrentUserId());
 
-              // SECURITY: validate status and shift for each import row
+              // status / shift are set as defaults; syncStatusByQR() corrects status below
               $row_status = in_array($employee_data['status'] ?? '', ALLOWED_STATUSES, true)
                 ? $employee_data['status'] : 'Active';
               $row_shift  = in_array($employee_data['shift']  ?? '', ALLOWED_SHIFTS,   true)
@@ -1110,7 +1181,7 @@ try {
                 'fullname'  => sanitizeInput(trim($employee_data['fullname'])),
                 'position'  => sanitizeInput(trim($employee_data['position'])),
                 'brand'     => sanitizeInput(trim($employee_data['brand'] ?? '')),
-                'status'    => $row_status,
+                'status'    => $row_status,     // will be corrected by syncStatusByQR()
                 'shift'     => $row_shift,
                 'violation' => (($v = sanitizeInput(trim($employee_data['violation'] ?? ''))) === '' || $v === 'None') ? '' : $v,
                 'image'     => null,
@@ -1125,6 +1196,8 @@ try {
               $employee_id = $employeeManager->createEmployee($employee_record);
 
               if ($employee_id !== false) {
+                // ── Derive correct status from code table ──────────────────
+                syncStatusByQR($db, $employee_id, $employee_record['qr_code'], $changedBy);
                 $imported_count++;
               } else {
                 $errors[] = "Row " . ($index + 1) . ": Failed to create employee record";
@@ -1185,7 +1258,6 @@ try {
         $new_status   = $_POST['new_status']   ?? '';
         $reason       = sanitizeInput($_POST['reason'] ?? 'Bulk status update');
 
-        // SECURITY: whitelist new_status
         if (!in_array($new_status, ALLOWED_STATUSES, true)) {
           $response['message'] = 'Invalid status value.';
           break;
@@ -1200,9 +1272,7 @@ try {
           $employee_ids = safeJsonDecode($employee_ids) ?: [];
         }
 
-        // SECURITY: cap bulk update count
-        $employee_ids = array_slice($employee_ids, 0, MAX_BULK_DELETE);
-
+        $employee_ids  = array_slice($employee_ids, 0, MAX_BULK_DELETE);
         $updated_count = 0;
         $errors        = [];
 
@@ -1282,8 +1352,6 @@ try {
 
       case 'restore_data':
         $backup_json  = $_POST['backup_data'] ?? '';
-
-        // SECURITY: whitelist restore_mode
         $raw_mode     = $_POST['restore_mode'] ?? 'replace';
         $restore_mode = in_array($raw_mode, ALLOWED_RESTORE, true) ? $raw_mode : 'replace';
 
@@ -1293,7 +1361,6 @@ try {
         }
 
         try {
-          // SECURITY: safeJsonDecode with depth limit
           $backup_data = safeJsonDecode($backup_json);
 
           if (!$backup_data || !isset($backup_data['employees']) || !is_array($backup_data['employees'])) {
@@ -1301,7 +1368,6 @@ try {
             break;
           }
 
-          // SECURITY: cap restore rows
           if (count($backup_data['employees']) > MAX_IMPORT_ROWS) {
             $response['message'] = 'Backup exceeds maximum allowed rows (' . MAX_IMPORT_ROWS . ').';
             break;
@@ -1316,6 +1382,7 @@ try {
 
           $restored_count = 0;
           $errors         = [];
+          $changedBy      = $_SESSION['username'] ?? 'System';
 
           foreach ($backup_data['employees'] as $employee_data) {
             try {
@@ -1325,7 +1392,6 @@ try {
                 $employee_data['qr_code'] = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
               }
 
-              // SECURITY: validate status/shift for restore rows too
               $employee_data['status'] = in_array($employee_data['status'] ?? '', ALLOWED_STATUSES, true)
                 ? $employee_data['status'] : 'Active';
               $employee_data['shift']  = in_array($employee_data['shift']  ?? '', ALLOWED_SHIFTS,   true)
@@ -1334,6 +1400,8 @@ try {
               $employee_id = $employeeManager->createEmployee($employee_data);
 
               if ($employee_id !== false) {
+                // ── Derive correct status from code table ──────────────────
+                syncStatusByQR($db, $employee_id, $employee_data['qr_code'], $changedBy);
                 $restored_count++;
               } else {
                 $errors[] = "Failed to restore employee: " . ($employee_data['fullname'] ?? 'Unknown');
@@ -1366,7 +1434,6 @@ try {
   } elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $action = $_GET['action'] ?? '';
 
-    // SECURITY: validate action against whitelist
     if (!empty($action) && !in_array($action, ALLOWED_GET_ACTIONS, true)) {
       $response['message'] = 'Invalid GET action specified.';
       goto send_response;
@@ -1404,10 +1471,7 @@ try {
         $limit = max(1, (int)($_GET['limit'] ?? 25));
 
         try {
-          // ── Paginated data ──
-          $result = $employeeManager->getEmployees($filters, $page, $limit);
-
-          // ── All distinct values for filter dropdowns (page=null = no pagination) ──
+          $result  = $employeeManager->getEmployees($filters, $page, $limit);
           $allRows = $employeeManager->getEmployees($filters, null);
 
           $response['success']        = true;
@@ -1451,15 +1515,15 @@ try {
           $conn = getUserDBConnection($_SESSION['user_id']);
 
           $stmt = $conn->prepare(
-            "SELECT * FROM employee_access_log 
-             WHERE employee_id = :id 
-             ORDER BY access_timestamp DESC 
+            "SELECT * FROM employee_access_log
+             WHERE employee_id = :id
+             ORDER BY access_timestamp DESC
              LIMIT 200"
           );
           $stmt->execute([':id' => $id]);
           $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-          $userIds = array_unique(array_filter(array_column($logs, 'user_id')));
+          $userIds    = array_unique(array_filter(array_column($logs, 'user_id')));
           $userNameMap = [];
 
           if (!empty($userIds)) {
@@ -1552,7 +1616,7 @@ try {
             `violation_description` TEXT DEFAULT NULL,
             `violation_date` DATE DEFAULT NULL,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
           $stmt = $conn->prepare(
             "SELECT id, violation_type, violation_description, violation_date, created_at
@@ -1590,7 +1654,6 @@ try {
 } catch (Exception $e) {
   $error_response = ['success' => false, 'message' => 'A system error occurred. Please try again.'];
 
-  // SECURITY: never expose raw exception messages to client
   error_log("Manpower System Error: " . $e->getMessage());
 
   if (isset($_SESSION['user_id'])) {
@@ -1634,8 +1697,7 @@ function serveFile($filepath, $filename = null)
   ];
 
   $content_type = $content_types[$file_extension] ?? 'application/octet-stream';
-
-  $image_types = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+  $image_types  = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
   if (in_array($file_extension, $image_types)) {
     header('Content-Disposition: inline; filename="' . $filename . '"');
@@ -1661,7 +1723,6 @@ if (isset($_GET['serve_file'])) {
     exit;
   }
   $fileUploader = new FileUploader($userId);
-  // SECURITY: basename() prevents path traversal
   $filename     = basename($_GET['serve_file']);
   $filepath     = $fileUploader->getImagePath($filename);
   serveFile($filepath, $filename);
@@ -1670,9 +1731,9 @@ if (isset($_GET['serve_file'])) {
 if (isset($_GET['api_info'])) {
   header('Content-Type: application/json');
   echo json_encode([
-    'version'     => '2.5',
+    'version'     => '2.6',
     'name'        => 'Integrated Manpower Management System',
-    'description' => 'Multi-user employee management — security hardened',
+    'description' => 'Multi-user employee management — status auto-derived from code table',
   ], JSON_PRETTY_PRINT);
   exit;
 }
@@ -1683,7 +1744,6 @@ if (isset($_GET['health_check'])) {
     'timestamp'           => date('Y-m-d H:i:s'),
     'timezone'            => date_default_timezone_get(),
     'user_authenticated'  => isset($_SESSION['user_id']),
-    // SECURITY: never expose user_id in health check response
     'database_connection' => 'OK',
   ];
 
@@ -1694,7 +1754,7 @@ if (isset($_GET['health_check'])) {
     $health['user_database'] = 'OK';
   } catch (Exception $e) {
     $health['status']        = 'ERROR';
-    $health['user_database'] = 'ERROR';   // SECURITY: don't leak exception message
+    $health['user_database'] = 'ERROR';
   }
 
   header('Content-Type: application/json');

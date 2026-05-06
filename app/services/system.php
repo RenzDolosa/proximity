@@ -329,7 +329,7 @@ if ($databaseConnected) {
               </select>
               <label class="fl-label" for="status">Status</label>
             </div>
-            <div class="form-group fl-group">
+            <!-- <div class="form-group fl-group">
               <input type="text" id="birth" name="birth" placeholder=" " autocomplete="off">
               <label class="fl-label" for="birth">Birth Date <span style="color:#e74c3c">*</span></label>
             </div>
@@ -340,7 +340,7 @@ if ($databaseConnected) {
                 <option value="Female">Female</option>
               </select>
               <label class="fl-label" for="gender">Gender</label>
-            </div>
+            </div> -->
           </div>
 
           <div class="form-layout">
