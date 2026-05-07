@@ -201,6 +201,8 @@ body {
 .emp-records {
   display: flex;
   gap: 30px;
+  flex-wrap: wrap;
+  justify-content: space-between;
 }
 
 /* .total-emp {
@@ -615,7 +617,14 @@ tr:hover {
   }
 
   .table-header h3 {
-    font-size: 14px;
+    font-size: 12px;
+  }
+
+  .emp-records {
+    width: 100%;
+    gap: 16px 30px;
+    flex-wrap: wrap;
+    justify-content: space-between;
   }
 
   .emp-status {
@@ -645,7 +654,7 @@ tr:hover {
   /* ── Table ── */
   .data-table {
     overflow: visible;
-    padding-bottom: 85px;
+    padding-bottom: 110px; 
   }
 
   .data-table table {

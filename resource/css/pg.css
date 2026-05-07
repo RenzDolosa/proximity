@@ -89,24 +89,36 @@
 
 @media (max-width: 640px) {
   .pagination {
-    bottom: 50px;
-    padding: 8px 10px;
+    bottom: 50px; /* exact height of bottom-nav in portal.php */
+    padding: 6px 8px;
+    padding-bottom: 10px;
     gap: 4px;
+    flex-wrap: nowrap; /* prevent wrapping to double height */
   }
 
   .page-num-btn {
-    width: 28px;
-    height: 28px;
-    font-size: 12px;
+    width: 26px;
+    height: 26px;
+    font-size: 11px;
   }
 
   .page-arrow-btn {
-    padding: 5px 9px;
-    font-size: 12px;
+    padding: 4px 8px;
+    font-size: 11px;
+    white-space: nowrap;
   }
 
   #page-info {
-    font-size: 11px;
-    margin-left: 4px;
+    font-size: 10px;
+    margin-left: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100px;
+  }
+
+  .page-ellipsis {
+    padding: 0 2px;
+    line-height: 26px;
   }
 }

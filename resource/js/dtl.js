@@ -264,7 +264,11 @@ function updateAutoUpdateUI() {
   if (lastUpdate && lastUpdateTimestamp) {
     const timeString = new Date(lastUpdateTimestamp).toLocaleTimeString();
     lastUpdate.textContent = `Last updated: ${timeString}`;
-    lastUpdate.style.display = "block";
+    lastUpdate.style.cssText = `
+      display: block;
+      color: #ffffff;
+      font-size: 12px;
+    `;
   } else if (lastUpdate) {
     lastUpdate.style.display = "none";
   }
@@ -299,9 +303,9 @@ function showAutoUpdateNotification() {
       opacity: 1;
       background-color: #e8f5e8;
       color: #2d5a2d;
-      padding: 4px 8px;
+      padding: 2px 4px;
       border-radius: 4px;
-      font-size: 12px;
+      font-size: 11px;
       border: 1px solid #b8e6b8;
       transition: opacity 0.3s ease;
     `;
@@ -835,8 +839,8 @@ async function renderEmployeeTable() {
               <td>${employee.gate_name || employee.user_id || "N/A"}</td>
 
               ${
-              window.PERMISSIONS.delete
-                ? `
+                window.PERMISSIONS.delete
+                  ? `
             <td style="position: relative; width: 160px;">
 
               <!-- ACTIONS TOGGLE -->
@@ -889,8 +893,8 @@ async function renderEmployeeTable() {
               </div>
             </td>
             `
-                : ""
-            }
+                  : ""
+              }
           </tr>
       `;
     })
@@ -1428,7 +1432,11 @@ async function deleteFilteredEmployees() {
     showLoading(true);
 
     // Fetch ALL filtered log IDs from backend (no pagination)
-    const params = new URLSearchParams({ action: "get", page: 1, limit: 99999 });
+    const params = new URLSearchParams({
+      action: "get",
+      page: 1,
+      limit: 99999,
+    });
 
     for (const [key, value] of Object.entries(activeFilters)) {
       if (key === "position" && value === "__none__") {
@@ -1458,7 +1466,11 @@ async function deleteFilteredEmployees() {
     });
     const allData = await allRes.json();
 
-    if (!allData.success || !Array.isArray(allData.data) || allData.data.length === 0) {
+    if (
+      !allData.success ||
+      !Array.isArray(allData.data) ||
+      allData.data.length === 0
+    ) {
       showAlert("No log entries to delete", "warning");
       return;
     }

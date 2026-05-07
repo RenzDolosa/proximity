@@ -725,6 +725,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       .bottom-nav {
         display: flex;
       }
+
     }
 
     .bn-item {
@@ -778,7 +779,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     /* Center NFC pill button */
     .bn-item.nfc-btn {
-      position: relative;
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
     }
 
     .bn-nfc-pill {
@@ -973,36 +976,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </button>
     <?php endif; ?>
 
-    <!-- NFC / Proximity — centre pill -->
-    <?php if ($access['proximity']): ?>
-      <button class="bn-item nfc-btn" id="bn-nfc"
-        onclick="window.location.href='proximity.php';">
-        <div class="bn-nfc-pill">
-          <img src="../../../resource/assets/icon/nfc-icon.svg" alt="NFC">
-        </div>
-        <span class="bn-label">NFC</span>
-      </button>
-    <?php endif; ?>
+    <!-- Invisible spacer to hold center slot -->
+    <div class="bn-item" style="visibility: hidden; pointer-events: none;" aria-hidden="true"></div>
+
+    <!-- NFC — absolutely centered regardless of sibling count -->
+    <button class="bn-item nfc-btn" id="bn-nfc"
+      <?php if ($access['proximity']): ?>
+      onclick="window.location.href='proximity.php';"
+      <?php else: ?>
+      disabled style="opacity:0.3; cursor:not-allowed;"
+      <?php endif; ?>>
+      <div class="bn-nfc-pill">
+        <img src="../../../resource/assets/icon/nfc-icon.svg" alt="NFC">
+      </div>
+      <span class="bn-label">NFC</span>
+    </button>
 
     <!-- Admin Panel -->
-    <button class="bn-item" id="bn-admin"
-      onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=admin panel';">
-      <i class="fas fa-user-shield"></i>
-      <span class="bn-label">Admin</span>
-    </button>
+    <?php if ($access['admin panel']): ?>
+      <button class="bn-item" id="bn-admin"
+        onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=admin panel';">
+        <i class="fas fa-user-shield"></i>
+        <span class="bn-label">Admin</span>
+      </button>
+    <?php endif; ?>
 
     <!-- Settings -->
     <button class="bn-item" id="bn-settings"
       onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=settings';">
       <i class="fas fa-cog"></i>
       <span class="bn-label">Settings</span>
-    </button>
-
-    <!-- About -->
-    <button class="bn-item" id="bn-about"
-      onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=about';">
-      <i class="fas fa-info-circle"></i>
-      <span class="bn-label">About</span>
     </button>
 
   </nav>
