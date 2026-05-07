@@ -256,14 +256,6 @@ $access = getMenuAccess();
             </div>
 
             <div class="contact-item">
-              <div class="ci-icon"><i class="fab fa-github"></i></div>
-              <div>
-                <div class="ci-label">Source Repository</div>
-                <div class="ci-value">github.com/qrpass3pl/htdocs</div>
-              </div>
-            </div>
-
-            <div class="contact-item">
               <div class="ci-icon"><i class="fas fa-globe"></i></div>
               <div>
                 <div class="ci-label">Live Site</div>

@@ -186,6 +186,18 @@ body {
   margin-top: 2px;
 }
 
+.emp-age {
+  font-size: 11px;
+  color: #718096;
+  margin-top: 2px;
+}
+
+.emp-tenure {
+  font-size: 11px;
+  color: #718096;
+  margin-top: 2px;
+}
+
 .emp-records {
   display: flex;
   gap: 30px;

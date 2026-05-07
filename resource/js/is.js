@@ -89,7 +89,7 @@ async function parseExcelFile(file) {
 
         const skipHeader = document.getElementById("skipHeader").checked;
         const startIndex = skipHeader ? 1 : 0;
-        const previewData = jsonData.slice(startIndex, startIndex + 5);
+        const previewData = jsonData.slice(startIndex, startIndex + 10);
 
         resolve(previewData);
       } catch (error) {
@@ -104,8 +104,18 @@ async function parseExcelFile(file) {
 // Display preview data
 function displayPreview(data) {
   let previewHTML = '<table class="preview-table"><thead><tr>';
-  previewHTML +=
-    "<th>SN</th><th>EMPID</th><th>Fullname</th><th>Position</th><th>Brand / Department</th><th>Status</th><th>Shift</th><th>Violation</th><th>Proximity Code</th>";
+  previewHTML += `<th>SN</th>
+    <th>EMPID</th>
+    <th>Fullname</th>
+    <th>Position</th>
+    <th>Brand / Department</th>
+    <!-- <th>Gender</th>
+    <th>Birth Date</th>
+    <th>Hired Date</th> -->
+    <th>Status</th>
+    <th>Shift</th>
+    <th>Violation</th>
+    <th>Proximity Code</th>`;
   previewHTML += "</tr></thead><tbody>";
 
   data.forEach((col, index) => {
@@ -154,10 +164,39 @@ function displayPreview(data) {
       `<td>${brandDisplay}</td>`,
     );
 
+    // const genderValue = col[4] || "";
+    // const genderDisplay = genderValue
+    //   ? genderValue
+    //   : '<em style="color: #6c757d;">None</em>';
+    // previewHTML = previewHTML.replace(
+    //   `<td>${genderValue}</td>`,
+    //   `<td>${genderDisplay}</td>`,
+    // );
+
+    // const birthRaw = col[5];
+    // const birthIso = formatDateValue(birthRaw); // YYYY-MM-DD (for data)
+    // const birthDisplay = birthIso
+    //   ? formatDateForDisplay(birthIso) // DD/MM/YYYY (for preview)
+    //   : '<em style="color: #6c757d;">None</em>';
+    // previewHTML = previewHTML.replace(
+    //   `<td>${birthRaw || ""}</td>`,
+    //   `<td>${birthDisplay}</td>`,
+    // );
+
+    // const hiredRaw = col[6];
+    // const hiredIso = formatDateValue(hiredRaw); // YYYY-MM-DD (for data)
+    // const hiredDisplay = hiredIso
+    //   ? formatDateForDisplay(hiredIso) // DD/MM/YYYY (for preview)
+    //   : '<em style="color: #6c757d;">None</em>';
+    // previewHTML = previewHTML.replace(
+    //   `<td>${hiredRaw || ""}</td>`,
+    //   `<td>${hiredDisplay}</td>`,
+    // );
+
     const statusValue = col[4] || "";
     const statusDisplay = statusValue
       ? statusValue
-      : '<em style="color: #6c757d;">Auto (from Proximity Code)</em>';
+      : '<em style="color: #6c757d;">Default (Active)</em>';
     previewHTML = previewHTML.replace(
       `<td>${statusValue}</td>`,
       `<td>${statusDisplay}</td>`,
@@ -194,6 +233,54 @@ function displayPreview(data) {
 
   document.getElementById("importPreview").innerHTML = previewHTML;
   document.getElementById("importPreview").style.display = "block";
+}
+
+// Normalize date values from CSV or Excel into YYYY-MM-DD string (for DB storage)
+function formatDateValue(value) {
+  if (!value && value !== 0) return "";
+
+  // Excel serial number — pure UTC math, no timezone involvement
+  if (typeof value === "number") {
+    // Excel's epoch is Dec 30, 1899 (not Jan 1, 1900 — Excel has a leap year bug)
+    // Multiply by ms-per-day, offset from JS epoch (Jan 1 1970 = serial 25569)
+    const ms = Math.round(value) * 86400 * 1000;
+    const date = new Date(25569 * -86400 * 1000 + ms);
+    // Use UTC getters — no local timezone shift
+    const yyyy = date.getUTCFullYear();
+    const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(date.getUTCDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // String — normalize to YYYY-MM-DD
+  const str = String(value).trim();
+
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+
+  // DD/MM/YYYY ← your Excel locale
+  const dmyMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (dmyMatch) {
+    const [, dd, mm, yyyy] = dmyMatch;
+    return `${yyyy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+  }
+
+  // MM-DD-YYYY or DD-MM-YYYY string fallback
+  const mdyMatch = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+  if (mdyMatch) {
+    const [, dd, mm, yyyy] = mdyMatch;
+    return `${yyyy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+  }
+
+  return str;
+}
+
+// Format YYYY-MM-DD → DD/MM/YYYY for human-readable preview display only
+function formatDateForDisplay(isoValue) {
+  if (!isoValue) return "";
+  const match = isoValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+  return isoValue;
 }
 
 // Parse CSV line (handles quotes and commas)
@@ -291,6 +378,9 @@ async function handleImportSubmit(e) {
         fullname: row[1] || "",
         position: row[2] || "",
         brand: row[3] || "",
+        // gender: row[4] || "",
+        // birth: formatDateValue(row[5]),
+        // hired: formatDateValue(row[6]),
         status: row[4] || "Active", // backend will override with code-table truth
         shift: row[5] || "",
         violation: row[6] || "",

@@ -844,9 +844,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <version_compare>
         <div class="version-tag" id="version"></div>
       </version_compare>
-      <div class="nav-item" onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=about';">
-        <i class="fas fa-info-circle"></i> <span class="nav-item-label">About Us</span>
-      </div>
       <div class="nav-item" onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=settings';">
         <i class="fas fa-cog"></i> <span class="nav-item-label">Settings</span>
       </div>
@@ -891,7 +888,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <div class="dropdown-item" id="changePassBtn">
             <i class="fas fa-lock"></i> Change Password
           </div>
-          <?php if ($access['readme']): ?>
+          <?php if ($access['about']) : ?>
+            <div class="dropdown-item" onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=about';">
+              <i class="fas fa-info-circle"></i> About Us
+            </div>
+          <?php endif; ?>
+          <?php if ($access['readme']) : ?>
             <div class="dropdown-item" onclick="document.querySelector('.frames').src='app/models/readme.php';">
               <i class="fas fa-book-open"></i> README
             </div>

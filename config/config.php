@@ -134,6 +134,10 @@ function createDatabase()
       "ALTER TABLE code ADD COLUMN IF NOT EXISTS is_active TINYINT(1) NOT NULL DEFAULT 1",
       "ALTER TABLE employee_access_log ADD INDEX idx_timestamp (access_timestamp DESC)",
       "ALTER TABLE employee_access_log ADD INDEX idx_status (status)",
+      "ALTER TABLE employees
+          ADD COLUMN IF NOT EXISTS gender ENUM('Male','Female') DEFAULT NULL AFTER brand,
+          ADD COLUMN IF NOT EXISTS birth  DATE DEFAULT NULL AFTER gender,
+          ADD COLUMN IF NOT EXISTS hired  DATE DEFAULT NULL AFTER birth;"
     ];
 
     foreach ($alterStatements as $sql) {
@@ -302,11 +306,15 @@ function createUserDatabase($userId)
     $sql = "
         CREATE TABLE
           IF NOT EXISTS employees (
+            IF NOT EXISTS employees (
             id INT NOT NULL,
             user_id int(11) DEFAULT NULL,
             fullname VARCHAR(100) NOT NULL,
             position VARCHAR(50) NOT NULL,
             brand VARCHAR(50) NOT NULL,
+            gender ENUM('Male', 'Female') DEFAULT NULL,
+            birth DATE DEFAULT NULL,
+            hired DATE DEFAULT NULL,
             status ENUM ('Active', 'Inactive') DEFAULT 'Active',
             shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') NOT NULL,
             violation TEXT,
@@ -450,16 +458,19 @@ function ensureUserTablesExist($userId)
     $sql = "
         CREATE TABLE
           IF NOT EXISTS employees (
-            id INT PRIMARY KEY,
+            id INT NOT NULL,
             user_id int(11) DEFAULT NULL,
             fullname VARCHAR(100) NOT NULL,
             position VARCHAR(50) NOT NULL,
             brand VARCHAR(50) NOT NULL,
+            gender ENUM('Male', 'Female') DEFAULT NULL,
+            birth DATE DEFAULT NULL,
+            hired DATE DEFAULT NULL,
             status ENUM ('Active', 'Inactive') DEFAULT 'Active',
             shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') NOT NULL,
             violation TEXT,
             image VARCHAR(255),
-            qr_code VARCHAR(100) UNIQUE,
+            qr_code VARCHAR(100) UNIQUE PRIMARY KEY,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_qr_code (qr_code)

@@ -53,6 +53,52 @@ function toProperCase(str) {
   });
 }
 
+// Format a DATE column (YYYY-MM-DD from DB) to match the timestamp display style
+function formatDateDisplay(dateStr) {
+  if (!dateStr || dateStr === "—") return "—";
+  // DB stores as YYYY-MM-DD; parse as local date to avoid UTC-offset shifting
+  const [y, m, d] = String(dateStr).split("-");
+  if (!y || !m || !d) return escapeHtml(dateStr);
+  const date = new Date(Number(y), Number(m) - 1, Number(d));
+  if (isNaN(date.getTime())) return escapeHtml(dateStr);
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
+
+// Calculate age in years from a YYYY-MM-DD birth date string
+function calcAge(dateStr) {
+  if (!dateStr) return null;
+  const [y, m, d] = String(dateStr).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const today = new Date();
+  let age = today.getFullYear() - y;
+  const notYetThisYear =
+    today.getMonth() + 1 < m ||
+    (today.getMonth() + 1 === m && today.getDate() < d);
+  if (notYetThisYear) age--;
+  return age >= 0 ? age : null;
+}
+
+// Calculate tenure as "X yr(s) Y mo(s)" from a YYYY-MM-DD hired date string
+function calcTenure(dateStr) {
+  if (!dateStr) return null;
+  const [y, m, d] = String(dateStr).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const today = new Date();
+  let years  = today.getFullYear() - y;
+  let months = (today.getMonth() + 1) - m;
+  if (today.getDate() < d) months--;
+  if (months < 0) { years--; months += 12; }
+  if (years < 0) return null;
+  if (years === 0 && months === 0) return "< 1 mo";
+  if (years === 0) return `${months} mo${months !== 1 ? "s" : ""}`;
+  if (months === 0) return `${years} yr${years !== 1 ? "s" : ""}`;
+  return `${years} yr${years !== 1 ? "s" : ""} ${months} mo${months !== 1 ? "s" : ""}`;
+}
+
 // ─────────────────────────────────────────────────────────────────
 //  Load global audio from DB; fall back to bundled files if absent
 // ─────────────────────────────────────────────────────────────────
@@ -454,6 +500,9 @@ async function loadEmployeeData(employeeId) {
       document.getElementById("shift").value = employee.shift || "";
       document.getElementById("violation").value = employee.violation || "";
       document.getElementById("qr_code").value = employee.qr_code || "";
+      document.getElementById("gender").value = employee.gender || "";
+      document.getElementById("birth").value = employee.birth || "";
+      document.getElementById("hired").value = employee.hired || "";
 
       const fileLabel = document.querySelector(".file-upload-label");
       if (employee.image) {
@@ -647,6 +696,9 @@ async function renderEmployeeTable() {
       const safeBrand = escapeHtml(employee.brand);
       const safeStatus = escapeHtml(employee.status);
       const safeShift = escapeHtml(employee.shift);
+      const safeGender = escapeHtml(employee.gender || "—");
+      const safeBirth = formatDateDisplay(employee.birth);
+      const safeHired = formatDateDisplay(employee.hired);
       const safeViolation = escapeHtml(employee.violation);
       const safeQrCode = escapeHtml(employee.qr_code);
       const safeImage = escapeHtml(employee.image);
@@ -683,8 +735,25 @@ async function renderEmployeeTable() {
               <div>${toProperCase(safeBrand)}</div>
               <div class="emp-position"><strong>Position: ${toProperCase(safePosition)}</strong></div>
             </td>
+            <!-- <td><small>${safeGender}</small></td>
             <td>
-              <div>${safeShift}</div>
+              <div><small>${safeBirth}</small></div>
+              <div class="emp-age"><strong>Age: ${
+                calcAge(employee.birth) !== null
+                  ? calcAge(employee.birth) + " yrs"
+                  : "—"
+              }</strong></div>
+            </td>
+            <td>
+              <div><small>${safeHired}</small></div>
+              <div class="emp-tenure"><strong>Tenure: ${
+                calcTenure(employee.hired) !== null
+                  ? escapeHtml(calcTenure(employee.hired))
+                  : "—"
+              }</strong></div>
+            </td> -->
+            <td>
+              <div><small>${safeShift}</small></div>
               <div class="emp-status"><strong>Status: <span class="status-${safeStatus.toLowerCase()}">${safeStatus}</span></strong></div>
             </td>
             <td class="Col7">

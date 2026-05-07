@@ -14,7 +14,11 @@
  */
 async function fetchAllEmployeesForExport(filters = {}) {
   try {
-    const params = new URLSearchParams({ action: "get", page: 1, limit: 999999 });
+    const params = new URLSearchParams({
+      action: "get",
+      page: 1,
+      limit: 999999,
+    });
 
     // Mirror the same filter-translation logic used in system.js → loadEmployees()
     for (const [key, value] of Object.entries(filters)) {
@@ -64,13 +68,16 @@ async function fetchAllEmployeesForExport(filters = {}) {
  */
 async function fetchAllCodesForExport() {
   try {
-    const response = await fetch("proxcode_backend.php?action=get&page=1&limit=999999", {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Requested-With": "XMLHttpRequest",
+    const response = await fetch(
+      "proxcode_backend.php?action=get&page=1&limit=999999",
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+        },
       },
-    });
+    );
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -180,9 +187,12 @@ async function exportEmployeeData(employees, type = "Data") {
       "Fullname",
       "Position",
       "Brand / Department",
+      // "Gender",
+      // "Birth Date",
+      // "Hired Date",
       "Status",
       "Shift",
-      "Remarks",          // Violation
+      "Remarks", // Violation
       "Proximity Code",
       "Register Date",
       "Last Update",
@@ -193,15 +203,18 @@ async function exportEmployeeData(employees, type = "Data") {
       data.push([
         String(index + 1),
         String(employee.id ?? ""),
-        toProperCase(employee.fullname)  || "",
-        toProperCase(employee.position)  || "",
-        toProperCase(employee.brand)     || "",
-        employee.status       || "",
-        employee.shift        || "",
-        employee.violation    || "None",
-        employee.qr_code      || "",
-        formatDate(employee.created_at)  || "",
-        formatDate(employee.updated_at)  || "",
+        toProperCase(employee.fullname) || "",
+        toProperCase(employee.position) || "",
+        toProperCase(employee.brand) || "",
+        // employee.gender || "",
+        // employee.birth || "",
+        // employee.hired || "",
+        employee.status || "",
+        employee.shift || "",
+        employee.violation || "None",
+        employee.qr_code || "",
+        formatDate(employee.created_at) || "",
+        formatDate(employee.updated_at) || "",
       ]);
     });
 
@@ -209,11 +222,14 @@ async function exportEmployeeData(employees, type = "Data") {
     const ws = XLSX.utils.aoa_to_sheet(data);
 
     ws["!cols"] = [
-      { wch: 5  }, // SN
+      { wch: 5 }, // SN
       { wch: 10 }, // EMPID
       { wch: 25 }, // Fullname
       { wch: 20 }, // Position
       { wch: 20 }, // Brand
+      // { wch: 15 }, // Gender
+      // { wch: 15 }, // Birth Date
+      // { wch: 15 }, // Hired Date
       { wch: 12 }, // Status
       { wch: 15 }, // Shift
       { wch: 20 }, // Remarks
@@ -228,10 +244,10 @@ async function exportEmployeeData(employees, type = "Data") {
       const ca = XLSX.utils.encode_cell({ r: 0, c: col });
       if (!ws[ca]) continue;
       ws[ca].s = {
-        font:      { bold: true, color: { rgb: "FFFFFF" } },
-        fill:      { fgColor: { rgb: "4472C4" } },
+        font: { bold: true, color: { rgb: "FFFFFF" } },
+        fill: { fgColor: { rgb: "4472C4" } },
         alignment: { horizontal: "center", vertical: "center" },
-        border:    _thinBorderXlsx(),
+        border: _thinBorderXlsx(),
       };
     }
 
@@ -241,7 +257,8 @@ async function exportEmployeeData(employees, type = "Data") {
         if (!ws[ca]) ws[ca] = { v: "", t: "s" };
         if (!ws[ca].s) ws[ca].s = {};
         ws[ca].s.border = _thinBorderXlsx();
-        if (col === 0) ws[ca].s.alignment = { horizontal: "center", vertical: "center" };
+        if (col === 0)
+          ws[ca].s.alignment = { horizontal: "center", vertical: "center" };
       }
     }
 
@@ -252,7 +269,7 @@ async function exportEmployeeData(employees, type = "Data") {
 
     showAlert(
       `Successfully exported ${employees.length} record(s) → ${filename}`,
-      "success"
+      "success",
     );
   } catch (error) {
     console.error("Export employee data error:", error);
@@ -299,6 +316,9 @@ function exportToExcel(type = "Filtered") {
       "Fullname",
       "Position",
       "Brand / Department",
+      // "Gender",
+      // "Birth Date",
+      // "Hired Date",
       "Status",
       "Shift",
       "Remarks",
@@ -317,41 +337,55 @@ function exportToExcel(type = "Filtered") {
       const text = (cell) => (cell ? cell.textContent.trim() : "");
 
       // EMPID lives in a sub-div with class "emp-id" inside cell[1]
-      const empIdEl  = cells[1]?.querySelector(".emp-id");
-      const empId    = empIdEl
+      const empIdEl = cells[1]?.querySelector(".emp-id");
+      const empId = empIdEl
         ? empIdEl.textContent.replace(/EMPID:/i, "").trim()
         : "";
 
       // Fullname is in the first <strong> inside cell[1]
-      const fullnameEl = cells[1]?.querySelector("strong:first-child");
-      const fullname   = fullnameEl ? fullnameEl.textContent.trim() : text(cells[1]);
+      const fullnameEl = cells[2]?.querySelector("strong:first-child");
+      const fullname = fullnameEl
+        ? fullnameEl.textContent.trim()
+        : text(cells[2]);
 
       // Brand is the first div's text inside cell[2]; position is in sub-div
-      const brandEl    = cells[2]?.querySelector("div:first-child");
-      const positionEl = cells[2]?.querySelector(".emp-position");
-      const brand      = brandEl    ? brandEl.textContent.trim()                          : "";
-      const position   = positionEl ? positionEl.textContent.replace(/Position:/i, "").trim() : "";
+      const positionEl = cells[3]?.querySelector(".emp-position");
+      const position = positionEl
+        ? positionEl.textContent.replace(/Position:/i, "").trim()
+        : "";
+
+      const brandEl = cells[4]?.querySelector("div:first-child");
+      const brand = brandEl
+        ? brandEl.textContent.trim()
+        : "";
 
       // Status — strip the span wrapper
-      const statusEl = cells[3]?.querySelector("span") || cells[3];
-      const status   = statusEl ? statusEl.textContent.trim() : "";
+      const statusEl = cells[8]?.querySelector("span") || cells[8];
+      const status = statusEl
+        ? statusEl.textContent.trim()
+        : "";
 
       // QR: read from data-qr attribute on Col9 cell (cell index 7)
-      const qrCell = cells[7];
-      const qrCode = qrCell ? (qrCell.dataset.qr || "") : "";
+      const qrCell = cells[11];
+      const qrCode = qrCell
+        ? qrCell.dataset.qr || ""
+        : "";
 
       data.push([
-        text(cells[0]),  // SN
-        empId,           // EMPID
-        fullname,        // Fullname
-        position,        // Position
-        brand,           // Brand
-        status,          // Status
-        text(cells[4]),  // Shift
-        text(cells[5]),  // Remarks / Violation
-        qrCode,          // Proximity Code (from data-qr)
-        text(cells[8]),  // Register Date
-        text(cells[9]),  // Last Update
+        text(cells[0]), // SN
+        empId, // EMPID
+        fullname, // Fullname
+        position, // Position
+        brand, // Brand
+        // text(cells[5]), // Gender
+        // text(cells[6]), // Birth Date
+        // text(cells[7]), // Hired Date
+        status, // Status
+        text(cells[9]), // Shift
+        text(cells[10]), // Remarks / Violation
+        qrCode, // Proximity Code (from data-qr)
+        text(cells[12]), // Register Date
+        text(cells[13]), // Last Update
       ]);
     });
 
@@ -364,8 +398,19 @@ function exportToExcel(type = "Filtered") {
     const ws = XLSX.utils.aoa_to_sheet(data);
 
     ws["!cols"] = [
-      { wch: 5  }, { wch: 10 }, { wch: 25 }, { wch: 20 }, { wch: 20 },
-      { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 18 },
+      { wch: 5 },
+      { wch: 10 },
+      { wch: 25 },
+      { wch: 20 },
+      { wch: 20 },
+      // { wch: 15 },
+      // { wch: 15 },
+      // { wch: 15 },
+      { wch: 12 },
+      { wch: 15 },
+      { wch: 20 },
+      { wch: 15 },
+      { wch: 18 },
       { wch: 18 },
     ];
 
@@ -375,10 +420,10 @@ function exportToExcel(type = "Filtered") {
       const ca = XLSX.utils.encode_cell({ r: 0, c: col });
       if (!ws[ca]) continue;
       ws[ca].s = {
-        font:      { bold: true, color: { rgb: "FFFFFF" } },
-        fill:      { fgColor: { rgb: "4472C4" } },
+        font: { bold: true, color: { rgb: "FFFFFF" } },
+        fill: { fgColor: { rgb: "4472C4" } },
         alignment: { horizontal: "center", vertical: "center" },
-        border:    _thinBorderXlsx(),
+        border: _thinBorderXlsx(),
       };
     }
 
@@ -388,7 +433,8 @@ function exportToExcel(type = "Filtered") {
         if (!ws[ca]) continue;
         if (!ws[ca].s) ws[ca].s = {};
         ws[ca].s.border = _thinBorderXlsx();
-        if (col === 0) ws[ca].s.alignment = { horizontal: "center", vertical: "center" };
+        if (col === 0)
+          ws[ca].s.alignment = { horizontal: "center", vertical: "center" };
       }
     }
 
@@ -399,7 +445,7 @@ function exportToExcel(type = "Filtered") {
 
     showAlert(
       `Successfully exported ${data.length - 1} record(s) → ${filename}`,
-      "success"
+      "success",
     );
   } catch (error) {
     console.error("Export error:", error);
@@ -415,12 +461,15 @@ function excelTemplate(type = "Template") {
   showAlert("Exporting Excel Template…", "info");
 
   try {
-    const data    = [];
+    const data = [];
     const headers = [
       "EMPID",
       "Fullname",
       "Position",
       "Brand / Department",
+      // "Gender",
+      // "Birth Date",
+      // "Hired Date",
       "Status",
       "Shift",
       "Remarks",
@@ -432,8 +481,17 @@ function excelTemplate(type = "Template") {
     const ws = XLSX.utils.aoa_to_sheet(data);
 
     ws["!cols"] = [
-      { wch: 10 }, { wch: 25 }, { wch: 20 }, { wch: 20 },
-      { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 15 },
+      { wch: 10 },
+      { wch: 25 },
+      { wch: 20 },
+      { wch: 20 },
+      // { wch: 15 },
+      // { wch: 15 },
+      // { wch: 15 },
+      { wch: 12 },
+      { wch: 15 },
+      { wch: 20 },
+      { wch: 15 },
     ];
 
     const headerRange = XLSX.utils.decode_range(ws["!ref"]);
@@ -441,10 +499,10 @@ function excelTemplate(type = "Template") {
       const ca = XLSX.utils.encode_cell({ r: 0, c: col });
       if (!ws[ca]) continue;
       ws[ca].s = {
-        font:      { bold: true, color: { rgb: "FFFFFF" } },
-        fill:      { fgColor: { rgb: "4472C4" } },
+        font: { bold: true, color: { rgb: "FFFFFF" } },
+        fill: { fgColor: { rgb: "4472C4" } },
         alignment: { horizontal: "center", vertical: "center" },
-        border:    _thinBorderXlsx(),
+        border: _thinBorderXlsx(),
       };
     }
 
@@ -468,7 +526,7 @@ function loadExcelJS() {
     const script = document.createElement("script");
     script.src =
       "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";
-    script.onload  = resolve;
+    script.onload = resolve;
     script.onerror = () => reject(new Error("Failed to load ExcelJS"));
     document.head.appendChild(script);
   });
@@ -494,8 +552,8 @@ function resolveEmployeeImageUrl(employee, tableRow) {
 async function fetchImageBase64(url) {
   if (!url) return null;
   const extensions = ["jpg", "jpeg", "png", "webp"];
-  const urlsToTry  = [url];
-  const base        = url.replace(/\.(jpg|jpeg|png|webp)$/i, "");
+  const urlsToTry = [url];
+  const base = url.replace(/\.(jpg|jpeg|png|webp)$/i, "");
   extensions.forEach((ext) => {
     const alt = `${base}.${ext}`;
     if (alt !== url) urlsToTry.push(alt);
@@ -507,11 +565,11 @@ async function fetchImageBase64(url) {
       if (!res.ok) continue;
       const blob = await res.blob();
       if (!blob.type.startsWith("image/")) continue;
-      const ext    = blob.type.split("/")[1] || "jpeg";
+      const ext = blob.type.split("/")[1] || "jpeg";
       const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result.split(",")[1]);
-        reader.onerror   = reject;
+        reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
       return { base64, extension: ext === "jpeg" ? "jpeg" : ext };
@@ -524,17 +582,26 @@ async function fetchImageBase64(url) {
 
 function resizeImageToSquare(base64, extension, size = 60) {
   return new Promise((resolve) => {
-    const img    = new Image();
-    img.onload   = () => {
-      const canvas  = document.createElement("canvas");
-      canvas.width  = size;
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
       canvas.height = size;
-      const ctx     = canvas.getContext("2d");
-      const scale   = Math.max(size / img.width, size / img.height);
-      const scaledW = img.width  * scale;
+      const ctx = canvas.getContext("2d");
+      const scale = Math.max(size / img.width, size / img.height);
+      const scaledW = img.width * scale;
       const scaledH = img.height * scale;
-      ctx.drawImage(img, (size - scaledW) / 2, (size - scaledH) / 2, scaledW, scaledH);
-      resolve({ base64: canvas.toDataURL("image/jpeg", 0.85).split(",")[1], extension: "jpeg" });
+      ctx.drawImage(
+        img,
+        (size - scaledW) / 2,
+        (size - scaledH) / 2,
+        scaledW,
+        scaledH,
+      );
+      resolve({
+        base64: canvas.toDataURL("image/jpeg", 0.85).split(",")[1],
+        extension: "jpeg",
+      });
     };
     img.onerror = () => resolve(null);
     img.src = `data:image/${extension === "jpeg" ? "jpeg" : extension};base64,${base64}`;
@@ -559,7 +626,7 @@ async function exportWithImages() {
     typeof activeFilters !== "undefined" ? activeFilters : {};
   const isFiltered = Object.keys(currentFilters).length > 0;
   let exportEmployees = [];
-  let exportType      = "All";
+  let exportType = "All";
 
   if (isFiltered) {
     showAlert("Fetching all filtered records…", "info");
@@ -592,81 +659,94 @@ async function exportWithImages() {
   tableRows.forEach((row) => {
     // EMPID is in the emp-id sub-div inside cell[1]
     const empIdEl = row.querySelectorAll("td")[1]?.querySelector(".emp-id");
-    const empId   = empIdEl
+    const empId = empIdEl
       ? empIdEl.textContent.replace(/EMPID:/i, "").trim()
       : "";
     if (empId) tableRowMap[empId] = row;
   });
 
-  showAlert(`Building Excel with images for ${exportEmployees.length} record(s)…`, "info");
+  showAlert(
+    `Building Excel with images for ${exportEmployees.length} record(s)…`,
+    "info",
+  );
 
-  const workbook  = new ExcelJS.Workbook();
+  const workbook = new ExcelJS.Workbook();
   workbook.creator = "Employee Management System";
   workbook.created = new Date();
   const worksheet = workbook.addWorksheet("Employee Data");
 
-  const ROW_HEIGHT    = 55;
+  const ROW_HEIGHT = 55;
   const IMG_COL_WIDTH = 14;
-  const IMG_PX_W      = 60;
-  const IMG_PX_H      = 48;
+  const IMG_PX_W = 60;
+  const IMG_PX_H = 48;
 
   worksheet.columns = [
-    { header: "SN",                 key: "sn",         width: 5            },
-    { header: "EMPID",              key: "id",         width: 12           },
-    { header: "Photo",              key: "photo",      width: IMG_COL_WIDTH},
-    { header: "Fullname",           key: "fullname",   width: 26           },
-    { header: "Position",           key: "position",   width: 22           },
-    { header: "Brand / Department", key: "brand",      width: 22           },
-    { header: "Status",             key: "status",     width: 12           },
-    { header: "Shift",              key: "shift",      width: 15           },
-    { header: "Remarks",            key: "violation",  width: 20           },
-    { header: "Proximity Code",     key: "qr_code",    width: 16           },
-    { header: "Register Date",      key: "created_at", width: 20           },
-    { header: "Last Update",        key: "updated_at", width: 20           },
+    { header: "SN", key: "sn", width: 5 },
+    { header: "EMPID", key: "id", width: 12 },
+    { header: "Photo", key: "photo", width: IMG_COL_WIDTH },
+    { header: "Fullname", key: "fullname", width: 26 },
+    { header: "Position", key: "position", width: 22 },
+    { header: "Brand / Department", key: "brand", width: 22 },
+    // { header: "Gender", key: "gender", width: 15 },
+    // { header: "Birth Date", key: "birth", width: 15 },
+    // { header: "Hired Date", key: "hired", width: 15 },
+    { header: "Status", key: "status", width: 12 },
+    { header: "Shift", key: "shift", width: 15 },
+    { header: "Remarks", key: "violation", width: 20 },
+    { header: "Proximity Code", key: "qr_code", width: 16 },
+    { header: "Register Date", key: "created_at", width: 20 },
+    { header: "Last Update", key: "updated_at", width: 20 },
   ];
 
   const headerRow = worksheet.getRow(1);
   headerRow.height = 22;
   headerRow.eachCell((cell) => {
-    cell.font      = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
-    cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4472C4" } };
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF4472C4" },
+    };
     cell.alignment = { horizontal: "center", vertical: "middle" };
-    cell.border    = _thinBorderExcelJS();
+    cell.border = _thinBorderExcelJS();
   });
 
-  let successCount  = 0;
+  let successCount = 0;
   let missingImages = 0;
 
   for (let i = 0; i < exportEmployees.length; i++) {
     const emp = exportEmployees[i];
 
     const dataRow = worksheet.addRow({
-      sn:         i + 1,
-      id:         emp.id         || "",
-      photo:      "",
-      fullname:   toProperCase(emp.fullname),
-      position:   toProperCase(emp.position),
-      brand:      toProperCase(emp.brand),
-      status:     emp.status     || "",
-      shift:      emp.shift      || "",
-      violation:  emp.violation  || "None",
-      qr_code:    emp.qr_code    || "",
+      sn: i + 1,
+      id: emp.id || "",
+      photo: "",
+      fullname: toProperCase(emp.fullname),
+      position: toProperCase(emp.position),
+      brand: toProperCase(emp.brand),
+      // gender: emp.gender || "",
+      // birth: emp.birth || "",
+      // hired: emp.hired || "",
+      status: emp.status || "",
+      shift: emp.shift || "",
+      violation: emp.violation || "None",
+      qr_code: emp.qr_code || "",
       created_at: formatDate(emp.created_at),
       updated_at: formatDate(emp.updated_at),
     });
 
     dataRow.height = ROW_HEIGHT;
     dataRow.eachCell({ includeEmpty: true }, (cell, colNum) => {
-      cell.border    = _thinBorderExcelJS();
+      cell.border = _thinBorderExcelJS();
       cell.alignment = {
-        vertical:   "middle",
+        vertical: "middle",
         horizontal: colNum === 1 ? "center" : "left",
-        wrapText:   false,
+        wrapText: false,
       };
     });
 
     const tableRow = tableRowMap[String(emp.id)] || null;
-    const imgUrl   = resolveEmployeeImageUrl(emp, tableRow);
+    const imgUrl = resolveEmployeeImageUrl(emp, tableRow);
     const imgResult = imgUrl ? await fetchImageBase64(imgUrl) : null;
 
     if (imgResult) {
@@ -674,15 +754,15 @@ async function exportWithImages() {
         const squared = await resizeImageToSquare(
           imgResult.base64,
           imgResult.extension,
-          IMG_PX_W
+          IMG_PX_W,
         );
         const imageId = workbook.addImage({
-          base64:    (squared || imgResult).base64,
+          base64: (squared || imgResult).base64,
           extension: (squared || imgResult).extension,
         });
         worksheet.addImage(imageId, {
-          tl:     { col: 2.08, row: i + 1.08 },
-          ext:    { width: IMG_PX_W, height: IMG_PX_H },
+          tl: { col: 2.08, row: i + 1.08 },
+          ext: { width: IMG_PX_W, height: IMG_PX_H },
           editAs: "oneCell",
         });
         successCount++;
@@ -695,15 +775,15 @@ async function exportWithImages() {
     }
   }
 
-  const buffer   = await workbook.xlsx.writeBuffer();
-  const blob     = new Blob([buffer], {
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
   const filename = `Employee_Data_${exportType}_With_Images_${_dateStamp()}.xlsx`;
-  const url      = URL.createObjectURL(blob);
-  const a        = document.createElement("a");
-  a.href         = url;
-  a.download     = filename;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -761,8 +841,10 @@ async function exportFilteredCodes() {
   try {
     // Build server-side filter params (qr_code, created_at are DB columns)
     const serverParams = new URLSearchParams({ action: "get" });
-    if (currentFilters.qr_code)    serverParams.append("qr_code",    currentFilters.qr_code);
-    if (currentFilters.created_at) serverParams.append("created_at", currentFilters.created_at);
+    if (currentFilters.qr_code)
+      serverParams.append("qr_code", currentFilters.qr_code);
+    if (currentFilters.created_at)
+      serverParams.append("created_at", currentFilters.created_at);
 
     const res = await fetch(`proxcode_backend.php?${serverParams.toString()}`, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -781,7 +863,9 @@ async function exportFilteredCodes() {
     if (remarksFilter) {
       let qrImageMap = {};
       if (typeof buildQRToImageMap === "function") {
-        try { qrImageMap = await buildQRToImageMap(); } catch (e) {}
+        try {
+          qrImageMap = await buildQRToImageMap();
+        } catch (e) {}
       }
       filteredCodes = filteredCodes.filter((c) => {
         const isOccupied = Object.prototype.hasOwnProperty.call(
@@ -822,7 +906,7 @@ async function exportProximityCodes(proxcodes, type = "Data") {
       return;
     }
 
-    const data    = [];
+    const data = [];
     const headers = [
       "SN",
       "EMPID",
@@ -844,16 +928,19 @@ async function exportProximityCodes(proxcodes, type = "Data") {
     }
 
     proxcodes.forEach((proxcode, index) => {
-      const qrLower        = (proxcode.qr_code || "").trim().toLowerCase();
-      const isOccupied     = Object.prototype.hasOwnProperty.call(qrImageMap, qrLower);
+      const qrLower = (proxcode.qr_code || "").trim().toLowerCase();
+      const isOccupied = Object.prototype.hasOwnProperty.call(
+        qrImageMap,
+        qrLower,
+      );
       const displayRemarks = isOccupied ? "Occupied" : "Available";
-      const matchedEmp     = qrImageMap[qrLower];
-      const empId          = matchedEmp ? String(matchedEmp.id) : "";
+      const matchedEmp = qrImageMap[qrLower];
+      const empId = matchedEmp ? String(matchedEmp.id) : "";
 
       data.push([
         String(index + 1),
         empId,
-        proxcode.qr_code      || "",
+        proxcode.qr_code || "",
         displayRemarks,
         formatDate(proxcode.created_at) || "",
         formatDate(proxcode.updated_at) || "",
@@ -864,7 +951,7 @@ async function exportProximityCodes(proxcodes, type = "Data") {
     const ws = XLSX.utils.aoa_to_sheet(data);
 
     ws["!cols"] = [
-      { wch: 5  }, // SN
+      { wch: 5 }, // SN
       { wch: 10 }, // EMPID
       { wch: 15 }, // Proximity Code
       { wch: 15 }, // Remarks
@@ -878,10 +965,10 @@ async function exportProximityCodes(proxcodes, type = "Data") {
       const ca = XLSX.utils.encode_cell({ r: 0, c: col });
       if (!ws[ca]) continue;
       ws[ca].s = {
-        font:      { bold: true, color: { rgb: "FFFFFF" } },
-        fill:      { fgColor: { rgb: "4472C4" } },
+        font: { bold: true, color: { rgb: "FFFFFF" } },
+        fill: { fgColor: { rgb: "4472C4" } },
         alignment: { horizontal: "center", vertical: "center" },
-        border:    _thinBorderXlsx(),
+        border: _thinBorderXlsx(),
       };
     }
 
@@ -891,7 +978,8 @@ async function exportProximityCodes(proxcodes, type = "Data") {
         if (!ws[ca]) ws[ca] = { v: "", t: "s" };
         if (!ws[ca].s) ws[ca].s = {};
         ws[ca].s.border = _thinBorderXlsx();
-        if (col === 0) ws[ca].s.alignment = { horizontal: "center", vertical: "center" };
+        if (col === 0)
+          ws[ca].s.alignment = { horizontal: "center", vertical: "center" };
       }
     }
 
@@ -902,7 +990,7 @@ async function exportProximityCodes(proxcodes, type = "Data") {
 
     showAlert(
       `Successfully exported ${proxcodes.length} proximity code(s) → ${filename}`,
-      "success"
+      "success",
     );
   } catch (error) {
     console.error("Export proximity codes error:", error);
@@ -938,7 +1026,7 @@ function exportCodesToExcel(type = "Filtered") {
       return;
     }
 
-    const data    = [];
+    const data = [];
     const headers = [
       "SN",
       "EMPID",
@@ -959,15 +1047,15 @@ function exportCodesToExcel(type = "Filtered") {
 
       // QR code is stored in data-qr on cell[3]
       const qrCell = cells[3];
-      const qrCode = qrCell ? (qrCell.dataset.qr || "") : "";
+      const qrCode = qrCell ? qrCell.dataset.qr || "" : "";
 
       data.push([
-        text(cells[0]),  // SN
-        text(cells[2]),  // EMPID
-        qrCode,          // Proximity Code (from data-qr)
-        text(cells[4]),  // Remarks
-        text(cells[5]),  // Register Date
-        text(cells[6]),  // Last Update
+        text(cells[0]), // SN
+        text(cells[2]), // EMPID
+        qrCode, // Proximity Code (from data-qr)
+        text(cells[4]), // Remarks
+        text(cells[5]), // Register Date
+        text(cells[6]), // Last Update
       ]);
     });
 
@@ -980,8 +1068,12 @@ function exportCodesToExcel(type = "Filtered") {
     const ws = XLSX.utils.aoa_to_sheet(data);
 
     ws["!cols"] = [
-      { wch: 5  }, { wch: 10 }, { wch: 15 },
-      { wch: 15 }, { wch: 18 }, { wch: 18 },
+      { wch: 5 },
+      { wch: 10 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 18 },
+      { wch: 18 },
     ];
 
     const headerRange = XLSX.utils.decode_range(ws["!ref"]);
@@ -990,10 +1082,10 @@ function exportCodesToExcel(type = "Filtered") {
       const ca = XLSX.utils.encode_cell({ r: 0, c: col });
       if (!ws[ca]) continue;
       ws[ca].s = {
-        font:      { bold: true, color: { rgb: "FFFFFF" } },
-        fill:      { fgColor: { rgb: "4472C4" } },
+        font: { bold: true, color: { rgb: "FFFFFF" } },
+        fill: { fgColor: { rgb: "4472C4" } },
         alignment: { horizontal: "center", vertical: "center" },
-        border:    _thinBorderXlsx(),
+        border: _thinBorderXlsx(),
       };
     }
 
@@ -1003,7 +1095,8 @@ function exportCodesToExcel(type = "Filtered") {
         if (!ws[ca]) continue;
         if (!ws[ca].s) ws[ca].s = {};
         ws[ca].s.border = _thinBorderXlsx();
-        if (col === 0) ws[ca].s.alignment = { horizontal: "center", vertical: "center" };
+        if (col === 0)
+          ws[ca].s.alignment = { horizontal: "center", vertical: "center" };
       }
     }
 
@@ -1014,7 +1107,7 @@ function exportCodesToExcel(type = "Filtered") {
 
     showAlert(
       `Successfully exported ${data.length - 1} proximity code(s) → ${filename}`,
-      "success"
+      "success",
     );
   } catch (error) {
     console.error("Export error:", error);
@@ -1030,7 +1123,7 @@ function excelProxCodeTemplate(proxcode = "Proximity Code", type = "Template") {
   showAlert(`Exporting Excel ${proxcode} ${type}…`, "info");
 
   try {
-    const data    = [];
+    const data = [];
     const headers = [proxcode];
     data.push(headers);
 
@@ -1044,10 +1137,10 @@ function excelProxCodeTemplate(proxcode = "Proximity Code", type = "Template") {
       const ca = XLSX.utils.encode_cell({ r: 0, c: col });
       if (!ws[ca]) continue;
       ws[ca].s = {
-        font:      { bold: true, color: { rgb: "FFFFFF" } },
-        fill:      { fgColor: { rgb: "4472C4" } },
+        font: { bold: true, color: { rgb: "FFFFFF" } },
+        fill: { fgColor: { rgb: "4472C4" } },
         alignment: { horizontal: "center", vertical: "center" },
-        border:    _thinBorderXlsx(),
+        border: _thinBorderXlsx(),
       };
     }
 
@@ -1071,11 +1164,16 @@ function formatDate(dateString) {
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return dateString;
     return (
-      date.getFullYear() + "-" +
-      String(date.getMonth() + 1).padStart(2, "0") + "-" +
-      String(date.getDate()).padStart(2, "0") + " " +
-      String(date.getHours()).padStart(2, "0") + ":" +
-      String(date.getMinutes()).padStart(2, "0") + ":" +
+      date.getFullYear() +
+      "-" +
+      String(date.getMonth() + 1).padStart(2, "0") +
+      "-" +
+      String(date.getDate()).padStart(2, "0") +
+      " " +
+      String(date.getHours()).padStart(2, "0") +
+      ":" +
+      String(date.getMinutes()).padStart(2, "0") +
+      ":" +
       String(date.getSeconds()).padStart(2, "0")
     );
   } catch {
@@ -1087,10 +1185,14 @@ function formatDate(dateString) {
 function _dateStamp() {
   const now = new Date();
   return (
-    now.getFullYear() + "-" +
-    String(now.getMonth() + 1).padStart(2, "0") + "-" +
-    String(now.getDate()).padStart(2, "0") + "_" +
-    String(now.getHours()).padStart(2, "0") + "-" +
+    now.getFullYear() +
+    "-" +
+    String(now.getMonth() + 1).padStart(2, "0") +
+    "-" +
+    String(now.getDate()).padStart(2, "0") +
+    "_" +
+    String(now.getHours()).padStart(2, "0") +
+    "-" +
     String(now.getMinutes()).padStart(2, "0")
   );
 }

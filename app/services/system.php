@@ -238,6 +238,9 @@ if ($databaseConnected) {
               <th>SN</th>
               <th>Fullname</th>
               <th>Brand / Department</th>
+              <!-- <th>Gender</th>
+              <th>Birth Date</th>
+              <th>Hired Date</th> -->
               <th>Shift</th>
               <th class="Col7">Remarks</th>
               <th class="Col8">Image</th>
@@ -322,18 +325,7 @@ if ($databaseConnected) {
               </select>
               <label class="fl-label" for="shift">Shift <span style="color:#e74c3c">*</span></label>
             </div>
-            <div class="form-group fl-group">
-              <select id="status" name="status" class="has-value" style="cursor: not-allowed;" onchange="this.classList.toggle('has-value', this.value !== '')" disabled>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-              <label class="fl-label" for="status">Status</label>
-            </div>
             <!-- <div class="form-group fl-group">
-              <input type="text" id="birth" name="birth" placeholder=" " autocomplete="off">
-              <label class="fl-label" for="birth">Birth Date <span style="color:#e74c3c">*</span></label>
-            </div>
-            <div class="form-group fl-group">
               <select id="gender" name="gender" class="has-value" onchange="this.classList.toggle('has-value', this.value !== '')">
                 <option value="">Select Gender</option>
                 <option value="Male">Male</option>
@@ -341,10 +333,35 @@ if ($databaseConnected) {
               </select>
               <label class="fl-label" for="gender">Gender</label>
             </div> -->
+            <div class="form-group fl-group">
+              <select id="status" name="status" class="has-value" style="cursor: not-allowed;" onchange="this.classList.toggle('has-value', this.value !== '')" disabled>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+              <label class="fl-label" for="status">Status</label>
+            </div>
           </div>
+
+          <!-- <div class="form-row">
+            <div class="form-group fl-group">
+              <input type="date" id="birth" name="birth" placeholder=" " autocomplete="off">
+              <label class="fl-label" for="birth" style="pointer-events:none;">Birth Date <span style="color:#e74c3c">*</span></label>
+            </div>
+            <div class="form-group fl-group">
+              <select id="status" name="status" class="has-value" style="cursor: not-allowed;" onchange="this.classList.toggle('has-value', this.value !== '')" disabled>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+              <label class="fl-label" for="status">Status</label>
+            </div>
+          </div> -->
 
           <div class="form-layout">
             <div class="left-column">
+              <!-- <div class="form-group fl-group">
+                <input type="date" id="hired" name="hired" placeholder=" " autocomplete="off">
+                <label class="fl-label" for="hired" style="pointer-events:none;">Hired Date <span style="color:#e74c3c">*</span></label>
+              </div> -->
               <div class="form-group fl-group">
                 <input type="text" id="qr_code" name="qr_code" placeholder=" " autocomplete="off">
                 <label class="fl-label" for="qr_code">Proximity Code</label>
@@ -505,6 +522,9 @@ if ($databaseConnected) {
             <li><strong>fullname</strong> - Employee's fullname (required)</li>
             <li><strong>position</strong> - Job position</li>
             <li><strong>brand/deparment</strong> - Brand/Department</li>
+            <!-- <li><strong>gender</strong> - Gender</li>
+            <li><strong>birth date</strong> - Birth Date (DD/MM/YYYY)</li>
+            <li><strong>hired date</strong> - Hired Date (DD/MM/YYYY)</li> -->
             <li><strong>status</strong> - Active or Inactive (default: Active)</li>
             <li><strong>shift</strong> - Day Shift, Night Shift, or Graveyard Shift (required)</li>
             <li><strong>remarks</strong> - Any remarks (optional)</li>

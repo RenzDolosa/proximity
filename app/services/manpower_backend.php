@@ -260,8 +260,8 @@ class EmployeeManager
   public function createEmployee($data)
   {
     $query = "INSERT INTO " . $this->table . "
-                (id, fullname, position, brand, status, shift, violation, image, qr_code, user_id)
-                VALUES (:id, :fullname, :position, :brand, :status, :shift, :violation, :image, :qr_code, :user_id)";
+            (id, fullname, position, brand, gender, birth, hired, status, shift, violation, image, qr_code, user_id)
+            VALUES (:id, :fullname, :position, :brand, :gender, :birth, :hired, :status, :shift, :violation, :image, :qr_code, :user_id)";
 
     $stmt = $this->conn->prepare($query);
     $stmt->bindParam(':user_id',   $data['user_id']);
@@ -269,6 +269,9 @@ class EmployeeManager
     $stmt->bindParam(':fullname',  $data['fullname']);
     $stmt->bindParam(':position',  $data['position']);
     $stmt->bindParam(':brand',     $data['brand']);
+    $stmt->bindParam(':gender',    $data['gender']);
+    $stmt->bindParam(':birth',     $data['birth']);
+    $stmt->bindParam(':hired',     $data['hired']);
     $stmt->bindParam(':status',    $data['status']);
     $stmt->bindParam(':shift',     $data['shift']);
     $stmt->bindParam(':violation', $data['violation']);
@@ -418,15 +421,19 @@ class EmployeeManager
 
         $insert = $this->conn->prepare(
           "INSERT INTO " . $this->table . "
-           (id, fullname, position, brand, status, shift, violation, image, qr_code, user_id, created_at)
-           VALUES (:id, :fullname, :position, :brand, :status, :shift, :violation, :image, :qr_code, :user_id, :created_at)"
+            (id, fullname, position, brand, gender, birth, hired, status, shift, violation, image, qr_code, user_id, created_at)
+            VALUES (:id, :fullname, :position, :brand, :gender, :birth, :hired, :status, :shift, :violation, :image, :qr_code, :user_id, :created_at)"
         );
+
         $insert->execute([
           ':user_id'    => $this->userId,
           ':id'         => $new_id,
           ':fullname'   => $data['fullname'],
           ':position'   => $data['position'],
           ':brand'      => $data['brand'],
+          ':gender'     => $data['gender'],
+          ':birth'      => $data['birth'],
+          ':hired'      => $data['hired'],
           ':status'     => $data['status'],
           ':shift'      => $data['shift'],
           ':violation'  => $data['violation'],
@@ -442,10 +449,11 @@ class EmployeeManager
       }
     } else {
       $query = "UPDATE " . $this->table . "
-                SET id = :id, fullname = :fullname, position = :position, brand = :brand,
-                    status = :status, shift = :shift, violation = :violation,
-                    image = :image, qr_code = :qr_code, user_id = :user_id, updated_at = :updated_at
-                WHERE id = :where_id";
+            SET id = :id, fullname = :fullname, position = :position, brand = :brand,
+                gender = :gender, birth = :birth, hired = :hired,
+                status = :status, shift = :shift, violation = :violation,
+                image = :image, qr_code = :qr_code, user_id = :user_id, updated_at = :updated_at
+            WHERE id = :where_id";
 
       $stmt = $this->conn->prepare($query);
       $stmt->execute([
@@ -454,6 +462,9 @@ class EmployeeManager
         ':fullname'   => $data['fullname'],
         ':position'   => $data['position'],
         ':brand'      => $data['brand'],
+        ':gender'     => $data['gender'],
+        ':birth'      => $data['birth'],
+        ':hired'      => $data['hired'],
         ':status'     => $data['status'],
         ':shift'      => $data['shift'],
         ':violation'  => $data['violation'],
@@ -869,6 +880,8 @@ try {
         $raw_shift  = $_POST['shift']  ?? '';
         $status = in_array($raw_status, ALLOWED_STATUSES, true) ? $raw_status : 'Active';
         $shift  = in_array($raw_shift,  ALLOWED_SHIFTS,   true) ? $raw_shift  : '';
+        $raw_gender = $_POST['gender'] ?? '';
+        $gender = in_array($raw_gender, ['Male', 'Female'], true) ? $raw_gender : null;
 
         $employee_data = [
           'user_id'   => $database->getCurrentUserId(),
@@ -876,6 +889,9 @@ try {
           'fullname'  => sanitizeInput($_POST['fullname']  ?? ''),
           'position'  => sanitizeInput($_POST['position']  ?? ''),
           'brand'     => sanitizeInput($_POST['brand']     ?? ''),
+          'gender'    => $gender,
+          'birth'     => !empty($_POST['birth'])  ? sanitizeInput($_POST['birth'])  : null,
+          'hired'     => !empty($_POST['hired'])  ? sanitizeInput($_POST['hired'])  : null,
           'status'    => $status,
           'shift'     => $shift,
           'violation' => sanitizeInput($_POST['violation'] ?? ''),
@@ -971,8 +987,9 @@ try {
         $raw_shift  = $_POST['shift']  ?? $current_employee['shift'];
         $status = in_array($raw_status, ALLOWED_STATUSES, true) ? $raw_status : $current_employee['status'];
         $shift  = in_array($raw_shift,  ALLOWED_SHIFTS,   true) ? $raw_shift  : $current_employee['shift'];
-
         $new_qr_code = sanitizeInput(!empty($_POST['qr_code']) ? $_POST['qr_code'] : $current_employee['qr_code']);
+        $raw_gender_edit = $_POST['gender'] ?? $current_employee['gender'] ?? '';
+        $gender_edit = in_array($raw_gender_edit, ['Male', 'Female'], true) ? $raw_gender_edit : null;
 
         $employee_data = [
           'user_id'   => $database->getCurrentUserId(),
@@ -980,7 +997,10 @@ try {
           'fullname'  => sanitizeInput($_POST['fullname']  ?? $current_employee['fullname']),
           'position'  => sanitizeInput($_POST['position']  ?? $current_employee['position']),
           'brand'     => sanitizeInput($_POST['brand']     ?? $current_employee['brand']),
-          'status'    => $status,               // will be overwritten by syncStatusByQR()
+          'gender'    => $gender_edit,
+          'birth'     => !empty($_POST['birth']) ? sanitizeInput($_POST['birth']) : ($current_employee['birth'] ?? null),
+          'hired'     => !empty($_POST['hired']) ? sanitizeInput($_POST['hired']) : ($current_employee['hired'] ?? null),
+          'status'    => $status,
           'shift'     => $shift,
           'violation' => sanitizeInput($_POST['violation'] ?? $current_employee['violation']),
           'image'     => sanitizeInput($image_filename),
@@ -1170,10 +1190,10 @@ try {
                 : QRCodeGenerator::generateQRCode($database->getCurrentUserId());
 
               // status / shift are set as defaults; syncStatusByQR() corrects status below
-              $row_status = in_array($employee_data['status'] ?? '', ALLOWED_STATUSES, true)
-                ? $employee_data['status'] : 'Active';
-              $row_shift  = in_array($employee_data['shift']  ?? '', ALLOWED_SHIFTS,   true)
-                ? $employee_data['shift']  : 'Day Shift';
+              $row_status = in_array($employee_data['status'] ?? '', ALLOWED_STATUSES, true) ? $employee_data['status'] : 'Active';
+              $row_shift  = in_array($employee_data['shift']  ?? '', ALLOWED_SHIFTS,   true) ? $employee_data['shift']  : 'Day Shift';
+              $import_gender = $employee_data['gender'] ?? '';
+              $import_gender = in_array($import_gender, ['Male', 'Female'], true) ? $import_gender : null;
 
               $employee_record = [
                 'user_id'   => $database->getCurrentUserId(),
@@ -1181,7 +1201,10 @@ try {
                 'fullname'  => sanitizeInput(trim($employee_data['fullname'])),
                 'position'  => sanitizeInput(trim($employee_data['position'])),
                 'brand'     => sanitizeInput(trim($employee_data['brand'] ?? '')),
-                'status'    => $row_status,     // will be corrected by syncStatusByQR()
+                'gender'    => $import_gender,
+                'birth'     => !empty($employee_data['birth']) ? sanitizeInput(trim($employee_data['birth'])) : null,
+                'hired'     => !empty($employee_data['hired']) ? sanitizeInput(trim($employee_data['hired'])) : null,
+                'status'    => $row_status,
                 'shift'     => $row_shift,
                 'violation' => (($v = sanitizeInput(trim($employee_data['violation'] ?? ''))) === '' || $v === 'None') ? '' : $v,
                 'image'     => null,
