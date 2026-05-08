@@ -37,7 +37,6 @@ const ALLOWED_POST_ACTIONS = [
   'delete_all',
   'import',
   'get_stats',
-  'get_status_history',
   'bulk_status_update',
   'search_qr',
   'restore_data',
@@ -53,6 +52,7 @@ const ALLOWED_GET_ACTIONS = [
   'stats',
   'user_info',
   'get_violations',
+  'get_status_history',
 ];
 
 const ALLOWED_STATUSES   = ['Active', 'Inactive'];
@@ -1218,20 +1218,6 @@ try {
         }
         break;
 
-      case 'get_status_history':
-        $employee_id = $_POST['id'] ?? 0;
-        if ($employee_id) {
-          try {
-            $response['success'] = true;
-            $response['data']    = $employeeManager->getEmployeeStatusHistory($employee_id);
-          } catch (Exception $e) {
-            $response['message'] = 'Error getting status history: ' . $e->getMessage();
-          }
-        } else {
-          $response['message'] = 'Employee ID is required';
-        }
-        break;
-
       case 'bulk_status_update':
         $employee_ids = $_POST['employee_ids'] ?? [];
         $new_status   = $_POST['new_status']   ?? '';
@@ -1491,7 +1477,6 @@ try {
         }
         try {
           $conn = getUserDBConnection($_SESSION['user_id']);
-
           $stmt = $conn->prepare(
             "SELECT * FROM employee_access_log
              WHERE employee_id = :id
@@ -1536,6 +1521,68 @@ try {
         }
         break;
 
+      case 'get_status_history':
+        $emp_id = intval($_GET['id'] ?? 0);
+        if (!$emp_id) {
+          $response['message'] = 'Employee ID required';
+          break;
+        }
+        try {
+          $conn = $database->getUserConnection();
+          $stmt = $conn->prepare(
+            "SELECT id, old_status, new_status, changed_by, change_reason, created_at
+             FROM status_history
+             WHERE employee_id = :id
+             ORDER BY created_at DESC
+             LIMIT 200"
+          );
+          $stmt->execute([':id' => $emp_id]);
+          $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+          $response['success'] = true;
+          $response['history'] = $rows;
+        } catch (Exception $e) {
+          $response['message'] = 'Error fetching status history: ' . $e->getMessage();
+          error_log("get_status_history error: " . $e->getMessage());
+        }
+        break;
+
+      case 'get_violations':
+        $emp_id = intval($_GET['id'] ?? 0);
+        if (!$emp_id) {
+          $response['message'] = 'Employee ID required';
+          break;
+        }
+        try {
+          $conn = $database->getUserConnection();
+
+          $conn->exec("CREATE TABLE IF NOT EXISTS `violations` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `employee_id` INT NOT NULL,
+            `violation_type` VARCHAR(100) DEFAULT NULL,
+            `violation_description` TEXT DEFAULT NULL,
+            `violation_date` DATE DEFAULT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+          $stmt = $conn->prepare(
+            "SELECT id, violation_type, violation_description, violation_date, created_at
+             FROM violations
+             WHERE employee_id = :id
+             ORDER BY created_at DESC
+             LIMIT 200"
+          );
+          $stmt->execute([':id' => $emp_id]);
+          $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+          $response['success']    = true;
+          $response['violations'] = $rows;
+        } catch (Exception $e) {
+          $response['message'] = 'Error fetching violations: ' . $e->getMessage();
+          error_log("get_violations error: " . $e->getMessage());
+        }
+        break;
+
       case 'check_qr':
         $qr_code = sanitizeInput($_GET['qr_code'] ?? '');
         if (!empty($qr_code)) {
@@ -1576,42 +1623,6 @@ try {
           'first_name' => $_SESSION['first_name'] ?? '',
           'last_name'  => $_SESSION['last_name']  ?? '',
         ];
-        break;
-
-      case 'get_violations':
-        $emp_id = intval($_GET['id'] ?? 0);
-        if (!$emp_id) {
-          $response['message'] = 'Employee ID required';
-          break;
-        }
-        try {
-          $conn = $database->getUserConnection();
-
-          $conn->exec("CREATE TABLE IF NOT EXISTS `violations` (
-            `id` INT AUTO_INCREMENT PRIMARY KEY,
-            `employee_id` INT NOT NULL,
-            `violation_type` VARCHAR(100) DEFAULT NULL,
-            `violation_description` TEXT DEFAULT NULL,
-            `violation_date` DATE DEFAULT NULL,
-            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-          $stmt = $conn->prepare(
-            "SELECT id, violation_type, violation_description, violation_date, created_at
-             FROM violations
-             WHERE employee_id = :id
-             ORDER BY created_at DESC
-             LIMIT 200"
-          );
-          $stmt->execute([':id' => $emp_id]);
-          $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-          $response['success']    = true;
-          $response['violations'] = $rows;
-        } catch (Exception $e) {
-          $response['message'] = 'Error fetching violations: ' . $e->getMessage();
-          error_log("get_violations error: " . $e->getMessage());
-        }
         break;
     }
   }

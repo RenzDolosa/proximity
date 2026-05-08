@@ -75,10 +75,13 @@ function calcTenure(dateStr) {
   const [y, m, d] = String(dateStr).split("-").map(Number);
   if (!y || !m || !d) return null;
   const today = new Date();
-  let years  = today.getFullYear() - y;
-  let months = (today.getMonth() + 1) - m;
+  let years = today.getFullYear() - y;
+  let months = today.getMonth() + 1 - m;
   if (today.getDate() < d) months--;
-  if (months < 0) { years--; months += 12; }
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
   if (years < 0) return null;
   if (years === 0 && months === 0) return "< 1 mo";
   if (years === 0) return `${months} mo${months !== 1 ? "s" : ""}`;
@@ -1008,7 +1011,6 @@ function copyQRCode(code) {
     document.execCommand("copy");
 
     showAlert("Proximity code copied to clipboard!");
-
   } catch (err) {
     if (navigator.clipboard) {
       navigator.clipboard
@@ -1713,54 +1715,143 @@ async function deleteFilteredEmployees() {
 async function openLogsModal(employeeId, fullname) {
   const modal = document.getElementById("logsModal");
   const title = document.getElementById("logsModalTitle");
-  const tbody = document.getElementById("logsTableBody");
 
-  document.getElementById("logCountIn").textContent = "—";
-  document.getElementById("logCountOut").textContent = "—";
-  document.getElementById("logCountTotal").textContent = "—";
-
-  title.innerHTML = `<i class="fas fa-history"></i> Access Logs — `;
+  title.innerHTML = `<i class="fas fa-history"></i> Logs — `;
   const nameSpan = document.createElement("span");
   nameSpan.textContent = fullname;
   title.appendChild(nameSpan);
 
-  tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>`;
+  _renderLogsModal(modal, employeeId);
   modal.style.display = "block";
+
+  modal.onclick = (e) => {
+    if (e.target === modal) closeModal();
+  };
+}
+
+function _renderLogsModal(modal, employeeId) {
+  const body = modal.querySelector(".modal-body");
+  body.innerHTML = `
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--color-border-tertiary);margin-bottom:16px;">
+      <button id="logsTabAccess" onclick="_switchLogsTab('access','${employeeId}')"
+        style="padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid #3b82f6;
+               background:none;color:#3b82f6;cursor:pointer;">
+        <i class="fas fa-history"></i> Access Log
+      </button>
+      <button id="logsTabStatus" onclick="_switchLogsTab('status','${employeeId}')"
+        style="padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid transparent;
+               background:none;color:#94a3b8;cursor:pointer;">
+        <i class="fas fa-exchange-alt"></i> Status Log
+      </button>
+      <button id="logsTabRemarks" onclick="_switchLogsTab('remarks','${employeeId}')"
+        style="padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid transparent;
+              background:none;color:#94a3b8;cursor:pointer;">
+        <i class="fas fa-exclamation-triangle"></i> Remarks Log
+      </button>
+    </div>
+    <div id="logsTabContent"></div>
+  `;
+
+  _switchLogsTab("access", employeeId);
+}
+
+let _statusHistoryCache = {};
+let _remarksCache = {};
+
+async function _switchLogsTab(tab, employeeId) {
+  const accessBtn  = document.getElementById("logsTabAccess");
+  const statusBtn  = document.getElementById("logsTabStatus");
+  const remarksBtn = document.getElementById("logsTabRemarks");
+  const content    = document.getElementById("logsTabContent");
+
+  const active   = "padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid #3b82f6;background:none;color:#3b82f6;cursor:pointer;";
+  const inactive = "padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid transparent;background:none;color:#94a3b8;cursor:pointer;";
+
+  accessBtn.style.cssText  = inactive;
+  statusBtn.style.cssText  = inactive;
+  remarksBtn.style.cssText = inactive;
+
+  if (tab === "access") {
+    accessBtn.style.cssText = active;
+    await _renderAccessTab(content, employeeId);
+  } else if (tab === "status") {
+    statusBtn.style.cssText = active;
+    await _renderStatusTab(content, employeeId);
+  } else if (tab === "remarks") {
+    remarksBtn.style.cssText = active;
+    await _renderRemarksTab(content, employeeId);
+  }
+}
+
+async function _renderAccessTab(container, employeeId) {
+  container.innerHTML = `
+    <div style="display:flex;gap:16px;margin-bottom:16px;">
+      <div style="flex:1;background:#ede9fe;border-radius:8px;padding:16px;text-align:center;">
+        <div style="font-size:28px;font-weight:700;color:#5b21b6;" id="logCountTotal">—</div>
+        <div style="font-size:13px;color:#5b21b6;font-weight:600;">Total Scans</div>
+      </div>
+      <div style="flex:1;background:#d1fae5;border-radius:8px;padding:16px;text-align:center;">
+        <div style="font-size:28px;font-weight:700;color:#065f46;" id="logCountIn">—</div>
+        <div style="font-size:13px;color:#065f46;font-weight:600;">Total IN</div>
+      </div>
+      <div style="flex:1;background:#fee2e2;border-radius:8px;padding:16px;text-align:center;">
+        <div style="font-size:28px;font-weight:700;color:#991b1b;" id="logCountOut">—</div>
+        <div style="font-size:13px;color:#991b1b;font-weight:600;">Total OUT</div>
+      </div>
+    </div>
+    <div style="max-height:320px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:#f8f9fa;border-bottom:2px solid #e9ecef;">
+            <th style="padding:10px 12px;text-align:left;width:50px;">SN</th>
+            <th style="padding:10px 12px;text-align:left;">Status</th>
+            <th style="padding:10px 12px;text-align:left;">Gate</th>
+            <th style="padding:10px 12px;text-align:left;">Timestamp</th>
+          </tr>
+        </thead>
+        <tbody id="logsTableBody">
+          <tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>`;
 
   try {
     const res = await fetch(
       `manpower_backend.php?action=get_access_logs&id=${encodeURIComponent(employeeId)}`,
-      {
-        headers: { "X-Requested-With": "XMLHttpRequest" },
-      },
+      { headers: { "X-Requested-With": "XMLHttpRequest" } },
     );
     const data = await res.json();
+    const tbody = document.getElementById("logsTableBody");
+    if (!tbody) return;
 
     if (data.success) {
       const logs = data.logs;
       const inCount = logs.filter((l) => l.check_status === "IN").length;
       const outCount = logs.filter((l) => l.check_status === "OUT").length;
 
-      document.getElementById("logCountIn").textContent = inCount;
-      document.getElementById("logCountOut").textContent = outCount;
-      document.getElementById("logCountTotal").textContent = logs.length;
+      const elIn = document.getElementById("logCountIn");
+      const elOut = document.getElementById("logCountOut");
+      const elTotal = document.getElementById("logCountTotal");
+      if (elIn) elIn.textContent = inCount;
+      if (elOut) elOut.textContent = outCount;
+      if (elTotal) elTotal.textContent = logs.length;
 
       tbody.innerHTML = logs.length
         ? logs
             .map(
               (log, i) => `
-        <tr style="border-bottom:1px solid #f0f0f0;">
-          <td style="padding:9px 12px;color:#aaa;">${i + 1}</td>
-          <td style="padding:9px 12px;">
-            <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
-              background:${log.check_status === "IN" ? "#d1fae5" : "#fee2e2"};
-              color:${log.check_status === "IN" ? "#065f46" : "#991b1b"};">
-              ${escapeHtml(log.check_status)}
-            </span>
-          </td>
-          <td style="padding:9px 12px;color:#555;">${escapeHtml(log.access_timestamp)}</td>
-          <td style="padding:9px 12px;">${escapeHtml(log.gate_name || log.user_id || "N/A")}</td>
-        </tr>`,
+          <tr style="border-bottom:1px solid #f0f0f0;">
+            <td style="padding:9px 12px;color:#aaa;">${i + 1}</td>
+            <td style="padding:9px 12px;">
+              <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
+                background:${log.check_status === "IN" ? "#d1fae5" : "#fee2e2"};
+                color:${log.check_status === "IN" ? "#065f46" : "#991b1b"};">
+                ${escapeHtml(log.check_status)}
+              </span>
+            </td>
+            <td style="padding:9px 12px;">${escapeHtml(log.gate_name || log.user_id || "N/A")}</td>
+            <td style="padding:9px 12px;color:#aaa;font-size:11px;white-space:nowrap;">${escapeHtml(log.access_timestamp)}</td>
+          </tr>`,
             )
             .join("")
         : `<tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;">No log records found.</td></tr>`;
@@ -1768,12 +1859,193 @@ async function openLogsModal(employeeId, fullname) {
       tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:24px;">${escapeHtml(data.message || "Failed to load logs.")}</td></tr>`;
     }
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:24px;">Error loading logs.</td></tr>`;
+    const tbody = document.getElementById("logsTableBody");
+    if (tbody)
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:24px;">Error loading logs.</td></tr>`;
+  }
+}
+
+async function _renderStatusTab(container, employeeId) {
+  container.innerHTML = `
+    <div style="display:flex;gap:16px;margin-bottom:16px;">
+      <div style="flex:1;background:#e0f2fe;border-radius:8px;padding:16px;text-align:center;">
+        <div style="font-size:28px;font-weight:700;color:#0369a1;" id="statCountTotal">—</div>
+        <div style="font-size:13px;color:#0369a1;font-weight:600;">Total Changes</div>
+      </div>
+      <div style="flex:1;background:#d1fae5;border-radius:8px;padding:16px;text-align:center;">
+        <div style="font-size:28px;font-weight:700;color:#065f46;" id="statCountActive">—</div>
+        <div style="font-size:13px;color:#065f46;font-weight:600;">→ Active</div>
+      </div>
+      <div style="flex:1;background:#fee2e2;border-radius:8px;padding:16px;text-align:center;">
+        <div style="font-size:28px;font-weight:700;color:#991b1b;" id="statCountInactive">—</div>
+        <div style="font-size:13px;color:#991b1b;font-weight:600;">→ Inactive</div>
+      </div>
+    </div>
+    <div style="max-height:320px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:#f8f9fa;border-bottom:2px solid #e9ecef;">
+            <th style="padding:10px 12px;text-align:left;width:50px;">SN</th>
+            <th style="padding:10px 12px;text-align:left;">From</th>
+            <th style="padding:10px 12px;text-align:left;">To</th>
+            <th style="padding:10px 12px;text-align:left;">Operator</th>
+            <th style="padding:10px 12px;text-align:left;">Reason</th>
+            <th style="padding:10px 12px;text-align:left;">Date</th>
+          </tr>
+        </thead>
+        <tbody id="statusHistoryBody">
+          <tr><td colspan="6" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>`;
+
+  // Lazy cache per employee
+  if (!_statusHistoryCache[employeeId]) {
+    try {
+      const res = await fetch(
+        `manpower_backend.php?action=get_status_history&id=${encodeURIComponent(employeeId)}`,
+        { headers: { "X-Requested-With": "XMLHttpRequest" } },
+      );
+      const data = await res.json();
+      _statusHistoryCache[employeeId] = data.success ? data.history : [];
+    } catch (e) {
+      _statusHistoryCache[employeeId] = null;
+    }
   }
 
-  modal.onclick = (e) => {
-    if (e.target === modal) closeModal();
+  const tbody = document.getElementById("statusHistoryBody");
+  if (!tbody) return;
+
+  const rows = _statusHistoryCache[employeeId];
+  if (rows === null) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#ef4444;padding:24px;">Error loading status history.</td></tr>`;
+    return;
+  }
+
+  const toActive = rows.filter((r) => r.new_status === "Active").length;
+  const toInactive = rows.filter((r) => r.new_status === "Inactive").length;
+  const elTotal = document.getElementById("statCountTotal");
+  const elActive = document.getElementById("statCountActive");
+  const elInactive = document.getElementById("statCountInactive");
+  if (elTotal) elTotal.textContent = rows.length;
+  if (elActive) elActive.textContent = toActive;
+  if (elInactive) elInactive.textContent = toInactive;
+
+  const statusPill = (s) => {
+    const isActive = s === "Active";
+    return `<span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
+      background:${isActive ? "#d1fae5" : "#fee2e2"};
+      color:${isActive ? "#065f46" : "#991b1b"};">${escapeHtml(s || "—")}</span>`;
   };
+
+  tbody.innerHTML = rows.length
+    ? rows
+        .map(
+          (r, i) => `
+        <tr style="border-bottom:1px solid #f0f0f0;">
+          <td style="padding:9px 12px;color:#aaa;">${i + 1}</td>
+          <td style="padding:9px 12px;">${statusPill(r.old_status)}</td>
+          <td style="padding:9px 12px;">${statusPill(r.new_status)}</td>
+          <td style="padding:9px 12px;color:#555;">${escapeHtml(r.changed_by || "System")}</td>
+          <td style="padding:9px 12px;color:#555;max-width:200px;word-break:break-word;">${escapeHtml(r.change_reason || "—")}</td>
+          <td style="padding:9px 12px;color:#aaa;font-size:11px;white-space:nowrap;">${escapeHtml(r.created_at || "—")}</td>
+        </tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="6" style="text-align:center;padding:24px;color:#aaa;">No status changes recorded.</td></tr>`;
+}
+
+async function _renderRemarksTab(container, employeeId) {
+  container.innerHTML = `
+    <div style="display:flex;gap:16px;margin-bottom:16px;">
+      <div style="flex:1;background:#fff5f5;border-radius:8px;padding:16px;text-align:center;">
+        <div style="font-size:28px;font-weight:700;color:#c53030;" id="remCountTotal">—</div>
+        <div style="font-size:13px;color:#c53030;font-weight:600;">Total Records</div>
+      </div>
+      <div style="flex:1;background:#fffbeb;border-radius:8px;padding:16px;text-align:center;">
+        <div style="font-size:28px;font-weight:700;color:#b7791f;" id="remCountUpdates">—</div>
+        <div style="font-size:13px;color:#b7791f;font-weight:600;">Updates</div>
+      </div>
+      <div style="flex:1;background:#f0fff4;border-radius:8px;padding:16px;text-align:center;">
+        <div style="font-size:28px;font-weight:700;color:#276749;" id="remCountCleared">—</div>
+        <div style="font-size:13px;color:#276749;font-weight:600;">Cleared</div>
+      </div>
+    </div>
+    <div style="max-height:320px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:#f8f9fa;border-bottom:2px solid #e9ecef;">
+            <th style="padding:10px 12px;text-align:left;width:50px;">SN</th>
+            <th style="padding:10px 12px;text-align:left;">Type</th>
+            <th style="padding:10px 12px;text-align:left;">Description</th>
+            <th style="padding:10px 12px;text-align:left;">Date</th>
+            <th style="padding:10px 12px;text-align:left;">Recorded</th>
+          </tr>
+        </thead>
+        <tbody id="remarksHistoryBody">
+          <tr><td colspan="5" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>`;
+
+  if (!_remarksCache[employeeId]) {
+    try {
+      const res  = await fetch(
+        `manpower_backend.php?action=get_violations&id=${encodeURIComponent(employeeId)}`,
+        { headers: { "X-Requested-With": "XMLHttpRequest" } }
+      );
+      const data = await res.json();
+      _remarksCache[employeeId] = data.success ? data.violations : null;
+    } catch (e) {
+      _remarksCache[employeeId] = null;
+    }
+  }
+
+  const tbody = document.getElementById("remarksHistoryBody");
+  if (!tbody) return;
+
+  const rows = _remarksCache[employeeId];
+  if (rows === null) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#ef4444;padding:24px;">Error loading remarks history.</td></tr>`;
+    return;
+  }
+
+  const updates = rows.filter((r) => r.violation_type === "Remarks Updated").length;
+  const cleared = rows.filter((r) => r.violation_type === "Remarks Cleared").length;
+
+  const elTotal    = document.getElementById("remCountTotal");
+  const elUpdates  = document.getElementById("remCountUpdates");
+  const elCleared  = document.getElementById("remCountCleared");
+  if (elTotal)   elTotal.textContent   = rows.length;
+  if (elUpdates) elUpdates.textContent = updates;
+  if (elCleared) elCleared.textContent = cleared;
+
+  const typeBadge = (type) => {
+    if (type === "Remarks Cleared")  return { bg: "#f0fff4", color: "#276749" };
+    if (type === "Remarks Updated")  return { bg: "#fffbeb", color: "#b7791f" };
+    return { bg: "#fff5f5", color: "#c53030" };
+  };
+
+  tbody.innerHTML = rows.length
+    ? rows.map((v, i) => {
+        const { bg, color } = typeBadge(v.violation_type);
+        return `
+          <tr style="border-bottom:1px solid #f0f0f0;">
+            <td style="padding:9px 12px;color:#aaa;">${i + 1}</td>
+            <td style="padding:9px 12px;">
+              <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
+                background:${escapeHtml(bg)};color:${escapeHtml(color)};">
+                ${escapeHtml(v.violation_type || "—")}
+              </span>
+            </td>
+            <td style="padding:9px 12px;color:#555;max-width:220px;word-break:break-word;">
+              ${escapeHtml(v.violation_description || "—")}
+            </td>
+            <td style="padding:9px 12px;white-space:nowrap;">${escapeHtml(v.violation_date || "—")}</td>
+            <td style="padding:9px 12px;color:#aaa;font-size:11px;white-space:nowrap;">${escapeHtml(v.created_at || "—")}</td>
+          </tr>`;
+      }).join("")
+    : `<tr><td colspan="5" style="text-align:center;padding:24px;color:#aaa;">No remarks history found.</td></tr>`;
 }
 
 async function openViolationsModal(employeeId, fullname) {
@@ -2138,6 +2410,9 @@ function closeModal() {
   if (fileLabel)
     fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
   if (imageInput) imageInput.value = "";
+
+  _statusHistoryCache = {};
+  _remarksCache = {};
 }
 
 // ── Field error highlight ────────────────────────────────────────────────────
