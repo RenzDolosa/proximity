@@ -21,10 +21,6 @@ let activeFilters = {};
 const count = employees.length;
 const label = count > 1 ? "employee's" : "employee";
 
-// ─────────────────────────────────────────────────────────────────
-// SECURITY: HTML escape helper — use on ALL dynamic content
-// inserted via innerHTML to prevent stored XSS attacks.
-// ─────────────────────────────────────────────────────────────────
 function escapeHtml(str) {
   if (str === null || str === undefined) return "";
   return String(str)
@@ -240,7 +236,7 @@ function updateAutoUpdateUI() {
     lastUpdate.textContent = `Last updated: ${timeString}`;
     lastUpdate.style.cssText = `
       display: block;
-      color: #ffffff;
+      color: #000000;
       font-size: 12px;
     `;
   } else if (lastUpdate) {

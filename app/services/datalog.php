@@ -221,6 +221,10 @@ if ($databaseConnected) {
               <option value="300000">5 minutes</option>
             </select>
           </div>
+          <div style="position: absolute; right: 0; padding-right: 50px; display: flex; flex-direction: column; align-items: flex-end; pointer-events: none;">
+            <div id="lastUpdateTime"></div>
+            <div id="autoUpdateNotification"></div>
+          </div>
           <!-- <div style="position: absolute; top: 0; right: 0; padding: 10px 50px 0px 0px; justify-content: end; pointer-events: none;">
             <div id="lastUpdateTime"></div>
             <div id="autoUpdateNotification"></div>
@@ -263,10 +267,6 @@ if ($databaseConnected) {
             <p>&</p>
             <h3 id="today_out" class="check-out">OUT : <?php echo $stats['today_out'] ?? 0; ?></h3>
           </div>
-        </div>
-        <div style="position: absolute; right: 0; padding-right: 50px; display: flex; flex-direction: column; align-items: flex-end; pointer-events: none;">
-          <div id="lastUpdateTime"></div>
-          <div id="autoUpdateNotification"></div>
         </div>
       </div>
       <div class="table-scroll-wrap">

@@ -1755,20 +1755,23 @@ function _renderLogsModal(modal, employeeId) {
   _switchLogsTab("access", employeeId);
 }
 
+let _logsCache = {};
 let _statusHistoryCache = {};
 let _remarksCache = {};
 
 async function _switchLogsTab(tab, employeeId) {
-  const accessBtn  = document.getElementById("logsTabAccess");
-  const statusBtn  = document.getElementById("logsTabStatus");
+  const accessBtn = document.getElementById("logsTabAccess");
+  const statusBtn = document.getElementById("logsTabStatus");
   const remarksBtn = document.getElementById("logsTabRemarks");
-  const content    = document.getElementById("logsTabContent");
+  const content = document.getElementById("logsTabContent");
 
-  const active   = "padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid #3b82f6;background:none;color:#3b82f6;cursor:pointer;";
-  const inactive = "padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid transparent;background:none;color:#94a3b8;cursor:pointer;";
+  const active =
+    "padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid #3b82f6;background:none;color:#3b82f6;cursor:pointer;";
+  const inactive =
+    "padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid transparent;background:none;color:#94a3b8;cursor:pointer;";
 
-  accessBtn.style.cssText  = inactive;
-  statusBtn.style.cssText  = inactive;
+  accessBtn.style.cssText = inactive;
+  statusBtn.style.cssText = inactive;
   remarksBtn.style.cssText = inactive;
 
   if (tab === "access") {
@@ -1815,62 +1818,66 @@ async function _renderAccessTab(container, employeeId) {
       </table>
     </div>`;
 
-  try {
-    const res = await fetch(
-      `manpower_backend.php?action=get_access_logs&id=${encodeURIComponent(employeeId)}`,
-      { headers: { "X-Requested-With": "XMLHttpRequest" } },
-    );
-    const data = await res.json();
-    const tbody = document.getElementById("logsTableBody");
-    if (!tbody) return;
-
-    if (data.success) {
-      const logs = data.logs;
-      const inCount = logs.filter((l) => l.check_status === "IN").length;
-      const outCount = logs.filter((l) => l.check_status === "OUT").length;
-
-      const elIn = document.getElementById("logCountIn");
-      const elOut = document.getElementById("logCountOut");
-      const elTotal = document.getElementById("logCountTotal");
-      if (elIn) elIn.textContent = inCount;
-      if (elOut) elOut.textContent = outCount;
-      if (elTotal) elTotal.textContent = logs.length;
-
-      tbody.innerHTML = logs.length
-        ? logs
-            .map(
-              (log, i) => `
-          <tr style="border-bottom:1px solid #f0f0f0;">
-            <td style="padding:9px 12px;color:#aaa;">${i + 1}</td>
-            <td style="padding:9px 12px;">
-              <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
-                background:${log.check_status === "IN" ? "#d1fae5" : "#fee2e2"};
-                color:${log.check_status === "IN" ? "#065f46" : "#991b1b"};">
-                ${escapeHtml(log.check_status)}
-              </span>
-            </td>
-            <td style="padding:9px 12px;">${escapeHtml(log.gate_name || log.user_id || "N/A")}</td>
-            <td style="padding:9px 12px;color:#aaa;font-size:11px;white-space:nowrap;">${escapeHtml(log.access_timestamp)}</td>
-          </tr>`,
-            )
-            .join("")
-        : `<tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;">No log records found.</td></tr>`;
-    } else {
-      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:24px;">${escapeHtml(data.message || "Failed to load logs.")}</td></tr>`;
+  // Lazy cache per employee
+  if (!_logsCache[employeeId]) {
+    try {
+      const res = await fetch(
+        `manpower_backend.php?action=get_access_logs&id=${encodeURIComponent(employeeId)}`,
+        { headers: { "X-Requested-With": "XMLHttpRequest" } },
+      );
+      const data = await res.json();
+      _logsCache[employeeId] = data.success ? data.logs : null;
+    } catch (e) {
+      _logsCache[employeeId] = null;
     }
-  } catch (err) {
-    const tbody = document.getElementById("logsTableBody");
-    if (tbody)
-      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:24px;">Error loading logs.</td></tr>`;
   }
+
+  const tbody = document.getElementById("logsTableBody");
+  if (!tbody) return;
+
+  const logs = _logsCache[employeeId];
+  if (logs === null) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:24px;">Error loading logs.</td></tr>`;
+    return;
+  }
+
+  const inCount  = logs.filter((l) => l.check_status === "IN").length;
+  const outCount = logs.filter((l) => l.check_status === "OUT").length;
+
+  const elIn    = document.getElementById("logCountIn");
+  const elOut   = document.getElementById("logCountOut");
+  const elTotal = document.getElementById("logCountTotal");
+  if (elIn)    elIn.textContent    = inCount;
+  if (elOut)   elOut.textContent   = outCount;
+  if (elTotal) elTotal.textContent = logs.length;
+
+  tbody.innerHTML = logs.length
+    ? logs
+        .map(
+          (log, i) => `
+        <tr style="border-bottom:1px solid #f0f0f0;">
+          <td style="padding:9px 12px;color:#aaa;">${i + 1}</td>
+          <td style="padding:9px 12px;">
+            <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
+              background:${log.check_status === "IN" ? "#d1fae5" : "#fee2e2"};
+              color:${log.check_status === "IN" ? "#065f46" : "#991b1b"};">
+              ${escapeHtml(log.check_status)}
+            </span>
+          </td>
+          <td style="padding:9px 12px;">${escapeHtml(log.gate_name || log.user_id || "N/A")}</td>
+          <td style="padding:9px 12px;color:#aaa;font-size:11px;white-space:nowrap;">${escapeHtml(log.access_timestamp)}</td>
+        </tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;">No log records found.</td></tr>`;
 }
 
 async function _renderStatusTab(container, employeeId) {
   container.innerHTML = `
     <div style="display:flex;gap:16px;margin-bottom:16px;">
-      <div style="flex:1;background:#e0f2fe;border-radius:8px;padding:16px;text-align:center;">
-        <div style="font-size:28px;font-weight:700;color:#0369a1;" id="statCountTotal">—</div>
-        <div style="font-size:13px;color:#0369a1;font-weight:600;">Total Changes</div>
+      <div style="flex:1;background:#ede9fe;border-radius:8px;padding:16px;text-align:center;">
+        <div style="font-size:28px;font-weight:700;color:#5b21b6;" id="statCountTotal">—</div>
+        <div style="font-size:13px;color:#5b21b6;font-weight:600;">Total Changes</div>
       </div>
       <div style="flex:1;background:#d1fae5;border-radius:8px;padding:16px;text-align:center;">
         <div style="font-size:28px;font-weight:700;color:#065f46;" id="statCountActive">—</div>
@@ -1990,9 +1997,9 @@ async function _renderRemarksTab(container, employeeId) {
 
   if (!_remarksCache[employeeId]) {
     try {
-      const res  = await fetch(
+      const res = await fetch(
         `manpower_backend.php?action=get_violations&id=${encodeURIComponent(employeeId)}`,
-        { headers: { "X-Requested-With": "XMLHttpRequest" } }
+        { headers: { "X-Requested-With": "XMLHttpRequest" } },
       );
       const data = await res.json();
       _remarksCache[employeeId] = data.success ? data.violations : null;
@@ -2010,26 +2017,31 @@ async function _renderRemarksTab(container, employeeId) {
     return;
   }
 
-  const updates = rows.filter((r) => r.violation_type === "Remarks Updated").length;
-  const cleared = rows.filter((r) => r.violation_type === "Remarks Cleared").length;
+  const updates = rows.filter(
+    (r) => r.violation_type === "Remarks Updated",
+  ).length;
+  const cleared = rows.filter(
+    (r) => r.violation_type === "Remarks Cleared",
+  ).length;
 
-  const elTotal    = document.getElementById("remCountTotal");
-  const elUpdates  = document.getElementById("remCountUpdates");
-  const elCleared  = document.getElementById("remCountCleared");
-  if (elTotal)   elTotal.textContent   = rows.length;
+  const elTotal = document.getElementById("remCountTotal");
+  const elUpdates = document.getElementById("remCountUpdates");
+  const elCleared = document.getElementById("remCountCleared");
+  if (elTotal) elTotal.textContent = rows.length;
   if (elUpdates) elUpdates.textContent = updates;
   if (elCleared) elCleared.textContent = cleared;
 
   const typeBadge = (type) => {
-    if (type === "Remarks Cleared")  return { bg: "#f0fff4", color: "#276749" };
-    if (type === "Remarks Updated")  return { bg: "#fffbeb", color: "#b7791f" };
+    if (type === "Remarks Cleared") return { bg: "#f0fff4", color: "#276749" };
+    if (type === "Remarks Updated") return { bg: "#fffbeb", color: "#b7791f" };
     return { bg: "#fff5f5", color: "#c53030" };
   };
 
   tbody.innerHTML = rows.length
-    ? rows.map((v, i) => {
-        const { bg, color } = typeBadge(v.violation_type);
-        return `
+    ? rows
+        .map((v, i) => {
+          const { bg, color } = typeBadge(v.violation_type);
+          return `
           <tr style="border-bottom:1px solid #f0f0f0;">
             <td style="padding:9px 12px;color:#aaa;">${i + 1}</td>
             <td style="padding:9px 12px;">
@@ -2044,7 +2056,8 @@ async function _renderRemarksTab(container, employeeId) {
             <td style="padding:9px 12px;white-space:nowrap;">${escapeHtml(v.violation_date || "—")}</td>
             <td style="padding:9px 12px;color:#aaa;font-size:11px;white-space:nowrap;">${escapeHtml(v.created_at || "—")}</td>
           </tr>`;
-      }).join("")
+        })
+        .join("")
     : `<tr><td colspan="5" style="text-align:center;padding:24px;color:#aaa;">No remarks history found.</td></tr>`;
 }
 
@@ -2411,6 +2424,7 @@ function closeModal() {
     fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
   if (imageInput) imageInput.value = "";
 
+  _logsCache = {};
   _statusHistoryCache = {};
   _remarksCache = {};
 }
