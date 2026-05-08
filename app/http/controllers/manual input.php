@@ -151,7 +151,6 @@ try {
       </div>
 
       <div class="employee-grid" id="resultsTable">
-        <!-- Default blank state -->
         <div class="no-results" id="defaultState">
           <div class="no-results-icon"><img src="../../../resource/assets/icon/nfc-icon.svg" alt="Proximity Code" loading="lazy" style="width: 10%; height: 10%;"></div>
           <h3>Search for Employees</h3>
@@ -179,7 +178,6 @@ try {
     // ── Global-audio endpoint (relative to the scan controller page) ─────────
     const GLOBAL_AUDIO_ENDPOINT = "../../services/global_audio.php";
 
-    // Maps global_audio_settings.audio_type  →  <audio> element ID
     const AUDIO_TYPE_MAP = {
       success: "successSound",
       checkout: "checkoutSound",
@@ -212,11 +210,9 @@ try {
           const entry = json.audio?.[audioType];
 
           if (entry?.data && entry.data.length > 0) {
-            // Database has a custom sound — use it directly as a data-URL
             el.src = entry.data;
             el.preload = "auto";
           } else {
-            // Nothing uploaded yet — fall back to the bundled file
             const fallback = el.dataset.fallback;
             if (fallback) {
               el.src = fallback;
@@ -228,7 +224,6 @@ try {
       } catch (e) {
         console.warn("Could not load global audio; using bundled fallbacks.", e);
 
-        // On any error, make sure every element at least has its fallback src
         Object.values(AUDIO_TYPE_MAP).forEach((elementId) => {
           const el = document.getElementById(elementId);
           if (el && !el.src && el.dataset.fallback) {
@@ -239,14 +234,11 @@ try {
       }
     }
 
-    // Convert date strings to proper format if needed
     employees = employees.map(employee => {
       return {
         ...employee,
-        // Ensure all required fields have default values
         violation: employee.violation || '',
         image: employee.image || null,
-        // Convert database dates to display format if needed
         created_at: employee.created_at ? employee.created_at.split(' ')[0] : new Date().toISOString().split('T')[0],
         updated_at: employee.updated_at ? employee.updated_at.split(' ')[0] : new Date().toISOString().split('T')[0]
       };
@@ -268,7 +260,6 @@ try {
       return name.split(' ').map(n => n[0]).join('').toUpperCase();
     }
 
-    // Function to stop any currently playing audio
     function stopCurrentAudio() {
       if (currentAudio && !currentAudio.paused) {
         currentAudio.pause();
@@ -292,7 +283,7 @@ try {
     const playNoResultSound = () => playSound("noResultSound");
     const playWarningSound = () => playSound("warningSound");
 
-    // Add employee to access log
+    // ── Add employee to access log ────────────────────────────────────────────────
     async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
       stopCurrentAudio();
       const button = triggerElement;
@@ -368,15 +359,12 @@ try {
       }
     }
 
-    // Updated renderEmployees function with separate IN/OUT buttons
     async function renderEmployees(employeeList = filteredEmployees) {
       const resultsTable = document.getElementById('resultsTable');
       const count = document.getElementById('resultsCount');
 
-      // Remove any existing classes
       resultsTable.classList.remove('has-results');
 
-      // If no search has been performed, show default state
       if (!hasSearched) {
         resultsTable.innerHTML = `
       <div class="no-results" id="defaultState">
@@ -404,11 +392,9 @@ try {
 
       const currentUserId = await getCurrentUserId();
 
-      // Add class when there are results for better browser compatibility
       resultsTable.classList.add('has-results');
 
       resultsTable.innerHTML = employeeList.map(employee => {
-        // Handle employee image display
         let avatarContent;
         if (employee.image && employee.image.trim() !== '') {
           avatarContent = `<img src="../../../public/uploads/user/${employee.image}" alt="${employee.fullname}" class="employee-image" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
@@ -466,18 +452,15 @@ try {
       const formData = new FormData(form);
       const filters = Object.fromEntries(formData.entries());
 
-      // Check if any search criteria is entered
       const hasSearchCriteria = Object.values(filters).some(value => value.trim() !== '');
 
       if (!hasSearchCriteria) {
-        // If no search criteria, reset to default state
         hasSearched = false;
         filteredEmployees = [];
         renderEmployees();
         return;
       }
 
-      // Mark that a search has been performed
       hasSearched = true;
 
       filteredEmployees = employees.filter(employee => {
@@ -520,7 +503,7 @@ try {
         console.error("Error getting user ID:", error);
       }
 
-      return "default"; // fallback
+      return "default";
     }
 
     // ── Fullname Autocomplete ────────────────────────────────────────────────────
@@ -532,14 +515,13 @@ try {
 
       const q = query.trim().toLowerCase();
 
-      // Build unique fullname list from loaded employees
       const matches = [
         ...new Map(
           employees
           .filter((emp) => !q || emp.fullname.toLowerCase().includes(q))
           .map((emp) => [emp.fullname.toLowerCase(), emp.fullname]),
         ).values(),
-      ].slice(0, 10); // cap at 10 suggestions
+      ].slice(0, 10);
 
       if (!matches.length || !q) {
         list.style.display = "none";
@@ -549,7 +531,6 @@ try {
 
       list.innerHTML = matches
         .map((name, i) => {
-          // Highlight matching portion
           const regex = new RegExp(
             `(${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
             "gi",
@@ -611,7 +592,6 @@ try {
       }
     }
 
-    // Close suggestions when clicking outside
     document.addEventListener("click", function(e) {
       const list = document.getElementById("fullname-suggestions");
       const input = document.getElementById("search_fullname");
@@ -622,11 +602,9 @@ try {
     });
 
     function showAlert(message, type = "info") {
-      // Remove any existing alerts
       const existingAlerts = document.querySelectorAll(".alert");
       existingAlerts.forEach(alert => alert.remove());
 
-      // Create alert element
       const alert = document.createElement("div");
       alert.className = `alert alert-${type}`;
       alert.innerHTML = `
@@ -634,10 +612,8 @@ try {
     <button onclick="this.parentElement.remove()" style="float: right; background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 5px;"><i class="fas fa-times"></i></button>
   `;
 
-      // Add to page
       document.body.insertBefore(alert, document.body.firstChild);
 
-      // Auto remove after 5 seconds
       setTimeout(() => {
         if (alert.parentElement) {
           alert.remove();
@@ -645,7 +621,6 @@ try {
       }, 5000);
     }
 
-    // Show/hide loading state
     function showLoading(show) {
       const body = document.body;
       if (show) {
@@ -655,25 +630,21 @@ try {
       }
     }
 
-    // Initialize the page
     document.addEventListener('DOMContentLoaded', function() {
       loadGlobalAudio();
       updateStats();
       renderEmployees();
 
-      // Add real-time search
       const searchInputs = document.querySelectorAll('#searchForm input, #searchForm select');
       searchInputs.forEach((input) => {
         input.addEventListener("input", debounce(searchEmployees, 300));
       });
 
-      // 🔥 AUTO-FOCUS LOGIC
       const codeInput = document.getElementById("search_qr");
 
       function autoFocus() {
         const active = document.activeElement;
 
-        // Check if active element is NOT an input, select, or textarea
         const isTyping =
           active &&
           (active.tagName === "INPUT" ||
@@ -685,17 +656,13 @@ try {
         }
       }
 
-      // Run on page load
       autoFocus();
 
-      // Re-check when user clicks anywhere
       document.addEventListener("click", autoFocus);
 
-      // Re-check when focus changes (keyboard navigation, tabbing, etc.)
       document.addEventListener("focusin", autoFocus);
     });
 
-    // Debounce function
     function debounce(func, wait) {
       let timeout;
       return function executedFunction(...args) {

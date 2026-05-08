@@ -3,8 +3,8 @@
 "use strict";
 
 let cameraStream = null;
-let capturedImageData = null; // final (possibly cropped) JPEG data-URL
-let rawCaptureDataUrl = null; // pre-crop data-URL kept for retake
+let capturedImageData = null;
+let rawCaptureDataUrl = null;
 let availableCameras = [];
 let currentCameraId = null;
 let currentCameraLabel = null;
@@ -193,7 +193,7 @@ function capturePhoto() {
 
   ctx.save();
   ctx.translate(offscreen.width, 0);
-  ctx.scale(-1, 1); // un-mirror CSS scaleX(-1)
+  ctx.scale(-1, 1);
   ctx.drawImage(video, 0, 0, offscreen.width, offscreen.height);
   ctx.restore();
 
@@ -202,24 +202,15 @@ function capturePhoto() {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  CROP INTERFACE  (Cropper.js)
+//  CROP INTERFACE
 // ─────────────────────────────────────────────────────────────
-
-/**
- * Aspect-ratio presets shown in the toolbar.
- * { label, value }  — value is the numeric w/h ratio (NaN = free).
- */
 const ASPECT_RATIO_PRESETS = [
   { label: "Free", value: NaN },
   { label: "1:1", value: 1 / 1 },
 ];
 
-let currentAspectRatio = NaN; // tracks the currently active preset
+let currentAspectRatio = NaN;
 
-/**
- * Dynamically builds (or rebuilds) the ratio toolbar at the top of cropWrap.
- * Safe to call multiple times — removes any previous toolbar first.
- */
 function injectAspectRatioToolbar(cropWrap) {
   const existing = document.querySelector(".aspect-ratio-toolbar");
   if (existing) existing.remove();
@@ -237,7 +228,6 @@ function injectAspectRatioToolbar(cropWrap) {
     "flex-shrink:0",
   ].join(";");
 
-  // Section label
   const lbl = document.createElement("span");
   lbl.textContent = "Aspect Ratio:";
   lbl.style.cssText =
@@ -282,10 +272,8 @@ function injectAspectRatioToolbar(cropWrap) {
     toolbar.appendChild(btn);
   });
 
-  // Insert toolbar at the very top of cropWrap, before the image
   cropWrap.insertAdjacentElement("afterend", toolbar);
 
-  // Default highlight: Free
   _highlightRatioBtn(toolbar, NaN);
 }
 
@@ -301,7 +289,6 @@ function setAspectRatio(ratioValue, toolbar) {
     cropperInstance.setAspectRatio(isNaN(ratioValue) ? NaN : ratioValue);
   }
 
-  // Resolve toolbar reference if not provided
   const tb = toolbar || document.querySelector(".aspect-ratio-toolbar");
   if (tb) _highlightRatioBtn(tb, ratioValue);
 
@@ -318,7 +305,6 @@ function setAspectRatio(ratioValue, toolbar) {
   );
 }
 
-/** Update button active states in the toolbar. */
 function _highlightRatioBtn(toolbar, ratioValue) {
   toolbar.querySelectorAll("button").forEach((btn) => {
     const isActive =
@@ -367,7 +353,7 @@ function showCropInterface(dataUrl) {
   if (uploadBtn) uploadBtn.style.display = "none";
 
   destroyCropper();
-  currentAspectRatio = NaN; // always start as free on each new capture
+  currentAspectRatio = NaN;
   injectAspectRatioToolbar(cropWrap);
 
   cropImg.src = dataUrl;
@@ -385,7 +371,7 @@ function showCropInterface(dataUrl) {
     }
 
     cropperInstance = new Cropper(cropImg, {
-      aspectRatio: NaN, // starts free; changed live via setAspectRatio()
+      aspectRatio: NaN,
       viewMode: 2,
       autoCropArea: 0.85,
       movable: true,
@@ -525,13 +511,11 @@ function uploadCameraPhoto() {
     const img = new Image();
 
     img.onload = () => {
-      // Draw onto canvas then export as WebP
       const canvas = document.createElement("canvas");
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
 
       const ctx = canvas.getContext("2d");
-      // White background handles any edge-case transparency
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0);
@@ -539,7 +523,6 @@ function uploadCameraPhoto() {
       canvas.toBlob(
         (blob) => {
           if (!blob) {
-            // Fallback: browser doesn't support WebP encoding — use JPEG
             fallbackJpegUpload();
             return;
           }
@@ -558,7 +541,6 @@ function uploadCameraPhoto() {
           }
 
           fileInput.files = dt.files;
-          // Trigger the change event so setupFileUploadHandler updates the preview label
           fileInput.dispatchEvent(new Event("change", { bubbles: true }));
 
           updateCameraStatus(
@@ -583,7 +565,6 @@ function uploadCameraPhoto() {
   }
 }
 
-// Fallback: upload as JPEG if WebP encoding is unavailable
 function fallbackJpegUpload() {
   try {
     const byteStr = atob(capturedImageData.split(",")[1]);

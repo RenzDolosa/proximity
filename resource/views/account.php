@@ -42,7 +42,6 @@ try {
   $dbError = $e->getMessage();
 }
 
-// Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   if (isset($_POST['update_profile'])) {
     $firstName = sanitizeInput($_POST['first_name']);
@@ -131,7 +130,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 }
 
-// Refresh user data
 try {
   $pdo  = getMainDBConnection();
   $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
@@ -144,7 +142,6 @@ try {
   error_log("Error refreshing user data: " . $e->getMessage());
 }
 
-// User statistics
 $userStats = ['total_employees' => 0, 'active_employees' => 0, 'total_violations' => 0, 'recent_activity' => 0];
 try {
   $userPdo = getUserDBConnection($user['id']);
@@ -164,7 +161,6 @@ try {
   error_log("Error fetching user stats: " . $e->getMessage());
 }
 
-// Account timestamps
 try {
   $pdo  = getMainDBConnection();
   $stmt = $pdo->prepare("SELECT created_at, last_login FROM users WHERE id = ?");
@@ -419,10 +415,8 @@ try {
           </div>
         </div>
       </div>
-
-    </div><!-- /.two-col -->
-
-  </div><!-- /.page-body -->
+    </div>
+  </div>
 
   <script src="../js/btn.js"></script>
   <script src="../js/req.js"></script>

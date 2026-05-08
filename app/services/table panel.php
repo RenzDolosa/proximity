@@ -19,7 +19,6 @@ $requestedTab = $_GET['tab'] ?? null;
 
 $firstTab = null;
 
-// If a specific tab was requested and user has access, use it
 if ($requestedTab === 'datalog' && $access['datalog']) {
   $firstTab = 'scanned';
 } elseif ($requestedTab === 'proximity' && $access['proximity-code']) {
@@ -27,7 +26,6 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
 } elseif ($requestedTab === 'employees' && $access['system']) {
   $firstTab = 'employees';
 } else {
-  // Fall back to default order
   if ($access['system'])         $firstTab = 'employees';
   elseif ($access['datalog'])    $firstTab = 'scanned';
   elseif ($access['proximity-code']) $firstTab = 'proximity';
@@ -205,7 +203,6 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
         const input = frame.contentWindow?.document?.getElementById('search_qr');
         if (input) input.focus();
       } catch (e) {
-        // cross-origin or frame not yet ready — silently ignore
       }
     }
 
@@ -222,26 +219,23 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
       setTimeout(() => focusFrameSearchInput(frame), 50);
     }
 
-    // Prevent Escape from affecting tab buttons
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
           e.preventDefault();
           e.stopPropagation();
-          btn.blur(); // remove focus outline
-          window.history.back(); // forward the intent
+          btn.blur();
+          window.history.back();
         }
       });
     });
 
-    // Also catch Escape on the parent document itself
     document.addEventListener("keydown", function(e) {
       if (e.key === "Escape") {
         window.history.back();
       }
     });
 
-    // Guard: if the main iframe navigates to login, redirect the whole top window
     document.querySelectorAll('.tab-frame').forEach(frame => {
       frame.addEventListener('load', function() {
         try {

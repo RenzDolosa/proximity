@@ -15,7 +15,6 @@ if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') &&
 requireAccess('proximity-code', 'system.php');
 $access = getMenuAccess();
 
-// Get dashboard statistics if database is connected
 $stats = [
   'total_employees' => 0,
 ];
@@ -25,12 +24,10 @@ $settings = [];
 
 if ($databaseConnected) {
   try {
-    // Get total employees
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM code");
     $stmt->execute();
     $stats['total_employees'] = $stmt->fetchColumn();
 
-    // Get recent proximity code logs (fixed column references)
     $stmt = $userDb->prepare("
             SELECT el.*, e.qr_code
             FROM code el
@@ -41,7 +38,6 @@ if ($databaseConnected) {
     $stmt->execute();
     $recentLogs = $stmt->fetchAll();
 
-    // Get company settings
     $stmt = $userDb->prepare("SELECT setting_key, setting_value FROM user_settings");
     $stmt->execute();
     $settings = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
@@ -257,7 +253,7 @@ if ($databaseConnected) {
             </div>
           </div>
         </form>
-      </div><!-- /.modal-body -->
+      </div>
 
       <!-- FOOTER -->
       <div class="modal-footer">
@@ -268,7 +264,6 @@ if ($databaseConnected) {
           <i class="fas fa-times"></i> Cancel
         </button>
       </div>
-
     </div>
   </div>
 
@@ -283,7 +278,6 @@ if ($databaseConnected) {
       <div class="modal-body">
         <p id="deleteModalMessage">Are you sure you want to delete this employee?</p>
 
-        <!-- Confirmation input for delete all -->
         <div id="confirmationContainer" style="display: none; margin-top: 20px;">
           <label for="confirmationInput" style="display: block; margin-bottom: 10px; font-weight: bold;">Type "DELETE ALL" to confirm:</label>
           <input type="text" id="confirmationInput" placeholder="Type DELETE ALL" style="margin-bottom: 10px;" />
@@ -324,7 +318,6 @@ if ($databaseConnected) {
           <ul>
             <li><strong>proximity code</strong> - If have Proximity Code (required)</li>
           </ul>
-          <!-- <p><em>Note: If blank Proximity Codes will be automatically generated for each employee.</em></p> -->
         </div>
 
         <form id="importForm" enctype="multipart/form-data">
@@ -356,7 +349,7 @@ if ($databaseConnected) {
             <h4>Preview (First 5 rows):</h4>
           </div>
         </form>
-      </div><!-- /.modal-body -->
+      </div>
 
       <!-- FOOTER -->
       <div class="modal-footer">
@@ -370,7 +363,6 @@ if ($databaseConnected) {
           <i class="fas fa-times"></i> Cancel
         </button>
       </div>
-
     </div>
   </div>
 
@@ -404,7 +396,6 @@ if ($databaseConnected) {
       document.getElementById('filterFab').innerHTML = '<i class="fas fa-sliders-h"></i> Filters';
     }
 
-    // Hide FAB on desktop — only needed on mobile
     function checkFab() {
       const fab = document.getElementById('filterFab');
       if (!fab) return;
@@ -413,9 +404,8 @@ if ($databaseConnected) {
     checkFab();
     window.addEventListener('resize', checkFab);
 
-    // image phone view
     (function() {
-      if (window.innerWidth > 640) return; // desktop only uses CSS hover
+      if (window.innerWidth > 640) return;
 
       let clone = null;
 
@@ -423,19 +413,16 @@ if ($databaseConnected) {
         const img = e.target.closest('.employee-image');
         if (!img) return;
 
-        e.preventDefault(); // prevent scroll while zooming
+        e.preventDefault();
 
         const rect = img.getBoundingClientRect();
         const cloneSize = 130;
 
-        // Calculate position — anchor left of the image, above center
         let left = rect.left;
         let top = rect.top - cloneSize - 8;
 
-        // If it would go off the top, show below instead
         if (top < 8) top = rect.bottom + 8;
 
-        // Don't go off right edge
         if (left + cloneSize > window.innerWidth - 8) {
           left = window.innerWidth - cloneSize - 8;
         }

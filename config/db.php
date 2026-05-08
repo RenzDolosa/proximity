@@ -83,7 +83,6 @@ if (!isset($_SESSION['user_id']) || !isLoggedIn()) {
   $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
     && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
-  // Also detect fetch() calls — they don't send X-Requested-With by default
   $acceptsJson = isset($_SERVER['HTTP_ACCEPT'])
     && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json');
 
@@ -124,7 +123,6 @@ $username       = $_SESSION['username'] ?? 'User';
 $email          = $_SESSION['email'] ?? '';
 $phoneNum       = $_SESSION['phone'] ?? '';
 
-// Handle logout
 if (isset($_GET['logout'])) {
   logSystemAction($userId, 'USER_LOGOUT', 'User logged out');
   session_destroy();
@@ -146,7 +144,6 @@ if (isset($_GET['logout'])) {
   exit;
 }
 
-// Get user database connection
 try {
   $userDb = getUserDBConnection($userId);
   $databaseConnected = true;
@@ -162,18 +159,10 @@ $sessionUserId = (int)$userId;
 // PERMISSION SYSTEM
 // ════════════════════════════════════════════════════════════════════════════
 
-/**
- * Returns the decoded permissions array for the current user's group.
- * Reads $_SESSION['user_group'] (already set by loginUser()) so no extra
- * DB query is needed on every page load — only one query per call.
- *
- * Returns: ['system' => 'allow'|'deny', 'datalog' => 'allow'|'deny', ...]
- */
 function getUserGroupPermissions(): array
 {
-  // Administrators always get full access — skip DB lookup entirely
   if (!empty($_SESSION['user_group']) && $_SESSION['user_group'] === 'Administrator') {
-    return [];   // canAccess() treats Administrator specially below
+    return [];
   }
 
   if (empty($_SESSION['user_group'])) {
@@ -200,15 +189,6 @@ function getUserGroupPermissions(): array
   }
 }
 
-/**
- * Returns true when the current user may access $pageKey.
- *
- * Rules:
- *   - Administrators → always allowed
- *   - Key missing from saved permissions → default ALLOW
- *   - Key present and value === 'allow' → allowed
- *   - Key present and value === 'deny'  → denied
- */
 function canAccess(array $permissions, string $pageKey): bool
 {
   if (!empty($_SESSION['user_group']) && $_SESSION['user_group'] === 'Administrator') {
@@ -578,7 +558,6 @@ function scanPortalPages(
     ],
   ];
 
-  // Build a quick lookup of which real paths are "owned" by a grouped folder
   $groupedPaths = [];
   foreach ($groupedFolders as $config) {
     if (!empty($config['folder'])) {
@@ -603,7 +582,6 @@ function scanPortalPages(
     $realBase = realpath($baseDir);
     if (!$realBase || !is_dir($realBase)) continue;
 
-    // Skip if this folder is owned by a grouped parent
     if (in_array($realBase, $groupedPaths, true)) continue;
 
     foreach (glob($baseDir . '/*.php') ?: [] as $file) {
@@ -644,9 +622,8 @@ function scanPortalPages(
   // ── Grouped folders → parent with children ───────────────────────────────────
   foreach ($groupedFolders as $parentKey => $config) {
 
-    $children = $config['children'];  // start with any hardcoded children
+    $children = $config['children'];
 
-    // Auto-scan the folder if provided
     if (!empty($config['folder']) && is_dir($config['folder'])) {
       foreach (glob($config['folder'] . '/*.php') ?: [] as $file) {
         $name        = basename($file, '.php');
@@ -667,7 +644,6 @@ function scanPortalPages(
 
     if (empty($children)) continue;
 
-    // Find if the parent page itself already exists (e.g. admin panel.php was in iframe/)
     $attached = attachChildrenByKey($pages, $parentKey, $children);
     if (!$attached) {
       $seenKeys[$parentKey] = true;
@@ -734,7 +710,6 @@ function getMenuAccess(): array
   $pages       = scanPortalPages();
   $access      = [];
 
-  // Keys derived from actual .php files
   foreach (flattenPageKeys($pages) as $key) {
     $access[$key] = canAccess($permissions, $key);
   }
@@ -747,7 +722,7 @@ function getMenuAccess(): array
     'phpmyadmin',
   ];
   foreach ($virtualKeys as $key) {
-    if (!isset($access[$key])) {   // don't overwrite if a file happens to match
+    if (!isset($access[$key])) {
       $access[$key] = canAccess($permissions, $key);
     }
   }

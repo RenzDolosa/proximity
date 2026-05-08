@@ -42,7 +42,6 @@
   const MAX_BYTES = 5 * 1024 * 1024; // 5 MB raw
 
   // ── State ─────────────────────────────────────────────────────────────────
-  // pending[key] = { data: '<base64 data-URL>', mime: 'audio/mpeg' }  OR  null (=delete)
   const pending = {};
 
   // ── Build UI ──────────────────────────────────────────────────────────────
@@ -178,7 +177,6 @@
   // ── Remove handler ────────────────────────────────────────────────────────
   function onRemove(key) {
     if (!confirm(`Remove the ${key} sound globally?`)) return;
-    // Mark as pending delete (empty string signals deletion)
     pending[key] = { data: "", mime: "" };
     const entry = AUDIO_TYPES.find((t) => t.key === key);
     if (entry) refreshCard(key, entry.label, entry.icon, entry.color, "", "");
@@ -236,7 +234,7 @@
 
     if (success) {
       showMsg("Audio settings saved successfully!", "success");
-      loadAll(); // refresh all cards from server
+      loadAll();
     }
   }
 

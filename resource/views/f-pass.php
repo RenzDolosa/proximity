@@ -4,7 +4,6 @@
 require_once __DIR__ . '/../../config/config.php';
 // require_once '../../config/db.php';
 
-// Redirect if already logged in
 if (isset($_SESSION['user_id'])) {
   header('Location: ../../portal.php');
   exit();
@@ -17,7 +16,6 @@ $email = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $email = sanitizeInput($_POST['email'] ?? '');
 
-  // Validation
   if (empty($email)) {
     $errors[] = "Email is required.";
   } elseif (!isValidEmail($email)) {
@@ -28,25 +26,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
       $pdo = getDBConnection();
 
-      // Check if email exists
       $stmt = $pdo->prepare("SELECT id, username, email FROM users WHERE email = ?");
       $stmt->execute([$email]);
       $user = $stmt->fetch();
 
       if ($user) {
-        // Generate secure reset token
         $reset_token = bin2hex(random_bytes(32));
         $expires_at = date('Y-m-d H:i:s', strtotime('+1 hour'));
 
-        // Delete any existing reset tokens for this user
         $stmt = $pdo->prepare("DELETE FROM password_resets WHERE user_id = ?");
         $stmt->execute([$user['id']]);
 
-        // Insert new reset token
         $stmt = $pdo->prepare("INSERT INTO password_resets (user_id, reset_token, expires_at, created_at) VALUES (?, ?, ?, NOW())");
         $stmt->execute([$user['id'], $reset_token, $expires_at]);
 
-        // Send reset email
         $reset_link = "http://" . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']) . "/reset-password.php?token=" . $reset_token;
 
         $subject = "Password Reset Request";
@@ -69,20 +62,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </html>
                 ";
 
-        // Email headers
         $headers = "MIME-Version: 1.0" . "\r\n";
         $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
         $headers .= "From: noreply@yourwebsite.com" . "\r\n";
 
-        // Send email
         if (mail($email, $subject, $message, $headers)) {
           $success = "Password reset instructions have been sent to your email address.";
-          $email = ''; // Clear email field on success
+          $email = '';
         } else {
           $errors[] = "Failed to send email. Please try again later.";
         }
       } else {
-        // Don't reveal if email exists or not for security
         $success = "If an account with that email exists, password reset instructions have been sent.";
         $email = '';
       }

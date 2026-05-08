@@ -36,7 +36,7 @@
   color: #666;
 }
 
-/* Open Modal */
+/* ── Open Modal ── */
 .modal {
   display: none;
   position: fixed;
@@ -261,7 +261,6 @@ textarea:focus {
   border-color: #667eea;
   background-color: #f8f9ff;
 }
-/*<--*/
 
 @media (max-width: 768px) {
   .form-row {
@@ -269,7 +268,7 @@ textarea:focus {
   }
 }
 
-/* Toggle switch */
+/* ── Toggle switch ── */
 .toggle-switch {
   position: relative;
   display: inline-block;
@@ -307,7 +306,6 @@ textarea:focus {
   transform: translateX(22px);
 }
 
-/* Status badge in table */
 .status-enabled {
   background: #dcfce7;
   color: #15803d;
@@ -353,7 +351,6 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-/* The floating label */
 .fl-label {
   position: absolute;
   left: 12px;
@@ -368,7 +365,6 @@ textarea:focus {
   white-space: nowrap;
 }
 
-/* Textarea: label starts at top, not vertically centered */
 .fl-group textarea ~ .fl-label {
   top: 14px;
   transform: none;

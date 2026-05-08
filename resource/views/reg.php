@@ -17,7 +17,6 @@ if (($_SESSION['user_group'] ?? '') !== 'Administrator') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  // Get and sanitize input data
   $myDatabase = sanitizeInput($_POST['my_database'] ?? '');
   $username = sanitizeInput($_POST['username'] ?? '');
   $email = sanitizeInput($_POST['email'] ?? '');
@@ -26,8 +25,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $first_name = sanitizeInput($_POST['first_name'] ?? '');
   $last_name = sanitizeInput($_POST['last_name'] ?? '');
   $phone = sanitizeInput($_POST['phone'] ?? '');
+  $user_group = sanitizeInput($_POST['user_group'] ?? '');
 
-  // Enhanced validation with config.php functions
   if (empty($username)) {
     $errors[] = "Username is required.";
   } elseif (strlen($username) < 3) {
@@ -60,7 +59,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $errors[] = "Passwords do not match.";
   }
 
-  // Check for existing username/email using config.php connection
   if (empty($errors)) {
     try {
       $pdo = getMainDBConnection();
@@ -76,7 +74,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
   }
 
-  // If no errors, create user with database using config.php function
   if (empty($errors)) {
     $result = registerUser($username, $email, $password, $first_name, $last_name, $myDatabase, $phone, $user_group);
 
@@ -90,22 +87,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       //   'User registered with database: ' . USER_DB_PREFIX . $result['user_id']
       // );
 
-      // Clear form data on success
       $username = $email = $first_name = $last_name = $myDatabase = $phone = $user_group = '';
 
-      // // Optional: Auto-login the user after registration
-      // // Uncomment the following lines if you want auto-login:
-
-      // $_SESSION['user_id'] = $result['user_id'];
-      // $_SESSION['username'] = $username;
-      // $_SESSION['email'] = $email;
-      // $_SESSION['first_name'] = $first_name;
-      // $_SESSION['last_name'] = $last_name;
-      // header('Location: portal.php');
       exit;
     } else {
       $errors = $result['errors'];
-      // Log failed registration attempt
       logSystemAction(
         null,
         'REGISTRATION_FAILED',

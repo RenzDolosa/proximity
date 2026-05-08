@@ -48,7 +48,6 @@
   font-weight: 600;
 }
 
-/* Preview table styling */
 .preview-table {
   max-height: 350px;
   overflow: auto;
@@ -89,7 +88,6 @@
   background-color: #f8f9fa;
 }
 
-/* Progress bar styling */
 .progress-bar {
   width: 100%;
   height: 24px;
@@ -165,7 +163,6 @@
   text-align: center;
 }
 
-/* Responsive design */
 @media (max-width: 768px) {
   .import-instructions {
     padding: 1rem;

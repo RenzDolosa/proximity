@@ -34,7 +34,6 @@ $access = getMenuAccess();
   <script src="resource/js/btn.js"></script>
   <script src="resource/js/req.js"></script>
   <script>
-    // Guard: if the main iframe navigates to login, redirect the whole top window
     const mainFrame = document.querySelector('.frames');
     if (mainFrame) {
       mainFrame.addEventListener('load', function() {
@@ -44,7 +43,6 @@ $access = getMenuAccess();
             window.top.location.href = frameUrl;
           }
         } catch (e) {
-          // Cross-origin means a real redirect happened — go to login
           window.top.location.href = 'index.php';
         }
       });

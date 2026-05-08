@@ -521,9 +521,9 @@ body {
 .lb-scroll {
   overflow-y: auto;
   flex: 1;
-  margin: 0 -16px; /* pull to card edges */
-  padding: 0 16px; /* restore inner padding for content */
-  scrollbar-gutter: stable; /* reserve space so content doesn't shift */
+  margin: 0 -16px;
+  padding: 0 16px;
+  scrollbar-gutter: stable;
 }
 
 @media (max-width: 640px) {
@@ -601,7 +601,6 @@ body {
   /* ── Activity list ── */
   .card-body {
     padding: 6px !important;
-    /* override the inline padding:0 150px */
   }
 
   .activity-item {
@@ -629,7 +628,6 @@ body {
 
   .activity-info {
     padding-left: 0 !important;
-    /* override inline padding-left: 50px */
   }
 
   .activity-name {

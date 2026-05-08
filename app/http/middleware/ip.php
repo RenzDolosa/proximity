@@ -1,22 +1,19 @@
 <?php
 // app/http/middleware/ip.php
 
-$servername = "192.168.1.50"; // IP address of XAMPP server
+$servername = "192.168.1.50";
 $username = "remote_user";
 $password = "";
 $dbname = "system_database";
-$port = 3306; // MySQL port
+$port = 3306;
 
-// Using MySQLi
 $conn = new mysqli($servername, $username, $password, $dbname, $port);
 
-// Check connection
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 echo "Connected successfully";
 
-// Using PDO
 try {
     $pdo = new PDO("mysql:host=$servername;port=$port;dbname=$dbname", $username, $password);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);

@@ -17,7 +17,6 @@ $selectedDate = $_GET['lb_date'] ?? date('Y-m-d');
 try {
   $userDb = getUserDBConnection($userId);
 
-  // Leaderboard rows
   $stmt = $userDb->prepare("
     SELECT 
       COALESCE(NULLIF(TRIM(el.fullname), ''), e.fullname, 'Unknown') AS fullname,
@@ -33,7 +32,6 @@ try {
   $stmt->execute([':selected_date' => $selectedDate]);
   $leaderboard = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-  // Gate stats for the same date
   $stmt = $userDb->prepare("
     SELECT u.first_name AS gate_name, COUNT(*) AS total
     FROM employee_access_log el

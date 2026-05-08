@@ -15,7 +15,6 @@ if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') &&
 requireAccess('system', 'datalog.php');
 $access = getMenuAccess();
 
-// Get dashboard statistics if database is connected
 $stats = [
   'total_employees' => 0,
   'active_employees' => 0,
@@ -392,7 +391,7 @@ if ($databaseConnected) {
           </div>
 
         </form>
-      </div><!-- /.modal-body -->
+      </div>
 
       <!-- FOOTER -->
       <div class="modal-footer">
@@ -560,8 +559,7 @@ if ($databaseConnected) {
             <h4>Preview (First 5 rows):</h4>
           </div>
         </form>
-
-      </div><!-- /.modal-body -->
+      </div>
 
       <!-- FOOTER -->
       <div class="modal-footer">
@@ -575,7 +573,6 @@ if ($databaseConnected) {
           <i class="fas fa-times"></i> Cancel
         </button>
       </div>
-
     </div>
   </div>
 

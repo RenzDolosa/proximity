@@ -11,22 +11,17 @@ const LoadingManager = {
   },
 
   setupEventListeners() {
-    // Show loading on navigation
     window.addEventListener('beforeunload', () => this.show());
-
-    // Hide loading on page ready
     window.addEventListener('load', () => {
       setTimeout(() => this.hide(), 500);
     });
 
-    // Handle back/forward navigation
     window.addEventListener('pageshow', (event) => {
       if (event.persisted) {
         this.hide();
       }
     });
 
-    // DOM ready fallback
     document.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => this.hide(), 300);
     });
@@ -54,17 +49,13 @@ const LoadingManager = {
     const elements = this.getElements();
     if (!elements.screen) return;
 
-    // Clear any pending hide timeout
     if (this.hideTimeout) {
       clearTimeout(this.hideTimeout);
       this.hideTimeout = null;
     }
 
-    // Update text content
     if (elements.text) elements.text.textContent = text + '...';
     if (elements.subtext) elements.subtext.textContent = subtext;
-
-    // Update spinner type
     if (elements.spinner) {
       elements.spinner.className = 'spinner';
       if (type === 'dots') {
@@ -73,10 +64,8 @@ const LoadingManager = {
       }
     }
 
-    // Show progress bar if requested
     this.updateProgress(showProgress);
 
-    // Add active class
     elements.screen?.classList.add('active');
     elements.content?.classList.remove('error', 'success');
     elements.container?.classList.add('loading');
@@ -90,7 +79,6 @@ const LoadingManager = {
     const elements = this.getElements();
     if (!elements.screen) return;
 
-    // Remove active class
     elements.screen?.classList.remove('active');
     elements.container?.classList.remove('loading');
 
@@ -105,7 +93,6 @@ const LoadingManager = {
     if (elements.text) elements.text.textContent = text;
     if (elements.subtext) elements.subtext.textContent = 'Operation completed';
 
-    // Auto hide after duration
     if (this.hideTimeout) clearTimeout(this.hideTimeout);
     this.hideTimeout = setTimeout(() => this.hide(), duration);
   },
@@ -118,7 +105,6 @@ const LoadingManager = {
     if (elements.text) elements.text.textContent = text;
     if (elements.subtext) elements.subtext.textContent = 'Please try again or contact support';
 
-    // Auto hide after duration
     if (this.hideTimeout) clearTimeout(this.hideTimeout);
     this.hideTimeout = setTimeout(() => this.hide(), duration);
   },
@@ -157,10 +143,10 @@ const LoadingManager = {
   }
 };
 
-// ── Initialize on script load ──
+// ── Initialize on script load ────
 LoadingManager.init();
 
-// ── Legacy API (backward compatibility) ──
+// ── Legacy API ──────────────────
 function showLoadingScreen() {
   LoadingManager.show();
 }
@@ -249,7 +235,6 @@ function showLoadingForCustomOperation(operationName, duration = 2000) {
 // ── Enhanced form submission handling ──
 document.addEventListener('DOMContentLoaded', function() {
 
-  // Handle export buttons
   document.querySelectorAll('[data-action="export"]').forEach(button => {
     button.addEventListener('click', function() {
       showLoadingForExport();
@@ -257,7 +242,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  // Handle import buttons
   document.querySelectorAll('[data-action="import"]').forEach(button => {
     button.addEventListener('click', function() {
       showLoadingForImport();
@@ -265,7 +249,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  // Handle delete buttons
   document.querySelectorAll('[data-action="delete"]').forEach(button => {
     button.addEventListener('click', function() {
       showLoadingForDelete();
@@ -273,7 +256,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  // Handle search input
   const searchInput = document.getElementById('search_employee');
   if (searchInput) {
     let searchTimeout;
@@ -295,18 +277,16 @@ if (window.self !== window.top) {
   });
 }
 
-// ── AJAX request interceptor (if using fetch/xhr) ──
+// ── AJAX request interceptor ──
 const originalFetch = window.fetch;
 window.fetch = function(...args) {
   const options = args[1] || {};
   const headers = options.headers || {};
   
-  // Treat as silent if explicitly marked OR if it's a background/auto request
   const isSilent = 
     headers['X-Silent-Request'] === 'true' ||
     (typeof isAutoUpdating !== 'undefined' && isAutoUpdating);
 
-  // Only show loading for non-silent, non-GET requests (form submissions, deletes, etc.)
   const method = (options.method || 'GET').toUpperCase();
   const isWrite = method !== 'GET';
 

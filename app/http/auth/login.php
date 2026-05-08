@@ -4,19 +4,18 @@
 $errors = [];
 $success = '';
 
-// ── 1. Generate CSRF token FIRST ──────────────────────────────────────────
+// ── Generate CSRF token FIRST ──────────────────────────────────────────
 if (empty($_SESSION['csrf_token'])) {
   $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-// ── 2. Already logged in ──────────────────────────────────────────────────
-// Redirect if already logged in
+// ── Already logged in ──────────────────────────────────────────────────
 if (isset($_SESSION['user_id'])) {
   header('Location: portal.php');
   exit;
 }
 
-// ── 3. Rate limiting (5 attempts per 3 minutes) ──────────────────────────
+// ── Rate limiting (5 attempts per 3 minutes) ──────────────────────────
 if (!isset($_SESSION['login_attempts'])) {
   $_SESSION['login_attempts'] = 0;
   $_SESSION['last_attempt']   = 0;
@@ -35,30 +34,26 @@ if (
     ceil($remaining / 60) . " minute(s).";
 }
 
-// ── 4. Handle POST ────────────────────────────────────────────────────────
+// ── Handle POST ────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($errors)) {
 
-  // CSRF check
   $submitted_token = $_POST['csrf_token'] ?? '';
   if (
     empty($submitted_token) ||
     !isset($_SESSION['csrf_token']) ||
     !hash_equals($_SESSION['csrf_token'], $submitted_token)
   ) {
-    // Rotate token so a page refresh gives a fresh valid one
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     $errors[] = "Your session expired. Please try again.";
 
   } else {
 
-    // Track attempt
     $_SESSION['login_attempts']++;
     $_SESSION['last_attempt'] = $current_time;
 
     $username = sanitizeInput(trim($_POST['username'] ?? ''));
     $password = $_POST['password'] ?? '';
 
-    // Input validation
     if (empty($username)) {
       $errors[] = "Username or email is required.";
     } elseif (strlen($username) > 255) {
@@ -77,26 +72,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($errors)) {
       }
     }
 
-    // Attempt login
     if (empty($errors)) {
       $result = loginUser($username, $password);
 
       if ($result['success']) {
-        // Reset attempt counter
         $_SESSION['login_attempts'] = 0;
         unset($_SESSION['last_attempt']);
 
-        // Set user session before regenerating so it carries over
         if (!isset($_SESSION['user_id']) && isset($result['user_id'])) {
           $_SESSION['user_id'] = $result['user_id'];
         }
 
-        // Regenerate session ID AFTER writing all needed session data,
-        // then immediately rotate the CSRF token in the new session.
         session_regenerate_id(true);
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 
-        // Audit log
         $ip         = $_SERVER['REMOTE_ADDR']     ?? 'Unknown';
         $user_agent = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
         logSystemAction(
@@ -109,10 +98,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($errors)) {
         exit;
 
       } else {
-        // Rotate CSRF token on failed attempt too (prevents token fixation)
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 
-        // Audit log (no user ID — don't reveal whether account exists)
         $ip         = $_SERVER['REMOTE_ADDR']     ?? 'Unknown';
         $user_agent = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
         logSystemAction(
@@ -121,7 +108,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($errors)) {
           "Failed login. IP: $ip, UA: " . substr($user_agent, 0, 100)
         );
 
-        // Generic message — prevents username enumeration
         $errors[] = "Invalid username/email or password.";
       }
     }

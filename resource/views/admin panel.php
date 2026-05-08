@@ -31,7 +31,6 @@ if (isset($_GET['action'])) {
     $pdo = getMainDBConnection();
 
     // ── USERS MANAGEMENT ACTIONS ─────────────────────────────────────────────
-
     if ($_GET['action'] === 'fetch_users') {
       if ($access['users'] !== true) {
         echo json_encode(['success' => false, 'message' => 'Access denied. Administrators only.']);
@@ -87,7 +86,6 @@ if (isset($_GET['action'])) {
         $my_db      = sanitizeInput($data['my_database'] ?? '');
         $user_group = sanitizeInput($data['user_group']  ?? '');
 
-        // Fetch valid groups dynamically
         $validGroupsStmt = $pdo->query("SELECT group_name FROM user_groups WHERE is_enabled = 1");
         $allowedGroups = $validGroupsStmt->fetchAll(PDO::FETCH_COLUMN);
 
@@ -237,7 +235,6 @@ if (isset($_GET['action'])) {
     }
 
     // ── SYSTEM LOG ACTIONS ───────────────────────────────────────────────────
-
     if (in_array($_GET['action'], ['fetch_logs', 'fetch_log_actions', 'delete_log', 'delete_all_logs'], true)) {
       if ($access['system logs'] !== true) {
         echo json_encode(['success' => false, 'message' => 'Access denied.']);
@@ -308,7 +305,6 @@ if (isset($_GET['action'])) {
     }
 
     // ── USER GROUPS ACTIONS ──────────────────────────────────────────────────
-
     if (in_array($_GET['action'], [
       'fetch_groups',
       'fetch_group',
@@ -1276,7 +1272,6 @@ function renderBindRows(array $pages, int $depth = 0): void
       color: #fff;
     }
 
-    /* Log detail */
     .log-detail-grid {
       display: grid;
       gap: 10px;
@@ -1350,7 +1345,6 @@ function renderBindRows(array $pages, int $depth = 0): void
       flex-direction: column;
     }
 
-    /* Header */
     .gmodal-header {
       padding: 18px 24px 0;
       border-bottom: 1px solid #e9ecef;
@@ -1367,14 +1361,12 @@ function renderBindRows(array $pages, int $depth = 0): void
       margin-bottom: 14px;
     }
 
-    /* Sidebar + content split */
     .gmodal-body {
       display: flex;
       flex: 1;
       overflow: hidden;
     }
 
-    /* Sidebar tabs */
     .gmodal-sidebar {
       width: 130px;
       flex-shrink: 0;
@@ -1420,7 +1412,6 @@ function renderBindRows(array $pages, int $depth = 0): void
       text-align: center;
     }
 
-    /* Tab panels */
     .gmodal-content {
       flex: 1;
       padding: 20px 22px;
@@ -1435,7 +1426,6 @@ function renderBindRows(array $pages, int $depth = 0): void
       display: block;
     }
 
-    /* Footer */
     .gmodal-footer {
       padding: 14px 24px;
       border-top: 1px solid #e9ecef;
@@ -1550,7 +1540,6 @@ function renderBindRows(array $pages, int $depth = 0): void
       pointer-events: none;
     }
 
-    /* Radio pill group */
     .radio-pill-group {
       display: flex;
       gap: 3px;
@@ -1584,7 +1573,6 @@ function renderBindRows(array $pages, int $depth = 0): void
       transition: all .15s;
     }
 
-    /* Allow state */
     .radio-pill.allow-pill.selected {
       background: #d1fae5;
       border-color: #10b981;
@@ -1596,7 +1584,6 @@ function renderBindRows(array $pages, int $depth = 0): void
       border-color: #10b981;
     }
 
-    /* Not allow state */
     .radio-pill.deny-pill.selected {
       background: #fee2e2;
       border-color: #ef4444;
@@ -1674,7 +1661,6 @@ function renderBindRows(array $pages, int $depth = 0): void
       margin-top: 1px;
     }
 
-    /* Description field style */
     .desc-textarea {
       width: 100%;
       padding: 8px 10px;
@@ -1841,7 +1827,6 @@ function renderBindRows(array $pages, int $depth = 0): void
 
       .form-grid {
         grid-template-columns: 1fr;
-        /* stack side-by-side fields */
       }
 
       .form-row input,
@@ -2381,9 +2366,8 @@ function renderBindRows(array $pages, int $depth = 0): void
               </div>
             </div>
           </div>
-
-        </div><!-- /gmodal-content -->
-      </div><!-- /gmodal-body -->
+        </div>
+      </div>
 
       <!-- Footer -->
       <div class="modal-actions" style="padding:14px 24px; justify-content:flex-end;">
@@ -2509,12 +2493,8 @@ function renderBindRows(array $pages, int $depth = 0): void
     /* ══════════════════════════════════════════════════════════════
       BIND ACCESS — Tree logic
     ══════════════════════════════════════════════════════════════ */
-
-    // ── Build flat key→children map recursively from any depth ──
     const MENU_TREE = <?= json_encode($MENU_PAGES) ?>;
-
-    // Flatten tree: key → { parentKey, childKeys }
-    const NODE_MAP = {}; // key → { parentKey|null, childKeys[] }
+    const NODE_MAP = {};
 
     function buildNodeMap(pages, parentKey = null) {
       pages.forEach(page => {
@@ -2529,7 +2509,6 @@ function renderBindRows(array $pages, int $depth = 0): void
     }
     buildNodeMap(MENU_TREE);
 
-    // Get ALL descendant keys recursively
     function getAllDescendants(key) {
       const result = [];
       const kids = NODE_MAP[key]?.childKeys || [];
@@ -2540,7 +2519,6 @@ function renderBindRows(array $pages, int $depth = 0): void
       return result;
     }
 
-    // Get ALL ancestor keys
     function getAllAncestors(key) {
       const result = [];
       let current = NODE_MAP[key]?.parentKey;
@@ -2565,19 +2543,16 @@ function renderBindRows(array $pages, int $depth = 0): void
       const key = group.dataset.key;
       const isDeny = pill.classList.contains('deny-pill');
 
-      // 1. Select this pill
       group.querySelectorAll('.radio-pill').forEach(p => p.classList.remove('selected'));
       pill.classList.add('selected');
       pill.querySelector('input[type="radio"]').checked = true;
 
-      // 2. Cascade DOWN to ALL descendants
       const descendants = getAllDescendants(key);
       descendants.forEach(descKey => {
         const descGroup = document.querySelector(`.radio-pill-group[data-key="${descKey}"]`);
         if (!descGroup) return;
 
         if (isDeny) {
-          // Force deny + disable
           descGroup.querySelectorAll('.radio-pill').forEach(p => {
             p.classList.remove('selected');
             p.classList.add('disabled');
@@ -2587,12 +2562,9 @@ function renderBindRows(array $pages, int $depth = 0): void
             denyPill.classList.add('selected');
             denyPill.querySelector('input[type="radio"]').checked = true;
           }
-          // Expand so user can see inherited state
           const container = document.getElementById('children_' + descKey);
           const btn = document.getElementById('toggleBtn_' + descKey);
-          // Only expand the immediate parent's children container
         } else {
-          // Re-enable + reset to allow
           descGroup.querySelectorAll('.radio-pill').forEach(p => {
             p.classList.remove('disabled');
             p.classList.remove('selected');
@@ -2605,7 +2577,6 @@ function renderBindRows(array $pages, int $depth = 0): void
         }
       });
 
-      // Auto-expand immediate children container when denying
       if (isDeny) {
         const container = document.getElementById('children_' + key);
         const btn = document.getElementById('toggleBtn_' + key);
@@ -2613,7 +2584,6 @@ function renderBindRows(array $pages, int $depth = 0): void
         if (btn) btn.classList.add('open');
       }
 
-      // 3. When ALLOWING: check if all siblings also allow → re-enable parent
       if (!isDeny) {
         const ancestors = getAllAncestors(key);
         ancestors.forEach(ancestorKey => {
@@ -2625,10 +2595,7 @@ function renderBindRows(array $pages, int $depth = 0): void
             return checked?.value === 'allow';
           });
           if (allAllow) {
-            // Re-enable the ancestor's pills if they were disabled
             const ancestorGroup = document.querySelector(`.radio-pill-group[data-key="${ancestorKey}"]`);
-            // Don't forcibly change ancestor — just let user decide
-            // But DO re-enable any pills that were locked
           }
         });
       }
@@ -2644,18 +2611,14 @@ function renderBindRows(array $pages, int $depth = 0): void
     }
 
     function setPermissionsToForm(permsObj) {
-      // First pass: apply all values, clear disabled state
       Object.keys(NODE_MAP).forEach(key => {
         _applyPermToGroup(key, permsObj);
       });
 
-      // Second pass: cascade deny from any parent downward
-      // Process top-level first, then deeper levels
       function cascadeFromNode(key) {
         const val = (permsObj && permsObj[key]) ? permsObj[key] : 'allow';
         if (val === 'deny') {
           const descendants = getAllDescendants(key);
-          // Expand container
           const container = document.getElementById('children_' + key);
           const btn = document.getElementById('toggleBtn_' + key);
           if (container) container.style.display = 'block';
@@ -2667,7 +2630,6 @@ function renderBindRows(array $pages, int $depth = 0): void
             descGroup.querySelectorAll('.radio-pill').forEach(p => p.classList.add('disabled'));
           });
         }
-        // Recurse into children
         (NODE_MAP[key]?.childKeys || []).forEach(cascadeFromNode);
       }
 
@@ -2719,7 +2681,6 @@ function renderBindRows(array $pages, int $depth = 0): void
           e.stopImmediatePropagation();
           closeModal(open.id);
         } else {
-          // No modal open — bubble up to parent
           if (window.self !== window.top) {
             window.parent.document.dispatchEvent(
               new KeyboardEvent('keydown', {
@@ -3298,8 +3259,8 @@ function renderBindRows(array $pages, int $depth = 0): void
       const eb = document.getElementById('groupFormErr');
       eb.style.display = 'none';
       eb.innerHTML = '';
-      setPermissionsToForm(null); // reset all to Allow
-      switchGroupTab('basic'); // always open on Basic Info
+      setPermissionsToForm(null);
+      switchGroupTab('basic');
     }
 
     function openAddGroup() {
@@ -3697,7 +3658,6 @@ function renderBindRows(array $pages, int $depth = 0): void
 
     loadUsers().then(startUsersCountdown);
 
-    // Auto-switch to tab specified in URL hash on load
     const hashTab = window.location.hash.replace('#', '');
     if (hashTab && TAB_IDS[hashTab]) {
       switchTab(hashTab);
@@ -3715,7 +3675,6 @@ function renderBindRows(array $pages, int $depth = 0): void
           e.preventDefault();
           e.stopPropagation();
           btn.blur();
-          // If no modal is open, bubble up to parent
           const open = document.querySelector('.modal-overlay.show');
           if (!open) {
             if (window.self !== window.top) {

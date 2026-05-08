@@ -1,6 +1,5 @@
 // resource/js/acct.js --> account
 
-// Form validation
 document.addEventListener("DOMContentLoaded", function () {
   const passwordForm = document.querySelector(
     'form[method="POST"]:has([name="change_password"])'
@@ -18,7 +17,6 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // Auto-hide alerts after 5 seconds
   const alerts = document.querySelectorAll(".alert");
   alerts.forEach((alert) => {
     setTimeout(() => {
@@ -29,16 +27,10 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 });
 
-// Enhanced acct.js with password toggle functionality
 
 document.addEventListener("DOMContentLoaded", function () {
-  // Add password toggle functionality
   addPasswordToggle();
-
-  // Form validation enhancement
   enhanceFormValidation();
-
-  // Auto-hide alerts after 5 seconds
   autoHideAlerts();
 });
 
@@ -52,21 +44,18 @@ function addPasswordToggle() {
   passwordFields.forEach((fieldId) => {
     const field = document.getElementById(fieldId);
     if (field) {
-      // Create toggle button
       const toggleBtn = document.createElement("button");
       toggleBtn.type = "button";
       toggleBtn.className = "password-toggle-btn";
       toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
       toggleBtn.setAttribute("aria-label", "Toggle password visibility");
 
-      // Wrap the input in a container
       const wrapper = document.createElement("div");
       wrapper.className = "password-input-wrapper";
       field.parentNode.insertBefore(wrapper, field);
       wrapper.appendChild(field);
       wrapper.appendChild(toggleBtn);
 
-      // Add click event listener
       toggleBtn.addEventListener("click", function () {
         togglePasswordVisibility(field, toggleBtn);
       });
@@ -93,12 +82,10 @@ function enhanceFormValidation() {
   const confirmPasswordField = document.getElementById("confirm_password");
 
   if (newPasswordField && confirmPasswordField) {
-    // Add real-time password strength indicator
     newPasswordField.addEventListener("input", function () {
       validatePasswordStrength(this.value);
     });
 
-    // Add real-time password match validation
     confirmPasswordField.addEventListener("input", function () {
       validatePasswordMatch(newPasswordField.value, this.value);
     });
@@ -192,7 +179,6 @@ function autoHideAlerts() {
   });
 }
 
-// Show alert message
 function showAlert(message, type = "info") {
   const existingAlerts = document.querySelectorAll(".alert");
   existingAlerts.forEach((alert) => alert.remove());

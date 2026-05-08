@@ -1,6 +1,6 @@
 <?php
 // config/migrate_to_webp.php --> image migration image type to webp
-// Place this file in your /config/ folder (same level as config.php)
+
 // Run once via browser: https://proximity3pl.page.gd/config/migrate_to_webp.php?secret=AdminAdmin123
 
 // ─── SECURITY ────────────────────────────────────────────────────────────────
@@ -14,8 +14,6 @@ if (($_GET['secret'] ?? '') !== MIGRATION_SECRET) {
 require_once 'config.php';
 
 if (!isset($_SESSION['user_id'])) {
-  // Allow running without login only if accessed with ?force=1 alongside secret
-  // Useful when running from CLI or before login system is set up
   if (($_GET['force'] ?? '') !== '1') {
     die('<h2>Not logged in. Append &force=1 to the URL to run without a session, or log in first.</h2>');
   }
@@ -23,12 +21,11 @@ if (!isset($_SESSION['user_id'])) {
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 define('UPLOAD_DIR',  __DIR__ . '/../public/uploads/user/');
-define('WEBP_QUALITY', 82);   // 0–100, 82 is a good balance
-define('MAX_WIDTH',    800);   // Resize if wider than this (px), 0 = no resize
-define('DRY_RUN', isset($_GET['dry'])); // Append ?dry to preview without making changes
+define('WEBP_QUALITY', 82);
+define('MAX_WIDTH',    800);
+define('DRY_RUN', isset($_GET['dry']));
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
-
 function convertToWebP(string $srcPath, string $destPath): bool
 {
   if (!function_exists('imagewebp')) {
@@ -49,7 +46,6 @@ function convertToWebP(string $srcPath, string $destPath): bool
   $origW = imagesx($src);
   $origH = imagesy($src);
 
-  // Optional resize
   if (MAX_WIDTH > 0 && $origW > MAX_WIDTH) {
     $newW    = MAX_WIDTH;
     $newH    = (int) round($origH * (MAX_WIDTH / $origW));
@@ -285,7 +281,6 @@ foreach ($userIds as $userId) {
   try {
     $userPdo = getUserDBConnection($userId);
 
-    // Fetch all employees that have an image
     $stmt = $userPdo->query("SELECT id, fullname, image FROM employees WHERE image IS NOT NULL AND image != ''");
     $emps = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -294,7 +289,6 @@ foreach ($userIds as $userId) {
       $srcPath     = UPLOAD_DIR . $oldFilename;
       $ext         = strtolower(pathinfo($oldFilename, PATHINFO_EXTENSION));
 
-      // Already WebP
       if ($ext === 'webp') {
         $totalAlready++;
         $rows[] = [
@@ -308,7 +302,6 @@ foreach ($userIds as $userId) {
         continue;
       }
 
-      // Source file missing on disk
       if (!file_exists($srcPath)) {
         $totalFailed++;
         $rows[] = [
@@ -327,7 +320,6 @@ foreach ($userIds as $userId) {
       $oldSize     = filesize($srcPath);
 
       if (DRY_RUN) {
-        // Preview only
         $totalConverted++;
         $rows[] = [
           'user'    => $userId,
@@ -340,7 +332,6 @@ foreach ($userIds as $userId) {
         continue;
       }
 
-      // Convert
       $ok = convertToWebP($srcPath, $destPath);
 
       if ($ok && file_exists($destPath)) {
@@ -348,12 +339,10 @@ foreach ($userIds as $userId) {
         $diff     = $oldSize - $newSize;
         $savedBytes += max(0, $diff);
 
-        // Update DB record
         try {
           $upd = $userPdo->prepare("UPDATE employees SET image = :img WHERE id = :id");
           $upd->execute([':img' => $newFilename, ':id' => $emp['id']]);
         } catch (Exception $dbEx) {
-          // DB update failed — remove the new webp so nothing is inconsistent
           @unlink($destPath);
           $totalFailed++;
           $rows[] = [
@@ -368,7 +357,6 @@ foreach ($userIds as $userId) {
           continue;
         }
 
-        // Remove old file
         @unlink($srcPath);
 
         $totalConverted++;
@@ -487,7 +475,6 @@ foreach ($userIds as $userId) {
 
 </html>
 <?php
-// Log the migration
 if (isset($_SESSION['user_id'])) {
   logSystemAction(
     $_SESSION['user_id'],

@@ -77,7 +77,6 @@ if ($databaseConnected) {
 
     $selectedDate = $_GET['lb_date'] ?? date('Y-m-d');
 
-    // Gate activity stats
     $stmt = $userDb->prepare("
       SELECT u.first_name AS gate_name, COUNT(*) AS total
       FROM employee_access_log el
@@ -91,7 +90,6 @@ if ($databaseConnected) {
     $stmt->execute([':selected_date' => $selectedDate]);
     $gateStats = $stmt->fetchAll();
 
-    // Today's employee scan leaderboard
     $stmt = $userDb->prepare("
       SELECT 
         COALESCE(NULLIF(TRIM(el.fullname), ''), e.fullname, 'Unknown') AS fullname,
@@ -107,7 +105,6 @@ if ($databaseConnected) {
     $stmt->execute([':selected_date' => $selectedDate]);
     $leaderboard = $stmt->fetchAll();
 
-    // Recent activity logs
     $stmt = $userDb->prepare("
       SELECT el.*,
             COALESCE(NULLIF(TRIM(el.fullname), ''), e.fullname, 'Unknown Employee') AS fullname,
@@ -283,7 +280,6 @@ if ($databaseConnected) {
           </div>
         </div>
       </div>
-
     </div>
 
     <!-- Two-column: Stats + Recent Activity -->
@@ -413,7 +409,6 @@ if ($databaseConnected) {
             </div>
           </div>
         </div> -->
-
       </div>
 
       <!-- Right: Recent activity -->
@@ -425,7 +420,6 @@ if ($databaseConnected) {
 
           <div class="card-body" style="padding: 0 50px 20px;">
 
-            <!-- Header row aligned to match activity-item layout -->
             <div style="
               display: flex;
               align-items: center;
@@ -582,10 +576,8 @@ if ($databaseConnected) {
           </div>
         </div>
       </div>
-
-    </div><!-- /.two-col -->
-
-  </div><!-- /.page-body -->
+    </div>
+  </div>
 
   <script src="../js/btn.js"></script>
   <script src="../js/req.js"></script>
@@ -662,7 +654,6 @@ if ($databaseConnected) {
       <?php endif; ?>
     })();
 
-    // Helper: re-render gate chart + legend
     function updateGateChart(gateStats) {
       const legend = document.getElementById('gate-legend');
       const totalEl = document.getElementById('gate-total-count');
@@ -686,7 +677,6 @@ if ($databaseConnected) {
       const data = gateStats.map(g => parseInt(g.total));
       const total = data.reduce((a, b) => a + b, 0);
 
-      // Update or create chart
       if (gateChart) {
         gateChart.data.labels = labels;
         gateChart.data.datasets[0].data = data;
@@ -718,10 +708,7 @@ if ($databaseConnected) {
         });
       }
 
-      // Update center total
       totalEl.textContent = total.toLocaleString();
-
-      // Rebuild legend
       legend.innerHTML = gateStats.map((g, i) => {
         const color = gateColors[i % gateColors.length];
         const pct = total > 0 ? ((parseInt(g.total) / total) * 100).toFixed(1) : 0;
@@ -737,14 +724,12 @@ if ($databaseConnected) {
       }).join('');
     }
 
-    // Date picker — updates both leaderboard AND gate chart
     document.getElementById('lb-date-picker').addEventListener('change', function() {
       const date = this.value;
       const cardBody = document.getElementById('lb-date-picker')
         .closest('.card')
         .querySelector('.card-body');
 
-      // Always replace card body with a fresh skeleton so elements are guaranteed to exist
       cardBody.innerHTML = `
         <table class="lb-table" style="table-layout:fixed;width:100%;">
           <thead>

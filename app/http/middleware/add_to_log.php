@@ -401,7 +401,6 @@ try {
 
   switch ($action) {
     case 'add_to_log':
-      // Validate required fields for adding to log
       $requiredFields = ['fullname', 'position', 'brand', 'status', 'shift', 'qr_code'];
       foreach ($requiredFields as $field) {
         if (!isset($input[$field]) || trim($input[$field]) === '') {
@@ -409,13 +408,11 @@ try {
         }
       }
 
-      // Optional: Validate against existing employee (if QR code exists in employees table)
       if (!empty($input['qr_code']) && isset($input['validate_employee']) && $input['validate_employee']) {
         $existingEmployee = $logManager->getEmployeeByQR($input['qr_code']);
         if (!$existingEmployee) {
           throw new Exception("Employee with QR code '{$input['qr_code']}' not found in employee database");
         }
-        // Use employee ID if found
         $input['employee_id'] = $existingEmployee['id'];
       }
 
@@ -430,7 +427,6 @@ try {
         exit();
       }
       
-      // Prepare log data
       $logData = [
         'employee_id' => $input['employee_id'] ?? null,
         'fullname' => trim($input['fullname']),
@@ -445,7 +441,6 @@ try {
         'access_type' => $input['access_type'] ?? 'manual_entry'
       ];
 
-      // Add to log
       $logId = $logManager->addToLog($logData);
 
       if ($logId) {
@@ -539,7 +534,6 @@ try {
   error_log("Add to log error: " . $e->getMessage());
 }
 
-// Remove error details in production unless debug mode
 if (!isset($_GET['debug']) && !isset($_POST['debug'])) {
   unset($response['error_details']);
 }

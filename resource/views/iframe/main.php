@@ -13,10 +13,8 @@ $userGroup = $_SESSION['user_group'] ?? '';
 // ── Page router ──
 $page = $_GET['page'] ?? null;
 
-// Pages that are full standalone HTML — render them in an iframe wrapper, not included directly
 $iframePages = ['admin panel', 'account', 'employee dashboard', 'settings', 'about'];
 
-// Pages safe to include directly (they output only a fragment, no full HTML shell)
 $includedPages = ['account', 'employee dashboard', 'f-pass', 'reg', 'settings'];
 
 if ($page && in_array($page, $iframePages)) {
@@ -40,7 +38,6 @@ if (!isset($_SESSION['user_id'])) {
   exit();
 }
 
-// Get dashboard statistics
 $stats = [
   'total_employees'   => 0,
   'active_employees'  => 0,
@@ -87,7 +84,6 @@ try {
 
 if ($databaseConnected) {
   try {
-    // Employee stats
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employees");
     $stmt->execute();
     $stats['total_employees'] = (int)$stmt->fetchColumn();
@@ -100,7 +96,6 @@ if ($databaseConnected) {
     $stmt->execute();
     $stats['inactive_employees'] = (int)$stmt->fetchColumn();
 
-    // Access log stats
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log");
     $stmt->execute();
     $stats['total_scanned'] = (int)$stmt->fetchColumn();
@@ -125,12 +120,10 @@ if ($databaseConnected) {
     $stmt->execute();
     $stats['check_out'] = (int)$stmt->fetchColumn();
 
-    // Proximity codes
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM code");
     $stmt->execute();
     $stats['total_proxcode'] = (int)$stmt->fetchColumn();
 
-    // Gate activity stats
     $stmt = $userDb->prepare("
       SELECT u.first_name AS gate_name, COUNT(*) AS total
       FROM employee_access_log el
@@ -143,7 +136,6 @@ if ($databaseConnected) {
     $stmt->execute();
     $gateStats = $stmt->fetchAll();
 
-    // Recent logs
     $stmt = $userDb->prepare("
       SELECT el.*,
              COALESCE(NULLIF(TRIM(el.fullname), ''), e.fullname, 'Unknown Employee') AS fullname
@@ -407,7 +399,6 @@ if ($databaseConnected) {
 
       </div>
     </div>
-    <!-- ── /Attendance chart ── -->
 
     <!-- Two-column: shortcuts + menu -->
     <div class="two-col">
@@ -513,10 +504,8 @@ if ($databaseConnected) {
           </div>
         </div>
       </div>
-
-    </div><!-- /.two-col -->
-
-  </div><!-- /.page-body -->
+    </div>
+  </div>
 
   <script src="../../js/req.js"></script>
   <script src="../../js/loading.js"></script>
@@ -697,13 +686,11 @@ if ($databaseConnected) {
       return out;
     }
 
-    // Fetches ONLY today + yesterday rows — no pagination truncation
     function fetchAttendanceData() {
       const now = new Date();
       const yd = new Date(now);
       yd.setDate(yd.getDate() - 1);
 
-      // Build the two YYYY-MM strings we need (may be the same month)
       const months = new Set([
         now.toISOString().slice(0, 7),
         yd.toISOString().slice(0, 7)
@@ -732,7 +719,6 @@ if ($databaseConnected) {
 
       Promise.all(fetches).then(function(results) {
         const allRows = [].concat.apply([], results);
-        // Keep only today and yesterday — discard rest of month
         const filtered = allRows.filter(function(r) {
           const d = new Date(r.access_timestamp);
           return !isNaN(d) && (d.toDateString() === todayStr || d.toDateString() === yesterdayStr);
@@ -893,7 +879,6 @@ if ($databaseConnected) {
       };
     }
 
-    // Fetches only the exact date window needed for the day-range chart
     function renderDailyChart(days) {
       const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
       const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
@@ -903,9 +888,8 @@ if ($databaseConnected) {
       ref.setHours(0, 0, 0, 0);
       const startDay = new Date(ref);
       startDay.setDate(startDay.getDate() - (days - 1));
-      const startStr = startDay.toISOString().slice(0, 10); // "YYYY-MM-DD"
+      const startStr = startDay.toISOString().slice(0, 10);
 
-      // Only the calendar months the window spans
       const months = new Set();
       for (let i = 0; i < days; i++) {
         const d = new Date(ref);

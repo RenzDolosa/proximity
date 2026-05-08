@@ -33,7 +33,6 @@ body {
   justify-items: center;
   width: 200vmin;
   padding: 1vmin;
-  /* backdrop-filter: blur(10px); */
 }
 
 h2 {
@@ -128,7 +127,7 @@ input[type="text"] {
   align-items: center;
   border-radius: 50%;
   background: linear-gradient(135deg, #667eea, #764ba2);
-  margin: 0 auto; /* ensures centering if flex parent isn't set */
+  margin: 0 auto;
 }
 
 .employee-image {
@@ -271,14 +270,12 @@ input[type="text"] {
 .employee-placeholder {
   font-size: 40vmin;
   font-weight: bold;
-  /*gradiant text !-->*/
   background: linear-gradient(270deg, #ffffff, #4ecdc4, #45b7d1, #96ceb4);
   background-size: 400% 400%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   animation: gradientShift 4s ease infinite;
-  /*<--*/
 }
 
 #message {
@@ -411,7 +408,6 @@ input[type="text"] {
   }
 }
 
-/* Alternative version with background color animation */
 .input-blocked-alt {
   animation: bg-flash 0.5s ease-in-out 3;
 }

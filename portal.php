@@ -777,7 +777,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       line-height: 1;
     }
 
-    /* Center NFC pill button */
     .bn-item.nfc-btn {
       position: absolute;
       left: 50%;
@@ -1028,7 +1027,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       userChevron.classList.remove('open');
     }
 
-    // Desktop: hover to open/close
     userPill.addEventListener('mouseenter', openDropdown);
     document.getElementById('userWrapper').addEventListener('mouseleave', function() {
       setTimeout(function() {
@@ -1041,7 +1039,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       openDropdown();
     });
 
-    // Click outside → close
     document.addEventListener('click', closeDropdown);
   </script>
 </body>

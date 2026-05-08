@@ -94,8 +94,6 @@
   margin-bottom: 1rem;
   height: 160px;
   cursor: default;
-  /* animation: slideInUp 0.8s ease-out; */
-  /* transition: all 0.3s ease; */
 }
 
 .welcome-card:hover {
@@ -131,7 +129,6 @@
   transition: all 0.3s ease;
 }
 
-/* Staggered animation delays for stat cards */
 .stat-card:nth-child(1) {
   animation-delay: 0.1s;
 }
@@ -208,12 +205,10 @@
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
   text-align: center;
   cursor: default;
-  /* animation: slideInLeft 0.7s ease-out; */
   animation-fill-mode: both;
   transition: all 0.3s ease;
 }
 
-/* Staggered animation delays for menu cards */
 /* .menu-card:nth-child(odd) {
   animation: slideInLeft 0.7s ease-out;
   animation-delay: 0.2s;
@@ -268,7 +263,6 @@
   cursor: pointer;
 }
 
-/* Staggered animation delays for action buttons */
 .action-btn:nth-child(1) {
   animation-delay: 0.5s;
 }
@@ -313,7 +307,6 @@
   }
 }
 
-/* Optional: Add a subtle bounce effect on page load */
 @keyframes bounceIn {
   0% {
     opacity: 0;
@@ -332,7 +325,6 @@
   }
 }
 
-/* Apply bounce effect to important elements if desired */
 .welcome-card.bounce-in {
   animation: bounceIn 1s ease-out;
 }

@@ -65,7 +65,6 @@ try {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Proximity Pass</title>
 
-  <!-- SECURITY: CSRF token stored in a meta tag for qp.js to read -->
   <meta name="csrf-token" content="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
 
   <link rel="preload" href="../../../resource/assets/logo/nfc-logo.svg" as="image/svg+xml">
@@ -138,9 +137,6 @@ try {
   <audio id="inactiveSound" data-fallback="../../../resource/assets/sounds/inactive.mp3" preload="none"></audio>
 
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
-  <!-- <script>
-    const QR_BACKEND_URL = <php echo json_encode($backendUrl); >;
-  </script> -->
   <script src="../../../resource/js/qp.js"></script>
   <script src="../../../resource/js/req.js"></script>
   <script src="../../../resource/js/ver.js"></script>

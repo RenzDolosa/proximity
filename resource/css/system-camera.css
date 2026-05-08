@@ -198,7 +198,6 @@
   object-fit: cover;
 }
 
-/* Final preview after crop applied */
 #cameraPreview {
   width: 100%;
   height: auto;
@@ -231,7 +230,6 @@
   object-fit: contain;
 }
 
-/* Cropper.js theme tweaks for dark UI */
 .cropper-view-box,
 .cropper-face {
   outline-color: #667eea;
@@ -293,7 +291,6 @@
   cursor: not-allowed;
 }
 
-/* Apply crop */
 .camera-btn.apply-crop {
   background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
   color: #1a1a1a;
@@ -303,7 +300,6 @@
   box-shadow: 0 6px 20px rgba(247, 151, 30, 0.45);
 }
 
-/* Retake */
 .camera-btn.retake {
   background-color: #ff6b6b;
   color: #fff;
@@ -313,7 +309,6 @@
   transform: translateY(-1px);
 }
 
-/* Use Photo */
 .camera-btn.upload {
   background-color: #51cf66;
   color: #fff;
@@ -324,7 +319,6 @@
   box-shadow: 0 6px 20px rgba(81, 207, 102, 0.35);
 }
 
-/* Cancel */
 .camera-btn.cancel {
   background-color: #3a3a3a;
   color: #ccc;

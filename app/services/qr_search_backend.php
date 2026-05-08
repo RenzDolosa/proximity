@@ -70,7 +70,6 @@ if ($_SESSION[$rateBucket] > 120) {
 }
 
 // ── Card number normalizer ─────────────────────────────────────────────────────
-// Strips leading zeros so "0006516684" matches "6516684" and vice-versa.
 function normalizeCardNo(string $raw): string
 {
   $raw = trim($raw);
@@ -137,7 +136,6 @@ class Database
 
   private function ensureCheckInOutTable()
   {
-    // employee_id is VARCHAR to hold the qr_code string (matches device-receiver inserts)
     $this->conn->exec("CREATE TABLE IF NOT EXISTS check_in_out (
       id             INT AUTO_INCREMENT PRIMARY KEY,
       user_id        INT(11) DEFAULT NULL,
@@ -176,9 +174,6 @@ class QueryLogger
   }
 
   // ── getEmployeeCheckStatus ─────────────────────────────────────────────────
-  // Checks by qr_code (primary key) AND by the stored employee_id column
-  // (which device-receiver stores as the qr_code string).
-  // Also handles the leading-zero mismatch via TRIM(LEADING '0' FROM ...).
   public function getEmployeeCheckStatus(string $qrCode): string
   {
     if (!$this->conn) return 'OUT';
@@ -214,7 +209,7 @@ class QueryLogger
       );
       return $stmt->execute([
         ':uid'  => $this->userId,
-        ':eid'  => $qrCode,        // store qr_code as employee_id (consistent with device-receiver)
+        ':eid'  => $qrCode,
         ':qr'   => $qrCode,
         ':name' => $fullname,
         ':type' => $checkType,
@@ -329,9 +324,6 @@ class LiveSearchHandler
   }
 
   // ── batchCheckStatuses ─────────────────────────────────────────────────────
-  // Fixed: query by qr_code (consistent with how device-receiver inserts rows).
-  // The old version queried by the integer id column which never matched because
-  // device-receiver stores the qr_code string in the employee_id column.
   private function batchCheckStatuses(array $employees): array
   {
     if (empty($employees) || !$this->conn) {
@@ -348,7 +340,6 @@ class LiveSearchHandler
     $rows     = $isSingle ? [$employees] : $employees;
 
     try {
-      // Collect all qr_codes from the result set
       $qrCodes = array_filter(array_column($rows, 'qr_code'));
       if (empty($qrCodes)) {
         foreach ($rows as &$r) $r['check_status'] = 'OUT';
@@ -358,8 +349,6 @@ class LiveSearchHandler
 
       $placeholders = implode(',', array_fill(0, count($qrCodes), '?'));
 
-      // Get the most recent check_type per qr_code.
-      // Also handle leading-zero mismatches by normalising with TRIM(LEADING '0' FROM ...).
       $sql = "SELECT qr_code, check_type
                 FROM (
                   SELECT qr_code, check_type,
@@ -373,13 +362,11 @@ class LiveSearchHandler
       $stmt->execute(array_values($qrCodes));
       $statusRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      // Build map: qr_code → check_type
       $statusMap = [];
       foreach ($statusRows as $sr) {
         $statusMap[$sr['qr_code']] = $sr['check_type'];
       }
 
-      // Also build a normalized map so leading-zero variants match
       $normalizedMap = [];
       foreach ($statusMap as $qr => $type) {
         $normalizedMap[normalizeCardNo($qr)] = $type;
@@ -493,7 +480,6 @@ class LiveSearchHandler
     try {
       $normalized = normalizeCardNo($qr_code);
 
-      // Try exact match first, then normalized (leading-zero-stripped) match
       $stmt = $this->conn->prepare(
         "SELECT id, fullname, position, brand, status, shift,
                 violation, image, qr_code
@@ -512,7 +498,7 @@ class LiveSearchHandler
           return ['__inactive__' => true];
         }
 
-        $canonicalQr = $result['qr_code']; // use stored value as canonical
+        $canonicalQr = $result['qr_code'];
 
         if ($autoToggle && $this->logger) {
           $previousStatus        = $this->logger->getEmployeeCheckStatus($canonicalQr);

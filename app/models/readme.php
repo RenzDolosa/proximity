@@ -12,7 +12,6 @@ if (!isset($_SESSION['user_id'])) {
 // ── Lightweight Markdown → HTML converter (no external dependency) ────────────
 function parseMarkdown(string $md): string
 {
-  // Escape HTML first to prevent XSS from raw HTML in the .md
   $md = htmlspecialchars($md, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
   $lines   = explode("\n", $md);
@@ -96,7 +95,6 @@ function parseMarkdown(string $md): string
     if (preg_match('/^\|.+\|$/', $trimmed)) {
       $flushList();
       $cells = array_map('trim', explode('|', trim($trimmed, '|')));
-      // Separator row
       if (preg_match('/^[\|\s\-:]+$/', $trimmed)) {
         $html .= "<tbody>\n";
         $tableHeader = false;
@@ -139,21 +137,16 @@ function parseMarkdown(string $md): string
 // Inline formatting: bold, italic, code, links
 function inline(string $s): string
 {
-  // Inline code (already HTML-escaped, so backtick content is safe)
   $s = preg_replace('/`([^`]+)`/', '<code>$1</code>', $s);
-  // Bold — ** and __ (__ only at word boundaries to avoid snake_case conflicts)
   $s = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $s);
   $s = preg_replace('/(?<!\w)__(.+?)__(?!\w)/', '<strong>$1</strong>', $s);
-  // Italic — * and _ (_ only at non-word boundaries to avoid filename/snake_case conflicts)
   $s = preg_replace('/\*(.+?)\*/', '<em>$1</em>', $s);
   $s = preg_replace('/(?<!\w)_([^_]+)_(?!\w)/', '<em>$1</em>', $s);
-  // Internal anchor links [text](#slug) — only allows #id format, no JS, no external URLs
   $s = preg_replace(
     '/\[([^\]]+)\]\((#[a-z0-9\-]+)\)/',
     '<a href="$2">$1</a>',
     $s
   );
-  // External links [text](https://...) — opens in new tab with noopener
   $s = preg_replace(
     '/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/',
     '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
@@ -208,7 +201,7 @@ if (file_exists($readmePath)) {
     .readme-wrap h1,
     .readme-wrap h2,
     .readme-wrap h3 {
-      scroll-margin-top: 20px; /* offset so heading isn't hidden on scroll-to */
+      scroll-margin-top: 20px;
     }
     .readme-wrap h1 {
       font-size: 22px;

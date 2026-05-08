@@ -1,14 +1,12 @@
 // resource/js/proxcode.js --> proximity table
 
-// Global variables
 let currentAction = "add";
 let employees = [];
-let currentUserId = null; // Cache current user ID
-let employeeDataCache = null; // Cache employee data from manpower_backend
+let currentUserId = null;
+let employeeDataCache = null;
 let qrImageMapCache = null;
 let systemQRCodesCache = null;
 
-// Pagination variables
 let currentPage = 1;
 const itemsPerPage = 25;
 let totalPages = 1;
@@ -19,10 +17,6 @@ let activeFilters = {};
 const count = employees.length;
 const label = count > 1 ? "code's" : "code";
 
-// ─────────────────────────────────────────────────────────────────
-// SECURITY: HTML escape helper — use on ALL dynamic content
-// inserted via innerHTML to prevent stored XSS attacks.
-// ─────────────────────────────────────────────────────────────────
 function escapeHtml(str) {
   if (str === null || str === undefined) return "";
   return String(str)
@@ -33,7 +27,6 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
-// SECURITY: Standalone toProperCase — replaces String.prototype pollution
 function toProperCase(str) {
   if (!str) return "";
   return String(str).replace(/[^\s,\-]+/g, function (txt) {
@@ -41,7 +34,6 @@ function toProperCase(str) {
   });
 }
 
-// Initialize the application
 document.addEventListener("DOMContentLoaded", function () {
   loadCurrentUserId();
   loadEmployees();
@@ -51,7 +43,6 @@ document.addEventListener("DOMContentLoaded", function () {
   syncOrphanStatuses();
 });
 
-// Load and cache current user ID
 async function loadCurrentUserId() {
   try {
     const response = await fetch("proxcode_backend.php?action=user_info", {
@@ -72,18 +63,6 @@ async function loadCurrentUserId() {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// FIX: Fetch ALL employee data from manpower_backend.php.
-//
-// The previous call used ?action=get with no limit, which caused
-// manpower_backend.php to apply its default limit of 25.  Any
-// employee whose QR code was not in the first 25 rows never
-// matched a proxcode, so the row showed "Occupied" but had no
-// image or EMPID.
-//
-// Fix: pass page=1&limit=999999 to retrieve every employee in one
-// request.  The result is cached so subsequent calls are free.
-// ─────────────────────────────────────────────────────────────────
 async function getManpowerEmployeeData() {
   try {
     if (employeeDataCache) {
@@ -102,7 +81,6 @@ async function getManpowerEmployeeData() {
 
     if (response.ok) {
       const data = await response.json();
-      // filter_options is ALL rows (no pagination applied by backend)
       if (data.success && Array.isArray(data.filter_options)) {
         employeeDataCache = data.filter_options;
         console.log(
@@ -118,7 +96,6 @@ async function getManpowerEmployeeData() {
   return [];
 }
 
-// Build a map of QR codes to employee images and details
 async function buildQRToImageMap() {
   if (qrImageMapCache) return qrImageMapCache;
 
@@ -143,8 +120,6 @@ async function buildQRToImageMap() {
   return qrImageMap;
 }
 
-// Returns the set of QR codes currently assigned to employees.
-// Reuses the fully-loaded manpower cache (no separate fetch needed).
 async function getSystemEmployeeQRCodes() {
   const manpowerEmployees = await getManpowerEmployeeData();
   return manpowerEmployees
@@ -153,7 +128,6 @@ async function getSystemEmployeeQRCodes() {
     .map((qr) => qr.trim().toLowerCase());
 }
 
-// Count and display available / occupied QR codes
 async function updateTotalAvailable() {
   try {
     const qrImageMap = await buildQRToImageMap();
@@ -179,7 +153,6 @@ async function updateTotalAvailable() {
   }
 }
 
-// Update total employees count
 async function updateTotalEmployees() {
   try {
     const el = document.getElementById("total_employees");
@@ -189,7 +162,6 @@ async function updateTotalEmployees() {
   }
 }
 
-// Setup event listeners
 function setupEventListeners() {
   const form = document.getElementById("employeeForm");
   if (form) {
@@ -244,7 +216,6 @@ function setupEventListeners() {
   document.addEventListener("focusin", autoFocusProximity);
 }
 
-// Debounce function
 function debounce(func, wait) {
   let timeout;
   return function executedFunction(...args) {
@@ -257,7 +228,6 @@ function debounce(func, wait) {
   };
 }
 
-// GET CURRENT ACTIVE FILTERS FROM FORM
 function getActiveFilters() {
   const searchForm = document.getElementById("searchForm");
   const filters = {};
@@ -274,13 +244,11 @@ function getActiveFilters() {
   return filters;
 }
 
-// CHECK IF ANY FILTERS ARE ACTIVE
 function hasActiveFilters() {
   const filters = getActiveFilters();
   return Object.keys(filters).length > 0;
 }
 
-// DISPLAY FILTER STATUS IN UI
 function displayFilterStatus() {
   const filters = getActiveFilters();
 
@@ -358,7 +326,6 @@ async function syncOrphanStatuses() {
         "info",
       );
 
-      // Invalidate caches so occupancy counts reflect the change
       employeeDataCache = null;
       qrImageMapCache = null;
 
@@ -374,7 +341,6 @@ async function syncOrphanStatuses() {
   }
 }
 
-// Load proximity code for editing
 async function loadEmployeeData(employeeId) {
   try {
     const response = await fetch(
@@ -450,7 +416,6 @@ async function renderEmployeeError(message = "Failed to load employee data.") {
   `;
 }
 
-// Render proximity code table with QR matching logic AND employee image display
 async function renderEmployeeTable() {
   const tbody = document.getElementById("employeeTableBody");
   const pagination = document.getElementById("pagination");
@@ -478,7 +443,6 @@ async function renderEmployeeTable() {
   const endIndex = startIndex + itemsPerPage;
   const currentEmployees = employees.slice(startIndex, endIndex);
 
-  // Fetch the full employee list (cached after first call)
   const qrImageMap = await buildQRToImageMap();
 
   tbody.innerHTML = currentEmployees
@@ -626,7 +590,6 @@ async function renderEmployeeTable() {
 // ─────────────────────────────────────────────────────────────────
 // SECURITY: data-attribute bridge functions
 // ─────────────────────────────────────────────────────────────────
-
 function toggleActionsPanel(btn) {
   const panel = btn.parentElement.querySelector(".actions-panel");
   const allPanels = document.querySelectorAll(".actions-panel");
@@ -661,8 +624,6 @@ function openEditFromBtn(btn) {
 }
 
 function openDeleteFromBtn(btn) {
-  // dataset.empId stores the employee row id (set as safeQr in the template above,
-  // but we actually need the numeric id — fixed below in renderEmployeeTable)
   openDeleteModal(btn.dataset.empId, false);
 }
 
@@ -699,7 +660,6 @@ function copyQRCode(code) {
   }
 }
 
-// Pagination functions
 function updatePaginationControls() {
   const paginationDiv = document.getElementById("pagination");
   if (!paginationDiv) return;
@@ -766,7 +726,6 @@ function goToPage(page) {
   }
 }
 
-// SEARCH EMPLOYEES
 function searchEmployees() {
   const searchForm = document.getElementById("searchForm");
   const searchQuery = document.getElementById("search_qr").value.trim();
@@ -782,7 +741,6 @@ function searchEmployees() {
   updateDeleteButtonState();
 }
 
-// CLEAR SEARCH
 function clearSearch() {
   const searchForm = document.getElementById("searchForm");
   if (searchForm) searchForm.reset();
@@ -828,7 +786,6 @@ async function openModal(action, employeeId = null) {
     const statusGroup = document.getElementById("statusToggleGroup");
     if (statusGroup) statusGroup.style.display = "none";
 
-    // RESET toggle to Enabled state for every new Add
     const toggle = document.getElementById("is_active_toggle");
     const hiddenInput = document.getElementById("is_active");
     const statusLabel = document.getElementById("statusLabel");
@@ -849,7 +806,6 @@ async function openModal(action, employeeId = null) {
   if (action === "add") qrCodeInput.focus();
 }
 
-// ENHANCED DELETE MODAL
 function openDeleteModal(employeeId = null, requireConfirmation = false) {
   const modal = document.getElementById("deleteModal");
   const confirmBtn = document.getElementById("confirmDeleteBtn");
@@ -982,7 +938,6 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
   });
 }
 
-// UPDATE DELETE BUTTON STATE
 function updateDeleteButtonState() {
   const deleteBtn = document.querySelector(".delete-all-btn .btn-danger");
   if (!deleteBtn) return;
@@ -1004,7 +959,6 @@ function updateDeleteButtonState() {
   }
 }
 
-// DELETE FILTERED PROXIMITY CODES
 async function deleteFilteredEmployees() {
   try {
     showLoading(true);
@@ -1131,7 +1085,6 @@ async function loadEmployees(
 
     activeFilters = filters;
 
-    // Strip 'remarks' before sending to backend — it's a computed field, not a DB column
     const {
       remarks: remarksFilter,
       status: statusFilter,
@@ -1158,7 +1111,6 @@ async function loadEmployees(
 
       populateFilter(employees);
 
-      // Apply remarks filter client-side (computed field, not stored in DB)
       if (remarksFilter) {
         const qrImageMap = await buildQRToImageMap();
         employees = employees.filter((emp) => {
@@ -1274,7 +1226,6 @@ async function handleFormSubmit(e) {
       );
       closeModal();
 
-      // Invalidate manpower cache so new assignments are reflected immediately
       employeeDataCache = null;
       qrImageMapCache = null;
 
@@ -1339,7 +1290,6 @@ function setupFileUploadHandler() {
   });
 }
 
-// DELETE SINGLE PROXIMITY CODE
 async function deleteEmployee(employeeId) {
   try {
     showLoading(true);
@@ -1376,7 +1326,6 @@ async function deleteEmployee(employeeId) {
   }
 }
 
-// DELETE ALL PROXIMITY CODES
 async function deleteAllEmployees(employeeId) {
   try {
     showLoading(true);
@@ -1412,7 +1361,6 @@ async function deleteAllEmployees(employeeId) {
   }
 }
 
-// SHOW ALERT
 function showAlert(message, type = "info") {
   document.querySelectorAll(".alert").forEach((a) => a.remove());
 
@@ -1437,12 +1385,10 @@ function showAlert(message, type = "info") {
   }, 5000);
 }
 
-// SHOW/HIDE LOADING
 function showLoading(show) {
   document.body.classList[show ? "add" : "remove"]("loading");
 }
 
-// Close modal when clicking outside
 window.onclick = function (event) {
   const modal = document.getElementById("employeeModal");
   if (event.target === modal) closeModal();

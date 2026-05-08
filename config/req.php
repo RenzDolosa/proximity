@@ -8,13 +8,14 @@ requireAccess('main', '../proximity.php', true);
 $access = getMenuAccess();
 
 $portalAccessGranted = isset($_SESSION['portal_access_granted']) && $_SESSION['portal_access_granted'] === true;
+$userId    = $_SESSION['user_id'] ?? '';
 
 if ($portalAccessGranted) {
   $isAdministrator = isset($_SESSION['user_group']) && $_SESSION['user_group'] === 'Administrator';
 
   if (!$isAdministrator) {
     $accessTime = $_SESSION['portal_access_time'] ?? 0;
-    if (time() - $accessTime > 600) { // 10 minutes
+    if (time() - $accessTime > 600) {
       unset($_SESSION['portal_access_granted']);
       unset($_SESSION['portal_access_time']);
       $portalAccessGranted = false;
@@ -23,7 +24,6 @@ if ($portalAccessGranted) {
   }
 }
 
-// Function to get current user's password hash from database
 function getCurrentUserPasswordHash($userId)
 {
   try {
@@ -38,13 +38,11 @@ function getCurrentUserPasswordHash($userId)
   }
 }
 
-// Function to check if portal is secure from other pages
 function isPortalSecure()
 {
   return isset($_SESSION['portal_access_granted']) && $_SESSION['portal_access_granted'] === true;
 }
 
-// Function to redirect to portal if not secure (call this from other pages)
 function redirectToPortalIfNotSecure()
 {
   if (!isPortalSecure()) {
@@ -53,54 +51,48 @@ function redirectToPortalIfNotSecure()
   }
 }
 
-// Handle portal password verification using current user's password
 if (isset($_POST['portal_password'])) {
   $submittedPassword = $_POST['portal_password'];
 
-  // Add rate limiting to prevent brute force
   $rateLimitKey = 'portal_attempts_' . $userId;
   $attempts = $_SESSION[$rateLimitKey] ?? 0;
   $lastAttempt = $_SESSION[$rateLimitKey . '_time'] ?? 0;
 
-  // Reset attempts if more than 5 minutes passed
   if (time() - $lastAttempt > 10) {
     $attempts = 0;
   }
 
-  // Check if too many attempts
   if ($attempts >= 10) {
     $timeRemaining = 10 - (time() - $lastAttempt);
     if ($timeRemaining > 0) {
       logSystemAction($userId, 'PORTAL_ACCESS_BLOCKED', 'Too many failed attempts');
       $error = "Too many failed attempts. Please try again in " . ceil($timeRemaining / 60) . " minutes.";
     } else {
-      $attempts = 0; // Reset if cooldown period passed
+      $attempts = 0;
     }
   }
 
   if (!isset($error)) {
-    // Get current user's password hash from database
     $userPasswordHash = getCurrentUserPasswordHash($userId);
 
     if ($userPasswordHash === null) {
       logSystemAction($userId, 'PORTAL_ACCESS_ERROR', 'Failed to retrieve user password');
       $error = "System error. Please try again or contact support.";
     } else {
-      // Verify password against user's actual password
       if (password_verify($submittedPassword, $userPasswordHash)) {
         $_SESSION['portal_access_granted'] = true;
         $_SESSION['portal_access_time'] = time();
-        unset($_SESSION[$rateLimitKey]); // Clear failed attempts
+        unset($_SESSION[$rateLimitKey]);
         unset($_SESSION[$rateLimitKey . '_time']);
         logSystemAction($userId, 'PORTAL_ACCESS_GRANTED', 'Portal access granted using user password');
-        header('Location: ../portal.php'); // Redirect to prevent form resubmission
+        header('Location: ../portal.php');
         exit();
       } else {
         $attempts++;
         $_SESSION[$rateLimitKey] = $attempts;
         $_SESSION[$rateLimitKey . '_time'] = time();
         logSystemAction($userId, 'PORTAL_ACCESS_DENIED', 'Invalid user password attempt');
-        $error = "Incorrect password. Attempt $attempts of 5.";
+        $error = "Incorrect password. Attempt $attempts of 10.";
       }
     }
   }
@@ -114,10 +106,8 @@ function maskEmail(string $email): string
   $len = strlen($local);
 
   if ($len <= 4) {
-    // e.g. "ab@…" → "a*@…"
     $masked = $local[0] . str_repeat('*', max(1, $len - 1));
   } else {
-    // Show first 2 + stars + last 2
     $masked = substr($local, 0, 2)
       . str_repeat('*', $len - 4)
       . substr($local, -2);
@@ -133,14 +123,14 @@ function maskUsername(string $name): string
   if ($len <= 2) return $name[0] . '*';
   if ($len === 3) return $name[0] . '*' . $name[2];
 
-  // Show first + stars + last
   return $name[0]
     . str_repeat('*', $len - 2)
     . $name[$len - 1];
 }
 
 $firstName = $_SESSION['first_name'] ?? '';
-$lastName = $_SESSION['last_name'] ?? '';
+$lastName  = $_SESSION['last_name'] ?? '';
+$email     = $_SESSION['email'] ?? '';
 
 if (!$portalAccessGranted) {
 ?>

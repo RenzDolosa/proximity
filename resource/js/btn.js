@@ -3,7 +3,6 @@
 window.addEventListener("load", () => window.focus());
 document.addEventListener("click", () => window.focus());
 
-// Debounce flag to prevent rapid Escape presses
 let escapeProcessing = false;
 
 document.addEventListener("keydown", function (e) {
@@ -16,7 +15,6 @@ document.addEventListener("keydown", function (e) {
   const logsModal = document.getElementById("logsModal");
   const cpOverlay = document.getElementById("cpOverlay");
 
-  // Check if any modal is currently visible using computed styles
   const isAnyModalOpen = [
     employeeModal,
     deleteModal,
@@ -31,9 +29,7 @@ document.addEventListener("keydown", function (e) {
     return display !== "none" && visibility !== "hidden";
   });
 
-  // If a modal is open, close it
   if (isAnyModalOpen) {
-    // Determine which modal to close and call appropriate close function
     if (
       cameraModal &&
       (window.getComputedStyle(cameraModal).display === "flex" ||
@@ -69,7 +65,6 @@ document.addEventListener("keydown", function (e) {
     return;
   }
 
-  // No modals open, navigate back
   escapeProcessing = true;
 
   if (window.self !== window.top) {
@@ -78,7 +73,6 @@ document.addEventListener("keydown", function (e) {
     window.history.back();
   }
 
-  // Reset flag after navigation or timeout
   setTimeout(() => {
     escapeProcessing = false;
   }, 500);

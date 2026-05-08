@@ -4,12 +4,10 @@
 require_once __DIR__ . '/../../config/config.php';
 
 // ── Security headers ──────────────────────────────────────────────────────────
-// Send before any output. Skip for file-serving responses (handled later).
 if (!isset($_GET['serve_file']) && !isset($_GET['api_info']) && !isset($_GET['health_check'])) {
   header('X-Content-Type-Options: nosniff');
   header('X-Frame-Options: DENY');
   header('Referrer-Policy: strict-origin-when-cross-origin');
-  // Tighten CSP to match your actual CDN/asset sources
   header("Content-Security-Policy: default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com;");
 }
 
@@ -18,12 +16,10 @@ if (!function_exists('sanitizeInput')) {
   function sanitizeInput($input)
   {
     if (is_null($input)) return '';
-    // Strip tags first, then encode remaining HTML-special chars
     return htmlspecialchars(strip_tags(trim((string)$input)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
   }
 }
 
-// Safety-net: re-assert PHP timezone
 if (!defined('APP_TIMEZONE')) {
   define('APP_TIMEZONE',    'Asia/Manila');
   define('APP_TIMEZONE_TZ', '+08:00');
@@ -31,7 +27,6 @@ if (!defined('APP_TIMEZONE')) {
 date_default_timezone_set(APP_TIMEZONE);
 
 // ── Safe json_decode wrapper ──────────────────────────────────────────────────
-// Limits nesting depth and throws on malformed JSON.
 function safeJsonDecode($json, $assoc = true, $depth = 32)
 {
   if (!is_string($json) || $json === '') return null;
@@ -62,7 +57,7 @@ const ALLOWED_GET_ACTIONS = [
   'check_qr',
   'stats',
   'user_info',
-  'sync_orphans',   // ← ADD THIS LINE
+  'sync_orphans',
 ];
 
 class Database
@@ -188,7 +183,6 @@ class EmployeeManager
 
   public function updateEmployee($id, $data)
   {
-    // Use date() instead of NOW() so the PHP timezone (Asia/Manila) is respected
     $query = "UPDATE " . $this->table . " 
                       SET qr_code = :qr_code, is_active = :is_active, updated_at = :updated_at
                       WHERE id = :id";
@@ -267,7 +261,6 @@ class EmployeeManager
         ];
       }
 
-      // ── Code DISABLED → set employee Inactive ────────────────────────────
       if ((int)$codeIsActive === 0) {
         if ($employee['status'] === 'Inactive') {
           return [
@@ -286,7 +279,6 @@ class EmployeeManager
         );
         $upd->execute([':ts' => $now, ':id' => $employee['id']]);
 
-        // Log to status_history
         try {
           $hist = $userConn->prepare(
             "INSERT INTO status_history
@@ -320,7 +312,6 @@ class EmployeeManager
         ];
       }
 
-      // ── Code ENABLED → restore employee to Active ─────────────────────────
       if ($employee['status'] === 'Active') {
         return [
           'success' => true,
@@ -1030,13 +1021,9 @@ try {
         break;
 
       case 'sync_orphans':
-        // ── Set Inactive any employee whose QR code is:
-        //      (a) not present in the `code` table at all, OR
-        //      (b) present but has is_active = 0
         try {
           $userConn = $database->getUserConnection();
 
-          // (a) QR code missing from `code` table entirely
           $stmtMissing = $userConn->prepare(
             "SELECT e.id, e.fullname, e.status, e.qr_code
              FROM employees e
@@ -1052,7 +1039,6 @@ try {
           $stmtMissing->execute();
           $missing = $stmtMissing->fetchAll(PDO::FETCH_ASSOC);
 
-          // (b) QR code exists in `code` but is disabled
           $stmtDisabled = $userConn->prepare(
             "SELECT e.id, e.fullname, e.status, e.qr_code
              FROM employees e
@@ -1064,7 +1050,6 @@ try {
           $stmtDisabled->execute();
           $disabled = $stmtDisabled->fetchAll(PDO::FETCH_ASSOC);
 
-          // Merge; deduplicate by employee id
           $seen       = [];
           $toProcess  = [];
           foreach (array_merge($missing, $disabled) as $row) {
@@ -1087,7 +1072,6 @@ try {
             $updStmt->execute([':ts' => $now, ':id' => $emp['id']]);
 
             if ($updStmt->rowCount() > 0) {
-              // Determine reason
               $isMissing = !in_array(
                 $emp['id'],
                 array_column($disabled, 'id'),
@@ -1134,27 +1118,26 @@ try {
 
           $stmtRestore = $userConn->prepare(
             "SELECT e.id, e.fullname, e.status, e.qr_code
-   FROM employees e
-   INNER JOIN code c
-     ON LOWER(TRIM(c.qr_code)) = LOWER(TRIM(e.qr_code))
-   WHERE c.is_active = 1
-     AND e.status = 'Inactive'"
+              FROM employees e
+              INNER JOIN code c
+                ON LOWER(TRIM(c.qr_code)) = LOWER(TRIM(e.qr_code))
+              WHERE c.is_active = 1
+                AND e.status = 'Inactive'"
           );
           $stmtRestore->execute();
           $toRestore = $stmtRestore->fetchAll(PDO::FETCH_ASSOC);
 
           foreach ($toRestore as $emp) {
-            // Only auto-restore if last status_history reason was an auto-disable
             $histStmt = $userConn->prepare(
               "SELECT change_reason FROM status_history
-     WHERE employee_id = :id
-     ORDER BY created_at DESC LIMIT 1"
+                WHERE employee_id = :id
+                ORDER BY created_at DESC LIMIT 1"
             );
             $histStmt->execute([':id' => $emp['id']]);
             $lastReason = $histStmt->fetchColumn();
 
             if (!$lastReason || strpos($lastReason, 'Auto-disabled') === false) {
-              continue; // manually set Inactive — don't touch
+              continue;
             }
 
             $updStmt = $userConn->prepare(

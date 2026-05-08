@@ -1,19 +1,16 @@
 // resource/js/dtl.js --> datalog table
 
-// Global variables
 let currentAction = "add";
 let employees = [];
 let employeeDataCache = null;
 let qrImageMapCache = null;
 
-// Update variables
 let autoUpdateInterval = null;
 let autoUpdateEnabled = false;
 let lastUpdateTimestamp = null;
 let userActivityTimer = null;
 let isUserActive = false;
 
-// Pagination variables
 let currentPage = 1;
 const itemsPerPage = 25;
 let totalPages = 1;
@@ -38,7 +35,6 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
-// SECURITY: Standalone toProperCase — replaces String.prototype pollution
 function toProperCase(str) {
   if (!str) return "";
   return String(str).replace(/[^\s,\-]+/g, function (txt) {
@@ -46,17 +42,13 @@ function toProperCase(str) {
   });
 }
 
-// Setup event listeners
 function setupEventListeners() {
-  // Form submission
   document
     .getElementById("employeeForm")
     ?.addEventListener("submit", handleFormSubmit);
 
-  // File upload handler
   setupFileUploadHandler();
 
-  // Search form inputs
   const searchInputs = document.querySelectorAll(
     "#searchForm input, #searchForm select",
   );
@@ -65,7 +57,6 @@ function setupEventListeners() {
     input.addEventListener("input", debounce(searchEmployees, 300));
   });
 
-  // 🔥 AUTO-FOCUS LOGIC
   const proximityInput = document.getElementById("search_qr");
 
   function autoFocusProximity() {
@@ -85,22 +76,18 @@ function setupEventListeners() {
   document.addEventListener("click", autoFocusProximity);
   document.addEventListener("focusin", autoFocusProximity);
 
-  // Auto-update toggle
   const autoUpdateToggle = document.getElementById("autoUpdateToggle");
   if (autoUpdateToggle) {
     autoUpdateToggle.addEventListener("change", toggleAutoUpdate);
   }
 
-  // Auto-update interval selector
   const intervalSelector = document.getElementById("updateInterval");
   if (intervalSelector) {
     intervalSelector.addEventListener("change", updateAutoUpdateInterval);
   }
 }
 
-// Initialize auto-update functionality
 function initializeAutoUpdate() {
-  // Check if auto-update elements exist before initializing
   const toggle = document.getElementById("autoUpdateToggle");
   const intervalSelector = document.getElementById("updateInterval");
 
@@ -109,9 +96,8 @@ function initializeAutoUpdate() {
     return;
   }
 
-  // Start with auto-update enabled and default interval
   autoUpdateEnabled = toggle.checked || false;
-  const defaultInterval = parseInt(intervalSelector.value) || 30000; // Default to 30 seconds
+  const defaultInterval = parseInt(intervalSelector.value) || 30000;
 
   if (autoUpdateEnabled) {
     startAutoUpdate(defaultInterval);
@@ -121,7 +107,6 @@ function initializeAutoUpdate() {
   setupUserActivityTracking();
 }
 
-// Setup user activity tracking
 function setupUserActivityTracking() {
   const activityEvents = [
     "mousedown",
@@ -137,7 +122,6 @@ function setupUserActivityTracking() {
   });
 }
 
-// Toggle auto-update on/off
 function toggleAutoUpdate() {
   const toggle = document.getElementById("autoUpdateToggle");
   autoUpdateEnabled = toggle ? toggle.checked : !autoUpdateEnabled;
@@ -154,7 +138,6 @@ function toggleAutoUpdate() {
   updateAutoUpdateUI();
 }
 
-// Update auto-update interval
 function updateAutoUpdateInterval() {
   if (autoUpdateEnabled) {
     const interval = getSelectedInterval();
@@ -166,7 +149,6 @@ function updateAutoUpdateInterval() {
   }
 }
 
-// Format interval for display
 function formatInterval(intervalMs) {
   if (intervalMs < 60000) {
     return `${intervalMs / 1000}s`;
@@ -176,20 +158,18 @@ function formatInterval(intervalMs) {
   }
 }
 
-// Get selected update interval
 function getSelectedInterval() {
   const selector = document.getElementById("updateInterval");
   return selector ? parseInt(selector.value) || 30000 : 30000;
 }
 
-// Start auto-update
 function startAutoUpdate(intervalMs) {
   stopAutoUpdate();
 
   autoUpdateInterval = setInterval(() => {
     if (autoUpdateEnabled && !isUserActive) {
       console.log("Performing auto-update...");
-      loadEmployeesAuto(); // activeFilters handled inside
+      loadEmployeesAuto();
     } else if (isUserActive) {
       console.log("Skipping auto-update - user is active");
     }
@@ -200,7 +180,6 @@ function startAutoUpdate(intervalMs) {
   );
 }
 
-// Stop auto-update
 function stopAutoUpdate() {
   if (autoUpdateInterval) {
     clearInterval(autoUpdateInterval);
@@ -209,31 +188,27 @@ function stopAutoUpdate() {
   }
 }
 
-// Check if employee data has changed
 function checkForChanges(newData) {
   if (!employees || employees.length !== newData.length) {
     return true;
   }
 
-  // Create a map for faster lookup and comparison
   const oldEmployeeMap = new Map(
     employees.map((emp) => [emp.id, JSON.stringify(emp)]),
   );
 
-  // Compare each employee record
   for (const newEmp of newData) {
     const oldEmpJson = oldEmployeeMap.get(newEmp.id);
     const newEmpJson = JSON.stringify(newEmp);
 
     if (!oldEmpJson || oldEmpJson !== newEmpJson) {
-      return true; // Employee added, removed, or modified
+      return true;
     }
   }
 
   return false;
 }
 
-// Update statistic with animation
 function updateStatistic(elementId, newValue) {
   const element = document.getElementById(elementId);
   if (element && element.textContent !== newValue.toLocaleString()) {
@@ -243,7 +218,6 @@ function updateStatistic(elementId, newValue) {
   }
 }
 
-// Update auto-update UI elements - Fixed
 function updateAutoUpdateUI() {
   const toggle = document.getElementById("autoUpdateToggle");
   const status = document.getElementById("autoUpdateStatus");
@@ -273,26 +247,22 @@ function updateAutoUpdateUI() {
     lastUpdate.style.display = "none";
   }
 
-  // Enable/disable interval selector based on auto-update status
   if (intervalSelector) {
     intervalSelector.disabled = !autoUpdateEnabled;
     intervalSelector.style.opacity = autoUpdateEnabled ? "1" : "0.5";
   }
 }
 
-// Handle user activity - Fixed timing
 function handleUserActivity() {
   isUserActive = true;
   clearTimeout(userActivityTimer);
 
-  // Resume auto-update after 5 seconds of inactivity
   userActivityTimer = setTimeout(() => {
     isUserActive = false;
     console.log("User activity paused, resuming auto-update");
-  }, 1000); // Increased from 1 second to 5 seconds
+  }, 1000);
 }
 
-// Show subtle notification for auto-updates
 function showAutoUpdateNotification() {
   const notification = document.getElementById("autoUpdateNotification");
   if (notification) {
@@ -310,7 +280,6 @@ function showAutoUpdateNotification() {
       transition: opacity 0.3s ease;
     `;
 
-    // Fade out after 3 seconds
     setTimeout(() => {
       if (notification) {
         notification.style.opacity = "0";
@@ -324,10 +293,8 @@ function showAutoUpdateNotification() {
   }
 }
 
-// Auto-load employees (silent update) - Fixed error handling
 async function loadEmployeesAuto(filters = {}) {
   try {
-    // Always use the currently active filters — never override with form state
     const filtersToUse =
       Object.keys(activeFilters).length > 0
         ? activeFilters
@@ -335,7 +302,6 @@ async function loadEmployeesAuto(filters = {}) {
           ? getActiveFilters()
           : {};
 
-    // Build params using the SAME translation logic as loadEmployees
     const params = new URLSearchParams({ action: "get" });
 
     params.append("page", currentPage);
@@ -355,7 +321,7 @@ async function loadEmployeesAuto(filters = {}) {
       } else if (key === "user_id" && value === "__none__") {
         params.append("user_id_none", "1");
       } else if (key === "user_id") {
-        params.append("gate_name", value); // translate user_id → gate_name
+        params.append("gate_name", value);
       } else {
         params.append(key, value);
       }
@@ -412,12 +378,10 @@ async function loadEmployeesAuto(filters = {}) {
   }
 }
 
-// Handle network errors for auto-update
 let networkErrorCount = 0;
 function handleNetworkError() {
   networkErrorCount++;
 
-  // Disable auto-update after 3 consecutive network errors
   if (networkErrorCount >= 3) {
     stopAutoUpdate();
     autoUpdateEnabled = false;
@@ -426,11 +390,10 @@ function handleNetworkError() {
       "Auto-update disabled due to repeated connection issues",
       "warning",
     );
-    networkErrorCount = 0; // Reset counter
+    networkErrorCount = 0;
   }
 }
 
-// Reset network error counter on successful update
 function resetNetworkErrorCount() {
   if (networkErrorCount > 0) {
     networkErrorCount = 0;
@@ -438,7 +401,6 @@ function resetNetworkErrorCount() {
   }
 }
 
-// Debounce function
 function debounce(func, wait) {
   let timeout;
   return function executedFunction(...args) {
@@ -451,7 +413,6 @@ function debounce(func, wait) {
   };
 }
 
-// GET CURRENT ACTIVE FILTERS FROM FORM
 function getActiveFilters() {
   const searchForm = document.getElementById("searchForm");
   const filters = {};
@@ -464,40 +425,34 @@ function getActiveFilters() {
     }
   }
 
-  // Convert special none value so backend can match empty/null position
   if (filters.position === "__none__") {
-    filters.position = "__none__"; // handled separately in loadEmployees
+    filters.position = "__none__";
   }
 
-  // Convert special none value so backend can match empty/null brand
   if (filters.brand === "__none__") {
-    filters.brand = "__none__"; // handled separately in loadEmployees
+    filters.brand = "__none__";
   }
 
-  // Convert special none value so backend can match empty/null violation
   if (filters.violation === "__none__") {
-    filters.violation = "__none__"; // handled separately in loadEmployees
+    filters.violation = "__none__";
   }
 
   if (filters.user_id === "__none__") {
-    filters.user_id = "__none__"; // handled separately in loadEmployees
+    filters.user_id = "__none__";
   }
 
   return filters;
 }
 
-// CHECK IF ANY FILTERS ARE ACTIVE
 function hasActiveFilters() {
   const filters = getActiveFilters();
   return Object.keys(filters).length > 0;
 }
 
-// DISPLAY FILTER STATUS IN UI
 function displayFilterStatus() {
   const filters = getActiveFilters();
   const filterInfo = document.createElement("div");
 
-  // Remove existing filter status if any
   const existingStatus = document.getElementById("filter-status");
   if (existingStatus) {
     existingStatus.remove();
@@ -518,33 +473,27 @@ function displayFilterStatus() {
       align-items: center;
     `;
 
-    // Create a container for the icon and text
     const filterLabel = document.createElement("span");
     filterLabel.style.display = "inline-flex";
     filterLabel.style.alignItems = "center";
     filterLabel.style.gap = "8px";
 
-    // Create and add the icon element
     const icon = document.createElement("i");
     icon.className = "fas fa-filter";
     filterLabel.appendChild(icon);
 
-    // Add the text content
     const textSpan = document.createElement("span");
     textSpan.appendChild(document.createTextNode("Active Filters: "));
 
-    // Build filter parts with proper strong elements and proper text formatting
     const filterEntries = Object.entries(filters);
     filterEntries.forEach(([key, value], index) => {
       if (index > 0) {
         textSpan.appendChild(document.createTextNode(" | "));
       }
 
-      // Create strong element for the key
       const strong = document.createElement("strong");
-      // Convert key to proper case (capitalize first letter of each word)
       const properKey = key
-        .split(/(?=[A-Z])/) // Split on capital letters
+        .split(/(?=[A-Z])/)
         .map(
           (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
         )
@@ -552,7 +501,6 @@ function displayFilterStatus() {
       strong.textContent = `${properKey}:`;
       textSpan.appendChild(strong);
 
-      // Add the value
       textSpan.appendChild(document.createTextNode(` ${value}`));
     });
 
@@ -566,10 +514,8 @@ function displayFilterStatus() {
   }
 }
 
-// Fetch employee data from manpower_backend.php and cache it
 async function getManpowerEmployeeData() {
   try {
-    // Return cached data if available
     if (employeeDataCache) {
       return employeeDataCache;
     }
@@ -584,7 +530,6 @@ async function getManpowerEmployeeData() {
     if (response.ok) {
       const data = await response.json();
       if (data.success && Array.isArray(data.data)) {
-        // Cache the employee data
         employeeDataCache = data.data;
         return data.data;
       }
@@ -596,9 +541,8 @@ async function getManpowerEmployeeData() {
   return [];
 }
 
-// Build a map of QR codes to employee images and details
 async function buildQRToImageMap() {
-  if (qrImageMapCache) return qrImageMapCache; // Return cached map
+  if (qrImageMapCache) return qrImageMapCache;
 
   const manpowerEmployees = await getManpowerEmployeeData();
   const qrImageMap = {};
@@ -616,11 +560,10 @@ async function buildQRToImageMap() {
       };
     }
   });
-  qrImageMapCache = qrImageMap; // Cache it
+  qrImageMapCache = qrImageMap;
   return qrImageMap;
 }
 
-// Load single employee data for editing
 async function loadEmployeeData(employeeId) {
   try {
     const response = await fetch(
@@ -638,7 +581,6 @@ async function loadEmployeeData(employeeId) {
     if (data.success && data.data) {
       const employee = data.data;
 
-      // Populate form fields
       const fields = {
         employee_id: employee.id,
         fullname: employee.fullname || "",
@@ -659,7 +601,6 @@ async function loadEmployeeData(employeeId) {
         }
       });
 
-      // Update file upload label if image exists
       const fileLabel = document.querySelector(".file-upload-label");
       if (fileLabel) {
         if (employee.image) {
@@ -696,7 +637,6 @@ async function renderEmployeeError(message = "Failed to load employee data.") {
 
   if (noDataDiv) noDataDiv.style.display = "none";
 
-  // SECURITY: escapeHtml on message in case it contains user-influenced content
   tbody.innerHTML = `
     <tr>
       <td colspan="13" style="text-align: center; padding: 20px; color: #c0392b;">
@@ -706,7 +646,6 @@ async function renderEmployeeError(message = "Failed to load employee data.") {
   `;
 }
 
-// Render employee table
 async function renderEmployeeTable() {
   const tbody = document.getElementById("employeeTableBody");
   const paginationDiv = document.getElementById("pagination");
@@ -726,19 +665,14 @@ async function renderEmployeeTable() {
 
   if (noDataDiv) noDataDiv.style.display = "none";
 
-  const currentEmployees = employees; // already paginated by server
+  const currentEmployees = employees;
   const startIndex = (currentPage - 1) * itemsPerPage;
 
-  // Get current user ID asynchronously
   const currentUserId = await getCurrentUserId();
-
-  // 🆕 Build QR to image map from manpower_backend
   const qrImageMap = await buildQRToImageMap();
 
-  // Render table rows
   tbody.innerHTML = currentEmployees
     .map((employee, index) => {
-      // SECURITY: escapeHtml on ALL employee fields used in innerHTML
       const safeFullname = escapeHtml(employee.fullname);
       const safePosition = escapeHtml(employee.position);
       const safeBrand = escapeHtml(employee.brand);
@@ -749,22 +683,18 @@ async function renderEmployeeTable() {
       const safeImage = escapeHtml(employee.image);
       const safeId = escapeHtml(String(employee.id));
       const safeEmpId = escapeHtml(String(employee.employee_id));
-      // 🆕 Get matched employee data from manpower_backend
       const matchedEmployeeData =
         qrImageMap[employee.qr_code.trim().toLowerCase()];
 
-      // Determine which image to display
       let imageUrl = null;
       let displayName = employee.fullname || "N/A";
       let tooltipText = displayName;
 
       if (matchedEmployeeData && matchedEmployeeData.image) {
-        // Use image from manpower_backend if QR matches
         imageUrl = `${window.location.origin}/../public/uploads/user/${matchedEmployeeData.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${matchedEmployeeData.image}`;
         displayName = matchedEmployeeData.fullname || employee.fullname;
         tooltipText = `${matchedEmployeeData.fullname}\n${matchedEmployeeData.position}\n${matchedEmployeeData.brand}`;
       } else if (employee.image) {
-        // Fallback to datalog's own image
         imageUrl = `${window.location.origin}/../public/uploads/user/${employee.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${employee.image}`;
         tooltipText = `${employee.fullname}\n${employee.position}\n${employee.brand}`;
       }
@@ -778,7 +708,6 @@ async function renderEmployeeTable() {
 
       const isAboveFold = index < 5;
 
-      // SECURITY: Use encodeURIComponent for URL params, escapeHtml for HTML attrs
       const thumbSrc = `${window.location.origin}/public/uploads/user/thumb_${safeImage}`;
       const imageSrc = `${window.location.origin}/public/uploads/user/${safeImage}`;
 
@@ -903,12 +832,6 @@ async function renderEmployeeTable() {
   updatePaginationControls();
 }
 
-// ─────────────────────────────────────────────────────────────────
-// SECURITY: data-attribute bridge functions
-// These replace inline onclick string interpolation, preventing
-// injection of arbitrary JS through employee field values.
-// ─────────────────────────────────────────────────────────────────
-
 function toggleActionsPanel(btn) {
   const panel = btn.parentElement.querySelector(".actions-panel");
   const allPanels = document.querySelectorAll(".actions-panel");
@@ -958,11 +881,9 @@ function openViolationPopupFromBtn(btn) {
 }
 
 function copyQRCodeFromCell(td) {
-  // SECURITY: read from data attribute, not from rendered text
   copyQRCode(td.dataset.qr);
 }
 
-// Get current user ID with better error handling
 async function getCurrentUserId() {
   try {
     const response = await fetch("../helper/get_user_id.php", {
@@ -985,28 +906,19 @@ async function getCurrentUserId() {
   return "default";
 }
 
-// Copy QR code to clipboard
 function copyQRCode(code) {
-  // Create a temporary textarea element to hold the text
   const tempTextArea = document.createElement("textarea");
   tempTextArea.value = code;
   document.body.appendChild(tempTextArea);
 
-  // Select and copy the text
   tempTextArea.select();
-  tempTextArea.setSelectionRange(0, 99999); // For mobile devices
+  tempTextArea.setSelectionRange(0, 99999);
 
   try {
-    // Copy the text to clipboard
     document.execCommand("copy");
-
-    // Show success message (optional)
     showAlert("Proximity code copied to clipboard!");
 
-    // Alternative: Use a more subtle notification
-    // console.log('QR code copied:', code);
   } catch (err) {
-    // Fallback for modern browsers using the Clipboard API
     if (navigator.clipboard) {
       navigator.clipboard
         .writeText(code)
@@ -1021,11 +933,9 @@ function copyQRCode(code) {
     }
   }
 
-  // Remove the temporary textarea
   document.body.removeChild(tempTextArea);
 }
 
-// Pagination functions
 function updatePaginationControls() {
   const paginationDiv = document.getElementById("pagination");
   if (!paginationDiv) return;
@@ -1052,7 +962,6 @@ function updatePaginationControls() {
   const sorted = [...range].sort((a, b) => a - b);
   let prev = null;
   let buttonsHTML = "";
-  // ✅ REMOVED: let totalRecords = 0; — now uses the global variable
 
   for (const p of sorted) {
     if (prev !== null && p - prev > 1) {
@@ -1095,7 +1004,6 @@ function goToPage(page) {
   }
 }
 
-// SEARCH EMPLOYEES
 function searchEmployees() {
   const searchForm = document.getElementById("searchForm");
   const searchQuery = document.getElementById("search_qr").value.trim();
@@ -1113,7 +1021,6 @@ function searchEmployees() {
   updateDeleteButtonState();
 }
 
-// CLEAR SEARCH
 function clearSearch() {
   const searchForm = document.getElementById("searchForm");
   if (searchForm) searchForm.reset();
@@ -1127,17 +1034,15 @@ function clearSearch() {
   loadEmployees({}, false, true);
 }
 
-// Force refresh with improved UX
 function forceRefresh() {
   showLoading(true);
-  isUserActive = true; // Prevent auto-update during manual refresh
+  isUserActive = true;
 
   loadEmployees()
     .then(() => {
       showAlert("Employee data refreshed manually", "success");
-      resetNetworkErrorCount(); // Reset network error counter on successful refresh
+      resetNetworkErrorCount();
 
-      // Resume auto-update tracking after a short delay
       setTimeout(() => {
         isUserActive = false;
       }, 2000);
@@ -1174,7 +1079,6 @@ function showFullnameSuggestions(query) {
     return;
   }
 
-  // SECURITY: escapeHtml on name before inserting into innerHTML
   list.innerHTML = matches
     .map((name, i) => {
       const safeName = escapeHtml(name);
@@ -1201,7 +1105,6 @@ function showFullnameSuggestions(query) {
   suggestionIndex = -1;
 }
 
-// SECURITY: read name from data-value attribute instead of string interpolation
 function selectSuggestionFromLi(li) {
   selectSuggestion(li.dataset.value);
 }
@@ -1209,7 +1112,6 @@ function selectSuggestionFromLi(li) {
 function selectSuggestion(name) {
   const input = document.getElementById("search_fullname");
   const list = document.getElementById("fullname-suggestions");
-  // SECURITY: .value assignment is safe (no HTML injection)
   if (input) input.value = name;
   if (list) list.style.display = "none";
   suggestionIndex = -1;
@@ -1239,7 +1141,6 @@ function handleSuggestionNav(e) {
     highlightSuggestion(suggestionIndex);
   } else if (e.key === "Enter" && suggestionIndex >= 0) {
     e.preventDefault();
-    // SECURITY: read from data attribute
     selectSuggestion(items[suggestionIndex].dataset.value);
   } else if (e.key === "Escape") {
     list.style.display = "none";
@@ -1247,7 +1148,6 @@ function handleSuggestionNav(e) {
   }
 }
 
-// Close suggestions when clicking outside
 document.addEventListener("click", function (e) {
   const list = document.getElementById("fullname-suggestions");
   const input = document.getElementById("search_fullname");
@@ -1257,7 +1157,6 @@ document.addEventListener("click", function (e) {
   }
 });
 
-// ENHANCED DELETE MODAL
 function openDeleteModal(employeeId = null, requireConfirmation = false) {
   const modal = document.getElementById("deleteModal");
   const confirmBtn = document.getElementById("confirmDeleteBtn");
@@ -1276,10 +1175,8 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
 
   if (requireConfirmation) {
     if (hasFilters) {
-      // SECURITY: textContent for title, DOM construction for message
       modalTitle.textContent = "⚠️ Delete Filtered Employees";
 
-      // Build message safely using DOM methods
       const msgDiv = document.createElement("div");
       const p1 = document.createElement("p");
       p1.style.marginBottom = "15px";
@@ -1302,7 +1199,6 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
           .join(" ");
         keyStrong.textContent = properKey + ":";
         row.appendChild(keyStrong);
-        // SECURITY: textContent for filter values — no XSS
         row.appendChild(document.createTextNode(" " + value));
         filterBox.appendChild(row);
       });
@@ -1404,7 +1300,6 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
   });
 }
 
-// UPDATE DELETE BUTTON STATE based on active filters
 function updateDeleteButtonState() {
   const deleteBtn = document.querySelector(".delete-all-btn .btn-danger");
   if (!deleteBtn) return;
@@ -1426,12 +1321,10 @@ function updateDeleteButtonState() {
   }
 }
 
-// DELETE EMPLOYEES BASED ON ACTIVE FILTERS
 async function deleteFilteredEmployees() {
   try {
     showLoading(true);
 
-    // Fetch ALL filtered log IDs from backend (no pagination)
     const params = new URLSearchParams({
       action: "get",
       page: 1,
@@ -1531,7 +1424,6 @@ function openViolationPopup(fullname, violation, employeeId) {
     ts: new Date().toISOString(),
   });
 
-  // Build popup using DOM methods — no innerHTML with raw user data
   const overlay = document.createElement("div");
   overlay.id = "violationPopupOverlay";
   overlay.style.cssText = `
@@ -1545,14 +1437,12 @@ function openViolationPopup(fullname, violation, employeeId) {
   card.style.cssText = `background:#fff;border:0.5px solid #e2e8f0;border-radius:12px;
     padding:1.25rem;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.12);`;
 
-  // Header row
   const header = document.createElement("div");
   header.style.cssText =
     "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;";
 
   const headerLabel = document.createElement("span");
   headerLabel.style.cssText = "font-size:13px;font-weight:500;color:#64748b;";
-  // SECURITY: textContent for fullname
   headerLabel.textContent = `${fullname} — Remarks`;
 
   const footer = document.createElement("div");
@@ -1568,7 +1458,6 @@ function openViolationPopup(fullname, violation, employeeId) {
   header.appendChild(headerLabel);
   header.appendChild(closeBtn);
 
-  // Body row
   const body = document.createElement("div");
   body.style.cssText =
     "display:flex;align-items:flex-start;justify-content:space-between;gap:12px;";
@@ -1576,7 +1465,6 @@ function openViolationPopup(fullname, violation, employeeId) {
   const violationText = document.createElement("div");
   violationText.style.cssText =
     "font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;flex:1;max-height:200px;overflow-y:auto;word-break:break-word;";
-  // SECURITY: textContent for violation content
   violationText.textContent = violation;
 
   const attachBtn = document.createElement("button");
@@ -1643,7 +1531,6 @@ function populateFilter(employeeList) {
   )
     return;
 
-  // Convert a string to Proper Case
   function toProperCase(str) {
     return str.replace(
       /[^\s,\-]+/g,
@@ -1651,7 +1538,6 @@ function populateFilter(employeeList) {
     );
   }
 
-  // Rebuild a <select>; values is a Map<lowerKey, originalValue>
   function buildSelect(select, placeholder, noneLabel, valuesMap) {
     const current = select.value;
 
@@ -1667,8 +1553,8 @@ function populateFilter(employeeList) {
         .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
         .forEach((v) => {
           const opt = document.createElement("option");
-          opt.value = v; // raw DB value — filter matching stays intact
-          opt.textContent = toProperCase(v); // display only
+          opt.value = v;
+          opt.textContent = toProperCase(v);
           select.appendChild(opt);
         });
     }
@@ -1678,7 +1564,6 @@ function populateFilter(employeeList) {
     }
   }
 
-  // Collect unique values (case-insensitive dedup; first occurrence wins)
   const positionMap = new Map();
   const brandMap = new Map();
   const statusMap = new Map();
@@ -1692,7 +1577,7 @@ function populateFilter(employeeList) {
       const v = (raw || "").trim();
       if (v && v.toLowerCase() !== "none") {
         const key = v.toLowerCase();
-        if (!map.has(key)) map.set(key, v); // keep first-seen casing as value
+        if (!map.has(key)) map.set(key, v);
       }
     };
 
@@ -1716,7 +1601,6 @@ function populateFilter(employeeList) {
   updateColor();
 }
 
-// Load employees with improved error handling
 async function loadEmployees(
   filters = {},
   preservePage = false,
@@ -1725,12 +1609,10 @@ async function loadEmployees(
   try {
     if (!silent) showLoading(true);
 
-    // 🆕 If no filters passed, check for active filters in form
     if (Object.keys(filters).length === 0 && hasActiveFilters()) {
       filters = getActiveFilters();
     }
 
-    // 🆕 Store the active filters
     activeFilters = filters;
 
     const params = new URLSearchParams({ action: "get" });
@@ -1779,12 +1661,10 @@ async function loadEmployees(
         populateFilter(data.filter_options);
       }
 
-      // Only reset to page 1 if not preserving page and not filtering
       if (!preservePage && Object.keys(filters).length === 0) {
         currentPage = 1;
       }
 
-      // 🆕 Clear cache to fetch fresh manpower data
       employeeDataCache = null;
       qrImageMapCache = null;
 
@@ -1815,7 +1695,6 @@ async function loadEmployees(
   }
 }
 
-// Close modal
 function closeModal() {
   const deleteModal = document.getElementById("deleteModal");
   if (!deleteModal) return;
@@ -1823,7 +1702,6 @@ function closeModal() {
   deleteModal.style.display = "none";
 }
 
-// Handle form submission
 async function handleFormSubmit(e) {
   e.preventDefault();
 
@@ -1963,7 +1841,6 @@ async function handleFormSubmit(e) {
 // ─────────────────────────────────────────────────────────────
 // FILE UPLOAD HANDLER
 // ─────────────────────────────────────────────────────────────
-// Setup file upload handler with fixed label assignment
 function setupFileUploadHandler() {
   const imageInput = document.getElementById("image");
   if (!imageInput) return;
@@ -1978,12 +1855,11 @@ function setupFileUploadHandler() {
 
       if (file.size > maxSize) {
         showAlert("File size must be less than 5MB", "error");
-        e.target.value = ""; // Clear the input
+        e.target.value = "";
         label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
         return;
       }
 
-      // Check file type
       const allowedTypes = [
         "image/jpeg",
         "image/jpg",
@@ -1992,19 +1868,18 @@ function setupFileUploadHandler() {
       ];
       if (!allowedTypes.includes(file.type)) {
         showAlert("Only image files are allowed", "error");
-        e.target.value = ""; // Clear the input
+        e.target.value = "";
         label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
         return;
       }
 
-      label.innerHTML = `<i class="fas fa-image"></i> ${file.name}`; // Fixed: removed extra 'label'
+      label.innerHTML = `<i class="fas fa-image"></i> ${file.name}`;
     } else {
       label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
     }
   });
 }
 
-// Delete single employee
 async function deleteEmployee(employeeId) {
   try {
     showLoading(true);
@@ -2037,7 +1912,6 @@ async function deleteEmployee(employeeId) {
   }
 }
 
-// Delete all employees
 async function deleteAllEmployees(employeeId) {
   try {
     showLoading(true);
@@ -2052,7 +1926,6 @@ async function deleteAllEmployees(employeeId) {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
-    // Check if response is ok
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -2083,7 +1956,6 @@ async function deleteAllEmployees(employeeId) {
   }
 }
 
-// Show alert message
 function showAlert(message, type = "info") {
   const existingAlerts = document.querySelectorAll(".alert");
   existingAlerts.forEach((alert) => alert.remove());
@@ -2091,9 +1963,7 @@ function showAlert(message, type = "info") {
   const alert = document.createElement("div");
   alert.className = `alert alert-${type}`;
 
-  // SECURITY: Use DOM methods instead of innerHTML for alert messages
   const msgSpan = document.createElement("span");
-  // Use textContent so any HTML in message is rendered as plain text
   msgSpan.textContent = message;
 
   const closeBtn = document.createElement("button");
@@ -2112,7 +1982,6 @@ function showAlert(message, type = "info") {
   }, 5000);
 }
 
-// Show/hide loading state
 function showLoading(show) {
   const body = document.body;
   if (show) {
@@ -2122,13 +1991,11 @@ function showLoading(show) {
   }
 }
 
-// Clean up intervals when page is closed
 window.addEventListener("beforeunload", function () {
   stopAutoUpdate();
   clearTimeout(userActivityTimer);
 });
 
-// Close modal when clicking outside
 window.onclick = function (event) {
   const modal = document.getElementById("employeeModal");
   if (event.target === modal) {
@@ -2136,18 +2003,15 @@ window.onclick = function (event) {
   }
 };
 
-// Add activity listeners
 document.addEventListener("mousedown", handleUserActivity);
 document.addEventListener("keydown", handleUserActivity);
 document.addEventListener("scroll", handleUserActivity);
 
-// Initialize the application
 document.addEventListener("DOMContentLoaded", function () {
   loadEmployees();
   setupEventListeners();
   updateDeleteButtonState();
 
-  // Initialize auto-update after a short delay to ensure all elements are ready
   setTimeout(() => {
     initializeAutoUpdate();
   }, 1000);

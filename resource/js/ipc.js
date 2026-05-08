@@ -1,6 +1,5 @@
 // resource/js/ipc.js --> proximity table import
 
-// Configuration
 const CONFIG = {
   BACKEND_URL: "proxcode_backend.php",
   MAX_FILE_SIZE: 10 * 1024 * 1024,
@@ -8,7 +7,6 @@ const CONFIG = {
 };
 
 // ===== HELPER FUNCTIONS =====
-
 function escapeHtml(text) {
   if (typeof text !== "string") text = String(text);
   const map = {
@@ -28,23 +26,17 @@ function safeGetElement(id) {
 }
 
 // ===== WIRE IMPORT BUTTON =====
-// Robust wiring that works regardless of DOMContentLoaded timing.
-// Re-wires every time the modal opens (clone-replace strips stale listeners).
-
 function _wireImportButton() {
   const importBtn = document.querySelector(".btn-import");
   if (!importBtn) return;
 
-  // Force button to never trigger a native form submit
   importBtn.type = "button";
 
-  // Clone-replace to strip any previous listeners, then re-add ours
   const fresh = importBtn.cloneNode(true);
   importBtn.parentNode.replaceChild(fresh, importBtn);
   fresh.type = "button";
   fresh.addEventListener("click", handleImportSubmit);
 
-  // File-input label update (idempotent via flag)
   const fileInput = safeGetElement("dataFile");
   if (fileInput && !fileInput._ipcBound) {
     fileInput._ipcBound = true;
@@ -66,15 +58,13 @@ function _wireImportButton() {
   }
 }
 
-// Wire on first load
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", _wireImportButton);
 } else {
-  _wireImportButton(); // DOM already ready (script loaded late)
+  _wireImportButton();
 }
 
 // ===== MODAL =====
-
 function openImportModal() {
   const modal = safeGetElement("importModal");
   const form = safeGetElement("importForm");
@@ -89,12 +79,10 @@ function openImportModal() {
   if (label)
     label.innerHTML = `<i class="fas fa-file"></i> Click to select file (.csv, .xlsx, .xls)`;
 
-  // Re-wire after modal opens — handles cases where DOM wasn't ready at script load
   _wireImportButton();
 }
 
 // ===== PREVIEW =====
-
 async function previewFile() {
   const fileInput = safeGetElement("dataFile");
   if (!fileInput) {
@@ -212,7 +200,6 @@ function _displayPreview(data) {
 }
 
 // ===== CSV LINE PARSER =====
-
 function _parseCSVLine(line) {
   const result = [];
   let current = "",
@@ -236,7 +223,6 @@ function _parseCSVLine(line) {
 }
 
 // ===== FULL FILE PROCESSORS =====
-
 async function _processCSVFull(file) {
   const text = await file.text();
   const lines = text.split("\n").filter((l) => l.trim());
@@ -286,43 +272,29 @@ async function _processExcelFull(file) {
 }
 
 // ===== POST-IMPORT REFRESH =====
-// Called after a successful import.
-// Busts all caches, reloads the table, then runs syncOrphanStatuses so that
-// employee statuses are immediately updated to reflect the newly imported codes.
-
 async function _refreshAfterImport() {
-  // 1. Bust proxcode caches (defined in proxcode.js)
   if (typeof employeeDataCache !== "undefined") employeeDataCache = null;
   if (typeof qrImageMapCache !== "undefined") qrImageMapCache = null;
-
-  // 2. Reload the proximity code table (silently — no loading spinner flash)
   if (typeof loadEmployees === "function") {
     await loadEmployees({}, false, true);
   } else if (typeof refreshTable === "function") {
     await refreshTable();
   }
 
-  // 3. Update Available / Occupied counters
   if (typeof updateTotalAvailable === "function") {
     await updateTotalAvailable();
   }
 
-  // 4. ── THE KEY FIX ──
-  // syncOrphanStatuses compares the code table against the employees table
-  // and sets employee statuses to Active/Inactive accordingly.
-  // Without this call, statuses stay stale after a bulk import.
   if (typeof syncOrphanStatuses === "function") {
     await syncOrphanStatuses();
   }
 
-  // 5. If we're on the system/manpower page, refresh those counts too
   if (typeof updateActiveEmployees === "function") {
     await updateActiveEmployees();
   }
 }
 
 // ===== MAIN IMPORT HANDLER =====
-
 async function handleImportSubmit(e) {
   if (e) e.preventDefault();
 
@@ -422,7 +394,6 @@ async function handleImportSubmit(e) {
     updateProgress(40);
     updateImportStatus("Preparing upload...");
 
-    // Backend expects: action=import, code=JSON array of {qr_code} objects
     const formData = new FormData();
     formData.append("action", "import");
     formData.append("code", JSON.stringify(proximityCodes));
@@ -465,7 +436,6 @@ async function handleImportSubmit(e) {
       updateImportStatus(statusMsg);
       showAlert(alertMsg, "success");
 
-      // Close modal first, then refresh everything including employee statuses
       setTimeout(async () => {
         closeModal();
         await _refreshAfterImport();
@@ -483,7 +453,6 @@ async function handleImportSubmit(e) {
 }
 
 // ===== PROGRESS HELPERS =====
-
 function showImportProgress(show) {
   const el = safeGetElement("importProgress");
   if (el) {
@@ -506,7 +475,6 @@ function updateImportStatus(msg) {
 }
 
 // ===== MODAL CLICK-OUTSIDE =====
-// Chain onto proxcode.js's window.onclick without overwriting it.
 (function () {
   const prev = window.onclick;
   window.onclick = function (event) {

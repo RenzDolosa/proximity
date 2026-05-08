@@ -1,17 +1,14 @@
 //m-i-v2.js - Updated for PHP Integration
 
-// Configuration
 const API_BASE_URL = "qr_search_backend v2.php";
 let selectedEmployees = new Set();
 let currentEmployees = [];
-let allEmployees = []; // Store all employees from PHP
+let allEmployees = [];
 
-// Initialize the application
 document.addEventListener("DOMContentLoaded", function () {
   initializeTabs();
   setupEventListeners();
 
-  // Load employees from PHP data if available
   if (window.phpEmployees) {
     allEmployees = window.phpEmployees;
     currentEmployees = allEmployees;
@@ -22,7 +19,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
-// Tab functionality
 function initializeTabs() {
   const tabButtons = document.querySelectorAll(".tab-button");
   const tabContents = document.querySelectorAll(".tab-content");
@@ -31,15 +27,12 @@ function initializeTabs() {
     button.addEventListener("click", function () {
       const tabName = this.dataset.tab;
 
-      // Remove active class from all buttons and contents
       tabButtons.forEach((btn) => btn.classList.remove("active"));
       tabContents.forEach((content) => (content.style.display = "none"));
 
-      // Add active class to clicked button and show corresponding content
       this.classList.add("active");
       document.getElementById(tabName + "-tab").style.display = "block";
 
-      // Focus on relevant input
       if (tabName === "qr") {
         setTimeout(() => document.getElementById("qr-lookup").focus(), 100);
       }
@@ -47,9 +40,7 @@ function initializeTabs() {
   });
 }
 
-// Setup event listeners
 function setupEventListeners() {
-  // Search on Enter key
   const searchInputs = ["search-all", "fullname", "position", "qr_code"];
   searchInputs.forEach((inputId) => {
     const element = document.getElementById(inputId);
@@ -62,7 +53,6 @@ function setupEventListeners() {
     }
   });
 
-  // QR lookup on Enter
   const qrLookup = document.getElementById("qr-lookup");
   if (qrLookup) {
     qrLookup.addEventListener("keypress", function (e) {
@@ -72,7 +62,6 @@ function setupEventListeners() {
     });
   }
 
-  // Filter changes trigger search
   const filterInputs = ["brand", "status", "shift", "check_status"];
   filterInputs.forEach((inputId) => {
     const element = document.getElementById(inputId);
@@ -89,7 +78,6 @@ function setupEventListeners() {
     }
   });
 
-  // Real-time search for main search input
   const searchAll = document.getElementById("search-all");
   if (searchAll) {
     searchAll.addEventListener(
@@ -105,7 +93,6 @@ function setupEventListeners() {
   }
 }
 
-// Debounce function for real-time search
 function debounce(func, wait) {
   let timeout;
   return function executedFunction(...args) {
@@ -118,21 +105,17 @@ function debounce(func, wait) {
   };
 }
 
-// Search employees - Updated to work with PHP data
 async function searchEmployees() {
   showLoading();
   clearMessage();
 
   try {
-    // Use local PHP data if available, otherwise use API
     if (window.phpEmployees && allEmployees.length > 0) {
       searchEmployeesLocal();
       return;
     }
 
     const searchParams = new URLSearchParams();
-
-    // Get search parameters based on active tab
     const activeTab = document.querySelector(".tab-button.active").dataset.tab;
 
     if (activeTab === "search") {
@@ -174,13 +157,11 @@ async function searchEmployees() {
     }
   } catch (error) {
     hideLoading();
-    // Fallback to local search if API fails
     searchEmployeesLocal();
     console.error("Search error, using local data:", error);
   }
 }
 
-// Local search function for PHP data
 function searchEmployeesLocal() {
   const activeTab = document.querySelector(".tab-button.active").dataset.tab;
   let filteredEmployees = [...allEmployees];
@@ -249,9 +230,7 @@ function searchEmployeesLocal() {
   showMessage(`Found ${filteredEmployees.length} employee(s)`, "success");
 }
 
-// Load all employees
 async function loadAllEmployees() {
-  // Use PHP data if available
   if (window.phpEmployees && allEmployees.length > 0) {
     displayEmployees(allEmployees);
     updateResultsCount(`Showing all ${allEmployees.length} employee(s)`);
@@ -283,7 +262,6 @@ async function loadAllEmployees() {
   }
 }
 
-// QR Code lookup
 async function lookupByQR() {
   const qrCode = document.getElementById("qr-lookup").value.trim();
 
@@ -292,7 +270,6 @@ async function lookupByQR() {
     return;
   }
 
-  // Try local search first
   if (allEmployees.length > 0) {
     const employee = allEmployees.find((emp) => emp.qr_code === qrCode);
     if (employee) {
@@ -334,7 +311,6 @@ async function lookupByQR() {
   }
 }
 
-// Get initials helper function
 function getInitials(name) {
   if (!name) return "N/A";
   return name
@@ -344,7 +320,6 @@ function getInitials(name) {
     .toUpperCase();
 }
 
-// Display employees - Updated with enhanced UI
 function displayEmployees(employees) {
   currentEmployees = employees;
   const grid = document.getElementById("employee-grid");
@@ -429,7 +404,6 @@ function displayEmployees(employees) {
   updateResultsCount(`Showing ${employees.length} employee(s)`);
 }
 
-// Toggle employee selection
 function toggleEmployeeSelection(employeeId) {
   if (selectedEmployees.has(employeeId)) {
     selectedEmployees.delete(employeeId);
@@ -437,7 +411,6 @@ function toggleEmployeeSelection(employeeId) {
     selectedEmployees.add(employeeId);
   }
 
-  // Update card appearance
   const card = document.querySelector(`[data-id="${employeeId}"]`);
   if (card) {
     card.classList.toggle("selected", selectedEmployees.has(employeeId));
@@ -446,7 +419,6 @@ function toggleEmployeeSelection(employeeId) {
   updateBulkActionsUI();
 }
 
-// Update bulk actions UI
 function updateBulkActionsUI() {
   const bulkActions = document.getElementById("bulk-actions");
   const selectedCount = selectedEmployees.size;
@@ -469,7 +441,6 @@ function updateBulkActionsUI() {
   }
 }
 
-// Clear selection
 function clearSelection() {
   selectedEmployees.clear();
   document.querySelectorAll(".employee-card").forEach((card) => {
@@ -483,7 +454,6 @@ function clearSelection() {
   updateBulkActionsUI();
 }
 
-// Bulk check in
 async function bulkCheckIn() {
   if (selectedEmployees.size === 0) return;
 
@@ -493,7 +463,6 @@ async function bulkCheckIn() {
   await bulkUpdateCheckStatus([...selectedEmployees], "IN");
 }
 
-// Bulk check out
 async function bulkCheckOut() {
   if (selectedEmployees.size === 0) return;
 
@@ -503,7 +472,6 @@ async function bulkCheckOut() {
   await bulkUpdateCheckStatus([...selectedEmployees], "OUT");
 }
 
-// Bulk update check status
 async function bulkUpdateCheckStatus(employeeIds, status) {
   showLoading();
 
@@ -529,7 +497,6 @@ async function bulkUpdateCheckStatus(employeeIds, status) {
         "success",
       );
 
-      // Update local data if available
       if (allEmployees.length > 0) {
         allEmployees.forEach((emp) => {
           if (employeeIds.includes(emp.id)) {
@@ -539,7 +506,6 @@ async function bulkUpdateCheckStatus(employeeIds, status) {
         });
         displayEmployees(currentEmployees);
       } else {
-        // Reload data from server
         loadAllEmployees();
       }
 
@@ -554,7 +520,6 @@ async function bulkUpdateCheckStatus(employeeIds, status) {
   }
 }
 
-// Update individual check status
 async function updateCheckStatus(employeeId, newStatus) {
   const employee = currentEmployees.find((emp) => emp.id == employeeId);
   const employeName = employee ? employee.fullname : `Employee ${employeeId}`;
@@ -583,7 +548,6 @@ async function updateCheckStatus(employeeId, newStatus) {
     if (data.success) {
       showMessage(`${employeName} marked as ${newStatus}`, "success");
 
-      // Update local data if available
       if (allEmployees.length > 0) {
         const empIndex = allEmployees.findIndex((emp) => emp.id == employeeId);
         if (empIndex !== -1) {
@@ -602,7 +566,6 @@ async function updateCheckStatus(employeeId, newStatus) {
 
         displayEmployees(currentEmployees);
       } else {
-        // Reload data from server
         loadAllEmployees();
       }
     } else {
@@ -615,7 +578,6 @@ async function updateCheckStatus(employeeId, newStatus) {
   }
 }
 
-// View employee details
 function viewEmployeeDetails(employeeId) {
   const employee = currentEmployees.find((emp) => emp.id == employeeId);
 
@@ -690,7 +652,6 @@ function viewEmployeeDetails(employeeId) {
   document.body.appendChild(modal);
 }
 
-// Bulk export
 function bulkExport() {
   if (selectedEmployees.size === 0) return;
 
@@ -706,7 +667,6 @@ function bulkExport() {
   showMessage(`Exported ${selectedData.length} employee(s)`, "success");
 }
 
-// Convert to CSV
 function convertToCSV(data) {
   if (!data || data.length === 0) return "";
 
@@ -741,7 +701,6 @@ function convertToCSV(data) {
   return csvRows.join("\n");
 }
 
-// Download CSV
 function downloadCSV(csvContent, filename) {
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const link = document.createElement("a");
@@ -757,11 +716,10 @@ function downloadCSV(csvContent, filename) {
   }
 }
 
-// Format date and time
 function formatDateTime(ts) {
   if (!ts) return "—";
   const d = new Date(ts);
-  if (isNaN(d)) return ts; // pass through if already a string
+  if (isNaN(d)) return ts;
   return d.toLocaleString(undefined, {
     year: "numeric",
     month: "short",
@@ -772,12 +730,10 @@ function formatDateTime(ts) {
   });
 }
 
-// Format date for filename
 function formatDateForFilename(date) {
   return date.toISOString().split("T")[0].replace(/-/g, "");
 }
 
-// Update results count
 function updateResultsCount(message) {
   const resultsCount = document.getElementById("results-count");
   if (resultsCount) {
@@ -785,7 +741,6 @@ function updateResultsCount(message) {
   }
 }
 
-// Show loading
 function showLoading() {
   const loading = document.getElementById("loading");
   if (loading) {
@@ -793,7 +748,6 @@ function showLoading() {
   }
 }
 
-// Hide loading
 function hideLoading() {
   const loading = document.getElementById("loading");
   if (loading) {
@@ -801,7 +755,6 @@ function hideLoading() {
   }
 }
 
-// Show/hide messages
 function showMessage(message, type = "info") {
   const messageDiv = document.getElementById("message");
   if (messageDiv) {
@@ -809,7 +762,6 @@ function showMessage(message, type = "info") {
     messageDiv.className = `message ${type}`;
     messageDiv.style.display = "block";
 
-    // Auto-hide success messages after 3 seconds
     if (type === "success") {
       setTimeout(() => {
         clearMessage();
@@ -827,35 +779,29 @@ function clearMessage() {
   }
 }
 
-// Clear form function
 function clearForm() {
-  // Clear search inputs
   const inputs = ["search-all", "fullname", "position", "qr_code", "qr-lookup"];
   inputs.forEach((id) => {
     const element = document.getElementById(id);
     if (element) element.value = "";
   });
 
-  // Reset filters
   const filters = ["brand", "status", "shift", "check_status"];
   filters.forEach((id) => {
     const element = document.getElementById(id);
     if (element) element.selectedIndex = 0;
   });
 
-  // Clear selection and load all employees
   clearSelection();
   loadAllEmployees();
   clearMessage();
 }
 
-// Select all visible employees
 function selectAllVisible() {
   currentEmployees.forEach((emp) => {
     selectedEmployees.add(emp.id);
   });
 
-  // Update UI
   document.querySelectorAll(".employee-card").forEach((card) => {
     card.classList.add("selected");
   });
@@ -868,7 +814,6 @@ function selectAllVisible() {
   updateBulkActionsUI();
 }
 
-// Export all visible employees
 function exportAllVisible() {
   if (currentEmployees.length === 0) {
     showMessage("No employees to export", "error");

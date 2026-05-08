@@ -1,6 +1,5 @@
 // resource/js/i-dtl.js --> datalog table import
 
-// Open import modal
 function openImportModal() {
   document.getElementById("importModal").style.display = "block";
   document.getElementById("importForm").reset();
@@ -10,9 +9,7 @@ function openImportModal() {
     `<i class="fas fa-file"></i> Click to select file (.csv, .xlsx, .xls)`;
 }
 
-// Update file label when file is selected
 document.addEventListener("DOMContentLoaded", function () {
-  // Add this to your existing setupEventListeners function
   document.getElementById("dataFile").addEventListener("change", function (e) {
     const label = document.querySelector("#dataFile + .file-upload-label");
     if (e.target.files.length > 0) {
@@ -28,13 +25,11 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
-  // Import form submission
   document
     .getElementById("importForm")
     .addEventListener("submit", handleImportSubmit);
 });
 
-// Preview file content (CSV or Excel)
 async function previewFile() {
   const fileInput = document.getElementById("dataFile");
   const file = fileInput.files[0];
@@ -66,7 +61,6 @@ async function previewFile() {
   }
 }
 
-// Parse CSV file
 async function parseCSVFile(file) {
   const text = await file.text();
   const lines = text.split("\n").filter((line) => line.trim());
@@ -77,7 +71,6 @@ async function parseCSVFile(file) {
   return previewLines.map((line) => parseCSVLine(line));
 }
 
-// Parse Excel file
 async function parseExcelFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -103,7 +96,6 @@ async function parseExcelFile(file) {
   });
 }
 
-// Display preview data
 function displayPreview(data) {
   let previewHTML = '<table class="preview-table"><thead><tr>';
   previewHTML +=
@@ -115,7 +107,6 @@ function displayPreview(data) {
     for (let i = 0; i < 6; i++) {
       previewHTML += `<td>${row[i] || ""}</td>`;
     }
-    // Show QR code column with indication if it will be auto-generated
     const qrValue = row[6] || "";
     const qrDisplay = qrValue
       ? qrValue
@@ -130,7 +121,6 @@ function displayPreview(data) {
   document.getElementById("importPreview").style.display = "block";
 }
 
-// Parse CSV line (handles quotes and commas)
 function parseCSVLine(line) {
   const result = [];
   let current = "";
@@ -153,7 +143,6 @@ function parseCSVLine(line) {
   return result;
 }
 
-// Handle import form submission
 async function handleImportSubmit(e) {
   e.preventDefault();
 
@@ -200,13 +189,11 @@ async function handleImportSubmit(e) {
         ? index + 2
         : index + 1;
 
-      // Validate required fields
       if (!row[0]) {
         errors.push(`Row ${rowNumber}: Missing required fields (fullname)`);
         return;
       }
 
-      // // Validate shift value
       // const validShifts = ['Day Shift', 'Night Shift', 'Graveyard Shift'];
       // if (row[4] && !validShifts.includes(row[4])) {
       //     errors.push(`Row ${rowNumber}: Invalid shift value "${row[4]}". Must be one of: ${validShifts.join(', ')}`);
@@ -235,7 +222,6 @@ async function handleImportSubmit(e) {
       return;
     }
 
-    // Send to backend
     const formData = new FormData();
     formData.append("action", "import");
     formData.append("employees", JSON.stringify(employees));
@@ -258,13 +244,11 @@ async function handleImportSubmit(e) {
       let statusMessage = `Successfully imported ${data.imported_count} employees!`;
       let alertMessage = `Import completed! ${data.imported_count} employees imported successfully.`;
 
-      // Add duplicate information if any
       if (data.duplicates_count && data.duplicates_count > 0) {
         statusMessage += ` (${data.duplicates_count} duplicates allowed)`;
         alertMessage += `\n${data.duplicates_count} duplicate employees were imported as separate records.`;
       }
 
-      // Add error information if any
       if (data.errors && data.errors.length > 0) {
         alertMessage += `\n\nNote: ${data.errors.length} records had issues but import continued.`;
       }
@@ -274,7 +258,7 @@ async function handleImportSubmit(e) {
 
       setTimeout(() => {
         closeImportModal();
-        loadEmployees(); // Refresh the table
+        loadEmployees();
       }, 2000);
     } else {
       showAlert(data.message, "error");
@@ -289,7 +273,6 @@ async function handleImportSubmit(e) {
   }
 }
 
-// Process CSV file for import
 async function processCSVFile(file) {
   const text = await file.text();
   const lines = text.split("\n").filter((line) => line.trim());
@@ -299,7 +282,6 @@ async function processCSVFile(file) {
   return dataLines.map((line) => parseCSVLine(line));
 }
 
-// Process Excel file for import
 async function processExcelFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -314,7 +296,6 @@ async function processExcelFile(file) {
         const skipHeader = document.getElementById("skipHeader").checked;
         const dataRows = skipHeader ? jsonData.slice(1) : jsonData;
 
-        // Filter out empty rows
         const filteredRows = dataRows.filter(
           (row) =>
             row &&
@@ -333,7 +314,6 @@ async function processExcelFile(file) {
   });
 }
 
-// Show/hide import progress
 function showImportProgress(show) {
   document.getElementById("importProgress").style.display = show
     ? "block"
@@ -343,17 +323,14 @@ function showImportProgress(show) {
   }
 }
 
-// Update import progress
 function updateProgress(percent) {
   document.getElementById("progressFill").style.width = percent + "%";
 }
 
-// Update import status
 function updateImportStatus(message) {
   document.getElementById("importStatus").textContent = message;
 }
 
-// Show alert message
 function showAlert(message, type = "info") {
   const existingAlerts = document.querySelectorAll(".alert");
   existingAlerts.forEach((alert) => alert.remove());
@@ -372,7 +349,6 @@ function showAlert(message, type = "info") {
   }, 5000);
 }
 
-// Update the window click handler to include import modal
 window.onclick = function (event) {
   const employeeModal = document.getElementById("employeeModal");
   const importModal = document.getElementById("importModal");

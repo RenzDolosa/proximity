@@ -16,24 +16,20 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
-// Auto-focus username on ANY keypress
 document.addEventListener("keydown", function (e) {
   const activeElement = document.activeElement;
   const tag = activeElement.tagName.toLowerCase();
 
-  // Only redirect focus if not already in any input/textarea/button
   if (!["input", "textarea", "button", "select"].includes(tag)) {
     const usernameField = document.getElementById("username");
     if (usernameField) usernameField.focus();
   }
 });
 
-// Auto-focus username on ANY click (except on password field or buttons)
 document.addEventListener("click", function (e) {
   const usernameField = document.getElementById("username");
   const clickedElement = e.target;
 
-  // Don't refocus if clicking on password field, toggle button, or submit button
   if (
     clickedElement.id !== "password" &&
     clickedElement.id !== "togglePassword" &&
@@ -58,7 +54,6 @@ document.getElementById("loginForm").addEventListener("submit", function (e) {
   }, 5000);
 });
 
-// Simple form validation
 document.getElementById("username").addEventListener("input", function () {
   const username = this.value;
   if (username.length > 0) {
@@ -73,7 +68,6 @@ document.getElementById("password").addEventListener("input", function () {
   }
 });
 
-// Password toggle functionality
 function togglePasswordVisibility(field, button) {
   const icon = button.querySelector("i");
 

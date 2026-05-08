@@ -175,8 +175,7 @@ $access = getMenuAccess();
           </div>
         </div>
       </div>
-
-    </div><!-- /.about-grid -->
+    </div>
 
     <!-- ── Technology Stack ── -->
     <div class="card">
@@ -283,15 +282,12 @@ $access = getMenuAccess();
 
         </div>
       </div>
-
-    </div><!-- /.about-grid -->
-
-  </div><!-- /.page-body -->
+    </div>
+  </div>
 
   <script src="../js/req.js"></script>
   <script src="../js/loading.js"></script>
   <script>
-    // Sync version badge with portal version tag if available
     const verEl = document.getElementById('about-version');
     if (verEl) {
       const vTag = window.parent?.document?.getElementById('version');

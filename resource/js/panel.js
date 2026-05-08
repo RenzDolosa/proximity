@@ -3,9 +3,8 @@
  */
 
 /* ═══════════════════════════════════════════════════════════
-   1.  TAB CONTROLLER
+  TAB CONTROLLER
 ═══════════════════════════════════════════════════════════ */
-
 const _panelTabsInit = { employees: false, scanned: false, proximity: false };
 
 function switchTab(name) {
@@ -32,9 +31,8 @@ function switchTab(name) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   2.  MODULE STATE
+  MODULE STATE
 ═══════════════════════════════════════════════════════════ */
-
 const SYS = {
   currentAction: "add",
   employees: [],
@@ -74,9 +72,8 @@ const PRX = {
 };
 
 /* ═══════════════════════════════════════════════════════════
-   3.  SHARED HELPERS
+  SHARED HELPERS
 ═══════════════════════════════════════════════════════════ */
-
 let _currentAudio = null;
 
 function _stopAudio() {
@@ -133,11 +130,8 @@ function _toProperCase(str) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   3B.  SHARED AUTO-FOCUS — FIX #5
-   Detects modals using display:block OR display:flex
-   so prx/dtl modals (which use flex) are not missed.
+  SHARED AUTO-FOCUS
 ═══════════════════════════════════════════════════════════ */
-
 const _QR_MAP = {
   "pane-employees": "sys-search_qr",
   "pane-scanned":   "dtl-search_qr",
@@ -148,7 +142,6 @@ function _autoFocusActiveQR() {
   const a = document.activeElement;
   if (a && ["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(a.tagName)) return;
 
-  // FIX #5: check for flex modals as well as block modals
   const openModal = document.querySelector(
     '.modal[style*="display: block"], ' +
     '.modal[style*="display:block"], ' +
@@ -170,9 +163,8 @@ function _autoFocusActiveQR() {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   4.  FILTER HELPERS
+  FILTER HELPERS
 ═══════════════════════════════════════════════════════════ */
-
 function _getFilters(formId) {
   const form    = document.getElementById(formId);
   const filters = {};
@@ -243,9 +235,8 @@ function _updateSelectColor(sel) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   5.  PAGINATION HELPERS
+  PAGINATION HELPERS
 ═══════════════════════════════════════════════════════════ */
-
 function _updatePagination(state, paginationId, prevId, nextId, infoId, label) {
   const div  = document.getElementById(paginationId);
   const prev = document.getElementById(prevId);
@@ -260,9 +251,8 @@ function _updatePagination(state, paginationId, prevId, nextId, infoId, label) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   6A.  SYSTEM (EMPLOYEES) MODULE
+  SYSTEM (EMPLOYEES) MODULE
 ═══════════════════════════════════════════════════════════ */
-
 async function _sys_init() {
   _sys_setupFileUpload();
   document
@@ -348,7 +338,6 @@ async function _sys_renderTable() {
   tbody.innerHTML = slice.map((emp, i) => {
     const initials = (emp.fullname || "UN").split(" ").map((n) => n[0]).join("").substring(0, 2).toUpperCase();
     const imgSrc   = `../../uploads/user/${emp.image}?t=${Date.now()}`;
-    // FIX #1: coerce emp.id to String in onclick so it always matches
     return `<tr>
       <td>${start + i + 1}</td>
       <td><strong>${_escapeHtml(String(emp.id))}</strong></td>
@@ -445,7 +434,6 @@ function sys_copyQR(code) {
     : _showAlert("Failed to copy", "error");
 }
 
-// FIX #1: employeeId is always a String here (rendered as '${String(emp.id)}' in the table)
 async function sys_openModal(action, employeeId = null) {
   SYS.currentAction = action;
   const modal = document.getElementById("sys-employeeModal");
@@ -503,7 +491,6 @@ async function _sys_loadEmployeeData(id) {
   }
 }
 
-// FIX #4: duplicate-name check correctly skips the record being edited
 async function sys_handleFormSubmit(e) {
   e.preventDefault();
   try {
@@ -527,7 +514,6 @@ async function sys_handleFormSubmit(e) {
       }
     }
 
-    // FIX #4: when editing, exclude the record being edited from the name-duplicate check
     const nameDuplicate = SYS.employees.some((emp) => {
       if (SYS.currentAction === "edit" && String(emp.id) === originalId) return false;
       return emp.fullname.toLowerCase().trim() === fullname.toLowerCase().trim();
@@ -562,7 +548,6 @@ async function sys_handleFormSubmit(e) {
         "success",
       );
       sys_closeModal();
-      // FIX #2 + #3: bust cross-tab caches so DTL/PRX reflect the change immediately
       _dtl_qrMapCache    = null;
       _prx_systemQRCache = null;
       _prx_qrMapCache    = null;
@@ -667,7 +652,6 @@ async function _sys_deleteOne(id) {
     const data = await res.json();
     if (data.success) {
       _showAlert(data.message, "success");
-      // FIX #2 + #3: bust cross-tab caches
       _dtl_qrMapCache    = null;
       _prx_systemQRCache = null;
       _prx_qrMapCache    = null;
@@ -695,7 +679,6 @@ async function _sys_deleteFiltered() {
     const data = await res.json();
     if (data.success) {
       _showAlert(`Deleted ${data.deleted_count || ids.length} employee(s)`, "success");
-      // FIX #2 + #3: bust cross-tab caches
       _dtl_qrMapCache    = null;
       _prx_systemQRCache = null;
       _prx_qrMapCache    = null;
@@ -709,7 +692,6 @@ async function _sys_deleteFiltered() {
   }
 }
 
-// FIX #1: employeeId received as String from onclick attribute
 async function sys_addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
   _stopAudio();
   const btn  = triggerElement;
@@ -717,7 +699,6 @@ async function sys_addToLog(employeeId, checkStatus = "IN", triggerElement = nul
   try {
     if (btn) { btn.innerHTML = "⏳ Adding..."; btn.disabled = true; }
 
-    // FIX #1: compare as strings to avoid strict number/string mismatch
     const emp = SYS.employees.find((e) => String(e.id) === String(employeeId));
     if (!emp) throw new Error("Employee not found");
 
@@ -795,9 +776,8 @@ function sys_exportFilteredData(){ if (typeof exportFilteredData === "function")
 function sys_exportWithImages()  { if (typeof exportWithImages === "function") exportWithImages(); }
 
 /* ═══════════════════════════════════════════════════════════
-   6B.  DTL (SCANNED LOG) MODULE
+  DTL (SCANNED LOG) MODULE
 ═══════════════════════════════════════════════════════════ */
-
 async function _dtl_init() {
   document.getElementById("dtl-autoUpdateToggle")?.addEventListener("change", dtl_toggleAutoUpdate);
   document.getElementById("dtl-updateInterval")?.addEventListener("change", dtl_updateInterval);
@@ -855,8 +835,6 @@ function _dtl_showAutoUpdateNotification() {
   setTimeout(() => { n.style.opacity = "0"; setTimeout(() => (n.style.display = "none"), 300); }, 3000);
 }
 
-// FIX #6: translate the __none__ sentinel into _none suffix params
-// so datalog_backend.php receives the same key format manpower_backend.php uses.
 async function dtl_loadEmployees(filters = {}, preservePage = false) {
   try {
     _showLoading(false);
@@ -866,7 +844,6 @@ async function dtl_loadEmployees(filters = {}, preservePage = false) {
 
     const params = new URLSearchParams({ action: "get" });
     for (const [k, v] of Object.entries(filters)) {
-      // FIX #6: mirror the same __none__ → _none translation used for manpower
       if (v === "__none__") params.append(k + "_none", "1");
       else                  params.append(k, v);
     }
@@ -977,7 +954,6 @@ function _dtl_renderError(msg) {
   tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:20px;color:#c0392b;">⚠️ ${msg}</td></tr>`;
 }
 
-// FIX #2: _dtl_qrMapCache is intentionally NOT a const so sys_ mutators can null it
 let _dtl_qrMapCache = null;
 async function _dtl_buildQRMap() {
   if (_dtl_qrMapCache) return _dtl_qrMapCache;
@@ -1028,7 +1004,7 @@ function dtl_nextPage()      { if (DTL.currentPage < DTL.totalPages)     { DTL.c
 function dtl_forceRefresh() {
   _showLoading(true);
   DTL.isUserActive = true;
-  _dtl_qrMapCache  = null;  // FIX #2: always bust on manual refresh
+  _dtl_qrMapCache  = null;
   dtl_loadEmployees()
     .then(() => { _showAlert("Refreshed!", "success"); setTimeout(() => (DTL.isUserActive = false), 2000); })
     .catch(() => _showAlert("Refresh failed", "error"))
@@ -1155,9 +1131,8 @@ function dtl_exportFilteredData()  { if (typeof exportFilteredData  === "functio
 function dtl_exportWithImages()    { if (typeof exportWithImages    === "function") exportWithImages(); }
 
 /* ═══════════════════════════════════════════════════════════
-   6C.  PROXCODE MODULE
+  PROXCODE MODULE
 ═══════════════════════════════════════════════════════════ */
-
 async function _prx_init() {
   _prx_setupFileUpload();
   document.getElementById("prx-employeeForm")?.addEventListener("submit", prx_handleFormSubmit);
@@ -1225,7 +1200,6 @@ async function prx_loadEmployees(filters = {}, preservePage = false) {
   }
 }
 
-// FIX #3: declared with let so sys_ mutators can null them
 let _prx_systemQRCache = null;
 async function _prx_getSystemQRs() {
   if (_prx_systemQRCache) return _prx_systemQRCache;
@@ -1608,27 +1582,24 @@ function prx_exportFilteredCodes(){ if (typeof exportFilteredCodes === "function
 function prx_exportWithImages()   { if (typeof exportWithImages  === "function") exportWithImages(); }
 
 /* ═══════════════════════════════════════════════════════════
-   7.  SHARED BADGE UPDATER
+  SHARED BADGE UPDATER
 ═══════════════════════════════════════════════════════════ */
-
 function _updateBadge(id, count) {
   const el = document.getElementById(id);
   if (el) el.textContent = count;
 }
 
 /* ═══════════════════════════════════════════════════════════
-   8.  UTILITY
+  UTILITY
 ═══════════════════════════════════════════════════════════ */
-
 function _debounce(fn, wait) {
   let t;
   return function (...args) { clearTimeout(t); t = setTimeout(() => fn.apply(this, args), wait); };
 }
 
 /* ═══════════════════════════════════════════════════════════
-   9.  BOOT
+  BOOT
 ═══════════════════════════════════════════════════════════ */
-
 document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("click",   _autoFocusActiveQR);
   document.addEventListener("focusin", _autoFocusActiveQR);

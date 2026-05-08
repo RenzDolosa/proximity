@@ -12,7 +12,6 @@ let activeController = null;
 // ── Global-audio endpoint (relative to the scan controller page) ─────────
 const GLOBAL_AUDIO_ENDPOINT = "../../services/global_audio.php";
 
-// Maps global_audio_settings.audio_type  →  <audio> element ID
 const AUDIO_TYPE_MAP = {
   success:    "successSound",
   checkout:   "checkoutSound",
@@ -179,13 +178,6 @@ function blockSearchInput(durationMs = 1000) {
   }, durationMs);
 }
 
-// ─────────────────────────────────────────────────────────────────
-//  QR code detection heuristic.
-//  A QR code from a physical scanner typically:
-//    - is 8+ characters long
-//    - contains at least one digit (human names are all-alpha)
-//    - is 10+ characters long OR contains a hyphen/underscore separator
-// ─────────────────────────────────────────────────────────────────
 function looksLikeQRCode(query) {
   if (query.length < 8) return false;
 
@@ -216,19 +208,14 @@ async function searchEmployees(query) {
     let url, method, fetchBody;
 
     if (looksLikeQRCode(query)) {
-      // Physical scanner path — auto-toggles check-in/out status.
-      // SECURITY: 'source: scanner' tells the backend this came from the
-      // scanner code path, not a manual text search. The backend uses this
-      // to decide whether to allow the status toggle.
       url    = "../../services/scanTest_search_backend.php";
       method = "POST";
       fetchBody = JSON.stringify({
         action:      "get_by_qr",
         qr_code:     query,
-        source:      "scanner",  // SECURITY: identifies this as a scanner request
+        source:      "scanner",
       });
     } else {
-      // Manual text search path — read-only, no status toggle
       url    = `../../services/scanTest_search_backend.php?q=${encodeURIComponent(query)}`;
       method = "GET";
     }
@@ -241,9 +228,6 @@ async function searchEmployees(query) {
         ...(method === "POST"
           ? {
               "Content-Type": "application/json",
-              // SECURITY: Attach CSRF token to every POST request.
-              // The backend rejects any POST that doesn't include this token,
-              // preventing cross-site request forgery attacks.
               "X-CSRF-Token": getCsrfToken(),
             }
           : {}),

@@ -1,10 +1,8 @@
 // resource/js/system.js --> system table
 
-// Global variables
 let currentAction = "add";
 let employees = [];
 
-// Pagination variables
 let currentPage = 1;
 const itemsPerPage = 25;
 let totalPages = 1;
@@ -20,7 +18,6 @@ const label = count > 1 ? "employee's" : "employee";
 // ── Global-audio endpoint ─────────────────────────────────────────
 const GLOBAL_AUDIO_ENDPOINT = "global_audio.php";
 
-// Maps global_audio_settings.audio_type  →  <audio> element ID
 const AUDIO_TYPE_MAP = {
   success: "successSound",
   checkout: "checkoutSound",
@@ -29,10 +26,6 @@ const AUDIO_TYPE_MAP = {
   inactive: "inactiveSound",
 };
 
-// ─────────────────────────────────────────────────────────────────
-// SECURITY: HTML escape helper — use on ALL dynamic content
-// inserted via innerHTML to prevent stored XSS attacks.
-// ─────────────────────────────────────────────────────────────────
 function escapeHtml(str) {
   if (str === null || str === undefined) return "";
   return String(str)
@@ -43,20 +36,16 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
-// SECURITY: Standalone toProperCase — replaces String.prototype pollution
 function toProperCase(str) {
   if (!str) return "";
-  // Insert space before uppercase letters that follow lowercase letters (PascalCase/camelCase split)
   const spaced = String(str).replace(/([a-z])([A-Z])/g, "$1 $2");
   return spaced.replace(/[^\s,\-]+/g, function (txt) {
     return txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase();
   });
 }
 
-// Format a DATE column (YYYY-MM-DD from DB) to match the timestamp display style
 function formatDateDisplay(dateStr) {
   if (!dateStr || dateStr === "—") return "—";
-  // DB stores as YYYY-MM-DD; parse as local date to avoid UTC-offset shifting
   const [y, m, d] = String(dateStr).split("-");
   if (!y || !m || !d) return escapeHtml(dateStr);
   const date = new Date(Number(y), Number(m) - 1, Number(d));
@@ -68,7 +57,6 @@ function formatDateDisplay(dateStr) {
   });
 }
 
-// Calculate age in years from a YYYY-MM-DD birth date string
 function calcAge(dateStr) {
   if (!dateStr) return null;
   const [y, m, d] = String(dateStr).split("-").map(Number);
@@ -82,7 +70,6 @@ function calcAge(dateStr) {
   return age >= 0 ? age : null;
 }
 
-// Calculate tenure as "X yr(s) Y mo(s)" from a YYYY-MM-DD hired date string
 function calcTenure(dateStr) {
   if (!dateStr) return null;
   const [y, m, d] = String(dateStr).split("-").map(Number);
@@ -144,7 +131,6 @@ async function loadGlobalAudio() {
   }
 }
 
-// Initialize the application
 document.addEventListener("DOMContentLoaded", function () {
   loadGlobalAudio();
   loadEmployees();
@@ -153,7 +139,6 @@ document.addEventListener("DOMContentLoaded", function () {
   syncOrphanStatuses();
 });
 
-// Setup event listeners
 function setupEventListeners() {
   document
     .getElementById("employeeForm")
@@ -180,7 +165,6 @@ function setupEventListeners() {
   const proximityInput = document.getElementById("search_qr");
 
   function autoFocusProximity() {
-    // Never steal focus while any modal is open
     const modalOpen =
       document.getElementById("employeeModal")?.style.display === "block" ||
       document.getElementById("deleteModal")?.style.display === "flex" ||
@@ -206,26 +190,22 @@ function setupEventListeners() {
   document.addEventListener("click", autoFocusProximity);
   document.addEventListener("focusin", autoFocusProximity);
 
-  // Position → A–Z, only show after user types
   setupFieldSuggestions("position", "position-suggestions", () =>
     [...allEmployees]
       .sort((a, b) => (a.position || "").localeCompare(b.position || ""))
       .map((e) => e.position),
   );
 
-  // Brand / Department → A–Z, only show after user types
   setupFieldSuggestions("brand", "brand-suggestions", () =>
     [...allEmployees]
       .sort((a, b) => (a.brand || "").localeCompare(b.brand || ""))
       .map((e) => e.brand),
   );
 
-  // Violation — only show after user types
   setupFieldSuggestions("violation", "violation-suggestions", () =>
     allEmployees.map((e) => e.violation),
   );
 
-  // Fullname → A–Z by lastname, only show after user types
   setupFieldSuggestions(
     "fullname",
     "fullname-suggestions",
@@ -242,7 +222,6 @@ function setupEventListeners() {
     { requireInput: true },
   );
 
-  // EMPID → high to low, only show after user types
   setupFieldSuggestions(
     "employee_id",
     "empid-suggestions",
@@ -253,7 +232,6 @@ function setupEventListeners() {
     { raw: true },
   );
 
-  // Proximity code — available codes from proxcode_backend, with icon + badge
   let availableCodes = [];
 
   setupFieldSuggestions("qr_code", "qrcode-suggestions", () => availableCodes, {
@@ -282,8 +260,6 @@ function setupEventListeners() {
         const currentCode =
           document.getElementById("qr_code")?.value.trim().toLowerCase() || "";
 
-        // Use filter_options (ALL employees, no pagination) so codes assigned
-        // to employees on other pages are correctly excluded from suggestions.
         const allEmployees =
           allEmpJson.success && Array.isArray(allEmpJson.filter_options)
             ? allEmpJson.filter_options
@@ -295,7 +271,6 @@ function setupEventListeners() {
             .filter(Boolean),
         );
 
-        // Only show codes that are:
         availableCodes = proxJson.data
           .filter((c) => {
             const cLower = (c.qr_code || "").trim().toLowerCase();
@@ -320,7 +295,6 @@ function setupEventListeners() {
   });
 }
 
-// Debounce function
 function debounce(func, wait) {
   let timeout;
   return function executedFunction(...args) {
@@ -333,7 +307,6 @@ function debounce(func, wait) {
   };
 }
 
-// GET CURRENT ACTIVE FILTERS FROM FORM
 function getActiveFilters() {
   const searchForm = document.getElementById("searchForm");
   const filters = {};
@@ -349,13 +322,11 @@ function getActiveFilters() {
   return filters;
 }
 
-// CHECK IF ANY FILTERS ARE ACTIVE
 function hasActiveFilters() {
   const filters = getActiveFilters();
   return Object.keys(filters).length > 0;
 }
 
-// DISPLAY FILTER STATUS IN UI
 function displayFilterStatus() {
   const filters = getActiveFilters();
 
@@ -391,7 +362,6 @@ function displayFilterStatus() {
     filterLabel.appendChild(icon);
 
     const textSpan = document.createElement("span");
-    // SECURITY: Use createTextNode for all user-derived filter values
     textSpan.appendChild(document.createTextNode("Active Filters: "));
 
     const filterEntries = Object.entries(filters);
@@ -409,7 +379,6 @@ function displayFilterStatus() {
         .join(" ");
       strong.textContent = `${properKey}:`;
       textSpan.appendChild(strong);
-      // SECURITY: textContent is safe — no escaping needed here
       textSpan.appendChild(document.createTextNode(` ${value}`));
     });
 
@@ -423,7 +392,6 @@ function displayFilterStatus() {
   }
 }
 
-// Function to stop any currently playing audio
 function stopCurrentAudio() {
   if (currentAudio && !currentAudio.paused) {
     currentAudio.pause();
@@ -458,7 +426,6 @@ async function syncOrphanStatuses() {
     if (!response.ok) return;
     const data = await response.json();
     if (data.success && data.synced_count > 0) {
-      // Silently reload so restored Active statuses show immediately
       await loadEmployees(
         hasActiveFilters() ? getActiveFilters() : {},
         true,
@@ -471,7 +438,6 @@ async function syncOrphanStatuses() {
   }
 }
 
-// Load employee data for editing
 async function loadEmployeeData(employeeId) {
   try {
     const response = await fetch(
@@ -489,7 +455,6 @@ async function loadEmployeeData(employeeId) {
     if (data.success && data.data) {
       const employee = data.data;
 
-      // SECURITY: Use .value assignment (not innerHTML) for form fields
       document.getElementById("user_id").value = employee.user_id;
       document.getElementById("employee_id").value = employee.id;
       document.getElementById("original_id").value = employee.id;
@@ -500,13 +465,12 @@ async function loadEmployeeData(employeeId) {
       document.getElementById("shift").value = employee.shift || "";
       document.getElementById("violation").value = employee.violation || "";
       document.getElementById("qr_code").value = employee.qr_code || "";
-      document.getElementById("gender").value = employee.gender || "";
-      document.getElementById("birth").value = employee.birth || "";
-      document.getElementById("hired").value = employee.hired || "";
+      // document.getElementById("gender").value = employee.gender || "";
+      // document.getElementById("birth").value = employee.birth || "";
+      // document.getElementById("hired").value = employee.hired || "";
 
       const fileLabel = document.querySelector(".file-upload-label");
       if (employee.image) {
-        // SECURITY: escapeHtml on image path and alt text
         const imagePath = `${window.location.origin}/../public/uploads/user/${escapeHtml(employee.image)}`;
         const altText = escapeHtml(employee.fullname);
 
@@ -533,13 +497,11 @@ async function loadEmployeeData(employeeId) {
   }
 }
 
-// Update total employees count
 async function updateTotalEmployees() {
   const el = document.getElementById("total_employees");
   if (el) el.textContent = totalRecords;
 }
 
-// Update active employees count
 async function updateActiveEmployees() {
   try {
     const res = await fetch("manpower_backend.php?action=stats", {
@@ -557,9 +519,7 @@ async function updateActiveEmployees() {
   }
 }
 
-// Add employee to access log
 async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
-  // SECURITY: whitelist checkStatus values
   if (!["IN", "OUT"].includes(checkStatus)) {
     console.error("Invalid checkStatus value:", checkStatus);
     return;
@@ -660,7 +620,6 @@ async function renderEmployeeError(message = "Failed to load employee data.") {
 
   if (noDataDiv) noDataDiv.style.display = "none";
 
-  // SECURITY: escapeHtml on message in case it contains user-influenced content
   tbody.innerHTML = `
     <tr>
       <td colspan="13" style="text-align: center; padding: 20px; color: #c0392b;">
@@ -670,7 +629,6 @@ async function renderEmployeeError(message = "Failed to load employee data.") {
   `;
 }
 
-// Render employee table
 async function renderEmployeeTable() {
   const tbody = document.getElementById("employeeTableBody");
   const paginationDiv = document.getElementById("pagination");
@@ -690,7 +648,6 @@ async function renderEmployeeTable() {
 
   tbody.innerHTML = currentEmployees
     .map((employee, index) => {
-      // SECURITY: escapeHtml on ALL employee fields used in innerHTML
       const safeFullname = escapeHtml(employee.fullname);
       const safePosition = escapeHtml(employee.position);
       const safeBrand = escapeHtml(employee.brand);
@@ -715,13 +672,9 @@ async function renderEmployeeTable() {
 
       const isAboveFold = index < 5;
 
-      // SECURITY: Use encodeURIComponent for URL params, escapeHtml for HTML attrs
       const thumbSrc = `${window.location.origin}/public/uploads/user/thumb_${safeImage}`;
       const imageSrc = `${window.location.origin}/public/uploads/user/${safeImage}`;
 
-      // SECURITY: For JS event handler attributes, use data attributes + event delegation
-      // instead of inline onclick with raw string interpolation where possible.
-      // For employee.id (integer from DB) direct use is safe; strings are escaped above.
       const numericId = parseInt(employee.id, 10);
 
       return `
@@ -957,12 +910,6 @@ async function renderEmployeeTable() {
   updatePaginationControls();
 }
 
-// ─────────────────────────────────────────────────────────────────
-// SECURITY: data-attribute bridge functions
-// These replace inline onclick string interpolation, preventing
-// injection of arbitrary JS through employee field values.
-// ─────────────────────────────────────────────────────────────────
-
 function toggleActionsPanel(btn) {
   const panel = btn.parentElement.querySelector(".actions-panel");
   const allPanels = document.querySelectorAll(".actions-panel");
@@ -1018,8 +965,6 @@ function openViolationsModalFromBtn(btn) {
 }
 
 function openViolationPopupFromBtn(btn) {
-  // Read values from data attributes (already HTML-escaped in the template)
-  // but pass RAW values from the employees array to avoid double-escaping in the popup logic
   const empId = btn.dataset.empId;
   const employee = employees.find((e) => String(e.id) === String(empId));
   if (!employee) return;
@@ -1027,7 +972,6 @@ function openViolationPopupFromBtn(btn) {
 }
 
 function copyQRCodeFromCell(td) {
-  // SECURITY: read from data attribute, not from rendered text
   copyQRCode(td.dataset.qr);
 }
 
@@ -1053,28 +997,19 @@ async function getCurrentUserId() {
   return "default";
 }
 
-// Copy QR code to clipboard
 function copyQRCode(code) {
-  // Create a temporary textarea element to hold the text
   const tempTextArea = document.createElement("textarea");
   tempTextArea.value = code;
   document.body.appendChild(tempTextArea);
-
-  // Select and copy the text
   tempTextArea.select();
-  tempTextArea.setSelectionRange(0, 99999); // For mobile devices
+  tempTextArea.setSelectionRange(0, 99999);
 
   try {
-    // Copy the text to clipboard
     document.execCommand("copy");
 
-    // Show success message (optional)
     showAlert("Proximity code copied to clipboard!");
 
-    // Alternative: Use a more subtle notification
-    // console.log('QR code copied:', code);
   } catch (err) {
-    // Fallback for modern browsers using the Clipboard API
     if (navigator.clipboard) {
       navigator.clipboard
         .writeText(code)
@@ -1089,11 +1024,9 @@ function copyQRCode(code) {
     }
   }
 
-  // Remove the temporary textarea
   document.body.removeChild(tempTextArea);
 }
 
-// Pagination functions
 function updatePaginationControls() {
   const paginationDiv = document.getElementById("pagination");
   if (!paginationDiv) return;
@@ -1125,7 +1058,6 @@ function updatePaginationControls() {
     if (prev !== null && p - prev > 1) {
       buttonsHTML += `<span class="page-ellipsis">…</span>`;
     }
-    // SECURITY: p is always a number — safe in template literal
     buttonsHTML += `<button class="page-num-btn ${currentPage === p ? "active" : ""}" onclick="goToPage(${p})">${p}</button>`;
     prev = p;
   }
@@ -1163,7 +1095,6 @@ function goToPage(page) {
   }
 }
 
-// SEARCH EMPLOYEES
 function searchEmployees() {
   const searchForm = document.getElementById("searchForm");
   const searchQuery = document.getElementById("search_qr").value.trim();
@@ -1181,7 +1112,6 @@ function searchEmployees() {
   updateDeleteButtonState();
 }
 
-// CLEAR SEARCH
 function clearSearch() {
   const searchForm = document.getElementById("searchForm");
   if (searchForm) searchForm.reset();
@@ -1226,7 +1156,6 @@ function showFullnameSuggestions(query) {
     return;
   }
 
-  // SECURITY: escapeHtml on name before inserting into innerHTML
   list.innerHTML = matches
     .map((name, i) => {
       const safeName = escapeHtml(name);
@@ -1253,7 +1182,6 @@ function showFullnameSuggestions(query) {
   suggestionIndex = -1;
 }
 
-// SECURITY: read name from data-value attribute instead of string interpolation
 function selectSuggestionFromLi(li) {
   selectSuggestion(li.dataset.value);
 }
@@ -1261,7 +1189,6 @@ function selectSuggestionFromLi(li) {
 function selectSuggestion(name) {
   const input = document.getElementById("search_fullname");
   const list = document.getElementById("fullname-suggestions");
-  // SECURITY: .value assignment is safe (no HTML injection)
   if (input) input.value = name;
   if (list) list.style.display = "none";
   suggestionIndex = -1;
@@ -1291,7 +1218,6 @@ function handleSuggestionNav(e) {
     highlightSuggestion(suggestionIndex);
   } else if (e.key === "Enter" && suggestionIndex >= 0) {
     e.preventDefault();
-    // SECURITY: read from data attribute
     selectSuggestion(items[suggestionIndex].dataset.value);
   } else if (e.key === "Escape") {
     list.style.display = "none";
@@ -1304,7 +1230,6 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
   const input = document.getElementById(inputId);
   if (!input) return;
 
-  // Always remove existing list and re-append to body
   const existing = document.getElementById(listId);
   if (existing) existing.remove();
 
@@ -1351,12 +1276,10 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     list.innerHTML = unique
       .map((name, i) => {
         const safe = escapeHtml(name);
-        // Display label: proper-cased for position/brand/violation; raw for qr_code (options.raw)
         const displayLabel = options.raw
           ? safe
           : escapeHtml(toProperCase(name));
 
-        // Only apply highlight markup when the user has actually typed something
         let hl = displayLabel;
         if (lower) {
           const regex = new RegExp(
@@ -1369,9 +1292,6 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
           );
         }
 
-        // data-value uses the display label so saving the form normalises
-        // PascalCase values (e.g. "PetmateDamage" → "Petmate Damage").
-        // For raw fields (qr_code) the original value is preserved.
         const inputValue = displayLabel;
 
         return `<li data-value="${inputValue}" data-index="${i}"
@@ -1389,7 +1309,6 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     idx = -1;
   }
 
-  // Focus: optionally run async loader first
   input.addEventListener("focus", async () => {
     if (options.requireInput && !input.value.trim()) return;
     show(input.value);
@@ -1465,7 +1384,6 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
   document.addEventListener("click", input._outsideClickHandler);
 }
 
-// Close suggestions when clicking outside
 document.addEventListener("click", function (e) {
   const list = document.getElementById("fullname-suggestions");
   const input = document.getElementById("search_fullname");
@@ -1475,7 +1393,6 @@ document.addEventListener("click", function (e) {
   }
 });
 
-// ── Violation padding — runs ONCE on page load ──
 const violation = document.getElementById("violation");
 
 function updateViolationPadding() {
@@ -1533,13 +1450,13 @@ async function openModal(action, employeeId = null) {
     modalTitle.innerHTML = `<i class="fas fa-user-plus"></i> Add Employee`;
     document.getElementById("status").value = "Active";
     modal.style.display = "block";
-    updateViolationPadding(); // field is empty after reset
+    updateViolationPadding();
     qrCodeInput.focus();
   } else if (action === "edit" && employeeId) {
     modalTitle.innerHTML = `<i class="fas fa-edit" style="color:#7c3aed"></i> Edit Employee`;
     modal.style.display = "block";
-    await loadEmployeeData(employeeId); // value is set here
-    updateViolationPadding(); // now check with actual data
+    await loadEmployeeData(employeeId);
+    updateViolationPadding();
     const idField = document.getElementById("employee_id");
     if (idField) {
       idField.focus();
@@ -1548,7 +1465,6 @@ async function openModal(action, employeeId = null) {
   }
 }
 
-// ENHANCED DELETE MODAL
 function openDeleteModal(employeeId = null, requireConfirmation = false) {
   const modal = document.getElementById("deleteModal");
   const confirmBtn = document.getElementById("confirmDeleteBtn");
@@ -1567,10 +1483,8 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
 
   if (requireConfirmation) {
     if (hasFilters) {
-      // SECURITY: textContent for title, DOM construction for message
       modalTitle.textContent = "⚠️ Delete Filtered Employees";
 
-      // Build message safely using DOM methods
       const msgDiv = document.createElement("div");
       const p1 = document.createElement("p");
       p1.style.marginBottom = "15px";
@@ -1593,7 +1507,6 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
           .join(" ");
         keyStrong.textContent = properKey + ":";
         row.appendChild(keyStrong);
-        // SECURITY: textContent for filter values — no XSS
         row.appendChild(document.createTextNode(" " + value));
         filterBox.appendChild(row);
       });
@@ -1695,7 +1608,6 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
   });
 }
 
-// UPDATE DELETE BUTTON STATE based on active filters
 function updateDeleteButtonState() {
   const deleteBtn = document.querySelector(".delete-all-btn .btn-danger");
   if (!deleteBtn) return;
@@ -1717,12 +1629,10 @@ function updateDeleteButtonState() {
   }
 }
 
-// DELETE EMPLOYEES BASED ON ACTIVE FILTERS
 async function deleteFilteredEmployees() {
   try {
     showLoading(true);
 
-    // Fetch ALL filtered employee IDs from backend (no pagination)
     const params = new URLSearchParams({
       action: "get",
       page: 1,
@@ -1809,7 +1719,6 @@ async function openLogsModal(employeeId, fullname) {
   document.getElementById("logCountOut").textContent = "—";
   document.getElementById("logCountTotal").textContent = "—";
 
-  // SECURITY: textContent for user-supplied fullname in title
   title.innerHTML = `<i class="fas fa-history"></i> Access Logs — `;
   const nameSpan = document.createElement("span");
   nameSpan.textContent = fullname;
@@ -1832,7 +1741,6 @@ async function openLogsModal(employeeId, fullname) {
       const inCount = logs.filter((l) => l.check_status === "IN").length;
       const outCount = logs.filter((l) => l.check_status === "OUT").length;
 
-      // SECURITY: textContent for counts
       document.getElementById("logCountIn").textContent = inCount;
       document.getElementById("logCountOut").textContent = outCount;
       document.getElementById("logCountTotal").textContent = logs.length;
@@ -1877,7 +1785,6 @@ async function openViolationsModal(employeeId, fullname) {
   document.getElementById("vioCountUpdates").textContent = "—";
   document.getElementById("vioCountCleared").textContent = "—";
 
-  // SECURITY: textContent for fullname
   title.innerHTML = `<i class="fas fa-exclamation-triangle" style="color:#e53e3e;"></i> Violation History — `;
   const nameSpan = document.createElement("span");
   nameSpan.textContent = fullname;
@@ -1902,7 +1809,6 @@ async function openViolationsModal(employeeId, fullname) {
         (r) => r.violation_type === "Remarks Cleared",
       ).length;
 
-      // SECURITY: textContent for counts
       document.getElementById("vioCountTotal").textContent = rows.length;
       document.getElementById("vioCountUpdates").textContent = updates;
       document.getElementById("vioCountCleared").textContent = cleared;
@@ -1969,7 +1875,6 @@ function openViolationPopup(fullname, violation, employeeId) {
     ts: new Date().toISOString(),
   });
 
-  // Build popup using DOM methods — no innerHTML with raw user data
   const overlay = document.createElement("div");
   overlay.id = "violationPopupOverlay";
   overlay.style.cssText = `
@@ -1983,14 +1888,12 @@ function openViolationPopup(fullname, violation, employeeId) {
   card.style.cssText = `background:#fff;border:0.5px solid #e2e8f0;border-radius:12px;
     padding:1.25rem;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.12);`;
 
-  // Header row
   const header = document.createElement("div");
   header.style.cssText =
     "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;";
 
   const headerLabel = document.createElement("span");
   headerLabel.style.cssText = "font-size:13px;font-weight:500;color:#64748b;";
-  // SECURITY: textContent for fullname
   headerLabel.textContent = `${fullname} — Remarks`;
 
   const footer = document.createElement("div");
@@ -2006,7 +1909,6 @@ function openViolationPopup(fullname, violation, employeeId) {
   header.appendChild(headerLabel);
   header.appendChild(closeBtn);
 
-  // Body row
   const body = document.createElement("div");
   body.style.cssText =
     "display:flex;align-items:flex-start;justify-content:space-between;gap:12px;";
@@ -2014,7 +1916,6 @@ function openViolationPopup(fullname, violation, employeeId) {
   const violationText = document.createElement("div");
   violationText.style.cssText =
     "font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;flex:1;max-height:200px;overflow-y:auto;word-break:break-word;";
-  // SECURITY: textContent for violation content
   violationText.textContent = violation;
 
   const attachBtn = document.createElement("button");
@@ -2083,7 +1984,6 @@ function populateFilter(employeeList) {
         .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
         .forEach((v) => {
           const opt = document.createElement("option");
-          // SECURITY: .value and .textContent are safe
           opt.value = v;
           opt.textContent = toProperCase(v);
           select.appendChild(opt);
@@ -2126,7 +2026,6 @@ function populateFilter(employeeList) {
   updateColor();
 }
 
-// LOAD EMPLOYEES - ALWAYS CHECKS FOR FILTERS
 async function loadEmployees(
   filters = {},
   preservePage = false,
@@ -2209,7 +2108,6 @@ async function loadEmployees(
   }
 }
 
-// Close modal
 function closeModal() {
   const employeeModal = document.getElementById("employeeModal");
   const deleteModal = document.getElementById("deleteModal");
@@ -2259,7 +2157,6 @@ function markFieldError(inputId) {
   );
 }
 
-// Handle form submission
 async function handleFormSubmit(e) {
   e.preventDefault();
 
@@ -2293,8 +2190,6 @@ async function handleFormSubmit(e) {
     }
 
     // ── Server-side uniqueness checks ─────────────────────────────────────
-    // Check EMPID, Fullname, and Proximity Code against the full database,
-    // not just the current page — avoids false negatives on paginated data.
     try {
       const checkRes = await fetch(
         `manpower_backend.php?action=get&page=1&limit=1` +
@@ -2309,7 +2204,6 @@ async function handleFormSubmit(e) {
       const checkData = await checkRes.json();
 
       if (checkData.success && checkData.total > 0) {
-        // Allow if editing the same record
         const conflict = checkData.data.find(
           (e) =>
             String(e.id) === String(empid) &&
@@ -2327,7 +2221,6 @@ async function handleFormSubmit(e) {
       }
     } catch (e) {
       console.warn("EMPID check failed, falling back to local check:", e);
-      // Fallback to local check
       if (currentAction === "edit" && empid !== originalId) {
         const idTaken = employees.some(
           (emp) => String(emp.id) === String(empid),
@@ -2412,7 +2305,6 @@ async function handleFormSubmit(e) {
         const qrData = await qrRes.json();
 
         if (qrData.success && qrData.exists) {
-          // Allow if it belongs to the employee being edited
           if (String(qrData.data?.id) !== String(originalId)) {
             showAlert(
               `Proximity Code "${escapeHtml(qrCode)}" is already assigned to another employee.`,
@@ -2427,7 +2319,6 @@ async function handleFormSubmit(e) {
         console.warn("Proximity code check failed:", e);
       }
     }
-    // ── End uniqueness checks ─────────────────────────────────────────────
 
     const imageInput = document.getElementById("image");
     if (imageInput.files.length > 0) {
@@ -2604,8 +2495,6 @@ function setupFileUploadHandler() {
       reader.onload = (event) => {
         const isConverted =
           webpFile.type === "image/webp" && file.type !== "image/webp";
-        // SECURITY: src comes from FileReader result (blob URL) — safe
-        // size is a number — safe
         label.innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
             <img id="imagePreview" src="${event.target.result}" alt="New image preview" loading="lazy"
@@ -2626,7 +2515,6 @@ function setupFileUploadHandler() {
   });
 }
 
-// Delete single employee
 async function deleteEmployee(employeeId) {
   try {
     showLoading(true);
@@ -2660,7 +2548,6 @@ async function deleteEmployee(employeeId) {
   }
 }
 
-// Delete all employees
 async function deleteAllEmployees(employeeId) {
   try {
     showLoading(true);
@@ -2702,7 +2589,6 @@ async function deleteAllEmployees(employeeId) {
   }
 }
 
-// Show alert message
 function showAlert(message, type = "info") {
   const existingAlerts = document.querySelectorAll(".alert");
   existingAlerts.forEach((alert) => alert.remove());
@@ -2710,9 +2596,7 @@ function showAlert(message, type = "info") {
   const alert = document.createElement("div");
   alert.className = `alert alert-${type}`;
 
-  // SECURITY: Use DOM methods instead of innerHTML for alert messages
   const msgSpan = document.createElement("span");
-  // Use textContent so any HTML in message is rendered as plain text
   msgSpan.textContent = message;
 
   const closeBtn = document.createElement("button");
@@ -2731,7 +2615,6 @@ function showAlert(message, type = "info") {
   }, 5000);
 }
 
-// Show/hide loading state
 function showLoading(show) {
   const body = document.body;
   if (show) {

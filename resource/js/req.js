@@ -9,26 +9,19 @@
     return window.location.protocol + "//" + window.location.host + "/index.php";
   }
 
-  /**
-   * Central logout handler.
-   * Destroys the server session, then redirects the top-level window.
-   */
   function handleSessionExpired(redirectUrl) {
     if (_redirecting) return;
     _redirecting = true;
 
     var dest = redirectUrl || getRootUrl();
 
-    // Show a non-blocking banner so the user knows what happened
     showSessionBanner();
 
-    // Tell the server to destroy the session cleanly (fire-and-forget)
     fetch("/app/http/auth/session_logout.php", {
       method: "POST",
       credentials: "same-origin",
       headers: { "X-Requested-With": "XMLHttpRequest" },
     }).catch(function () {
-      // Network error — doesn't matter, we're redirecting anyway
     }).finally(function () {
       setTimeout(function () {
         if (window.top) {
@@ -36,7 +29,7 @@
         } else {
           window.location.href = dest;
         }
-      }, 1200); // brief pause so the banner is visible
+      }, 1200);
     });
   }
 
@@ -46,7 +39,6 @@
 
   // ── Session expired banner ────────────────────────────────────────────────
   function showSessionBanner() {
-    // Remove any existing banner
     var existing = document.getElementById("__session_expired_banner__");
     if (existing) existing.remove();
 
@@ -71,7 +63,6 @@
       "animation:__slideDown__ .25s ease",
     ].join(";");
 
-    // Inject keyframe once
     if (!document.getElementById("__session_expired_style__")) {
       var style = document.createElement("style");
       style.id = "__session_expired_style__";
@@ -84,7 +75,6 @@
     spinner.style.cssText =
       "width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;display:inline-block;animation:spin .7s linear infinite;flex-shrink:0";
 
-    // Reuse existing spin keyframe if present, else add it
     if (!document.querySelector("style[data-spin]")) {
       var spinStyle = document.createElement("style");
       spinStyle.setAttribute("data-spin", "1");
@@ -103,7 +93,6 @@
     banner.appendChild(spinner);
     banner.appendChild(text);
 
-    // If inside an iframe, try to show the banner on the top window instead
     try {
       if (window.top && window.top !== window) {
         window.top.document.body.appendChild(banner);
@@ -119,11 +108,9 @@
   var _origFetch = window.fetch.bind(window);
 
   window.fetch = function (input, init) {
-    // Attach X-Requested-With so PHP can detect AJAX fetches
     init = init || {};
     init.headers = init.headers || {};
 
-    // Handle both plain objects and Headers instances
     if (init.headers instanceof Headers) {
       if (!init.headers.has("X-Requested-With")) {
         init.headers.set("X-Requested-With", "XMLHttpRequest");
@@ -145,7 +132,7 @@
           handleSessionExpired();
         });
       }
-      return response; // always pass through so callers don't break
+      return response;
     });
   };
 
@@ -167,7 +154,7 @@
     return _origOpen.apply(this, arguments);
   };
 
-  // ── Periodic session heartbeat (catches idle tabs) ────────────────────────
+  // ── Periodic session heartbeat ─────────────────────────────────────────────
   var HEARTBEAT_INTERVAL = 30000; // 30 seconds
 
   function heartbeat() {
@@ -184,11 +171,9 @@
         });
       }
     }).catch(function () {
-      // Network error — skip this cycle
     });
   }
 
-  // Only run heartbeat on authenticated pages (not the login page itself)
   if (!document.getElementById("loginForm")) {
     setInterval(heartbeat, HEARTBEAT_INTERVAL);
   }
@@ -213,7 +198,6 @@ document.addEventListener('DOMContentLoaded', function () {
       icon.classList.toggle('fa-eye-slash', isPassword);
     }
 
-    // Return focus to the field so mobile keyboard stays open
     passwordField.focus();
   });
 });

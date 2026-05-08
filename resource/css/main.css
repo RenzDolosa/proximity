@@ -454,12 +454,10 @@ body {
     padding-right: 12px;
   }
 
-  /* Right column items */
   .status-item:nth-child(even) {
     padding-left: 12px;
   }
 
-  /* If odd total items, last item spans full width */
   .status-item:last-child:nth-child(odd) {
     grid-column: 1 / -1;
     border-right: none;

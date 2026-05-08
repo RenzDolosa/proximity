@@ -5,10 +5,9 @@ document.addEventListener("DOMContentLoaded", function () {
   enhanceFormValidation();
   autoHideAlerts();
   handleFormSubmission();
-  testServerConnection(); // NEW: Test connection on page load
+  testServerConnection();
 });
 
-// NEW FUNCTION: Test server connection
 function testServerConnection() {
   fetch(window.location.pathname, { method: "HEAD" }).catch((err) => {
     console.error("Server connection issue:", err);
@@ -42,7 +41,6 @@ function addPasswordToggle() {
       wrapper.appendChild(toggleBtn);
     }
 
-    // Remove old event listeners
     const newToggleBtn = toggleBtn.cloneNode(true);
     toggleBtn.parentNode.replaceChild(newToggleBtn, toggleBtn);
 
@@ -101,7 +99,6 @@ function validateFormBeforeSubmit(e) {
   const firstName = document.getElementById("first_name").value;
   const lastName = document.getElementById("last_name").value;
 
-  // Client-side validation
   if (!username || username.length < 3) {
     e.preventDefault();
     showAlert("Username must be at least 3 characters long.", "error");
@@ -141,7 +138,6 @@ function validateFormBeforeSubmit(e) {
     return false;
   }
 
-  // All validations passed - show loading state
   showLoadingState(true);
   return true;
 }
@@ -269,7 +265,6 @@ function isValidPassword(password) {
   );
 }
 
-// IMPROVED: Better alert system
 function showAlert(message, type = "error") {
   removeExistingAlerts();
 
@@ -284,7 +279,6 @@ function showAlert(message, type = "error") {
   const form = document.getElementById("registerForm");
   form.insertAdjacentElement("beforebegin", alertDiv);
 
-  // Auto-hide after 8 seconds
   setTimeout(() => {
     fadeOut(alertDiv);
   }, 8000);
@@ -329,7 +323,6 @@ function handleFormSubmission() {
     showLoadingState(false);
   });
 
-  // Handle form submission with timeout
   if (form) {
     form.addEventListener("submit", function () {
       const timeoutId = setTimeout(() => {
@@ -338,9 +331,8 @@ function handleFormSubmission() {
           "Request took too long. Please check your connection and try again.",
           "error",
         );
-      }, 15000); // 15 second timeout
+      }, 15000);
 
-      // Clear timeout if response comes back
       const observer = new MutationObserver(() => {
         clearTimeout(timeoutId);
         observer.disconnect();

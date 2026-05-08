@@ -10,7 +10,6 @@ function openImportModal() {
     `<i class="fas fa-file"></i> Click to select file (.csv, .xlsx, .xls)`;
 }
 
-// Update file label when file is selected
 document.addEventListener("DOMContentLoaded", function () {
   document.getElementById("dataFile").addEventListener("change", function (e) {
     const label = document.querySelector("#dataFile + .file-upload-label");
@@ -32,7 +31,6 @@ document.addEventListener("DOMContentLoaded", function () {
     .addEventListener("submit", handleImportSubmit);
 });
 
-// Preview file content (CSV or Excel)
 async function previewFile() {
   const fileInput = document.getElementById("dataFile");
   const file = fileInput.files[0];
@@ -64,7 +62,6 @@ async function previewFile() {
   }
 }
 
-// Parse CSV file
 async function parseCSVFile(file) {
   const text = await file.text();
   const lines = text.split("\n").filter((line) => line.trim());
@@ -75,7 +72,6 @@ async function parseCSVFile(file) {
   return previewLines.map((line) => parseCSVLine(line));
 }
 
-// Parse Excel file
 async function parseExcelFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -101,7 +97,6 @@ async function parseExcelFile(file) {
   });
 }
 
-// Display preview data
 function displayPreview(data) {
   let previewHTML = '<table class="preview-table"><thead><tr>';
   previewHTML += `<th>SN</th>
@@ -235,37 +230,28 @@ function displayPreview(data) {
   document.getElementById("importPreview").style.display = "block";
 }
 
-// Normalize date values from CSV or Excel into YYYY-MM-DD string (for DB storage)
 function formatDateValue(value) {
   if (!value && value !== 0) return "";
 
-  // Excel serial number — pure UTC math, no timezone involvement
   if (typeof value === "number") {
-    // Excel's epoch is Dec 30, 1899 (not Jan 1, 1900 — Excel has a leap year bug)
-    // Multiply by ms-per-day, offset from JS epoch (Jan 1 1970 = serial 25569)
     const ms = Math.round(value) * 86400 * 1000;
     const date = new Date(25569 * -86400 * 1000 + ms);
-    // Use UTC getters — no local timezone shift
     const yyyy = date.getUTCFullYear();
     const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
     const dd = String(date.getUTCDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  // String — normalize to YYYY-MM-DD
   const str = String(value).trim();
 
-  // Already YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
 
-  // DD/MM/YYYY ← your Excel locale
   const dmyMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (dmyMatch) {
     const [, dd, mm, yyyy] = dmyMatch;
     return `${yyyy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
   }
 
-  // MM-DD-YYYY or DD-MM-YYYY string fallback
   const mdyMatch = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
   if (mdyMatch) {
     const [, dd, mm, yyyy] = mdyMatch;
@@ -275,7 +261,6 @@ function formatDateValue(value) {
   return str;
 }
 
-// Format YYYY-MM-DD → DD/MM/YYYY for human-readable preview display only
 function formatDateForDisplay(isoValue) {
   if (!isoValue) return "";
   const match = isoValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -283,7 +268,6 @@ function formatDateForDisplay(isoValue) {
   return isoValue;
 }
 
-// Parse CSV line (handles quotes and commas)
 function parseCSVLine(line) {
   const result = [];
   let current = "";
@@ -306,7 +290,6 @@ function parseCSVLine(line) {
   return result;
 }
 
-// Handle import form submission
 async function handleImportSubmit(e) {
   e.preventDefault();
 
@@ -381,7 +364,7 @@ async function handleImportSubmit(e) {
         // gender: row[4] || "",
         // birth: formatDateValue(row[5]),
         // hired: formatDateValue(row[6]),
-        status: row[4] || "Active", // backend will override with code-table truth
+        status: row[4] || "Active",
         shift: row[5] || "",
         violation: row[6] || "",
         qr: row[7] || "",
@@ -434,10 +417,6 @@ async function handleImportSubmit(e) {
       updateImportStatus(statusMessage);
       showAlert(alertMessage, "success");
 
-      // ── Close modal, refresh table, then sync statuses ─────────────────
-      // syncOrphanStatuses() ensures every employee's status is correct
-      // relative to the code table — catches any edge cases the server-side
-      // syncStatusByQR() may not have covered (e.g. QR code added after import).
       setTimeout(async () => {
         closeModal();
         await loadEmployees(
@@ -451,7 +430,6 @@ async function handleImportSubmit(e) {
         await updateTotalEmployees();
         await updateActiveEmployees();
 
-        // Final sync pass — reconciles any remaining status mismatches
         if (typeof syncOrphanStatuses === "function") {
           await syncOrphanStatuses();
         }
@@ -469,7 +447,6 @@ async function handleImportSubmit(e) {
   }
 }
 
-// Process CSV file for import
 async function processCSVFile(file) {
   const text = await file.text();
   const lines = text.split("\n").filter((line) => line.trim());
@@ -479,7 +456,6 @@ async function processCSVFile(file) {
   return dataLines.map((line) => parseCSVLine(line));
 }
 
-// Process Excel file for import
 async function processExcelFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -512,7 +488,6 @@ async function processExcelFile(file) {
   });
 }
 
-// Show/hide import progress
 function showImportProgress(show) {
   document.getElementById("importProgress").style.display = show
     ? "block"
@@ -522,18 +497,15 @@ function showImportProgress(show) {
   }
 }
 
-// Update import progress
 function updateProgress(percent) {
   document.getElementById("progressFill").style.width = percent + "%";
   document.getElementById("progressFill").textContent = percent + "%";
 }
 
-// Update import status
 function updateImportStatus(message) {
   document.getElementById("importStatus").textContent = message;
 }
 
-// Show alert message
 function showAlert(message, type = "info") {
   const existingAlerts = document.querySelectorAll(".alert");
   existingAlerts.forEach((alert) => alert.remove());
@@ -552,7 +524,6 @@ function showAlert(message, type = "info") {
   }, 5000);
 }
 
-// Update the window click handler to include import modal
 window.onclick = function (event) {
   const employeeModal = document.getElementById("employeeModal");
   const importModal = document.getElementById("importModal");

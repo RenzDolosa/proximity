@@ -166,9 +166,8 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
   gap: 20px;
   padding: 20px 0;
-  /* When showing no results, this will center the content */
   place-items: center;
-  min-height: 300px; /* Ensures there's enough space to center vertically */
+  min-height: 300px;
 }
 
 .employee-card {
@@ -318,17 +317,12 @@ body {
 }
 
 .no-results {
-  /* Make it span the full width when in grid */
   grid-column: 1 / -1;
-  
-  /* Center the content */
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  
-  /* Add some spacing and styling */
   padding: 60px 20px;
   color: #666;
   min-height: 300px;
@@ -340,17 +334,15 @@ body {
   opacity: 0.5;
 }
 
-/* When there are employee cards, reset the grid behavior */
 .employee-grid:has(.employee-card) {
   place-items: stretch;
 }
 
-/* Alternative approach if :has() is not supported */
 .employee-grid.has-results {
   place-items: stretch;
 }
 
-/*Alert Message !-->*/
+/* ── Alert Message ── */
 .alert-container {
   position: relative;
   z-index: 1000;
@@ -386,7 +378,6 @@ body {
   color: #721c24;
   border: 1px solid #f5c6cb;
 }
-/*<--*/
 
 .loading {
   opacity: 0.6;

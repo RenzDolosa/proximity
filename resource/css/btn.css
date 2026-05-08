@@ -122,8 +122,6 @@
 }
 
 @media (max-width: 640px) {
-  /* ... existing rules ... */
-
   /* ── Button row fix ── */
   .controls .form-row-btn {
     display: block;

@@ -182,7 +182,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
       font-family: 'Anton', Impact, 'Arial Narrow', 'Franklin Gothic Heavy', 'Arial Black', sans-serif;
       font-size: 30px;
       font-weight: 400;
-      /* Anton is already bold by design */
       color: #1565c0;
       letter-spacing: 2px;
       text-transform: uppercase;
@@ -432,7 +431,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
       resize: none;
       line-height: 24px;
       min-height: 192px;
-      /* 8 lines × 24px */
       overflow: hidden;
       box-sizing: border-box;
       background-image: repeating-linear-gradient(to bottom,
@@ -451,10 +449,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
     /* ── Print-only lined rows that replace the textarea for print ── */
     .lined-print-rows {
       display: none;
-      /* hidden on screen */
     }
 
-    /* ── Checklist / Recommendation box ── */
     .rec-box {
       border: 1px solid #888;
       padding: 6px 10px 7px;
@@ -729,7 +725,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
         margin: 0;
       }
 
-      /* Hide screen-only elements */
       #toolbar,
       .attach-section,
       .logo-edit-row,
@@ -794,7 +789,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
         color: transparent !important;
       }
 
-      /* FIX 3: Hide the screen textarea, show the print rows instead */
       .lined-area {
         display: none !important;
       }
@@ -873,7 +867,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
                   value="">
               </td>
             </tr>
-            <!-- wrapper row so we can detect blank subtitle for print -->
             <tr id="subtitle-wrapper" class="has-content">
               <td style="padding:0;text-align:center;display:table-cell;">
                 <input
@@ -976,14 +969,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
     <!-- ── EMPLOYEE WRITTEN EXPLANATION ── -->
     <div class="sec-hdr" style="margin-top: 20px;">Employee Written Explanation</div>
 
-    <!-- Screen: gradient-lined textarea -->
     <div class="box-area" id="lined-screen-box">
       <textarea class="lined-area" id="employee-explanation" rows="9" placeholder=""></textarea>
     </div>
 
-    <!-- FIX 3: Print: explicit border rows (8 lines) that print reliably -->
     <div class="lined-print-rows" id="lined-print-box">
-      <!-- JS will populate these with the textarea content before printing -->
       <div class="lined-print-row" id="pr0"></div>
       <div class="lined-print-row" id="pr1"></div>
       <div class="lined-print-row" id="pr2"></div>
@@ -1087,7 +1077,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
       </div>
     </div>
 
-  </div><!-- /report-canvas -->
+  </div>
 
   <!-- ── Signature modal ── -->
   <div id="sigModal">
@@ -1125,7 +1115,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
       updateSubtitlePrintClass();
     }
 
-    /* FIX 2: toggle class so print CSS can hide blank subtitle */
     function updateSubtitlePrintClass() {
       const subEl = document.getElementById('company-subtitle-input');
       const wrapper = document.getElementById('subtitle-wrapper');
@@ -1137,13 +1126,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
       }
     }
 
-    /* Load from localStorage immediately (no flicker on refresh).
-       If nothing is stored yet, seed with the defaults. */
     (function loadFromLocalStorage() {
       let name = localStorage.getItem(LS_NAME_KEY);
       let subtitle = localStorage.getItem(LS_SUBTITLE_KEY);
 
-      /* First-time visitors: seed localStorage with the defaults */
       if (name === null) {
         name = DEFAULT_COMPANY_NAME;
         localStorage.setItem(LS_NAME_KEY, name);
@@ -1157,7 +1143,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
       updateSubtitlePrintClass();
     })();
 
-    /* Load from server (authoritative, runs async after page paint) */
     async function loadSavedCompany() {
       try {
         const res = await fetch('', {
@@ -1177,17 +1162,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
           subtitle = parts[1] || '';
         }
 
-        /* If the server has no saved data yet, keep the defaults already shown */
         if (!name) name = DEFAULT_COMPANY_NAME;
         if (!subtitle) subtitle = DEFAULT_COMPANY_SUBTITLE;
 
-        /* Update DOM only if different from what localStorage already gave us */
         const nameEl = document.getElementById('company-name-input');
         const subEl = document.getElementById('company-subtitle-input');
         if (nameEl.value !== name) nameEl.value = name;
         if (subEl.value !== subtitle) subEl.value = subtitle;
 
-        /* Sync localStorage with server truth */
         localStorage.setItem(LS_NAME_KEY, name);
         localStorage.setItem(LS_SUBTITLE_KEY, subtitle);
 
@@ -1208,13 +1190,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
     let saveTimer = null;
 
     function scheduleSave() {
-      /* Save to localStorage immediately for instant persistence */
       const nameEl = document.getElementById('company-name-input');
       const subEl = document.getElementById('company-subtitle-input');
       localStorage.setItem(LS_NAME_KEY, nameEl.value.trim());
       localStorage.setItem(LS_SUBTITLE_KEY, subEl.value.trim());
       updateSubtitlePrintClass();
-      /* Debounce server save */
       clearTimeout(saveTimer);
       saveTimer = setTimeout(saveCompanyData, 800);
     }
@@ -1298,14 +1278,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
       }
     }
 
-    /* Fields that are auto-filled but still user-editable */
     const EDITABLE_AUTOFILL_IDS = new Set(['f_report_date', 'f_incident_date', 'f_incident_time']);
 
     function setAutoFilled(inputEl, value, badgeId) {
       if (!value || !inputEl) return;
       inputEl.value = value;
       inputEl.classList.add('auto-filled');
-      /* Lock the field unless it is a date/time field the user may adjust */
       if (!EDITABLE_AUTOFILL_IDS.has(inputEl.id)) {
         inputEl.readOnly = true;
         inputEl.style.cursor = 'not-allowed';
@@ -1523,7 +1501,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
       closeSigPad();
     }
 
-    /* ── FIX 3: Before print, copy textarea text into the print row divs ── */
     function syncPrintRows() {
       const ta = document.getElementById('employee-explanation');
       const lines = ta.value.split('\n');

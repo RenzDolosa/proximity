@@ -23,18 +23,16 @@ define('USER_DB_HOST', DB_HOST);
 define('USER_DB_USER', DB_USER);
 define('USER_DB_PASS', DB_PASS);
 
-// Maximum database name length for MySQL
 define('MAX_DB_NAME_LENGTH', 64);
 
 // ── Timezone ──────────────────────────────────────────────────────────────────
-// Set PHP timezone; every new PDO connection will also sync MySQL's session tz.
 define('APP_TIMEZONE',    'Asia/Manila');
-define('APP_TIMEZONE_TZ', '+08:00');       // MySQL offset equivalent
+define('APP_TIMEZONE_TZ', '+08:00');
 
 date_default_timezone_set(APP_TIMEZONE);
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Create main database
+// ── Create main database ──────────────────────────────────────────────────────
 function createDatabase()
 {
   $dbName = DB_NAME;
@@ -126,7 +124,6 @@ function createDatabase()
     $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `session_token` VARCHAR(255) DEFAULT NULL");
     $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `my_database` VARCHAR(50) NOT NULL DEFAULT ''");
 
-    // ── These tables may not exist in the main DB, so skip errors safely ──
     $alterStatements = [
       "ALTER TABLE employees ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL",
       "ALTER TABLE employee_access_log ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL",
@@ -144,7 +141,6 @@ function createDatabase()
       try {
         $dbPdo->exec($sql);
       } catch (PDOException $e) {
-        // Table doesn't exist in main DB — safely skip
       }
     }
     // ──────────────────────────────────────────────────────────────────────
@@ -168,8 +164,6 @@ createDatabase();
 // ============================================================================
 // DATABASE CONNECTION FUNCTIONS
 // ============================================================================
-
-// Create main database connection
 function getDBConnection()
 {
   try {
@@ -183,22 +177,18 @@ function getDBConnection()
         PDO::ATTR_EMULATE_PREPARES => false
       ]
     );
-    // Sync MySQL session timezone with PHP timezone
     $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
     return $pdo;
   } catch (PDOException $e) {
-    // error_log("Database connection failed: " . $e->getMessage());
     die("Database connection failed. Please try again later.");
   }
 }
 
-// Create connection to main database (for user management)
 function getMainDBConnection()
 {
   return getDBConnection();
 }
 
-// Create connection to user-specific database
 function getUserDBConnection($userId)
 {
   if (!is_numeric($userId) || $userId <= 0) {
@@ -218,16 +208,13 @@ function getUserDBConnection($userId)
         PDO::ATTR_EMULATE_PREPARES => false
       ]
     );
-    // Sync MySQL session timezone with PHP timezone
     $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
     return $pdo;
   } catch (PDOException $e) {
-    // error_log("User database connection failed for user $userId: " . $e->getMessage());
     throw new Exception("User database connection failed");
   }
 }
 
-// Check if user database exists
 function userDatabaseExists($userId)
 {
   if (!is_numeric($userId) || $userId <= 0) {
@@ -250,32 +237,26 @@ function userDatabaseExists($userId)
 
     return $stmt->rowCount() > 0;
   } catch (PDOException $e) {
-    // error_log("Error checking user database existence: " . $e->getMessage());
     return false;
   }
 }
 
-// FIXED: Create user-specific database and tables with better error handling
 function createUserDatabase($userId)
 {
   if (!is_numeric($userId) || $userId <= 0) {
     $errorMsg = "Invalid user ID for database creation: $userId";
-    // error_log($errorMsg);
     return ['success' => false, 'error' => $errorMsg];
   }
 
   $userId = intval($userId);
   $dbName = DB_NAME; // USER_DB_PREFIX . $userId;
 
-  // ADDED: Validate database name length
   if (strlen($dbName) > MAX_DB_NAME_LENGTH) {
     $errorMsg = "Database name exceeds maximum length of " . MAX_DB_NAME_LENGTH . " characters. Generated name: '$dbName' (" . strlen($dbName) . " chars)";
-    // error_log($errorMsg);
     return ['success' => false, 'error' => $errorMsg];
   }
 
   try {
-    // Connect without specifying database
     $pdo = new PDO(
       "mysql:host=" . USER_DB_HOST . ";charset=utf8mb4",
       USER_DB_USER,
@@ -284,14 +265,10 @@ function createUserDatabase($userId)
     );
     $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
 
-    // Create database with backticks and proper escaping
     $createDbQuery = "CREATE DATABASE IF NOT EXISTS `" . str_replace("`", "``", $dbName) . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
 
-    // error_log("Attempting to create database: $dbName with query: $createDbQuery");
     $pdo->exec($createDbQuery);
-    // error_log("Database created successfully: $dbName");
 
-    // Connect to the new database
     $userPdo = new PDO(
       "mysql:host=" . USER_DB_HOST . ";dbname=" . $dbName . ";charset=utf8mb4",
       USER_DB_USER,
@@ -300,9 +277,6 @@ function createUserDatabase($userId)
     );
     $userPdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
 
-    // error_log("Connected to new database: $dbName");
-
-    // Create user-specific tables
     $sql = "
         CREATE TABLE
           IF NOT EXISTS employees (
@@ -431,30 +405,24 @@ function createUserDatabase($userId)
           ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
     ";
 
-    // error_log("Creating tables in database: $dbName");
     $userPdo->exec($sql);
-    // error_log("Tables created successfully in database: $dbName");
 
     return ['success' => true, 'database_name' => $dbName];
   } catch (PDOException $e) {
     $errorMsg = "Error creating user database for user $userId: " . $e->getMessage();
-    // error_log($errorMsg);
     return ['success' => false, 'error' => $errorMsg];
   }
 }
 
-// Ensure all user tables exist (call on every login)
 function ensureUserTablesExist($userId)
 {
   if (!is_numeric($userId) || $userId <= 0) {
-    // error_log("Invalid user ID for ensuring tables: $userId");
     return false;
   }
 
   try {
     $userPdo = getUserDBConnection($userId);
 
-    // SQL to create tables if they don't exist
     $sql = "
         CREATE TABLE
           IF NOT EXISTS employees (
@@ -589,11 +557,9 @@ function ensureUserTablesExist($userId)
   }
 }
 
-// Delete user database (for cleanup)
 function deleteUserDatabase($userId)
 {
   if (!is_numeric($userId) || $userId <= 0) {
-    // error_log("Invalid user ID for deletion: $userId");
     return false;
   }
 
@@ -612,7 +578,6 @@ function deleteUserDatabase($userId)
     $pdo->exec("DROP DATABASE IF EXISTS `" . str_replace("`", "``", $dbName) . "`");
     return true;
   } catch (PDOException $e) {
-    // error_log("Error deleting user database: " . $e->getMessage());
     return false;
   }
 }
@@ -620,38 +585,31 @@ function deleteUserDatabase($userId)
 // ============================================================================
 // SESSION AND SECURITY FUNCTIONS
 // ============================================================================
-
-// Start session if not already started
 if (session_status() === PHP_SESSION_NONE) {
   ini_set('session.cookie_httponly', 1);
-  ini_set('session.cookie_secure', 0);  // ← Change to 0 for local HTTP
+  ini_set('session.cookie_secure', 0);
   ini_set('session.use_strict_mode', 1);
   session_start();
 }
 
-// Security function to sanitize input
 function sanitizeInput($data)
 {
   return htmlspecialchars(strip_tags(trim($data)), ENT_QUOTES, 'UTF-8');
 }
 
-// Function to validate email
 function isValidEmail($email)
 {
   return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
 }
 
-// Function to validate password strength
 function isValidPassword($password)
 {
-  // At least 8 characters, contains uppercase, lowercase, number
   return strlen($password) >= 8 &&
     preg_match('/[A-Z]/', $password) &&
     preg_match('/[a-z]/', $password) &&
     preg_match('/[0-9]/', $password);
 }
 
-// Function to check if custom database name already exists
 function customDatabaseExists($dbName)
 {
   try {
@@ -668,8 +626,7 @@ function customDatabaseExists($dbName)
 
     return $stmt->rowCount() > 0;
   } catch (PDOException $e) {
-    // error_log("Error checking custom database existence: " . $e->getMessage());
-    return true; // Return true to be safe and prevent creation
+    return true;
   }
 }
 
@@ -699,7 +656,6 @@ function registerUser($username, $email, $password, $firstName, $lastName, $user
 {
   $errors = [];
 
-  // Validate inputs
   if (empty($username) || strlen($username) < 3) {
     $errors[] = "Username must be at least 3 characters long";
   }
@@ -716,7 +672,6 @@ function registerUser($username, $email, $password, $firstName, $lastName, $user
     $errors[] = "First name and last name are required";
   }
 
-  // Return validation errors before database operations
   if (!empty($errors)) {
     return ['success' => false, 'errors' => $errors];
   }
@@ -724,10 +679,8 @@ function registerUser($username, $email, $password, $firstName, $lastName, $user
   try {
     $pdo = getMainDBConnection();
 
-    // Start transaction
     $pdo->beginTransaction();
 
-    // Check if username or email already exists
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ? OR email = ?");
     $stmt->execute([$username, $email]);
 
@@ -736,10 +689,8 @@ function registerUser($username, $email, $password, $firstName, $lastName, $user
       return ['success' => false, 'errors' => ['Username or email already exists']];
     }
 
-    // Hash password
     $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-    // Insert new user with my_database as metadata
     $stmt = $pdo->prepare("
       INSERT INTO users (username, email, password, first_name, last_name, my_database, phone, user_group, created_at) 
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -759,31 +710,22 @@ function registerUser($username, $email, $password, $firstName, $lastName, $user
 
     $userId = $pdo->lastInsertId();
 
-    // Commit the user creation first
     $pdo->commit();
 
-    // error_log("User created successfully: ID=$userId, Username=$username, My_Database=$myDatabase");
-
-    // Now create user-specific database with actual name: user_{$userId}
     $dbResult = createUserDatabase($userId);
 
     if (!$dbResult['success']) {
-      // If database creation fails, remove the user record
       try {
         $pdo->beginTransaction();
         $deleteStmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
         $deleteStmt->execute([$userId]);
         $pdo->commit();
-        // error_log("User deleted due to database creation failure: ID=$userId");
       } catch (PDOException $e) {
-        // error_log("Error rolling back user creation: " . $e->getMessage());
       }
 
-      // Return the actual error from database creation
       return ['success' => false, 'errors' => [$dbResult['error']]];
     }
 
-    // Log successful registration
     logSystemAction($userId, 'USER_REGISTERED', "User registered with database: " . $dbResult['database_name'] . " (custom name: $myDatabase)");
 
     return [
@@ -800,14 +742,12 @@ function registerUser($username, $email, $password, $firstName, $lastName, $user
         $pdo->rollBack();
       }
     } catch (PDOException $rollbackError) {
-      // silent
     }
 
     return ['success' => false, 'errors' => ['Database error: ' . $e->getMessage()]];
   }
 }
 
-// Enhanced User Login Function with Database Check
 function loginUser($username, $password)
 {
   try {
@@ -818,19 +758,15 @@ function loginUser($username, $password)
     $user = $stmt->fetch();
 
     if ($user && password_verify($password, $user['password'])) {
-      // Check if user database exists
       if (!userDatabaseExists($user['id'])) {
-        // Create user database if it doesn't exist
         $dbResult = createUserDatabase($user['id']);
         if (!$dbResult['success']) {
           return ['success' => false, 'errors' => ['Failed to initialize user database: ' . $dbResult['error']]];
         }
       } else {
-        // Database exists, but verify/create tables if needed
         ensureUserTablesExist($user['id']);
       }
 
-      // Set session variables
       $_SESSION['user_id'] = $user['id'];
       $_SESSION['username'] = $user['username'];
       $_SESSION['email'] = $user['email'];
@@ -839,7 +775,6 @@ function loginUser($username, $password)
       $_SESSION['my_database'] = $user['my_database'];
       $_SESSION['user_group'] = $user['user_group'];
 
-      // Update last login
       $updateStmt = $pdo->prepare("UPDATE users SET last_login = ? WHERE id = ?");
       $updateStmt->execute([date('Y-m-d H:i:s'), $user['id']]);
 
@@ -848,7 +783,6 @@ function loginUser($username, $password)
       return ['success' => false, 'errors' => ['Invalid username or password']];
     }
   } catch (PDOException $e) {
-    // error_log("Login error: " . $e->getMessage());
     return ['success' => false, 'errors' => ['Database error occurred during login: ' . $e->getMessage()]];
   }
 }
@@ -859,8 +793,6 @@ function createMainTables()
   try {
     $pdo = getMainDBConnection();
 
-    // FIX Bug 5: Removed invalid "ON users(...)" index syntax from CREATE TABLE.
-    // Also merged session_token column and its index directly into the CREATE TABLE definition.
     $sql = "
         CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -929,18 +861,14 @@ function createMainTables()
 
     $pdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `user_group` VARCHAR(50)");
 
-    // error_log("Main system tables created successfully");
     return true;
   } catch (PDOException $e) {
-    // error_log("Error creating main tables: " . $e->getMessage());
     return false;
   }
 }
 
-// Initialize main system tables
 createMainTables();
 
-// Utility function to log system actions
 function logSystemAction($userId, $action, $details = null)
 {
   try {
@@ -959,17 +887,14 @@ function logSystemAction($userId, $action, $details = null)
       date('Y-m-d H:i:s'),
     ]);
   } catch (PDOException $e) {
-    // error_log("Error logging system action: " . $e->getMessage());
   }
 }
 
-// Function to check if user is logged in
 function isLoggedIn()
 {
   return isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
 }
 
-// Function to get current user info
 function getCurrentUser()
 {
   if (!isLoggedIn()) {
@@ -987,7 +912,7 @@ function getCurrentUser()
   ];
 }
 
-// Function to logout user
+// ── Logout user ────────────────────────────────────────────────────────────────────
 function logoutUser()
 {
   if (isLoggedIn()) {

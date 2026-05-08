@@ -1,15 +1,5 @@
 <?php
 // app/services/manpower_backend.php --> system table backend
-// SECURITY FIXES APPLIED:
-// 1. Security headers added (X-Content-Type-Options, X-Frame-Options, CSP)
-// 2. Server-side MIME type validation for file uploads
-// 3. restore_mode whitelisted to allowed values
-// 4. json_decode depth-limited (JSON_THROW_ON_ERROR + depth param)
-// 5. action values validated against an explicit whitelist
-// 6. employee_ids array size capped to prevent mass-delete abuse
-// 7. sanitizeInput() defined here as a safe fallback if config.php's version is absent
-// ── FIX: syncStatusByQR() added — employee status is now always derived from
-//         the `code` table, never taken raw from POST/import data.
 
 require_once __DIR__ . '/../../config/config.php';
 
@@ -102,31 +92,8 @@ function safeJsonDecode($json, $assoc = true, $depth = 32)
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ── syncStatusByQR ────────────────────────────────────────────────────────────
-// Derives the correct employee status from the `code` table and persists it.
-//
-// Rules:
-//   • qr_code is empty/null          → Inactive
-//   • qr_code not found in `code`    → Inactive
-//   • qr_code found but is_active=0  → Inactive
-//   • qr_code found and is_active=1  → Active
-//
-// Called after every add, edit, and each import row so the `employees` table
-// is always consistent with the `code` table — regardless of what POST data
-// contained in the `status` field.
-//
-// Parameters:
-//   $conn        – PDO connection to the user database (contains both tables)
-//   $employeeId  – the employee's id (string or int)
-//   $qrCode      – the employee's qr_code value (may be empty)
-//   $changedBy   – username string for status_history audit trail
-//
-// Returns: 'Active' | 'Inactive'
-// ─────────────────────────────────────────────────────────────────────────────
 function syncStatusByQR($conn, $employeeId, $qrCode, $changedBy = 'System')
 {
-  // Determine desired status
   $qrTrimmed = trim((string)$qrCode);
 
   if ($qrTrimmed === '') {
@@ -140,25 +107,21 @@ function syncStatusByQR($conn, $employeeId, $qrCode, $changedBy = 'System')
     $stmt->execute([':qr' => $qrTrimmed]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // Active only when row exists AND is_active = 1
     $newStatus = ($row && (int)$row['is_active'] === 1) ? 'Active' : 'Inactive';
   }
 
   $now = date('Y-m-d H:i:s');
 
-  // Read the current status so we can log the transition
   $cur = $conn->prepare("SELECT status FROM employees WHERE id = :id");
   $cur->execute([':id' => $employeeId]);
   $oldStatus = $cur->fetchColumn() ?: 'Active';
 
-  // Only write + log if there is an actual change
   if ($oldStatus !== $newStatus) {
     $upd = $conn->prepare(
       "UPDATE employees SET status = :status, updated_at = :ts WHERE id = :id"
     );
     $upd->execute([':status' => $newStatus, ':ts' => $now, ':id' => $employeeId]);
 
-    // Audit trail
     try {
       $hist = $conn->prepare(
         "INSERT INTO status_history
@@ -801,7 +764,6 @@ class QRCodeGenerator
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN REQUEST HANDLER
 // ─────────────────────────────────────────────────────────────────────────────
-
 try {
   if (!isset($_SESSION['user_id'])) {
     $response = ['success' => false, 'message' => 'Authentication required. Please log in.'];
@@ -875,7 +837,6 @@ try {
 
         $qr_code = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
 
-        // status / shift are placeholders — syncStatusByQR() will correct status below
         $raw_status = $_POST['status'] ?? 'Active';
         $raw_shift  = $_POST['shift']  ?? '';
         $status = in_array($raw_status, ALLOWED_STATUSES, true) ? $raw_status : 'Active';
@@ -915,7 +876,6 @@ try {
         $employee_id = $employeeManager->createEmployee($employee_data);
 
         if ($employee_id !== false) {
-          // ── Derive correct status from code table ──────────────────────────
           $conn       = $database->getUserConnection();
           $changedBy  = $_SESSION['username'] ?? 'System';
           $finalStatus = syncStatusByQR($conn, $employee_id, $employee_data['qr_code'], $changedBy);
@@ -925,7 +885,7 @@ try {
           $response['data']    = [
             'id'      => $employee_id,
             'qr_code' => $employee_data['qr_code'],
-            'status'  => $finalStatus,          // reflects code-table state
+            'status'  => $finalStatus,
           ];
           logSystemAction($database->getCurrentUserId(), 'EMPLOYEE_CREATED', "Created employee: " . $employee_data['fullname']);
 
@@ -982,7 +942,6 @@ try {
           break;
         }
 
-        // status / shift are placeholders — syncStatusByQR() corrects status below
         $raw_status = $_POST['status'] ?? $current_employee['status'];
         $raw_shift  = $_POST['shift']  ?? $current_employee['shift'];
         $status = in_array($raw_status, ALLOWED_STATUSES, true) ? $raw_status : $current_employee['status'];
@@ -1010,7 +969,6 @@ try {
         try {
           $employeeManager->updateEmployee($old_id, $employee_data);
 
-          // ── Derive correct status from code table ──────────────────────────
           $conn       = $database->getUserConnection();
           $changedBy  = $_SESSION['username'] ?? 'System';
           $finalStatus = syncStatusByQR($conn, $new_id, $new_qr_code, $changedBy);
@@ -1189,7 +1147,6 @@ try {
                 ? trim($employee_data['qr'])
                 : QRCodeGenerator::generateQRCode($database->getCurrentUserId());
 
-              // status / shift are set as defaults; syncStatusByQR() corrects status below
               $row_status = in_array($employee_data['status'] ?? '', ALLOWED_STATUSES, true) ? $employee_data['status'] : 'Active';
               $row_shift  = in_array($employee_data['shift']  ?? '', ALLOWED_SHIFTS,   true) ? $employee_data['shift']  : 'Day Shift';
               $import_gender = $employee_data['gender'] ?? '';
@@ -1219,7 +1176,6 @@ try {
               $employee_id = $employeeManager->createEmployee($employee_record);
 
               if ($employee_id !== false) {
-                // ── Derive correct status from code table ──────────────────
                 syncStatusByQR($db, $employee_id, $employee_record['qr_code'], $changedBy);
                 $imported_count++;
               } else {
@@ -1423,7 +1379,6 @@ try {
               $employee_id = $employeeManager->createEmployee($employee_data);
 
               if ($employee_id !== false) {
-                // ── Derive correct status from code table ──────────────────
                 syncStatusByQR($db, $employee_id, $employee_data['qr_code'], $changedBy);
                 $restored_count++;
               } else {

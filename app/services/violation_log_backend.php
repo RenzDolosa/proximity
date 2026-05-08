@@ -16,8 +16,8 @@ $userId = $_SESSION['user_id'];
 $response = ['success' => false, 'message' => ''];
 
 try {
-  $db = getUserDBConnection($userId);   // user-scoped DB (same pattern as manpower_backend)
-  $mainDb = getMainDBConnection();      // for resolving employee names if needed
+  $db = getUserDBConnection($userId);
+  $mainDb = getMainDBConnection();
 
   // ── Ensure violations table exists ──────────────────────────────────────
   $db->exec("CREATE TABLE IF NOT EXISTS `violations` (
@@ -107,7 +107,6 @@ try {
         goto done;
       }
 
-      // Verify employee belongs to this user
       $chk = $db->prepare("SELECT id FROM employees WHERE id = ?");
       $chk->execute([$employeeId]);
       if (!$chk->fetch()) {
@@ -169,7 +168,7 @@ try {
         $response = ['success' => true, 'message' => 'Violation record updated successfully.'];
       } else {
         $response['message'] = 'No changes made or record not found.';
-        $response['success'] = true; // still OK – nothing changed
+        $response['success'] = true;
       }
 
       // ── DELETE ───────────────────────────────────────────────────────────────

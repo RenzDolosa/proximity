@@ -15,7 +15,6 @@ if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') &&
 requireAccess('datalog', 'proximity.php');
 $access = getMenuAccess();
 
-// Get dashboard statistics if database is connected
 $stats = [
   'total_scanned' => 0,
   'active_employees' => 0,
@@ -28,22 +27,18 @@ $settings = [];
 
 if ($databaseConnected) {
   try {
-    // Get total employees
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log");
     $stmt->execute();
     $stats['total_scanned'] = $stmt->fetchColumn();
 
-    // Get active employees (note: status values are 'Active', not 'active')
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE status = 'Active'");
     $stmt->execute();
     $stats['active_employees'] = $stmt->fetchColumn();
 
-    // Get inactive count
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE status = 'Inactive'");
     $stmt->execute();
     $stats['inactive_employees'] = $stmt->fetchColumn();
 
-    // Get today's attendance
     $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE DATE(access_timestamp) = CURDATE()");
     $stmt->execute();
     $stats['today_attendance'] = $stmt->fetchColumn();
@@ -56,7 +51,6 @@ if ($databaseConnected) {
     $stmt->execute();
     $stats['today_out'] = $stmt->fetchColumn();
 
-    // Get recent employee logs (fixed column references)
     $stmt = $userDb->prepare("
             SELECT el.*, e.fullname 
             FROM employee_logs el
@@ -67,7 +61,6 @@ if ($databaseConnected) {
     $stmt->execute();
     $recentLogs = $stmt->fetchAll();
 
-    // Get company settings
     $stmt = $userDb->prepare("SELECT setting_key, setting_value FROM user_settings");
     $stmt->execute();
     $settings = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
@@ -328,7 +321,6 @@ if ($databaseConnected) {
       <div class="modal-body">
         <p id="deleteModalMessage">Are you sure you want to delete this employee?</p>
 
-        <!-- Confirmation input for delete all -->
         <div id="confirmationContainer" style="display: none; margin-top: 20px;">
           <label for="confirmationInput" style="display: block; margin-bottom: 10px; font-weight: bold;">Type "DELETE ALL" to confirm:</label>
           <input type="text" id="confirmationInput" placeholder="Type DELETE ALL" style="margin-bottom: 10px;" />
@@ -365,7 +357,6 @@ if ($databaseConnected) {
       document.getElementById('filterFab').innerHTML = '<i class="fas fa-sliders-h"></i> Filters';
     }
 
-    // Hide FAB on desktop — only needed on mobile
     function checkFab() {
       const fab = document.getElementById('filterFab');
       if (!fab) return;
@@ -374,9 +365,8 @@ if ($databaseConnected) {
     checkFab();
     window.addEventListener('resize', checkFab);
 
-    // image phone view
     (function() {
-      if (window.innerWidth > 640) return; // desktop only uses CSS hover
+      if (window.innerWidth > 640) return;
 
       let clone = null;
 
@@ -384,19 +374,16 @@ if ($databaseConnected) {
         const img = e.target.closest('.employee-image');
         if (!img) return;
 
-        e.preventDefault(); // prevent scroll while zooming
+        e.preventDefault();
 
         const rect = img.getBoundingClientRect();
         const cloneSize = 130;
 
-        // Calculate position — anchor left of the image, above center
         let left = rect.left;
         let top = rect.top - cloneSize - 8;
 
-        // If it would go off the top, show below instead
         if (top < 8) top = rect.bottom + 8;
 
-        // Don't go off right edge
         if (left + cloneSize > window.innerWidth - 8) {
           left = window.innerWidth - cloneSize - 8;
         }
@@ -440,7 +427,6 @@ if ($databaseConnected) {
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="../../resource/js/dtl.js"></script>
   <script src="../../resource/js/btn.js"></script>
-  <!-- <script src="../../resource/js/i-dtl.js"></script> -->
   <script src="../../resource/js/ea-dtl.js"></script>
   <script src="../../resource/js/opt-btn.js"></script>
   <script src="../../resource/js/loading.js"></script>

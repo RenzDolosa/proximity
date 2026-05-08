@@ -364,7 +364,6 @@
   }
 }
 
-/* ── Print styles ── */
 @media print {
   #loading-screen {
     display: none !important;

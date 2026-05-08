@@ -596,7 +596,7 @@ if ($databaseConnected) {
         <p>Try adjusting your search criteria.</p>
       </div>
     </div>
-  </div><!-- /.container -->
+  </div>
 
   <!-- ── Fixed pagination (pg.css) ──────────────────────────────────── -->
   <div class="pagination" id="pagination" style="display:none;"></div>
@@ -649,13 +649,12 @@ if ($databaseConnected) {
   <script>
     // ── State ────────────────────────────────────────────────────────────
     const BACKEND = 'violation_log_backend.php';
-    let allVio = []; // raw from server
-    let filteredVio = []; // after filters
+    let allVio = [];
+    let filteredVio = [];
     let currentPage = 1;
     const PER_PAGE = 25;
     let deleteTargetId = null;
 
-    // SECURITY: Standalone toProperCase — replaces String.prototype pollution
     function toProperCase(str) {
       if (!str) return "";
       return String(str).replace(/[^\s,\-]+/g, function(txt) {
@@ -791,7 +790,6 @@ if ($databaseConnected) {
       }
     }
 
-    // Close suggestions when clicking outside
     document.addEventListener('click', function(e) {
       const list = document.getElementById('name-suggestions');
       const input = document.getElementById('f_name');
@@ -1033,7 +1031,6 @@ if ($databaseConnected) {
       }
     }
 
-    // Close confirm modal on backdrop click
     document.getElementById('deleteModal').addEventListener('click', function(e) {
       if (e.target === this) closeModal();
     });

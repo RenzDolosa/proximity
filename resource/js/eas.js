@@ -20,7 +20,6 @@ async function fetchAllEmployeesForExport(filters = {}) {
       limit: 999999,
     });
 
-    // Mirror the same filter-translation logic used in system.js → loadEmployees()
     for (const [key, value] of Object.entries(filters)) {
       if (key === "position" && value === "__none__") {
         params.append("position_none", "1");
@@ -99,10 +98,6 @@ async function fetchAllCodesForExport() {
 // ─────────────────────────────────────────────────────────────────────────────
 // EMPLOYEE EXPORT ENTRY POINTS
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Export ALL employee rows (no filters) to Excel.
- */
 async function exportAllData() {
   showAlert("Fetching all data for export…", "info");
 
@@ -121,13 +116,7 @@ async function exportAllData() {
   }
 }
 
-/**
- * Export filtered employee rows — uses activeFilters from system.js so the server
- * returns EVERY matching row, not just the current page.
- * Falls back to exportAllData() when no filters are active.
- */
 async function exportFilteredData() {
-  // activeFilters is declared in system.js (global scope)
   const currentFilters =
     typeof activeFilters !== "undefined" ? activeFilters : {};
   const isFiltered = Object.keys(currentFilters).length > 0;
@@ -140,7 +129,6 @@ async function exportFilteredData() {
   showAlert("Fetching all filtered data for export…", "info");
 
   try {
-    // Re-fetch ALL rows matching the current filters (server-side, no pagination cap)
     const filteredEmployees = await fetchAllEmployeesForExport(currentFilters);
 
     if (!filteredEmployees || filteredEmployees.length === 0) {
@@ -158,7 +146,6 @@ async function exportFilteredData() {
 // ─────────────────────────────────────────────────────────────────────────────
 // XLSX EXPORT — EMPLOYEES (no images)
 // ─────────────────────────────────────────────────────────────────────────────
-
 function toProperCase(str) {
   if (!str) return "";
   return str
@@ -343,30 +330,30 @@ function exportToExcel(type = "Filtered") {
         : "";
 
       // Fullname is in the first <strong> inside cell[1]
-      const fullnameEl = cells[2]?.querySelector("strong:first-child");
+      const fullnameEl = cells[1]?.querySelector("strong:first-child");
       const fullname = fullnameEl
         ? fullnameEl.textContent.trim()
         : text(cells[2]);
 
       // Brand is the first div's text inside cell[2]; position is in sub-div
-      const positionEl = cells[3]?.querySelector(".emp-position");
+      const positionEl = cells[2]?.querySelector(".emp-position");
       const position = positionEl
         ? positionEl.textContent.replace(/Position:/i, "").trim()
         : "";
 
-      const brandEl = cells[4]?.querySelector("div:first-child");
+      const brandEl = cells[2]?.querySelector("div:first-child");
       const brand = brandEl
         ? brandEl.textContent.trim()
         : "";
 
       // Status — strip the span wrapper
-      const statusEl = cells[8]?.querySelector("span") || cells[8];
+      const statusEl = cells[3]?.querySelector("span") || cells[8];
       const status = statusEl
         ? statusEl.textContent.trim()
         : "";
 
       // QR: read from data-qr attribute on Col9 cell (cell index 7)
-      const qrCell = cells[11];
+      const qrCell = cells[5];
       const qrCode = qrCell
         ? qrCell.dataset.qr || ""
         : "";
@@ -381,11 +368,11 @@ function exportToExcel(type = "Filtered") {
         // text(cells[6]), // Birth Date
         // text(cells[7]), // Hired Date
         status, // Status
-        text(cells[9]), // Shift
-        text(cells[10]), // Remarks / Violation
+        text(cells[3]), // Shift
+        text(cells[4]), // Remarks / Violation
         qrCode, // Proximity Code (from data-qr)
-        text(cells[12]), // Register Date
-        text(cells[13]), // Last Update
+        text(cells[6]), // Register Date
+        text(cells[7]), // Last Update
       ]);
     });
 
@@ -456,7 +443,6 @@ function exportToExcel(type = "Filtered") {
 // ─────────────────────────────────────────────────────────────────────────────
 // EXCEL IMPORT TEMPLATE
 // ─────────────────────────────────────────────────────────────────────────────
-
 function excelTemplate(type = "Template") {
   showAlert("Exporting Excel Template…", "info");
 
@@ -519,7 +505,6 @@ function excelTemplate(type = "Template") {
 // ─────────────────────────────────────────────────────────────────────────────
 // ExcelJS IMAGE EXPORT — EMPLOYEES
 // ─────────────────────────────────────────────────────────────────────────────
-
 function loadExcelJS() {
   return new Promise((resolve, reject) => {
     if (window.ExcelJS) return resolve();
@@ -532,17 +517,11 @@ function loadExcelJS() {
   });
 }
 
-/**
- * Resolve an employee's image URL.
- * Primary: employee.image field (set server-side).
- * Fallback: look for an <img> in the table row.
- */
 function resolveEmployeeImageUrl(employee, tableRow) {
   if (employee.image) {
     return `${window.location.origin}/public/uploads/user/${employee.image}`;
   }
   if (tableRow) {
-    // Col8 = index 6 in renderEmployeeTable()
     const imgEl = tableRow.querySelectorAll("td")[6]?.querySelector("img");
     if (imgEl?.src) return imgEl.src;
   }
@@ -574,7 +553,6 @@ async function fetchImageBase64(url) {
       });
       return { base64, extension: ext === "jpeg" ? "jpeg" : ext };
     } catch {
-      // try next
     }
   }
   return null;
@@ -608,10 +586,6 @@ function resizeImageToSquare(base64, extension, size = 60) {
   });
 }
 
-/**
- * Export with embedded employee photos using ExcelJS.
- * Respects active filters — fetches ALL matching rows from the server.
- */
 async function exportWithImages() {
   showAlert("Preparing export — loading image engine…", "info");
 
@@ -652,12 +626,10 @@ async function exportWithImages() {
     return;
   }
 
-  // Build a quick empId → table row lookup for grabbing existing <img> tags
   const tableRowMap = {};
   const tableRows =
     document.getElementById("employeeTableBody")?.querySelectorAll("tr") || [];
   tableRows.forEach((row) => {
-    // EMPID is in the emp-id sub-div inside cell[1]
     const empIdEl = row.querySelectorAll("td")[1]?.querySelector(".emp-id");
     const empId = empIdEl
       ? empIdEl.textContent.replace(/EMPID:/i, "").trim()
@@ -800,10 +772,6 @@ async function exportWithImages() {
 // ─────────────────────────────────────────────────────────────────────────────
 // PROXIMITY CODE EXPORT ENTRY POINTS
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Export ALL proximity code rows to Excel.
- */
 async function exportAllCodes() {
   showAlert("Fetching all proximity codes for export…", "info");
 
@@ -822,10 +790,6 @@ async function exportAllCodes() {
   }
 }
 
-/**
- * Export filtered proximity codes — falls back to exportAllCodes() when
- * no filters are active.
- */
 async function exportFilteredCodes() {
   const currentFilters =
     typeof activeFilters !== "undefined" ? activeFilters : {};
@@ -839,7 +803,6 @@ async function exportFilteredCodes() {
   showAlert("Fetching filtered proximity codes…", "info");
 
   try {
-    // Build server-side filter params (qr_code, created_at are DB columns)
     const serverParams = new URLSearchParams({ action: "get" });
     if (currentFilters.qr_code)
       serverParams.append("qr_code", currentFilters.qr_code);
@@ -858,7 +821,6 @@ async function exportFilteredCodes() {
 
     let filteredCodes = json.data;
 
-    // Apply remarks filter client-side — it's a computed field (Occupied/Available)
     const remarksFilter = currentFilters.remarks;
     if (remarksFilter) {
       let qrImageMap = {};
@@ -917,7 +879,6 @@ async function exportProximityCodes(proxcodes, type = "Data") {
     ];
     data.push(headers);
 
-    // Build QR → employee lookup using manpower data (defined in system.js / dtl.js)
     let qrImageMap = {};
     if (typeof buildQRToImageMap === "function") {
       try {
@@ -951,7 +912,7 @@ async function exportProximityCodes(proxcodes, type = "Data") {
     const ws = XLSX.utils.aoa_to_sheet(data);
 
     ws["!cols"] = [
-      { wch: 5 }, // SN
+      { wch: 5 },  // SN
       { wch: 10 }, // EMPID
       { wch: 15 }, // Proximity Code
       { wch: 15 }, // Remarks
@@ -1001,15 +962,6 @@ async function exportProximityCodes(proxcodes, type = "Data") {
 // ─────────────────────────────────────────────────────────────────────────────
 // DOM-TABLE EXPORT — PROXIMITY CODES (current visible page only)
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Export the proximity-code rows currently rendered in the HTML table.
- * QR code is read from the data-qr attribute on the relevant <td> cell.
- *
- * Proxcode table column layout (from the proxcode view):
- *  [0] SN  [1] Status badge  [2] EMPID  [3] QR cell (data-qr)
- *  [4] Remarks  [5] Register Date  [6] Last Update  [7] Actions
- */
 function exportCodesToExcel(type = "Filtered") {
   showAlert("Exporting visible page to Excel…", "info");
 
@@ -1045,14 +997,13 @@ function exportCodesToExcel(type = "Filtered") {
       const cells = row.querySelectorAll("td");
       if (cells.length === 0) return;
 
-      // QR code is stored in data-qr on cell[3]
       const qrCell = cells[3];
       const qrCode = qrCell ? qrCell.dataset.qr || "" : "";
 
       data.push([
         text(cells[0]), // SN
         text(cells[2]), // EMPID
-        qrCode, // Proximity Code (from data-qr)
+        qrCode,         // Proximity Code
         text(cells[4]), // Remarks
         text(cells[5]), // Register Date
         text(cells[6]), // Last Update
@@ -1118,7 +1069,6 @@ function exportCodesToExcel(type = "Filtered") {
 // ─────────────────────────────────────────────────────────────────────────────
 // PROXIMITY CODE IMPORT TEMPLATE
 // ─────────────────────────────────────────────────────────────────────────────
-
 function excelProxCodeTemplate(proxcode = "Proximity Code", type = "Template") {
   showAlert(`Exporting Excel ${proxcode} ${type}…`, "info");
 
@@ -1157,7 +1107,6 @@ function excelProxCodeTemplate(proxcode = "Proximity Code", type = "Template") {
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED UTILITIES
 // ─────────────────────────────────────────────────────────────────────────────
-
 function formatDate(dateString) {
   if (!dateString) return "";
   try {
@@ -1181,7 +1130,6 @@ function formatDate(dateString) {
   }
 }
 
-/** Returns a YYYY-MM-DD_HH-MM timestamp string for filenames. */
 function _dateStamp() {
   const now = new Date();
   return (
@@ -1197,19 +1145,16 @@ function _dateStamp() {
   );
 }
 
-/** Thin-border style object for SheetJS (XLSX) cells. */
 function _thinBorderXlsx() {
   const side = { style: "thin", color: { rgb: "000000" } };
   return { top: side, bottom: side, left: side, right: side };
 }
 
-/** Thin-border style object for ExcelJS cells. */
 function _thinBorderExcelJS() {
   const side = { style: "thin", color: { argb: "FF000000" } };
   return { top: side, bottom: side, left: side, right: side };
 }
 
-// Show alert — mirrors system.js implementation so either file can call it
 function showAlert(message, type = "info") {
   const existingAlerts = document.querySelectorAll(".alert");
   existingAlerts.forEach((alert) => alert.remove());
@@ -1236,7 +1181,6 @@ function showAlert(message, type = "info") {
   }, 5000);
 }
 
-// Keyboard: close export dropdown on Escape
 document.addEventListener("keydown", function (e) {
   if (
     e.key === "Escape" &&

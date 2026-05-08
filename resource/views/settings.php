@@ -467,9 +467,8 @@ $audioIconMap = [
           </div>
         </div>
       </div>
-
-    </div><!-- /.two-col -->
-  </div><!-- /.page-body -->
+    </div>
+  </div>
 
   <script src="../js/btn.js"></script>
   <script src="../js/global_audio_settings.js"></script>

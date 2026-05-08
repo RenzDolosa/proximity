@@ -1,10 +1,5 @@
-/* ═══════════════════════════════════════════════════════════
-   resource/css/about.css
-   Standalone stylesheet for the About Us page.
-   Replaces dependency on main.css + loading.css.
-   ═══════════════════════════════════════════════════════════ */
+/* resource/css/about.css --> about */
 
-/* ── Reset & tokens ── */
 *,
 *::before,
 *::after {
@@ -75,7 +70,6 @@ body {
   gap: 14px;
   max-width: 1400px;
   margin: 0 auto;
-  /* Fade-in on load */
   animation: pageFadeIn 0.4s ease both;
 }
 
@@ -142,7 +136,6 @@ body {
   box-shadow: 0 8px 32px rgba(37, 99, 235, 0.35);
 }
 
-/* Decorative circles */
 .about-hero::before,
 .about-hero::after {
   content: "";
@@ -173,7 +166,6 @@ body {
   );
 }
 
-/* Subtle mesh grid overlay */
 .about-hero .hero-grid {
   position: absolute;
   inset: 0;
@@ -207,7 +199,6 @@ body {
   filter: invert(1) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
 
-/* Fallback icon if image fails */
 .hero-logo .hero-icon-fallback {
   font-size: 28px;
   color: rgba(255, 255, 255, 0.9);
@@ -515,7 +506,6 @@ body {
   overflow: hidden;
 }
 
-/* Subtle top accent line */
 .team-card::before {
   content: "";
   position: absolute;
@@ -633,7 +623,6 @@ body {
   text-overflow: ellipsis;
 }
 
-/* ── Security notice ── */
 .security-notice {
   margin-top: 14px;
   padding: 13px 15px;
@@ -757,7 +746,7 @@ body {
 }
 
 /* ══════════════════════════════════════════
-   STAGGER ANIMATIONS (optional enhancement)
+   STAGGER ANIMATIONS
    ══════════════════════════════════════════ */
 .feature-item,
 .tl-item,
@@ -912,7 +901,6 @@ body {
   }
 }
 
-/* ── Reduce motion ── */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -922,7 +910,6 @@ body {
   }
 }
 
-/* ── Print ── */
 @media print {
   #loading-screen {
     display: none !important;

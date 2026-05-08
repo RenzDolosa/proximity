@@ -1,8 +1,5 @@
 <?php
 // app/services/global_audio.php
-// Global audio settings endpoint — mirrors company_settings_global pattern.
-// GET  (XHR) → returns current audio as base64 data-URLs
-// POST (XHR) → saves uploaded audio files
 
 require_once __DIR__ . '/../../config/config.php';
 
@@ -62,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
 
   $body      = json_decode(file_get_contents('php://input'), true);
   $audioType = $body['audio_type'] ?? '';
-  $audioData = $body['audio_data'] ?? '';   // base64 data-URL  e.g. "data:audio/mpeg;base64,..."
+  $audioData = $body['audio_data'] ?? '';
   $audioMime = $body['audio_mime'] ?? '';
 
   if (!in_array($audioType, $audioTypes, true)) {
@@ -70,7 +67,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
     exit;
   }
 
-  // ~5 MB limit in base64 (base64 inflates ~33 %, so raw 5 MB ≈ 6.8 MB base64)
   if (strlen($audioData) > 7_000_000) {
     echo json_encode(['success' => false, 'message' => 'Audio file too large (max 5 MB)']);
     exit;

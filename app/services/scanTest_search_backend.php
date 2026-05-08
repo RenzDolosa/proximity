@@ -104,16 +104,12 @@ class LiveSearchHandler
     $this->userId = $userId;
   }
 
-  /**
-   * Exact QR code lookup — returns a single employee or null.
-   */
   public function getEmployeeByQR($qr_code)
   {
     try {
       $stmt = $this->conn->prepare(
         "SELECT * FROM `{$this->table}` WHERE qr_code = :qr_code LIMIT 1"
       );
-      // Use bindValue with explicit string type to avoid any type-coercion quirks
       $stmt->bindValue(':qr_code', trim($qr_code), PDO::PARAM_STR);
       $stmt->execute();
       return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
@@ -123,10 +119,6 @@ class LiveSearchHandler
     }
   }
 
-  /**
-   * Fuzzy search across name/position/brand/shift/status/violation.
-   * Used as fallback when the input doesn't match a QR exactly.
-   */
   public function searchEmployees($searchParams = [])
   {
     try {
@@ -196,7 +188,6 @@ try {
 
   if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
-    // Build search param from ?q= (preferred) or legacy individual params
     $q = trim($_GET['q'] ?? '');
     if ($q === '') {
       foreach (['fullname', 'position', 'brand', 'status', 'shift', 'qr_code'] as $p) {
@@ -233,7 +224,7 @@ try {
         $employee = $searchHandler->getEmployeeByQR($qr);
         if ($employee) {
           $response['success'] = true;
-          $response['data']    = $employee;   // single object, not array
+          $response['data']    = $employee;
           $response['message'] = 'Employee found';
         } else {
           $response['success'] = false;
@@ -276,7 +267,6 @@ try {
   ];
 }
 
-// Debug mode (add ?debug=1 to URL)
 if (!isset($_GET['debug'])) {
   unset($response['error_details']);
 }

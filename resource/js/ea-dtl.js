@@ -16,7 +16,6 @@ async function fetchAllEmployeesForExport(filters = {}) {
   try {
     const params = new URLSearchParams({ action: "get", page: 1, limit: 999999 });
 
-    // Mirror the same filter-translation logic used in dtl.js → loadEmployees()
     for (const [key, value] of Object.entries(filters)) {
       if (key === "position" && value === "__none__") {
         params.append("position_none", "1");
@@ -31,7 +30,7 @@ async function fetchAllEmployeesForExport(filters = {}) {
       } else if (key === "user_id" && value === "__none__") {
         params.append("user_id_none", "1");
       } else if (key === "user_id") {
-        params.append("gate_name", value); // translate user_id → gate_name
+        params.append("gate_name", value);
       } else {
         params.append(key, value);
       }
@@ -65,10 +64,6 @@ async function fetchAllEmployeesForExport(filters = {}) {
 // ─────────────────────────────────────────────────────────────────────────────
 // EXPORT ENTRY POINTS
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Export ALL rows (no filters) to Excel.
- */
 async function exportAllData() {
   showAlert("Fetching all data for export…", "info");
 
@@ -87,19 +82,12 @@ async function exportAllData() {
   }
 }
 
-/**
- * Export filtered rows — uses activeFilters from dtl.js so the server
- * returns EVERY matching row, not just the current page.
- * Falls back to exportAllData() when no filters are active.
- */
 async function exportFilteredData() {
-  // activeFilters is declared in dtl.js (global scope)
   const currentFilters =
     typeof activeFilters !== "undefined" ? activeFilters : {};
   const isFiltered = Object.keys(currentFilters).length > 0;
 
   if (!isFiltered) {
-    // No filters — just dump everything
     exportAllData();
     return;
   }
@@ -107,7 +95,6 @@ async function exportFilteredData() {
   showAlert("Fetching all filtered data for export…", "info");
 
   try {
-    // Re-fetch ALL rows matching the current filters (server-side, no pagination cap)
     const filteredEmployees = await fetchAllEmployeesForExport(currentFilters);
 
     if (!filteredEmployees || filteredEmployees.length === 0) {
@@ -125,7 +112,6 @@ async function exportFilteredData() {
 // ─────────────────────────────────────────────────────────────────────────────
 // XLSX EXPORT (no images)
 // ─────────────────────────────────────────────────────────────────────────────
-
 function toProperCase(str) {
   if (!str) return "";
   return str
@@ -177,7 +163,6 @@ async function exportEmployeeData(employees, type = "Data") {
         employee.qr_code      || "",
         formatDate(employee.access_timestamp) || "",
         employee.check_status || "",
-        // gate_name is resolved server-side; fall back to user_id if absent
         employee.gate_name || employee.user_id || "",
       ];
       data.push(rowData);
@@ -203,7 +188,6 @@ async function exportEmployeeData(employees, type = "Data") {
 
     const headerRange = XLSX.utils.decode_range(ws["!ref"]);
 
-    // Style header row
     for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
       const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
       if (!ws[cellAddress]) continue;
@@ -215,7 +199,6 @@ async function exportEmployeeData(employees, type = "Data") {
       };
     }
 
-    // Style data rows
     for (let row = 1; row <= headerRange.e.r; row++) {
       for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
         const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
@@ -352,9 +335,18 @@ function exportToExcelDTL(type = "Filtered") {
     const ws = XLSX.utils.aoa_to_sheet(data);
 
     ws["!cols"] = [
-      { wch: 5  }, { wch: 10 }, { wch: 25 }, { wch: 20 }, { wch: 20 },
-      { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 20 },
-      { wch: 12 }, { wch: 10 },
+      { wch: 5  },
+      { wch: 10 },
+      { wch: 25 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 10 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 20 },
+      { wch: 12 },
+      { wch: 10 },
     ];
 
     const headerRange = XLSX.utils.decode_range(ws["!ref"]);
@@ -398,7 +390,6 @@ function exportToExcelDTL(type = "Filtered") {
 // ─────────────────────────────────────────────────────────────────────────────
 // ExcelJS IMAGE EXPORT
 // ─────────────────────────────────────────────────────────────────────────────
-
 function loadExcelJS() {
   return new Promise((resolve, reject) => {
     if (window.ExcelJS) return resolve();
@@ -435,7 +426,6 @@ async function fetchImageBase64(url) {
       });
       return { base64, extension: ext === "jpeg" ? "jpeg" : ext };
     } catch {
-      // try next
     }
   }
   return null;
@@ -461,10 +451,6 @@ function resizeImageToSquare(base64, extension, size = 60) {
   });
 }
 
-/**
- * Export with embedded employee photos using ExcelJS.
- * Respects active filters — fetches ALL matching rows from the server.
- */
 async function exportWithImages() {
   showAlert("Preparing export — loading image engine…", "info");
 
@@ -475,7 +461,6 @@ async function exportWithImages() {
     return;
   }
 
-  // Determine scope
   const currentFilters =
     typeof activeFilters !== "undefined" ? activeFilters : {};
   const isFiltered = Object.keys(currentFilters).length > 0;
@@ -506,7 +491,6 @@ async function exportWithImages() {
     return;
   }
 
-  // Build QR → image map (defined in dtl.js)
   showAlert("Matching employee images…", "info");
   let qrImageMap = {};
   try {
@@ -528,19 +512,19 @@ async function exportWithImages() {
   const IMG_PX_H      = 48;
 
   worksheet.columns = [
-    { header: "SN",                 key: "sn",               width: 5           },
-    { header: "EMPID",              key: "employee_id",      width: 12          },
+    { header: "SN",                 key: "sn",               width: 5            },
+    { header: "EMPID",              key: "employee_id",      width: 12           },
     { header: "Photo",              key: "photo",            width: IMG_COL_WIDTH},
-    { header: "Fullname",           key: "fullname",         width: 26          },
-    { header: "Position",           key: "position",         width: 22          },
-    { header: "Brand / Department", key: "brand",            width: 22          },
-    { header: "Status",             key: "status",           width: 12          },
-    { header: "Shift",              key: "shift",            width: 15          },
-    { header: "Remarks",            key: "violation",        width: 20          },
-    { header: "Proximity Code",     key: "qr_code",          width: 16          },
-    { header: "Timestamp",          key: "access_timestamp", width: 22          },
-    { header: "Check Status",       key: "check_status",     width: 14          },
-    { header: "Gate",               key: "gate",             width: 16          },
+    { header: "Fullname",           key: "fullname",         width: 26           },
+    { header: "Position",           key: "position",         width: 22           },
+    { header: "Brand / Department", key: "brand",            width: 22           },
+    { header: "Status",             key: "status",           width: 12           },
+    { header: "Shift",              key: "shift",            width: 15           },
+    { header: "Remarks",            key: "violation",        width: 20           },
+    { header: "Proximity Code",     key: "qr_code",          width: 16           },
+    { header: "Timestamp",          key: "access_timestamp", width: 22           },
+    { header: "Check Status",       key: "check_status",     width: 14           },
+    { header: "Gate",               key: "gate",             width: 16           },
   ];
 
   // Header styling
@@ -593,7 +577,6 @@ async function exportWithImages() {
       };
     });
 
-    // Resolve image
     let imgUrl = null;
     if (matchedData && matchedData.image) {
       imgUrl = `${window.location.origin}/../public/uploads/user/${matchedData.image}`;
@@ -657,7 +640,6 @@ async function exportWithImages() {
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED UTILITIES
 // ─────────────────────────────────────────────────────────────────────────────
-
 function formatDate(dateString) {
   if (!dateString) return "";
   try {
@@ -676,7 +658,6 @@ function formatDate(dateString) {
   }
 }
 
-/** Returns a YYYY-MM-DD_HH-MM timestamp string for filenames. */
 function _dateStamp() {
   const now = new Date();
   return (
@@ -688,19 +669,16 @@ function _dateStamp() {
   );
 }
 
-/** Thin-border style object for SheetJS (XLSX) cells. */
 function _thinBorderXlsx() {
   const side = { style: "thin", color: { rgb: "000000" } };
   return { top: side, bottom: side, left: side, right: side };
 }
 
-/** Thin-border style object for ExcelJS cells. */
 function _thinBorderExcelJS() {
   const side = { style: "thin", color: { argb: "FF000000" } };
   return { top: side, bottom: side, left: side, right: side };
 }
 
-// Show alert — mirrors dtl.js implementation so either file can call it
 function showAlert(message, type = "info") {
   const existingAlerts = document.querySelectorAll(".alert");
   existingAlerts.forEach((alert) => alert.remove());
@@ -727,7 +705,6 @@ function showAlert(message, type = "info") {
   }, 5000);
 }
 
-// Keyboard: close export dropdown on Escape
 document.addEventListener("keydown", function (e) {
   if (
     e.key === "Escape" &&

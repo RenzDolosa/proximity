@@ -3,7 +3,6 @@
 let isDropdownAddOpen = false;
 let isDropdownExportOpen = false;
 
-// Add Options
 function toggleAddOptions() {
   const menu = document.getElementById("addOptionsMenu");
   const trigger = document.getElementById("addTrigger");
@@ -24,7 +23,6 @@ function showAddOptions() {
   trigger.classList.add("active");
   isDropdownAddOpen = true;
 
-  // Add click outside listener
   setTimeout(() => {
     document.addEventListener("click", addClickOutside);
   }, 0);
@@ -38,7 +36,6 @@ function hideAddOptions() {
   trigger.classList.remove("active");
   isDropdownAddOpen = false;
 
-  // Remove click outside listener
   document.removeEventListener("click", addClickOutside);
 }
 
@@ -49,7 +46,6 @@ function addClickOutside(event) {
   }
 }
 
-// Export Options
 function toggleExportOptions() {
   const menu = document.getElementById("exportOptionsMenu");
   const trigger = document.getElementById("exportTrigger");
@@ -69,7 +65,6 @@ function showExportOptions() {
   trigger.classList.add("active");
   isDropdownExportOpen = true;
 
-  // Add click outside listener
   setTimeout(() => {
     document.addEventListener("click", exportClickOutside);
   }, 0);
@@ -83,7 +78,6 @@ function hideExportOptions() {
   trigger.classList.remove("active");
   isDropdownExportOpen = false;
 
-  // Remove click outside listener
   document.removeEventListener("click", exportClickOutside);
 }
 

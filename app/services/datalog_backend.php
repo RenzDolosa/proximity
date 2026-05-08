@@ -4,12 +4,10 @@
 require_once __DIR__ . '/../../config/config.php';
 
 // ── Security headers ──────────────────────────────────────────────────────────
-// Send before any output. Skip for file-serving responses (handled later).
 if (!isset($_GET['serve_file']) && !isset($_GET['api_info']) && !isset($_GET['health_check'])) {
   header('X-Content-Type-Options: nosniff');
   header('X-Frame-Options: DENY');
   header('Referrer-Policy: strict-origin-when-cross-origin');
-  // Tighten CSP to match your actual CDN/asset sources
   header("Content-Security-Policy: default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com;");
 }
 
@@ -22,7 +20,6 @@ if (!function_exists('sanitizeInput')) {
   }
 }
 
-// Safety-net: re-assert PHP timezone
 if (!defined('APP_TIMEZONE')) {
   define('APP_TIMEZONE',    'Asia/Manila');
   define('APP_TIMEZONE_TZ', '+08:00');
@@ -30,7 +27,6 @@ if (!defined('APP_TIMEZONE')) {
 date_default_timezone_set(APP_TIMEZONE);
 
 // ── Safe json_decode wrapper ──────────────────────────────────────────────────
-// Limits nesting depth and throws on malformed JSON.
 function safeJsonDecode($json, $assoc = true, $depth = 32)
 {
   if (!is_string($json) || $json === '') return null;
@@ -87,10 +83,6 @@ class Database
       }
       $this->userConn = getUserDBConnection($this->currentUserId);
 
-      // ── Explicitly sync MySQL session timezone with PHP/app timezone ──
-      // getUserDBConnection() already does this, but we set it again here
-      // to guarantee correct CURRENT_TIMESTAMP behaviour for every query
-      // made through this connection (access_timestamp, scan_timestamp, etc.)
       $this->userConn->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
     }
     return $this->userConn;
@@ -107,22 +99,11 @@ class Database
   }
 }
 
-// ============================================================================
-// AccessLogManager — reads from employee_access_log (written by qr_search_backend.php)
-// and check_in_out (IN/OUT toggle records, also written by qr_search_backend.php).
-//
-// Schema reminder:
-//   employee_access_log: id, employee_id, fullname, position, brand, status,
-//                        shift, violation, image, qr_code, access_type,
-//                        ip_address, user_agent, check_status, access_timestamp
-//   check_in_out:        id, employee_id, qr_code, fullname, check_type,
-//                        scan_timestamp, ip_address, user_agent
-// ============================================================================
 class AccessLogManager
 {
   private $conn;
-  private $logTable    = 'employee_access_log'; // written by qr_search_backend.php
-  private $checkTable  = 'check_in_out';        // IN/OUT toggle records
+  private $logTable    = 'employee_access_log';
+  private $checkTable  = 'check_in_out';
   private $userId;
 
   public function __construct($db)
@@ -136,9 +117,7 @@ class AccessLogManager
     }
   }
 
-  // ── READ: access log entries with optional filters ──────────────────────────
-  // Returns rows from employee_access_log ordered by most-recent first.
-  // Each row already has check_status set by qr_search_backend.php at scan time.
+  // ── Access log entries with optional filters ──────────────────────────
   public function getLogs($filters = [], $page = 1, $limit = 25)
   {
     $where  = "WHERE 1=1";
@@ -211,7 +190,6 @@ class AccessLogManager
       $params[':access_timestamp'] = '%' . $filters['access_timestamp'] . '%';
     }
 
-    // ── COUNT query ──
     $countStmt = $this->conn->prepare("SELECT COUNT(*) FROM {$this->logTable} l $where");
     foreach ($params as $key => $value) {
       $countStmt->bindValue($key, $value);
@@ -219,7 +197,6 @@ class AccessLogManager
     $countStmt->execute();
     $total = (int) $countStmt->fetchColumn();
 
-    // ── DATA query with LIMIT/OFFSET ──
     $offset = ($page - 1) * $limit;
     $dataStmt = $this->conn->prepare(
       "SELECT * FROM {$this->logTable} l $where ORDER BY id DESC LIMIT :limit OFFSET :offset"
@@ -232,7 +209,6 @@ class AccessLogManager
     $dataStmt->execute();
     $logs = $dataStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // ── Gate name lookup ──
     $userIds = array_unique(array_filter(array_column($logs, 'user_id')));
     $userNameMap = [];
     if (!empty($userIds)) {
@@ -258,7 +234,7 @@ class AccessLogManager
     return ['data' => $logs, 'total' => $total];
   }
 
-  // ── READ: single log entry ───────────────────────────────────────────────────
+  // ── Single log entry ───────────────────────────────────────────────────
   public function getLog($id)
   {
     $stmt = $this->conn->prepare(
@@ -269,7 +245,7 @@ class AccessLogManager
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
-  // ── READ: log entry by QR code ───────────────────────────────────────────────
+  // ── Log entry by QR code ───────────────────────────────────────────────
   public function getLogByQR($qr_code)
   {
     $stmt = $this->conn->prepare(
@@ -280,7 +256,7 @@ class AccessLogManager
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
-  // ── READ: IN/OUT history for one employee from check_in_out ─────────────────
+  // ── IN/OUT history for one employee from check_in_out ─────────────────
   public function getCheckInOutHistory($employeeId)
   {
     $stmt = $this->conn->prepare(
@@ -293,7 +269,7 @@ class AccessLogManager
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
   }
 
-  // ── READ: current IN/OUT status for one employee (most recent check_in_out row)
+  // ── Current IN/OUT status for one employee (most recent check_in_out row)
   public function getCurrentCheckStatus($employeeId, $qrCode = null)
   {
     if ($qrCode) {
@@ -319,7 +295,6 @@ class AccessLogManager
   }
 
   // ── DELETE: single log entry from employee_access_log ───────────────────────
-  // Does NOT touch employees or check_in_out.
   public function deleteLog($id)
   {
     $log = $this->getLog($id);
@@ -403,7 +378,6 @@ class AccessLogManager
   // ── DELETE: all log entries (employee_access_log + check_in_out) ─────────────
   public function deleteAllLogs()
   {
-    // Delete check_in_out first (no FK to access_log, but keeps data consistent)
     $this->conn->exec("DELETE FROM {$this->checkTable}");
     try {
       $this->conn->exec("ALTER TABLE {$this->checkTable} AUTO_INCREMENT = 1");
@@ -442,7 +416,6 @@ class AccessLogManager
 
     $stats['inactive'] = $stats['total'] - $stats['active'];
 
-    // IN/OUT counts from check_in_out (the authoritative toggle table)
     $stmt = $this->conn->prepare(
       "SELECT check_type, COUNT(*) as cnt FROM {$this->checkTable} GROUP BY check_type"
     );
@@ -452,7 +425,6 @@ class AccessLogManager
       $stats['check_counts'][$row['check_type']] = $row['cnt'];
     }
 
-    // Breakdown by shift
     $stmt = $this->conn->prepare(
       "SELECT shift, COUNT(*) as count FROM {$this->logTable} GROUP BY shift"
     );
@@ -462,7 +434,6 @@ class AccessLogManager
       $stats['by_shift'][$row['shift']] = $row['count'];
     }
 
-    // Breakdown by access_type
     $stmt = $this->conn->prepare(
       "SELECT access_type, COUNT(*) as count FROM {$this->logTable} GROUP BY access_type"
     );
@@ -572,7 +543,6 @@ try {
         }
         break;
 
-      // Delete a filtered set of log entries by ID list
       case 'delete_filtered':
         $log_ids_json = $_POST['employee_ids'] ?? '[]'; // key kept for JS compatibility
         $filters_json = $_POST['filters']      ?? '{}';
@@ -615,10 +585,8 @@ try {
         }
         break;
 
-      // Delete ALL log entries (employee_access_log + check_in_out)
       case 'delete_all':
         try {
-          // Count first so the response message is accurate
           $result    = $logManager->getLogs([], 1, 1);
           $log_count = $result['total'];
 
@@ -651,7 +619,6 @@ try {
         }
         break;
 
-      // Stats
       case 'get_stats':
         try {
           $response['success'] = true;
@@ -661,7 +628,6 @@ try {
         }
         break;
 
-      // IN/OUT history for one employee (from check_in_out)
       case 'get_checkinout_history':
         $employee_id = $_POST['employee_id'] ?? 0;
 
@@ -679,7 +645,6 @@ try {
         }
         break;
 
-      // Backup: export employee_access_log as JSON
       case 'backup_data':
         try {
           $logs  = $logManager->getLogs([]);
@@ -711,7 +676,6 @@ try {
         }
         break;
 
-      // QR lookup (read-only — does NOT toggle IN/OUT; use qr_search_backend.php for scans)
       case 'search_qr':
         $qr_code = $_POST['qr_code'] ?? '';
 
@@ -775,10 +739,8 @@ try {
         try {
           $result = $logManager->getLogs($filters, $page, $limit);
 
-          // ── Fetch ALL distinct filter option values (no pagination) ──────
           $db = $database->getUserConnection();
 
-          // Collect distinct user_ids for gate name resolution
           $optStmt = $db->query("
             SELECT DISTINCT position, brand, status, shift,
                             violation, check_status, user_id
@@ -786,7 +748,6 @@ try {
         ");
           $allRows = $optStmt->fetchAll(PDO::FETCH_ASSOC);
 
-          // Resolve gate names for distinct user_ids
           $distinctUserIds = array_unique(array_filter(array_column($allRows, 'user_id')));
           $gateNameMap = [];
           if (!empty($distinctUserIds)) {
@@ -801,7 +762,6 @@ try {
             }
           }
 
-          // Attach gate_name to each distinct row
           foreach ($allRows as &$row) {
             $uid = (int)($row['user_id'] ?? 0);
             $row['gate_name'] = $uid && isset($gateNameMap[$uid])
@@ -809,14 +769,13 @@ try {
               : null;
           }
           unset($row);
-          // ─────────────────────────────────────────────────────────────────
 
           $response['success']      = true;
           $response['data']         = $result['data'];
           $response['total']        = $result['total'];
           $response['page']         = $page;
           $response['pages']        = ceil($result['total'] / $limit);
-          $response['filter_options'] = $allRows; // ✅ all distinct values
+          $response['filter_options'] = $allRows;
         } catch (Exception $e) {
           $response['message'] = 'Error retrieving logs: ' . $e->getMessage();
         }
@@ -853,7 +812,6 @@ try {
         }
         break;
 
-      // Current IN/OUT status for an employee (reads check_in_out)
       case 'current_status':
         $employee_id = $_GET['employee_id'] ?? 0;
         $qr_code     = $_GET['qr_code']     ?? null;
@@ -909,7 +867,6 @@ try {
     }
   }
 
-  // Output JSON for AJAX
   if (
     !empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
     strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest'
@@ -997,7 +954,6 @@ if (isset($_GET['serve_file'])) {
   serveFile($filepath, $filename);
 }
 
-// Health check
 if (isset($_GET['health_check'])) {
   $health = [
     'status'             => 'OK',
