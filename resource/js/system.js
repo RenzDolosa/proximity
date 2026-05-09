@@ -26,6 +26,40 @@ const AUDIO_TYPE_MAP = {
   inactive: "inactiveSound",
 };
 
+// ─── Suggestion visibility helpers ───────────────────────────────
+function isInputVisible(input) {
+  const parentModal = input.closest(".modal, .modal-overlay");
+  if (parentModal) {
+    const d = parentModal.style.display;
+    return d === "block" || d === "flex";
+  }
+
+  const anyModalOpen =
+    document.getElementById("employeeModal")?.style.display === "block" ||
+    document.getElementById("deleteModal")?.style.display === "flex" ||
+    document.getElementById("importModal")?.style.display === "block" ||
+    document.getElementById("logsModal")?.style.display === "block" ||
+    document.getElementById("violationsModal")?.style.display === "block";
+  return !anyModalOpen;
+}
+
+function isAnySuggestionOpen() {
+  return [...document.querySelectorAll("ul[data-suggestion-list]")].some(
+    (el) => el.style.display === "block",
+  );
+}
+
+function hideAllSuggestions(scope) {
+  document.querySelectorAll("ul[data-suggestion-list]").forEach((ul) => {
+    if (!scope) {
+      ul.style.display = "none";
+      return;
+    }
+    const owner = document.getElementById(ul.dataset.ownerInput);
+    if (owner && scope.contains(owner)) ul.style.display = "none";
+  });
+}
+
 function escapeHtml(str) {
   if (str === null || str === undefined) return "";
   return String(str)
@@ -177,16 +211,7 @@ function setupEventListeners() {
 
     if (modalOpen) return;
 
-    const anySuggestionOpen = [
-      "fullname-suggestions",
-      "search-position-suggestions",
-      "search-brand-suggestions",
-      "search-status-suggestions",
-      "search-shift-suggestions",
-      "search-violation-suggestions",
-    ].some((id) => document.getElementById(id)?.style.display === "block");
-
-    if (anySuggestionOpen) return;
+    if (isAnySuggestionOpen()) return;
 
     const active = document.activeElement;
     const isTyping =
@@ -284,7 +309,257 @@ function setupEventListeners() {
     },
   );
 
-  setupFieldSuggestions(
+  setupModalSuggestions();
+}
+
+// ─────────────────────────────────────────────────────────────────
+// MODAL-ONLY AUTOCOMPLETE
+// ─────────────────────────────────────────────────────────────────
+const _modalSuggestionTeardowns = [];
+
+function setupModalSuggestions() {
+  _teardownModalSuggestions();
+
+  // ── helper ────────────────────────────────────────────────────
+  /**
+   * Attaches a self-contained autocomplete dropdown to a modal input.
+   *
+   * @param {string}   inputId     - ID of the <input> inside the modal
+   * @param {string}   listId      - Unique ID for the private <ul> to create
+   * @param {Function} getValues   - () => string[]  — raw candidate values
+   * @param {Object}   [opts]
+   *   opts.raw        {boolean}  - skip toProperCase display transform
+   *   opts.requireInput {boolean}- only show dropdown when input has a value
+   *   opts.icon       {string}   - optional <img> src prepended to each item
+   *   opts.badge      {string}   - optional badge text appended to each item
+   *   opts.onFocus    {Function} - async hook called on focus (e.g. fetch codes)
+   *   opts.onSelect   {Function} - called after a value is selected
+   */
+  function attachModalSuggestion(inputId, listId, getValues, opts = {}) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+
+    document.getElementById(listId)?.remove();
+
+    const list = document.createElement("ul");
+    list.id = listId;
+    list.dataset.modalSuggestion = "1";
+    list.dataset.ownerModalInput = inputId;
+    list.style.cssText = `
+      display:none;position:fixed;z-index:99999;
+      background:#fff;border:1px solid #cbd5e1;
+      border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.15);
+      list-style:none;margin:0;padding:0;
+      max-height:260px;overflow:hidden;overflow-y:auto;min-width:160px;
+    `;
+    document.body.appendChild(list);
+
+    let idx = -1;
+
+    // ── only show while employeeModal is open ──────────────────────────────────
+    function isModalOpen() {
+      const m = document.getElementById("employeeModal");
+      return m && (m.style.display === "block" || m.style.display === "flex");
+    }
+
+    function positionList() {
+      const rect = input.getBoundingClientRect();
+      list.style.top  = rect.bottom + 4 + "px";
+      list.style.left = rect.left + "px";
+      list.style.width = Math.max(rect.width, 200) + "px";
+    }
+
+    function selectItem(value) {
+      input.value = value;
+      list.style.display = "none";
+      idx = -1;
+      if (opts.onSelect) opts.onSelect(value);
+    }
+
+    function show(q) {
+      if (!isModalOpen()) {
+        list.style.display = "none";
+        idx = -1;
+        return;
+      }
+
+      const lower = q.trim().toLowerCase();
+
+      if (opts.requireInput && !lower) {
+        list.style.display = "none";
+        idx = -1;
+        return;
+      }
+
+      const raw = getValues();
+      const seen = new Map();
+
+      raw
+        .map((v) => (v || "").trim())
+        .filter((v) => v)
+        .filter((v) => !lower || v.toLowerCase().includes(lower))
+        .forEach((v) => {
+          const key = v.toLowerCase();
+          if (!seen.has(key)) seen.set(key, v);
+        });
+
+      const items = [...seen.values()];
+
+      if (!items.length) {
+        list.style.display = "none";
+        idx = -1;
+        return;
+      }
+
+      list.innerHTML = items
+        .map((v, i) => {
+          const display = opts.raw ? v : toProperCase(v);
+          const safeDisplay = escapeHtml(display);
+
+          let hl = safeDisplay;
+          if (lower) {
+            const regex = new RegExp(
+              `(${lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+              "gi",
+            );
+            hl = safeDisplay.replace(
+              regex,
+              '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
+            );
+          }
+
+          const iconHtml = opts.icon
+            ? `<img src="${escapeHtml(opts.icon)}" style="width:14px;height:14px;margin-right:6px;vertical-align:middle;">`
+            : "";
+          const badgeHtml = opts.badge
+            ? `<span style="margin-left:6px;font-size:10px;padding:1px 6px;border-radius:10px;
+                background:#d1fae5;color:#065f46;font-weight:600;">${escapeHtml(opts.badge)}</span>`
+            : "";
+
+          return `<li
+            data-value="${escapeHtml(v)}"
+            data-index="${i}"
+            style="padding:8px 12px;cursor:pointer;font-size:13px;
+                   border-bottom:1px solid #f1f5f9;
+                   display:flex;align-items:center;">
+            ${iconHtml}${hl}${badgeHtml}
+          </li>`;
+        })
+        .join("");
+
+      list.querySelectorAll("li[data-value]").forEach((li) => {
+        li.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          selectItem(li.dataset.value);
+        });
+        li.addEventListener("mouseover", () => {
+          list.querySelectorAll("li").forEach((l) => (l.style.background = ""));
+          li.style.background = "#f0f9ff";
+          idx = [...list.querySelectorAll("li")].indexOf(li);
+        });
+      });
+
+      positionList();
+      list.style.display = "block";
+      idx = -1;
+    }
+
+    // ── event handlers ───────────────────────────────────────────
+    const onFocus = async () => {
+      if (opts.requireInput && !input.value.trim()) return;
+      show(input.value);
+      if (opts.onFocus) {
+        await opts.onFocus();
+        show(input.value);
+      }
+    };
+
+    const onBlur = () => {
+      setTimeout(() => {
+        if (!list.contains(document.activeElement)) {
+          list.style.display = "none";
+          idx = -1;
+        }
+      }, 150);
+    };
+
+    const onInput = () => show(input.value);
+
+    const onKeydown = (e) => {
+      const liItems = [...list.querySelectorAll("li[data-value]")];
+      if (e.key === "Tab") {
+        list.style.display = "none";
+        idx = -1;
+        return;
+      }
+      if (!liItems.length || list.style.display === "none") return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        idx = Math.min(idx + 1, liItems.length - 1);
+        liItems.forEach((l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        idx = Math.max(idx - 1, 0);
+        liItems.forEach((l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""));
+      } else if (e.key === "Enter" && idx >= 0) {
+        e.preventDefault();
+        selectItem(liItems[idx].dataset.value);
+      } else if (e.key === "Escape") {
+        list.style.display = "none";
+        idx = -1;
+      }
+    };
+
+    const onScroll = () => {
+      if (list.style.display !== "none") positionList();
+    };
+
+    const onResize = () => {
+      if (list.style.display !== "none") positionList();
+    };
+
+    const outsideClick = (e) => {
+      if (!input.contains(e.target) && !list.contains(e.target)) {
+        list.style.display = "none";
+        idx = -1;
+      }
+    };
+
+    input.addEventListener("focus",   onFocus);
+    input.addEventListener("blur",    onBlur);
+    input.addEventListener("input",   onInput);
+    input.addEventListener("keydown", onKeydown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    document.addEventListener("click", outsideClick);
+
+    _modalSuggestionTeardowns.push(() => {
+      input.removeEventListener("focus",   onFocus);
+      input.removeEventListener("blur",    onBlur);
+      input.removeEventListener("input",   onInput);
+      input.removeEventListener("keydown", onKeydown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+      document.removeEventListener("click", outsideClick);
+      list.remove();
+    });
+  }
+
+  // ── Wire up each modal field ──────────────────────────────────
+
+  // ── EMPID — numeric desc, raw values ──────────────────────────
+  attachModalSuggestion(
+    "employee_id",
+    "modal-empid-suggestions",
+    () =>
+      [...allEmployees]
+        .sort((a, b) => Number(b.id) - Number(a.id))
+        .map((e) => String(e.id)),
+    { raw: true, requireInput: true },
+  );
+
+  // FULLNAME — sorted by last name, proper-cased
+  attachModalSuggestion(
     "fullname",
     "modal-fullname-suggestions",
     () =>
@@ -297,83 +572,116 @@ function setupEventListeners() {
           return lastName(a.fullname).localeCompare(lastName(b.fullname));
         })
         .map((e) => e.fullname),
-    {
-      requireInput: true,
-      raw: false,
-    },
+    { requireInput: true, raw: false },
   );
 
-  setupFieldSuggestions(
-    "employee_id",
-    "empid-suggestions",
+  // ── POSITION — sorted alphabetically, proper-cased ──────────────
+  attachModalSuggestion(
+    "position",
+    "modal-position-suggestions",
     () =>
       [...allEmployees]
-        .sort((a, b) => Number(b.id) - Number(a.id))
-        .map((e) => String(e.id)),
-    { raw: true },
+        .sort((a, b) => (a.position || "").localeCompare(b.position || ""))
+        .map((e) => e.position)
+        .filter(Boolean),
+    { requireInput: false, raw: false },
   );
 
-  let availableCodes = [];
+  // ── BRAND — sorted alphabetically, proper-cased ──────────────────
+  attachModalSuggestion(
+    "brand",
+    "modal-brand-suggestions",
+    () =>
+      [...allEmployees]
+        .sort((a, b) => (a.brand || "").localeCompare(b.brand || ""))
+        .map((e) => e.brand)
+        .filter(Boolean),
+    { requireInput: false, raw: false },
+  );
 
-  setupFieldSuggestions("qr_code", "qrcode-suggestions", () => availableCodes, {
-    raw: true,
-    icon: "../../resource/assets/icon/nfc-icon.svg",
-    badge: "Available",
-    onFocus: async () => {
-      try {
-        const [proxRes, allEmpRes] = await Promise.all([
-          fetch("proxcode_backend.php?action=get", {
-            headers: { "X-Requested-With": "XMLHttpRequest" },
-          }),
-          fetch("manpower_backend.php?action=get&page=1&limit=1", {
-            headers: {
-              "X-Requested-With": "XMLHttpRequest",
-              "X-Silent-Request": "true",
-            },
-          }),
-        ]);
+  // ── QR / PROXIMITY CODE — fetched on focus, shows available codes ────────
+  let _availableModalCodes = [];
 
-        const proxJson = await proxRes.json();
-        const allEmpJson = await allEmpRes.json();
+  attachModalSuggestion(
+    "qr_code",
+    "modal-qrcode-suggestions",
+    () => _availableModalCodes,
+    {
+      raw: true,
+      requireInput: false,
+      icon: "../../resource/assets/icon/nfc-icon.svg",
+      badge: "Available",
+      onFocus: async () => {
+        try {
+          const [proxRes, allEmpRes] = await Promise.all([
+            fetch("proxcode_backend.php?action=get", {
+              headers: { "X-Requested-With": "XMLHttpRequest" },
+            }),
+            fetch("manpower_backend.php?action=get&page=1&limit=1", {
+              headers: {
+                "X-Requested-With": "XMLHttpRequest",
+                "X-Silent-Request": "true",
+              },
+            }),
+          ]);
 
-        if (!proxJson.success || !Array.isArray(proxJson.data)) return;
+          const proxJson   = await proxRes.json();
+          const allEmpJson = await allEmpRes.json();
 
-        const currentCode =
-          document.getElementById("qr_code")?.value.trim().toLowerCase() || "";
+          if (!proxJson.success || !Array.isArray(proxJson.data)) return;
 
-        const allEmployees =
-          allEmpJson.success && Array.isArray(allEmpJson.filter_options)
-            ? allEmpJson.filter_options
-            : employees;
+          const currentCode =
+            document.getElementById("qr_code")?.value.trim().toLowerCase() || "";
 
-        const assignedSet = new Set(
-          allEmployees
-            .map((e) => (e.qr_code || "").trim().toLowerCase())
-            .filter(Boolean),
-        );
+          const empList =
+            allEmpJson.success && Array.isArray(allEmpJson.filter_options)
+              ? allEmpJson.filter_options
+              : employees;
 
-        availableCodes = proxJson.data
-          .filter((c) => {
-            const cLower = (c.qr_code || "").trim().toLowerCase();
-            return (
-              c.is_active == 1 &&
-              (!assignedSet.has(cLower) || cLower === currentCode)
-            );
-          })
-          .map((c) => c.qr_code)
-          .sort((a, b) => {
-            const numA = Number(a);
-            const numB = Number(b);
-            const bothNumeric = !isNaN(numA) && !isNaN(numB);
-            return bothNumeric
-              ? numA - numB
-              : String(a).localeCompare(String(b));
-          });
-      } catch (e) {
-        console.warn("QR suggestions: failed to load", e);
-      }
+          const assignedSet = new Set(
+            empList
+              .map((e) => (e.qr_code || "").trim().toLowerCase())
+              .filter(Boolean),
+          );
+
+          _availableModalCodes = proxJson.data
+            .filter((c) => {
+              const cLower = (c.qr_code || "").trim().toLowerCase();
+              return (
+                c.is_active == 1 &&
+                (!assignedSet.has(cLower) || cLower === currentCode)
+              );
+            })
+            .map((c) => c.qr_code)
+            .sort((a, b) => {
+              const numA = Number(a);
+              const numB = Number(b);
+              const bothNumeric = !isNaN(numA) && !isNaN(numB);
+              return bothNumeric ? numA - numB : String(a).localeCompare(String(b));
+            });
+        } catch (e) {
+          console.warn("Modal QR suggestions: failed to load", e);
+        }
+      },
     },
-  });
+  );
+
+  // ── VIOLATION / REMARKS — drawn from existing employee remarks ────────────
+  attachModalSuggestion(
+    "violation",
+    "modal-violation-suggestions",
+    () =>
+      [...allEmployees]
+        .map((e) => (e.violation || "").trim())
+        .filter(Boolean),
+    { requireInput: true, raw: true },
+  );
+}
+
+function _teardownModalSuggestions() {
+  while (_modalSuggestionTeardowns.length) {
+    _modalSuggestionTeardowns.pop()();
+  }
 }
 
 function debounce(func, wait) {
@@ -546,9 +854,6 @@ async function loadEmployeeData(employeeId) {
       document.getElementById("shift").value = employee.shift || "";
       document.getElementById("violation").value = employee.violation || "";
       document.getElementById("qr_code").value = employee.qr_code || "";
-      // document.getElementById("gender").value = employee.gender || "";
-      // document.getElementById("birth").value = employee.birth || "";
-      // document.getElementById("hired").value = employee.hired || "";
 
       const fileLabel = document.querySelector(".file-upload-label");
       if (employee.image) {
@@ -769,23 +1074,6 @@ async function renderEmployeeTable() {
               <div>${toProperCase(safeBrand)}</div>
               <div class="emp-position"><strong>Position: ${toProperCase(safePosition)}</strong></div>
             </td>
-            <!-- <td><small>${safeGender}</small></td>
-            <td>
-              <div><small>${safeBirth}</small></div>
-              <div class="emp-age"><strong>Age: ${
-                calcAge(employee.birth) !== null
-                  ? calcAge(employee.birth) + " yrs"
-                  : "—"
-              }</strong></div>
-            </td>
-            <td>
-              <div><small>${safeHired}</small></div>
-              <div class="emp-tenure"><strong>Tenure: ${
-                calcTenure(employee.hired) !== null
-                  ? escapeHtml(calcTenure(employee.hired))
-                  : "—"
-              }</strong></div>
-            </td> -->
             <td>
               <div><small>${safeShift}</small></div>
               <div class="emp-status"><strong>Status: <span class="status-${safeStatus.toLowerCase()}">${safeStatus}</span></strong></div>
@@ -1087,18 +1375,13 @@ function copyQRCode(code) {
 
   try {
     document.execCommand("copy");
-
     showAlert("Proximity code copied to clipboard!");
   } catch (err) {
     if (navigator.clipboard) {
       navigator.clipboard
         .writeText(code)
-        .then(() => {
-          showAlert("Proximity code copied to clipboard!");
-        })
-        .catch(() => {
-          showAlert("Failed to copy Proximity code");
-        });
+        .then(() => showAlert("Proximity code copied to clipboard!"))
+        .catch(() => showAlert("Failed to copy Proximity code"));
     } else {
       showAlert("Failed to copy Proximity code");
     }
@@ -1226,7 +1509,7 @@ function clearDateFilter() {
   searchEmployees();
 }
 
-// ── Generic field autocomplete ───────────────────────────────────────────────
+// ── Generic field autocomplete (filter bar only) ──────────────────
 function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
   const input = document.getElementById(inputId);
   if (!input) return;
@@ -1235,11 +1518,13 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     ? document.getElementById(options.hiddenId)
     : null;
 
-  const existing = document.getElementById(listId);
-  if (existing) existing.remove();
+  const stale = document.getElementById(listId);
+  if (stale) stale.remove();
 
   const list = document.createElement("ul");
   list.id = listId;
+  list.dataset.suggestionList = "1";
+  list.dataset.ownerInput = inputId;
   list.style.cssText = `
     display:none;position:fixed;z-index:99999;
     background:#fff;border:1px solid #cbd5e1;
@@ -1272,10 +1557,15 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
   }
 
   function show(q) {
+    if (!isInputVisible(input)) {
+      list.style.display = "none";
+      idx = -1;
+      return;
+    }
+
     const lower = q.trim().toLowerCase();
     const raw = getValues();
 
-    // ── Build item list ──────────────────────────────────────────
     const items = [];
 
     items.push({ display: "Default: ALL", raw: "", special: "all" });
@@ -1353,7 +1643,7 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
       .join("");
 
     list.querySelectorAll("li[data-raw]").forEach((li) => {
-      if (li.style.pointerEvents === "none") return; // divider
+      if (li.style.pointerEvents === "none") return;
       li.addEventListener("mousedown", (e) => {
         e.preventDefault();
         selectItem(li.dataset.display, li.dataset.raw);
@@ -1510,12 +1800,14 @@ async function openModal(action, employeeId = null) {
     document.getElementById("status").value = "Active";
     modal.style.display = "block";
     updateViolationPadding();
+    setupModalSuggestions();
     qrCodeInput.focus();
   } else if (action === "edit" && employeeId) {
     modalTitle.innerHTML = `<i class="fas fa-edit" style="color:#7c3aed"></i> Edit Employee`;
     modal.style.display = "block";
     await loadEmployeeData(employeeId);
     updateViolationPadding();
+    setupModalSuggestions();
     const idField = document.getElementById("employee_id");
     if (idField) {
       idField.focus();
@@ -1810,9 +2102,7 @@ function _renderLogsModal(modal, employeeId) {
     </div>
   `;
 
-  body.innerHTML = `
-    <div id="logsTabContent"></div>
-  `;
+  body.innerHTML = `<div id="logsTabContent"></div>`;
 
   _switchLogsTab("access", employeeId);
 }
@@ -2473,6 +2763,8 @@ function closeModal() {
   logsModal.style.display = "none";
   violationModal.style.display = "none";
 
+  _teardownModalSuggestions();
+
   const form = document.getElementById("employeeForm");
   if (form) form.reset();
 
@@ -2537,7 +2829,6 @@ async function handleFormSubmit(e) {
       return;
     }
 
-    // ── Server-side uniqueness checks ─────────────────────────────────────
     try {
       const checkRes = await fetch(
         `manpower_backend.php?action=get&page=1&limit=1` +
@@ -2742,9 +3033,6 @@ async function handleFormSubmit(e) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// CLIENT-SIDE WEBP CONVERSION
-// ─────────────────────────────────────────────────────────────
 async function convertImageToWebP(file, quality = 0.85) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -2785,9 +3073,6 @@ async function convertImageToWebP(file, quality = 0.85) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────
-// FILE UPLOAD HANDLER
-// ─────────────────────────────────────────────────────────────
 function setupFileUploadHandler() {
   const imageInput = document.getElementById("image");
 
