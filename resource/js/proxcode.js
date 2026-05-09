@@ -188,6 +188,20 @@ function setupEventListeners() {
   const proximityInput = document.getElementById("search_qr");
 
   function autoFocusProximity() {
+    const modalOpen =
+      document.getElementById("employeeModal")?.style.display === "block" ||
+      document.getElementById("deleteModal")?.style.display === "flex" ||
+      document.getElementById("importModal")?.style.display === "block";
+
+    if (modalOpen) return;
+
+    const anySuggestionOpen = [
+      "search-remarks-suggestions",
+      "search-status-suggestions",
+    ].some((id) => document.getElementById(id)?.style.display === "block");
+
+    if (anySuggestionOpen) return;
+
     const active = document.activeElement;
     const isTyping =
       active &&
@@ -214,6 +228,37 @@ function setupEventListeners() {
   autoFocusProximity();
   document.addEventListener("click", autoFocusProximity);
   document.addEventListener("focusin", autoFocusProximity);
+
+  setupFieldSuggestions(
+    "search_remarks",
+    "search-remarks-suggestions",
+    () => {
+      const map = qrImageMapCache || {};
+      return employees.map((e) => {
+        const isOccupied = Object.prototype.hasOwnProperty.call(
+          map,
+          String(e.qr_code).trim().toLowerCase(),
+        );
+        return isOccupied ? "Occupied" : "Available";
+      });
+    },
+    {
+      hiddenId: "search_remarks_val",
+      noneLabel: "No Remarks",
+      onSelect: () => searchEmployees(),
+    },
+  );
+
+  setupFieldSuggestions(
+    "search_status",
+    "search-status-suggestions",
+    () => employees.map((e) => (e.is_active == 1 ? "Enabled" : "Disabled")),
+    {
+      hiddenId: "search_status_val",
+      noneLabel: "No Status",
+      onSelect: () => searchEmployees(),
+    },
+  );
 }
 
 function debounce(func, wait) {
@@ -231,7 +276,6 @@ function debounce(func, wait) {
 function getActiveFilters() {
   const searchForm = document.getElementById("searchForm");
   const filters = {};
-
   if (!searchForm) return filters;
 
   const formData = new FormData(searchForm);
@@ -253,56 +297,65 @@ function displayFilterStatus() {
   const filters = getActiveFilters();
 
   const existingStatus = document.getElementById("filter-status");
-  if (existingStatus) existingStatus.remove();
+  if (existingStatus) {
+    existingStatus.remove();
+  }
 
-  if (Object.keys(filters).length === 0) return;
+  if (Object.keys(filters).length > 0) {
+    const filterInfo = document.createElement("div");
+    filterInfo.id = "filter-status";
+    filterInfo.style.cssText = `
+      background: #e3f2fd;
+      border-left: 4px solid #2196F3;
+      padding: 12px 16px;
+      margin-left: 16px;
+      border-radius: 4px;
+      font-size: 14px;
+      color: #1565c0;
+      display: inline-flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+    `;
 
-  const filterInfo = document.createElement("div");
-  filterInfo.id = "filter-status";
-  filterInfo.style.cssText = `
-    background: #e3f2fd;
-    border-left: 4px solid #2196F3;
-    padding: 12px 16px;
-    margin-left: 16px;
-    border-radius: 4px;
-    font-size: 14px;
-    color: #1565c0;
-    display: inline-flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: center;
-  `;
+    const filterLabel = document.createElement("span");
+    filterLabel.style.display = "inline-flex";
+    filterLabel.style.alignItems = "center";
+    filterLabel.style.gap = "8px";
 
-  const filterLabel = document.createElement("span");
-  filterLabel.style.display = "inline-flex";
-  filterLabel.style.alignItems = "center";
-  filterLabel.style.gap = "8px";
+    const icon = document.createElement("i");
+    icon.className = "fas fa-filter";
+    filterLabel.appendChild(icon);
 
-  const icon = document.createElement("i");
-  icon.className = "fas fa-filter";
-  filterLabel.appendChild(icon);
+    const textSpan = document.createElement("span");
+    textSpan.appendChild(document.createTextNode("Active Filters: "));
 
-  const textSpan = document.createElement("span");
-  textSpan.appendChild(document.createTextNode("Active Filters: "));
+    const filterEntries = Object.entries(filters);
+    filterEntries.forEach(([key, value], index) => {
+      if (index > 0) {
+        textSpan.appendChild(document.createTextNode(" | "));
+      }
 
-  Object.entries(filters).forEach(([key, value], index) => {
-    if (index > 0) textSpan.appendChild(document.createTextNode(" | "));
+      const strong = document.createElement("strong");
+      const properKey = key
+        .split(/(?=[A-Z])/)
+        .map(
+          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
+        )
+        .join(" ");
+      strong.textContent = `${properKey}:`;
+      textSpan.appendChild(strong);
+      textSpan.appendChild(document.createTextNode(` ${value}`));
+    });
 
-    const strong = document.createElement("strong");
-    const properKey = key
-      .split(/(?=[A-Z])/)
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(" ");
-    strong.textContent = `${properKey}:`;
-    textSpan.appendChild(strong);
-    textSpan.appendChild(document.createTextNode(` ${value}`));
-  });
+    filterLabel.appendChild(textSpan);
+    filterInfo.appendChild(filterLabel);
 
-  filterLabel.appendChild(textSpan);
-  filterInfo.appendChild(filterLabel);
-
-  const controlsDiv = document.querySelector(".controls");
-  if (controlsDiv) controlsDiv.appendChild(filterInfo);
+    const controlsDiv = document.querySelector(".controls");
+    if (controlsDiv) {
+      controlsDiv.appendChild(filterInfo);
+    }
+  }
 }
 
 async function syncOrphanStatuses() {
@@ -745,13 +798,23 @@ function clearSearch() {
   const searchForm = document.getElementById("searchForm");
   if (searchForm) searchForm.reset();
 
+  [
+    ["search_remarks", "search_remarks_val"],
+    ["search_status", "search_status_val"],
+  ].forEach(([displayId, hiddenId]) => {
+    const display = document.getElementById(displayId);
+    const hidden = document.getElementById(hiddenId);
+    if (display) display.value = "";
+    if (hidden) hidden.value = "";
+  });
+
   const filterStatus = document.getElementById("filter-status");
   if (filterStatus) filterStatus.remove();
 
   currentPage = 1;
   activeFilters = {};
-  loadEmployees({}, false, true);
   updateDeleteButtonState();
+  loadEmployees({}, false, true);
 }
 
 function clearDateFilter() {
@@ -762,7 +825,233 @@ function clearDateFilter() {
   searchEmployees();
 }
 
-// OPEN MODAL
+// ── Generic field autocomplete ───────────────────────────────────────────────
+function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+
+  const hidden = options.hiddenId
+    ? document.getElementById(options.hiddenId)
+    : null;
+
+  const existing = document.getElementById(listId);
+  if (existing) existing.remove();
+
+  const list = document.createElement("ul");
+  list.id = listId;
+  list.style.cssText = `
+    display:none;position:fixed;z-index:99999;
+    background:#fff;border:1px solid #cbd5e1;
+    border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.15);
+    list-style:none;margin:0;padding:0;
+    max-height:260px;overflow:hidden;overflow-y:auto;min-width:160px;
+  `;
+  document.body.appendChild(list);
+
+  let idx = -1;
+
+  function selectItem(displayValue, rawValue) {
+    if (rawValue === "") {
+      input.value = "";
+      if (hidden) hidden.value = "";
+    } else {
+      input.value = displayValue;
+      if (hidden) hidden.value = rawValue;
+    }
+    list.style.display = "none";
+    idx = -1;
+    if (options.onSelect) options.onSelect(rawValue);
+  }
+
+  function positionList() {
+    const rect = input.getBoundingClientRect();
+    list.style.top = rect.bottom + 4 + "px";
+    list.style.left = rect.left + "px";
+    list.style.width = Math.max(rect.width, 200) + "px";
+  }
+
+  function show(q) {
+    const lower = q.trim().toLowerCase();
+    const raw = getValues();
+
+    // ── Build item list ──────────────────────────────────────────
+    const items = [];
+
+    items.push({ display: "Default: ALL", raw: "", special: "all" });
+
+    if (options.noneLabel) {
+      items.push({
+        display: options.noneLabel,
+        raw: "__none__",
+        special: "none",
+      });
+      items.push({ display: "──────────", raw: null, special: "divider" });
+    }
+
+    const seen = new Map();
+    raw
+      .map((v) => (v || "").trim())
+      .filter((v) => v && v.toLowerCase() !== "none")
+      .filter((v) => !lower || v.toLowerCase().includes(lower))
+      .forEach((v) => {
+        const key = v.toLowerCase();
+        if (!seen.has(key)) seen.set(key, v);
+      });
+
+    [...seen.values()].forEach((v) => {
+      items.push({ display: options.raw ? v : toProperCase(v), raw: v });
+    });
+
+    const visibleItems = lower ? items.filter((i) => !i.special) : items;
+
+    const hasRealItems = visibleItems.some((i) => !i.special);
+    if (!visibleItems.length || (lower && !hasRealItems)) {
+      list.style.display = "none";
+      idx = -1;
+      return;
+    }
+
+    list.innerHTML = visibleItems
+      .map((item, i) => {
+        if (item.special === "divider") {
+          return `<li data-raw="" data-display=""
+            style="padding:4px 12px;font-size:11px;color:#94a3b8;
+                   pointer-events:none;user-select:none;border-bottom:1px solid #f1f5f9;">
+            ──────────
+          </li>`;
+        }
+
+        const safeDisplay = escapeHtml(item.display);
+        let hl = safeDisplay;
+        if (lower && !item.special) {
+          const regex = new RegExp(
+            `(${lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+            "gi",
+          );
+          hl = safeDisplay.replace(
+            regex,
+            '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
+          );
+        }
+
+        const isSpecial = item.special === "all" || item.special === "none";
+        const specialStyle = isSpecial
+          ? "font-weight:600;color:#1e40af;background:#f0f9ff;"
+          : "";
+
+        return `<li
+          data-raw="${escapeHtml(item.raw ?? "")}"
+          data-display="${safeDisplay}"
+          data-index="${i}"
+          style="padding:8px 12px;cursor:pointer;font-size:13px;
+                 border-bottom:1px solid #f1f5f9;
+                 display:flex;align-items:center;${specialStyle}">
+          ${hl}
+        </li>`;
+      })
+      .join("");
+
+    list.querySelectorAll("li[data-raw]").forEach((li) => {
+      if (li.style.pointerEvents === "none") return; // divider
+      li.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        selectItem(li.dataset.display, li.dataset.raw);
+      });
+      li.addEventListener("mouseover", () => {
+        list
+          .querySelectorAll("li")
+          .forEach(
+            (l) =>
+              (l.style.background =
+                l === li ? "#f0f9ff" : l.dataset.raw === undefined ? "" : ""),
+          );
+        idx = [...list.querySelectorAll("li")].indexOf(li);
+      });
+    });
+
+    positionList();
+    list.style.display = "block";
+    idx = -1;
+  }
+
+  input.addEventListener("focus", async () => {
+    if (options.requireInput && !input.value.trim()) return;
+    show(input.value);
+    if (options.onFocus) {
+      await options.onFocus();
+      show(input.value);
+    }
+  });
+
+  input.addEventListener("blur", () => {
+    setTimeout(() => {
+      if (!list.contains(document.activeElement)) {
+        list.style.display = "none";
+        idx = -1;
+      }
+    }, 150);
+  });
+
+  input.addEventListener("input", () => {
+    show(input.value);
+  });
+
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (list.style.display !== "none") positionList();
+    },
+    true,
+  );
+  window.addEventListener("resize", () => {
+    if (list.style.display !== "none") positionList();
+  });
+
+  input.addEventListener("keydown", (e) => {
+    const liItems = [...list.querySelectorAll("li")].filter(
+      (l) => l.style.pointerEvents !== "none",
+    );
+    if (e.key === "Tab") {
+      list.style.display = "none";
+      idx = -1;
+      return;
+    }
+    if (!liItems.length || list.style.display === "none") return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      idx = Math.min(idx + 1, liItems.length - 1);
+      liItems.forEach(
+        (l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""),
+      );
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      idx = Math.max(idx - 1, 0);
+      liItems.forEach(
+        (l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""),
+      );
+    } else if (e.key === "Enter" && idx >= 0) {
+      e.preventDefault();
+      selectItem(liItems[idx].dataset.display, liItems[idx].dataset.raw);
+    } else if (e.key === "Escape") {
+      list.style.display = "none";
+      idx = -1;
+    }
+  });
+
+  if (input._outsideClickHandler) {
+    document.removeEventListener("click", input._outsideClickHandler);
+  }
+  input._outsideClickHandler = (e) => {
+    if (!input.contains(e.target) && !list.contains(e.target)) {
+      list.style.display = "none";
+      idx = -1;
+    }
+  };
+  document.removeEventListener("click", input._outsideClickHandler);
+  document.addEventListener("click", input._outsideClickHandler);
+}
+
+// ── Open modal ──────────────────────────────────────────────────────
 async function openModal(action, employeeId = null) {
   currentAction = action;
   const modal = document.getElementById("employeeModal");
@@ -1070,7 +1359,6 @@ async function populateFilter(employeeList) {
   updateColor();
 }
 
-// LOAD EMPLOYEES
 async function loadEmployees(
   filters = {},
   preservePage = false,
@@ -1155,7 +1443,6 @@ async function loadEmployees(
   }
 }
 
-// CLOSE MODAL
 function closeModal() {
   ["employeeModal", "deleteModal", "importModal"].forEach((id) => {
     const el = document.getElementById(id);
@@ -1166,7 +1453,6 @@ function closeModal() {
   if (form) form.reset();
 }
 
-// HANDLE FORM SUBMISSION
 async function handleFormSubmit(e) {
   e.preventDefault();
 

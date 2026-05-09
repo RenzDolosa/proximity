@@ -86,18 +86,18 @@ if ($databaseConnected) {
     <div class="controls">
       <form id="searchForm">
         <div class="search-row">
-          <div class="search-group">
-            <select id="search_remarks" name="remarks">
-              <option value="">Default: ALL</option>
-              <option value="Available">Available</option>
-              <option value="Occupied">Occupied</option>
-            </select>
+          <!-- Remarks -->
+          <div class="search-group" style="position:relative;">
+            <input type="text" id="search_remarks" placeholder="Remarks" autocomplete="off" readonly style="cursor:pointer;">
+            <input type="hidden" id="search_remarks_val" name="remarks">
           </div>
-          <div class="search-group">
-            <select id="search_status" name="status">
-              <option value="">Default: ALL</option>
-            </select>
+
+          <!-- Status -->
+          <div class="search-group" style="position:relative;">
+            <input type="text" id="search_status" placeholder="Status" autocomplete="off" readonly style="cursor:pointer;">
+            <input type="hidden" id="search_status_val" name="status">
           </div>
+          
           <div class="search-group">
             <input type="text" id="search_date" name="created_at" placeholder="Date">
           </div>

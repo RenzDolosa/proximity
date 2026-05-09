@@ -83,55 +83,40 @@ if ($databaseConnected) {
     <div class="controls">
       <form id="searchForm">
         <div class="search-row">
-          <div class="search-group" style="position: relative;">
+          <!-- Fullname -->
+          <div class="search-group">
             <input type="text" id="search_fullname" name="fullname"
-              placeholder="Fullname" autocomplete="off"
-              oninput="showFullnameSuggestions(this.value)"
-              onkeydown="handleSuggestionNav(event)"
-              onfocus="showFullnameSuggestions(this.value)">
-            <ul id="fullname-suggestions" style="
-              display: none;
-              position: absolute;
-              top: 100%;
-              left: 0;
-              right: 0;
-              z-index: 9999;
-              background: #fff;
-              border: 1px solid #cbd5e1;
-              border-top: none;
-              border-radius: 0 0 8px 8px;
-              box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-              list-style: none;
-              margin: 0;
-              padding: 0;
-              max-height: 220px;
-              overflow-y: auto;
-            "></ul>
+              placeholder="Fullname" autocomplete="off">
           </div>
-          <div class="search-group">
-            <select id="search_position" name="position">
-              <option value="">Default: ALL</option>
-            </select>
+
+          <!-- Position -->
+          <div class="search-group" style="position:relative;">
+            <input type="text" id="search_position" placeholder="Position" autocomplete="off" readonly style="cursor:pointer;">
+            <input type="hidden" id="search_position_val" name="position">
           </div>
-          <div class="search-group">
-            <select id="search_brand" name="brand">
-              <option value="">Default: ALL</option>
-            </select>
+
+          <!-- Brand -->
+          <div class="search-group" style="position:relative;">
+            <input type="text" id="search_brand" placeholder="Brand" autocomplete="off" readonly style="cursor:pointer;">
+            <input type="hidden" id="search_brand_val" name="brand">
           </div>
-          <div class="search-group">
-            <select id="search_status" name="status">
-              <option value="">Default: ALL</option>
-            </select>
+
+          <!-- Status -->
+          <div class="search-group" style="position:relative;">
+            <input type="text" id="search_status" placeholder="Status" autocomplete="off" readonly style="cursor:pointer;">
+            <input type="hidden" id="search_status_val" name="status">
           </div>
-          <div class="search-group">
-            <select id="search_shift" name="shift">
-              <option value="">Default: ALL</option>
-            </select>
+
+          <!-- Shift -->
+          <div class="search-group" style="position:relative;">
+            <input type="text" id="search_shift" placeholder="Shift" autocomplete="off" readonly style="cursor:pointer;">
+            <input type="hidden" id="search_shift_val" name="shift">
           </div>
-          <div class="search-group">
-            <select id="search_violation" name="violation">
-              <option value="">Default: ALL</option>
-            </select>
+
+          <!-- Violation -->
+          <div class="search-group" style="position:relative;">
+            <input type="text" id="search_violation" placeholder="Violation" autocomplete="off" readonly style="cursor:pointer;">
+            <input type="hidden" id="search_violation_val" name="violation">
           </div>
           <div class="search-group" style="position: relative;">
             <input type="date"

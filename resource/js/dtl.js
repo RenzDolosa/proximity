@@ -56,6 +56,24 @@ function setupEventListeners() {
   const proximityInput = document.getElementById("search_qr");
 
   function autoFocusProximity() {
+    const modalOpen =
+      document.getElementById("deleteModal")?.style.display === "block";
+
+    if (modalOpen) return;
+
+    const anySuggestionOpen = [
+      "fullname-suggestions",
+      "search-position-suggestions",
+      "search-brand-suggestions",
+      "search-status-suggestions",
+      "search-shift-suggestions",
+      "search-violation-suggestions",
+      "search-inout-suggestions",
+      "search-inout-suggestions",
+    ].some((id) => document.getElementById(id)?.style.display === "block");
+
+    if (anySuggestionOpen) return;
+
     const active = document.activeElement;
     const isTyping =
       active &&
@@ -71,6 +89,108 @@ function setupEventListeners() {
   autoFocusProximity();
   document.addEventListener("click", autoFocusProximity);
   document.addEventListener("focusin", autoFocusProximity);
+
+  setupFieldSuggestions(
+    "search_fullname",
+    "fullname-suggestions",
+    () =>
+      [...employees]
+        .sort((a, b) => {
+          const lastName = (name) => {
+            const parts = (name || "").trim().split(/\s+/);
+            return parts[parts.length - 1].toLowerCase();
+          };
+          return lastName(a.fullname).localeCompare(lastName(b.fullname));
+        })
+        .map((e) => e.fullname),
+    {
+      requireInput: false,
+      onSelect: () => searchEmployees(),
+    },
+  );
+
+  setupFieldSuggestions(
+    "search_position",
+    "search-position-suggestions",
+    () =>
+      [...allEmployees]
+        .sort((a, b) => (a.position || "").localeCompare(b.position || ""))
+        .map((e) => e.position),
+    {
+      hiddenId: "search_position_val",
+      noneLabel: "No Position",
+      onSelect: () => searchEmployees(),
+    },
+  );
+
+  setupFieldSuggestions(
+    "search_brand",
+    "search-brand-suggestions",
+    () =>
+      [...allEmployees]
+        .sort((a, b) => (a.brand || "").localeCompare(b.brand || ""))
+        .map((e) => e.brand),
+    {
+      hiddenId: "search_brand_val",
+      noneLabel: "No Brand",
+      onSelect: () => searchEmployees(),
+    },
+  );
+
+  setupFieldSuggestions(
+    "search_status",
+    "search-status-suggestions",
+    () => [...allEmployees].map((e) => e.status),
+    {
+      hiddenId: "search_status_val",
+      noneLabel: "No Status",
+      onSelect: () => searchEmployees(),
+    },
+  );
+
+  setupFieldSuggestions(
+    "search_shift",
+    "search-shift-suggestions",
+    () => [...allEmployees].map((e) => e.shift),
+    {
+      hiddenId: "search_shift_val",
+      noneLabel: "No Shift",
+      onSelect: () => searchEmployees(),
+    },
+  );
+
+  setupFieldSuggestions(
+    "search_violation",
+    "search-violation-suggestions",
+    () => allEmployees.map((e) => e.violation),
+    {
+      hiddenId: "search_violation_val",
+      noneLabel: "No Violation",
+      onSelect: () => searchEmployees(),
+    },
+  );
+
+  setupFieldSuggestions(
+    "search_in-out",
+    "search-inout-suggestions",
+    () => [...employees].map((e) => e.check_status),
+    {
+      hiddenId: "search_in-out_val",
+      noneLabel: "No In/Out Status",
+      onSelect: () => searchEmployees(),
+    },
+  );
+
+  setupFieldSuggestions(
+    "search_user_id",
+    "search-userid-suggestions",
+    () => [...employees].map((e) => e.gate_name || e.user_id),
+    {
+      hiddenId: "search_user_id_val",
+      noneLabel: "No Operator",
+      onSelect: () => searchEmployees(),
+    },
+  );
 
   const autoUpdateToggle = document.getElementById("autoUpdateToggle");
   if (autoUpdateToggle) {
@@ -913,7 +1033,6 @@ function copyQRCode(code) {
   try {
     document.execCommand("copy");
     showAlert("Proximity code copied to clipboard!");
-
   } catch (err) {
     if (navigator.clipboard) {
       navigator.clipboard
@@ -1021,6 +1140,21 @@ function clearSearch() {
   const searchForm = document.getElementById("searchForm");
   if (searchForm) searchForm.reset();
 
+  [
+    ["search_position", "search_position_val"],
+    ["search_brand", "search_brand_val"],
+    ["search_status", "search_status_val"],
+    ["search_shift", "search_shift_val"],
+    ["search_violation", "search_violation_val"],
+    ["search_in-out", "search_in-out_val"],
+    ["search_user_id", "search_user_id_val"],
+  ].forEach(([displayId, hiddenId]) => {
+    const display = document.getElementById(displayId);
+    const hidden = document.getElementById(hiddenId);
+    if (display) display.value = "";
+    if (hidden) hidden.value = "";
+  });
+
   const filterStatus = document.getElementById("filter-status");
   if (filterStatus) filterStatus.remove();
 
@@ -1052,106 +1186,231 @@ function forceRefresh() {
     });
 }
 
-// ── Fullname Autocomplete ────────────────────────────────────────────────────
-let suggestionIndex = -1;
+// ── Generic field autocomplete (ported from system.js) ───────────────────────
+function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
 
-function showFullnameSuggestions(query) {
-  const list = document.getElementById("fullname-suggestions");
-  if (!list) return;
+  const hidden = options.hiddenId
+    ? document.getElementById(options.hiddenId)
+    : null;
 
-  const q = query.trim().toLowerCase();
+  const existing = document.getElementById(listId);
+  if (existing) existing.remove();
 
-  const matches = [
-    ...new Map(
-      employees
-        .filter((emp) => !q || emp.fullname.toLowerCase().includes(q))
-        .map((emp) => [emp.fullname.toLowerCase(), emp.fullname]),
-    ).values(),
-  ].slice(0, 10);
+  const list = document.createElement("ul");
+  list.id = listId;
+  list.style.cssText = `
+    display:none;position:fixed;z-index:99999;
+    background:#fff;border:1px solid #cbd5e1;
+    border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.15);
+    list-style:none;margin:0;padding:0;
+    max-height:260px;overflow:hidden;overflow-y:auto;min-width:160px;
+  `;
+  document.body.appendChild(list);
 
-  if (!matches.length || !q) {
+  let idx = -1;
+
+  function selectItem(displayValue, rawValue) {
+    if (rawValue === "") {
+      input.value = "";
+      if (hidden) hidden.value = "";
+    } else {
+      input.value = displayValue;
+      if (hidden) hidden.value = rawValue;
+    }
     list.style.display = "none";
-    suggestionIndex = -1;
-    return;
+    idx = -1;
+    if (options.onSelect) options.onSelect(rawValue);
   }
 
-  list.innerHTML = matches
-    .map((name, i) => {
-      const safeName = escapeHtml(name);
-      const properName = escapeHtml(toProperCase(name));
-      const regex = new RegExp(
-        `(${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
-        "gi",
-      );
-      const highlighted = properName.replace(
-        regex,
-        '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
-      );
-      return `
-      <li data-value="${properName}" data-index="${i}"
-          onmousedown="selectSuggestionFromLi(this)"
-          onmouseover="highlightSuggestion(${i})"
-          style="padding: 8px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #f1f5f9;">
-        ${highlighted}
-      </li>`;
-    })
-    .join("");
+  function positionList() {
+    const rect = input.getBoundingClientRect();
+    list.style.top = rect.bottom + 4 + "px";
+    list.style.left = rect.left + "px";
+    list.style.width = Math.max(rect.width, 200) + "px";
+  }
 
-  list.style.display = "block";
-  suggestionIndex = -1;
-}
+  function show(q) {
+    const lower = q.trim().toLowerCase();
+    const raw = getValues();
 
-function selectSuggestionFromLi(li) {
-  selectSuggestion(li.dataset.value);
-}
+    // ── Build item list ──────────────────────────────────────────
+    const items = [];
 
-function selectSuggestion(name) {
-  const input = document.getElementById("search_fullname");
-  const list = document.getElementById("fullname-suggestions");
-  if (input) input.value = name;
-  if (list) list.style.display = "none";
-  suggestionIndex = -1;
-  searchEmployees();
-}
+    items.push({ display: "Default: ALL", raw: "", special: "all" });
 
-function highlightSuggestion(index) {
-  const items = document.querySelectorAll("#fullname-suggestions li");
-  items.forEach((li, i) => {
-    li.style.background = i === index ? "#f0f9ff" : "";
+    if (options.noneLabel) {
+      items.push({
+        display: options.noneLabel,
+        raw: "__none__",
+        special: "none",
+      });
+      items.push({ display: "──────────", raw: null, special: "divider" });
+    }
+
+    const seen = new Map();
+    raw
+      .map((v) => (v || "").trim())
+      .filter((v) => v && v.toLowerCase() !== "none")
+      .filter((v) => !lower || v.toLowerCase().includes(lower))
+      .forEach((v) => {
+        const key = v.toLowerCase();
+        if (!seen.has(key)) seen.set(key, v);
+      });
+
+    [...seen.values()].forEach((v) => {
+      items.push({ display: options.raw ? v : toProperCase(v), raw: v });
+    });
+
+    const visibleItems = lower ? items.filter((i) => !i.special) : items;
+
+    const hasRealItems = visibleItems.some((i) => !i.special);
+    if (!visibleItems.length || (lower && !hasRealItems)) {
+      list.style.display = "none";
+      idx = -1;
+      return;
+    }
+
+    list.innerHTML = visibleItems
+      .map((item, i) => {
+        if (item.special === "divider") {
+          return `<li data-raw="" data-display=""
+            style="padding:4px 12px;font-size:11px;color:#94a3b8;
+                   pointer-events:none;user-select:none;border-bottom:1px solid #f1f5f9;">
+            ──────────
+          </li>`;
+        }
+
+        const safeDisplay = escapeHtml(item.display);
+        let hl = safeDisplay;
+        if (lower && !item.special) {
+          const regex = new RegExp(
+            `(${lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+            "gi",
+          );
+          hl = safeDisplay.replace(
+            regex,
+            '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
+          );
+        }
+
+        const isSpecial = item.special === "all" || item.special === "none";
+        const specialStyle = isSpecial
+          ? "font-weight:600;color:#1e40af;background:#f0f9ff;"
+          : "";
+
+        return `<li
+          data-raw="${escapeHtml(item.raw ?? "")}"
+          data-display="${safeDisplay}"
+          data-index="${i}"
+          style="padding:8px 12px;cursor:pointer;font-size:13px;
+                 border-bottom:1px solid #f1f5f9;
+                 display:flex;align-items:center;${specialStyle}">
+          ${hl}
+        </li>`;
+      })
+      .join("");
+
+    list.querySelectorAll("li[data-raw]").forEach((li) => {
+      if (li.style.pointerEvents === "none") return; // divider
+      li.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        selectItem(li.dataset.display, li.dataset.raw);
+      });
+      li.addEventListener("mouseover", () => {
+        list
+          .querySelectorAll("li")
+          .forEach(
+            (l) =>
+              (l.style.background =
+                l === li ? "#f0f9ff" : l.dataset.raw === undefined ? "" : ""),
+          );
+        idx = [...list.querySelectorAll("li")].indexOf(li);
+      });
+    });
+
+    positionList();
+    list.style.display = "block";
+    idx = -1;
+  }
+
+  input.addEventListener("focus", async () => {
+    if (options.requireInput && !input.value.trim()) return;
+    show(input.value);
+    if (options.onFocus) {
+      await options.onFocus();
+      show(input.value);
+    }
   });
-  suggestionIndex = index;
-}
 
-function handleSuggestionNav(e) {
-  const list = document.getElementById("fullname-suggestions");
-  const items = list ? list.querySelectorAll("li") : [];
-  if (!items.length || list.style.display === "none") return;
+  input.addEventListener("blur", () => {
+    setTimeout(() => {
+      if (!list.contains(document.activeElement)) {
+        list.style.display = "none";
+        idx = -1;
+      }
+    }, 150);
+  });
 
-  if (e.key === "ArrowDown") {
-    e.preventDefault();
-    suggestionIndex = Math.min(suggestionIndex + 1, items.length - 1);
-    highlightSuggestion(suggestionIndex);
-  } else if (e.key === "ArrowUp") {
-    e.preventDefault();
-    suggestionIndex = Math.max(suggestionIndex - 1, 0);
-    highlightSuggestion(suggestionIndex);
-  } else if (e.key === "Enter" && suggestionIndex >= 0) {
-    e.preventDefault();
-    selectSuggestion(items[suggestionIndex].dataset.value);
-  } else if (e.key === "Escape") {
-    list.style.display = "none";
-    suggestionIndex = -1;
+  input.addEventListener("input", () => {
+    show(input.value);
+  });
+
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (list.style.display !== "none") positionList();
+    },
+    true,
+  );
+  window.addEventListener("resize", () => {
+    if (list.style.display !== "none") positionList();
+  });
+
+  input.addEventListener("keydown", (e) => {
+    const liItems = [...list.querySelectorAll("li")].filter(
+      (l) => l.style.pointerEvents !== "none",
+    );
+    if (e.key === "Tab") {
+      list.style.display = "none";
+      idx = -1;
+      return;
+    }
+    if (!liItems.length || list.style.display === "none") return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      idx = Math.min(idx + 1, liItems.length - 1);
+      liItems.forEach(
+        (l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""),
+      );
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      idx = Math.max(idx - 1, 0);
+      liItems.forEach(
+        (l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""),
+      );
+    } else if (e.key === "Enter" && idx >= 0) {
+      e.preventDefault();
+      selectItem(liItems[idx].dataset.display, liItems[idx].dataset.raw);
+    } else if (e.key === "Escape") {
+      list.style.display = "none";
+      idx = -1;
+    }
+  });
+
+  if (input._outsideClickHandler) {
+    document.removeEventListener("click", input._outsideClickHandler);
   }
+  input._outsideClickHandler = (e) => {
+    if (!input.contains(e.target) && !list.contains(e.target)) {
+      list.style.display = "none";
+      idx = -1;
+    }
+  };
+  document.removeEventListener("click", input._outsideClickHandler);
+  document.addEventListener("click", input._outsideClickHandler);
 }
-
-document.addEventListener("click", function (e) {
-  const list = document.getElementById("fullname-suggestions");
-  const input = document.getElementById("search_fullname");
-  if (list && input && !input.contains(e.target) && !list.contains(e.target)) {
-    list.style.display = "none";
-    suggestionIndex = -1;
-  }
-});
 
 function openDeleteModal(employeeId = null, requireConfirmation = false) {
   const modal = document.getElementById("deleteModal");
@@ -1654,7 +1913,7 @@ async function loadEmployees(
       totalRecords = data.total;
 
       if (Array.isArray(data.filter_options)) {
-        populateFilter(data.filter_options);
+        allEmployees = data.filter_options;
       }
 
       if (!preservePage && Object.keys(filters).length === 0) {

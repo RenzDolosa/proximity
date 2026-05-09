@@ -177,6 +177,17 @@ function setupEventListeners() {
 
     if (modalOpen) return;
 
+    const anySuggestionOpen = [
+      "fullname-suggestions",
+      "search-position-suggestions",
+      "search-brand-suggestions",
+      "search-status-suggestions",
+      "search-shift-suggestions",
+      "search-violation-suggestions",
+    ].some((id) => document.getElementById(id)?.style.display === "block");
+
+    if (anySuggestionOpen) return;
+
     const active = document.activeElement;
     const isTyping =
       active &&
@@ -193,24 +204,69 @@ function setupEventListeners() {
   document.addEventListener("click", autoFocusProximity);
   document.addEventListener("focusin", autoFocusProximity);
 
-  setupFieldSuggestions("position", "position-suggestions", () =>
-    [...allEmployees]
-      .sort((a, b) => (a.position || "").localeCompare(b.position || ""))
-      .map((e) => e.position),
-  );
-
-  setupFieldSuggestions("brand", "brand-suggestions", () =>
-    [...allEmployees]
-      .sort((a, b) => (a.brand || "").localeCompare(b.brand || ""))
-      .map((e) => e.brand),
-  );
-
-  setupFieldSuggestions("violation", "violation-suggestions", () =>
-    allEmployees.map((e) => e.violation),
+  setupFieldSuggestions(
+    "search_position",
+    "search-position-suggestions",
+    () =>
+      [...allEmployees]
+        .sort((a, b) => (a.position || "").localeCompare(b.position || ""))
+        .map((e) => e.position),
+    {
+      hiddenId: "search_position_val",
+      noneLabel: "No Position",
+      onSelect: () => searchEmployees(),
+    },
   );
 
   setupFieldSuggestions(
-    "fullname",
+    "search_brand",
+    "search-brand-suggestions",
+    () =>
+      [...allEmployees]
+        .sort((a, b) => (a.brand || "").localeCompare(b.brand || ""))
+        .map((e) => e.brand),
+    {
+      hiddenId: "search_brand_val",
+      noneLabel: "No Brand",
+      onSelect: () => searchEmployees(),
+    },
+  );
+
+  setupFieldSuggestions(
+    "search_status",
+    "search-status-suggestions",
+    () => [...allEmployees].map((e) => e.status),
+    {
+      hiddenId: "search_status_val",
+      noneLabel: "No Status",
+      onSelect: () => searchEmployees(),
+    },
+  );
+
+  setupFieldSuggestions(
+    "search_shift",
+    "search-shift-suggestions",
+    () => [...allEmployees].map((e) => e.shift),
+    {
+      hiddenId: "search_shift_val",
+      noneLabel: "No Shift",
+      onSelect: () => searchEmployees(),
+    },
+  );
+
+  setupFieldSuggestions(
+    "search_violation",
+    "search-violation-suggestions",
+    () => allEmployees.map((e) => e.violation),
+    {
+      hiddenId: "search_violation_val",
+      noneLabel: "No Violation",
+      onSelect: () => searchEmployees(),
+    },
+  );
+
+  setupFieldSuggestions(
+    "search_fullname",
     "fullname-suggestions",
     () =>
       [...allEmployees]
@@ -222,7 +278,29 @@ function setupEventListeners() {
           return lastName(a.fullname).localeCompare(lastName(b.fullname));
         })
         .map((e) => e.fullname),
-    { requireInput: true },
+    {
+      requireInput: false,
+      onSelect: () => searchEmployees(),
+    },
+  );
+
+  setupFieldSuggestions(
+    "fullname",
+    "modal-fullname-suggestions",
+    () =>
+      [...allEmployees]
+        .sort((a, b) => {
+          const lastName = (name) => {
+            const parts = (name || "").trim().split(/\s+/);
+            return parts[parts.length - 1].toLowerCase();
+          };
+          return lastName(a.fullname).localeCompare(lastName(b.fullname));
+        })
+        .map((e) => e.fullname),
+    {
+      requireInput: true,
+      raw: false,
+    },
   );
 
   setupFieldSuggestions(
@@ -1118,6 +1196,19 @@ function clearSearch() {
   const searchForm = document.getElementById("searchForm");
   if (searchForm) searchForm.reset();
 
+  [
+    ["search_position", "search_position_val"],
+    ["search_brand", "search_brand_val"],
+    ["search_status", "search_status_val"],
+    ["search_shift", "search_shift_val"],
+    ["search_violation", "search_violation_val"],
+  ].forEach(([displayId, hiddenId]) => {
+    const display = document.getElementById(displayId);
+    const hidden = document.getElementById(hiddenId);
+    if (display) display.value = "";
+    if (hidden) hidden.value = "";
+  });
+
   const filterStatus = document.getElementById("filter-status");
   if (filterStatus) filterStatus.remove();
 
@@ -1135,102 +1226,14 @@ function clearDateFilter() {
   searchEmployees();
 }
 
-// ── Fullname Autocomplete ────────────────────────────────────────────────────
-let suggestionIndex = -1;
-
-function showFullnameSuggestions(query) {
-  const list = document.getElementById("fullname-suggestions");
-  if (!list) return;
-
-  const q = query.trim().toLowerCase();
-
-  const matches = [
-    ...new Map(
-      employees
-        .filter((emp) => !q || emp.fullname.toLowerCase().includes(q))
-        .map((emp) => [emp.fullname.toLowerCase(), emp.fullname]),
-    ).values(),
-  ];
-
-  if (!matches.length || !q) {
-    list.style.display = "none";
-    suggestionIndex = -1;
-    return;
-  }
-
-  list.innerHTML = matches
-    .map((name, i) => {
-      const safeName = escapeHtml(name);
-      const properName = escapeHtml(toProperCase(name));
-      const regex = new RegExp(
-        `(${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
-        "gi",
-      );
-      const highlighted = properName.replace(
-        regex,
-        '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
-      );
-      return `
-      <li data-value="${properName}" data-index="${i}"
-          onmousedown="selectSuggestionFromLi(this)"
-          onmouseover="highlightSuggestion(${i})"
-          style="padding: 8px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #f1f5f9;">
-        ${highlighted}
-      </li>`;
-    })
-    .join("");
-
-  list.style.display = "block";
-  suggestionIndex = -1;
-}
-
-function selectSuggestionFromLi(li) {
-  selectSuggestion(li.dataset.value);
-}
-
-function selectSuggestion(name) {
-  const input = document.getElementById("search_fullname");
-  const list = document.getElementById("fullname-suggestions");
-  if (input) input.value = name;
-  if (list) list.style.display = "none";
-  suggestionIndex = -1;
-  searchEmployees();
-}
-
-function highlightSuggestion(index) {
-  const items = document.querySelectorAll("#fullname-suggestions li");
-  items.forEach((li, i) => {
-    li.style.background = i === index ? "#f0f9ff" : "";
-  });
-  suggestionIndex = index;
-}
-
-function handleSuggestionNav(e) {
-  const list = document.getElementById("fullname-suggestions");
-  const items = list ? list.querySelectorAll("li") : [];
-  if (!items.length || list.style.display === "none") return;
-
-  if (e.key === "ArrowDown") {
-    e.preventDefault();
-    suggestionIndex = Math.min(suggestionIndex + 1, items.length - 1);
-    highlightSuggestion(suggestionIndex);
-  } else if (e.key === "ArrowUp") {
-    e.preventDefault();
-    suggestionIndex = Math.max(suggestionIndex - 1, 0);
-    highlightSuggestion(suggestionIndex);
-  } else if (e.key === "Enter" && suggestionIndex >= 0) {
-    e.preventDefault();
-    selectSuggestion(items[suggestionIndex].dataset.value);
-  } else if (e.key === "Escape") {
-    list.style.display = "none";
-    suggestionIndex = -1;
-  }
-}
-
 // ── Generic field autocomplete ───────────────────────────────────────────────
 function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
   const input = document.getElementById(inputId);
   if (!input) return;
+
+  const hidden = options.hiddenId
+    ? document.getElementById(options.hiddenId)
+    : null;
 
   const existing = document.getElementById(listId);
   if (existing) existing.remove();
@@ -1248,16 +1251,44 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
 
   let idx = -1;
 
+  function selectItem(displayValue, rawValue) {
+    if (rawValue === "") {
+      input.value = "";
+      if (hidden) hidden.value = "";
+    } else {
+      input.value = displayValue;
+      if (hidden) hidden.value = rawValue;
+    }
+    list.style.display = "none";
+    idx = -1;
+    if (options.onSelect) options.onSelect(rawValue);
+  }
+
   function positionList() {
     const rect = input.getBoundingClientRect();
     list.style.top = rect.bottom + 4 + "px";
     list.style.left = rect.left + "px";
-    list.style.width = rect.width + "px";
+    list.style.width = Math.max(rect.width, 200) + "px";
   }
 
   function show(q) {
     const lower = q.trim().toLowerCase();
     const raw = getValues();
+
+    // ── Build item list ──────────────────────────────────────────
+    const items = [];
+
+    items.push({ display: "Default: ALL", raw: "", special: "all" });
+
+    if (options.noneLabel) {
+      items.push({
+        display: options.noneLabel,
+        raw: "__none__",
+        special: "none",
+      });
+      items.push({ display: "──────────", raw: null, special: "divider" });
+    }
+
     const seen = new Map();
     raw
       .map((v) => (v || "").trim())
@@ -1267,44 +1298,77 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
         const key = v.toLowerCase();
         if (!seen.has(key)) seen.set(key, v);
       });
-    const unique = [...seen.values()];
 
-    if (!unique.length) {
+    [...seen.values()].forEach((v) => {
+      items.push({ display: options.raw ? v : toProperCase(v), raw: v });
+    });
+
+    const visibleItems = lower ? items.filter((i) => !i.special) : items;
+
+    const hasRealItems = visibleItems.some((i) => !i.special);
+    if (!visibleItems.length || (lower && !hasRealItems)) {
       list.style.display = "none";
       idx = -1;
       return;
     }
 
-    list.innerHTML = unique
-      .map((name, i) => {
-        const safe = escapeHtml(name);
-        const displayLabel = options.raw
-          ? safe
-          : escapeHtml(toProperCase(name));
+    list.innerHTML = visibleItems
+      .map((item, i) => {
+        if (item.special === "divider") {
+          return `<li data-raw="" data-display=""
+            style="padding:4px 12px;font-size:11px;color:#94a3b8;
+                   pointer-events:none;user-select:none;border-bottom:1px solid #f1f5f9;">
+            ──────────
+          </li>`;
+        }
 
-        let hl = displayLabel;
-        if (lower) {
+        const safeDisplay = escapeHtml(item.display);
+        let hl = safeDisplay;
+        if (lower && !item.special) {
           const regex = new RegExp(
             `(${lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
             "gi",
           );
-          hl = displayLabel.replace(
+          hl = safeDisplay.replace(
             regex,
             '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
           );
         }
 
-        const inputValue = displayLabel;
+        const isSpecial = item.special === "all" || item.special === "none";
+        const specialStyle = isSpecial
+          ? "font-weight:600;color:#1e40af;background:#f0f9ff;"
+          : "";
 
-        return `<li data-value="${inputValue}" data-index="${i}"
-        onmousedown="document.getElementById('${inputId}').value=this.dataset.value;document.getElementById('${listId}').style.display='none';"
-        onmouseover="this.parentElement.querySelectorAll('li').forEach((l,j)=>l.style.background=j===${i}?'#f0f9ff':'');"
-        style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f5f9;
-               display:flex;align-items:center;">
-        ${hl}
-      </li>`;
+        return `<li
+          data-raw="${escapeHtml(item.raw ?? "")}"
+          data-display="${safeDisplay}"
+          data-index="${i}"
+          style="padding:8px 12px;cursor:pointer;font-size:13px;
+                 border-bottom:1px solid #f1f5f9;
+                 display:flex;align-items:center;${specialStyle}">
+          ${hl}
+        </li>`;
       })
       .join("");
+
+    list.querySelectorAll("li[data-raw]").forEach((li) => {
+      if (li.style.pointerEvents === "none") return; // divider
+      li.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        selectItem(li.dataset.display, li.dataset.raw);
+      });
+      li.addEventListener("mouseover", () => {
+        list
+          .querySelectorAll("li")
+          .forEach(
+            (l) =>
+              (l.style.background =
+                l === li ? "#f0f9ff" : l.dataset.raw === undefined ? "" : ""),
+          );
+        idx = [...list.querySelectorAll("li")].indexOf(li);
+      });
+    });
 
     positionList();
     list.style.display = "block";
@@ -1320,7 +1384,7 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     }
   });
 
-  input.addEventListener("blur", (e) => {
+  input.addEventListener("blur", () => {
     setTimeout(() => {
       if (!list.contains(document.activeElement)) {
         list.style.display = "none";
@@ -1329,7 +1393,9 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     }, 150);
   });
 
-  input.addEventListener("input", () => show(input.value));
+  input.addEventListener("input", () => {
+    show(input.value);
+  });
 
   window.addEventListener(
     "scroll",
@@ -1343,30 +1409,30 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
   });
 
   input.addEventListener("keydown", (e) => {
-    const items = list.querySelectorAll("li");
+    const liItems = [...list.querySelectorAll("li")].filter(
+      (l) => l.style.pointerEvents !== "none",
+    );
     if (e.key === "Tab") {
       list.style.display = "none";
       idx = -1;
       return;
     }
-    if (!items.length || list.style.display === "none") return;
+    if (!liItems.length || list.style.display === "none") return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      idx = Math.min(idx + 1, items.length - 1);
-      items.forEach(
+      idx = Math.min(idx + 1, liItems.length - 1);
+      liItems.forEach(
         (l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""),
       );
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       idx = Math.max(idx - 1, 0);
-      items.forEach(
+      liItems.forEach(
         (l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""),
       );
     } else if (e.key === "Enter" && idx >= 0) {
       e.preventDefault();
-      input.value = items[idx].dataset.value;
-      list.style.display = "none";
-      idx = -1;
+      selectItem(liItems[idx].dataset.display, liItems[idx].dataset.raw);
     } else if (e.key === "Escape") {
       list.style.display = "none";
       idx = -1;
@@ -1385,15 +1451,6 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
   document.removeEventListener("click", input._outsideClickHandler);
   document.addEventListener("click", input._outsideClickHandler);
 }
-
-document.addEventListener("click", function (e) {
-  const list = document.getElementById("fullname-suggestions");
-  const input = document.getElementById("search_fullname");
-  if (list && input && !input.contains(e.target) && !list.contains(e.target)) {
-    list.style.display = "none";
-    suggestionIndex = -1;
-  }
-});
 
 const violation = document.getElementById("violation");
 
@@ -1823,7 +1880,6 @@ async function _renderAccessTab(container, employeeId) {
       </table>
     </div>`;
 
-  // Lazy cache per employee
   if (!_logsCache[employeeId]) {
     try {
       const res = await fetch(
@@ -1846,14 +1902,14 @@ async function _renderAccessTab(container, employeeId) {
     return;
   }
 
-  const inCount  = logs.filter((l) => l.check_status === "IN").length;
+  const inCount = logs.filter((l) => l.check_status === "IN").length;
   const outCount = logs.filter((l) => l.check_status === "OUT").length;
 
-  const elIn    = document.getElementById("logCountIn");
-  const elOut   = document.getElementById("logCountOut");
+  const elIn = document.getElementById("logCountIn");
+  const elOut = document.getElementById("logCountOut");
   const elTotal = document.getElementById("logCountTotal");
-  if (elIn)    elIn.textContent    = inCount;
-  if (elOut)   elOut.textContent   = outCount;
+  if (elIn) elIn.textContent = inCount;
+  if (elOut) elOut.textContent = outCount;
   if (elTotal) elTotal.textContent = logs.length;
 
   tbody.innerHTML = logs.length
@@ -1911,7 +1967,6 @@ async function _renderStatusTab(container, employeeId) {
       </table>
     </div>`;
 
-  // Lazy cache per employee
   if (!_statusHistoryCache[employeeId]) {
     try {
       const res = await fetch(
@@ -2366,7 +2421,6 @@ async function loadEmployees(
 
       if (Array.isArray(data.filter_options)) {
         allEmployees = data.filter_options;
-        populateFilter(data.filter_options);
       }
 
       if (!preservePage && Object.keys(filters).length === 0) {
