@@ -61,8 +61,7 @@
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }
 
-/* ── Employee Modal — sticky header/footer, scrollable body ── */
-#employeeModal .modal-content {
+.modal-flex .modal-content {
   display: flex;
   flex-direction: column;
   max-height: 90vh;
@@ -70,7 +69,7 @@
   padding: 0;
 }
 
-#employeeModal .modal-header {
+.modal-flex .modal-header {
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -81,81 +80,29 @@
   border-radius: 15px 15px 0 0;
 }
 
-#employeeModal .modal-header h2 {
+.modal-flex .modal-header h2 {
   margin: 0;
   font-size: 1.1rem;
 }
 
-#employeeModal .modal-header .close {
+.modal-flex .modal-header .close {
   font-size: 1.2rem;
   cursor: pointer;
   color: #999;
   line-height: 1;
 }
 
-#employeeModal .modal-header .close:hover {
+.modal-flex .modal-header .close:hover {
   color: #333;
 }
 
-#employeeModal .modal-body {
+.modal-flex .modal-body {
   flex: 1;
   overflow-y: auto;
-  padding: 1.25rem 1.5rem;
+  padding: 1rem 1.25rem 1.25rem 1.25rem;
 }
 
-#employeeModal .modal-footer {
-  flex-shrink: 0;
-  display: flex;
-  gap: 8px;
-  padding: 1rem 1.5rem;
-  border-top: 1px solid #e2e8f0;
-  background: #fff;
-  border-radius: 0 0 15px 15px;
-}
-
-/* ── Import Modal — sticky header/footer, scrollable body ── */
-#importModal .modal-content {
-  display: flex;
-  flex-direction: column;
-  max-height: 90vh;
-  overflow: hidden;
-  padding: 0;
-}
-
-#importModal .modal-header {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid #e2e8f0;
-  background: #fff;
-  border-radius: 15px 15px 0 0;
-}
-
-#importModal .modal-header h2 {
-  margin: 0;
-  font-size: 1.1rem;
-}
-
-#importModal .modal-header .close {
-  font-size: 1.2rem;
-  cursor: pointer;
-  color: #999;
-  line-height: 1;
-}
-
-#importModal .modal-header .close:hover {
-  color: #333;
-}
-
-#importModal .modal-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 1.25rem 1.5rem;
-}
-
-#importModal .modal-footer {
+.modal-flex .modal-footer {
   flex-shrink: 0;
   display: flex;
   gap: 8px;
@@ -529,7 +476,9 @@ textarea:focus {
   cursor: pointer;
   color: #fff;
   font-size: 1.1rem;
-  transition: opacity 0.2s, background 0.2s;
+  transition:
+    opacity 0.2s,
+    background 0.2s;
 }
 
 .file-upload-wrapper .camera-toggle-btn:hover {

@@ -224,7 +224,7 @@ if ($databaseConnected) {
   </div>
 
   <!-- Proximity Code Modal -->
-  <div id="employeeModal" class="modal">
+  <div id="employeeModal" class="modal modal-flex">
     <div class="modal-content">
 
       <!-- HEADER -->
@@ -290,7 +290,7 @@ if ($databaseConnected) {
   </div>
 
   <!-- CSV / Excel Import Modal -->
-  <div id="importModal" class="modal">
+  <div id="importModal" class="modal modal-flex">
     <div class="modal-content">
 
       <!-- HEADER -->

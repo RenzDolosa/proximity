@@ -1730,9 +1730,11 @@ async function openLogsModal(employeeId, fullname) {
 }
 
 function _renderLogsModal(modal, employeeId) {
+  const tab = modal.querySelector(".modal-tab");
   const body = modal.querySelector(".modal-body");
-  body.innerHTML = `
-    <div style="display:flex;gap:0;border-bottom:1px solid var(--color-border-tertiary);margin-bottom:16px;">
+
+  tab.innerHTML = `
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--color-border-tertiary);">
       <button id="logsTabAccess" onclick="_switchLogsTab('access','${employeeId}')"
         style="padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid #3b82f6;
                background:none;color:#3b82f6;cursor:pointer;">
@@ -1749,6 +1751,9 @@ function _renderLogsModal(modal, employeeId) {
         <i class="fas fa-exclamation-triangle"></i> Remarks Log
       </button>
     </div>
+  `;
+
+  body.innerHTML = `
     <div id="logsTabContent"></div>
   `;
 

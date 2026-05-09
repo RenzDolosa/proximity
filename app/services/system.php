@@ -277,7 +277,7 @@ if ($databaseConnected) {
   </div>
 
   <!-- Employee Modal -->
-  <div id="employeeModal" class="modal">
+  <div id="employeeModal" class="modal modal-flex">
     <div class="modal-content">
 
       <!-- HEADER -->
@@ -491,7 +491,7 @@ if ($databaseConnected) {
   </div>
 
   <!-- CSV / Excel Import Modal -->
-  <div id="importModal" class="modal">
+  <div id="importModal" class="modal modal-flex">
     <div class="modal-content">
 
       <!-- HEADER -->
@@ -577,52 +577,61 @@ if ($databaseConnected) {
   </div>
 
   <!-- Employee Logs Modal -->
-  <div id="logsModal" class="modal" style="display:none;">
+  <div id="logsModal" class="modal modal-flex" style="display:none;">
     <div class="modal-content" style="max-width:700px;">
-      <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
-      <h2 id="logsModalTitle"><i class="fas fa-history"></i> Logs</h2>
+      <div class="modal-header">
+        <h2 id="logsModalTitle"><i class="fas fa-history"></i> Logs</h2>
+        <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
+      </div>
+      <div class="modal-tab" style="padding: 0 1.25rem;"></div>
       <div class="modal-body"></div>
     </div>
   </div>
 
   <!-- Violation History Modal -->
-  <div id="violationsModal" class="modal" style="display:none;">
+  <div id="violationsModal" class="modal modal-flex" style="display:none;">
     <div class="modal-content" style="max-width:700px;">
-      <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
-      <h2 id="violationsModalTitle"><i class="fas fa-exclamation-triangle" style="color:#e53e3e;"></i> Violation History</h2>
+      <div class="modal-header">
+        <h2 id="violationsModalTitle"><i class="fas fa-exclamation-triangle" style="color:#e53e3e;"></i> Violation History</h2>
+        <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
+      </div>
 
-      <div style="display:flex;gap:16px;margin:16px 0;">
-        <div style="flex:1;background:#fff5f5;border-radius:8px;padding:16px;text-align:center;">
-          <div style="font-size:28px;font-weight:700;color:#c53030;" id="vioCountTotal">—</div>
-          <div style="font-size:13px;color:#c53030;font-weight:600;">Total Records</div>
-        </div>
-        <div style="flex:1;background:#fffbeb;border-radius:8px;padding:16px;text-align:center;">
-          <div style="font-size:28px;font-weight:700;color:#b7791f;" id="vioCountUpdates">—</div>
-          <div style="font-size:13px;color:#b7791f;font-weight:600;">Updates</div>
-        </div>
-        <div style="flex:1;background:#f0fff4;border-radius:8px;padding:16px;text-align:center;">
-          <div style="font-size:28px;font-weight:700;color:#276749;" id="vioCountCleared">—</div>
-          <div style="font-size:13px;color:#276749;font-weight:600;">Cleared</div>
+      <div style="padding: 0 1.25rem;">
+        <div style="display:flex;gap:16px;margin-top:16px;">
+          <div style="flex:1;background:#fff5f5;border-radius:8px;padding:16px;text-align:center;">
+            <div style="font-size:28px;font-weight:700;color:#c53030;" id="vioCountTotal">—</div>
+            <div style="font-size:13px;color:#c53030;font-weight:600;">Total Records</div>
+          </div>
+          <div style="flex:1;background:#fffbeb;border-radius:8px;padding:16px;text-align:center;">
+            <div style="font-size:28px;font-weight:700;color:#b7791f;" id="vioCountUpdates">—</div>
+            <div style="font-size:13px;color:#b7791f;font-weight:600;">Updates</div>
+          </div>
+          <div style="flex:1;background:#f0fff4;border-radius:8px;padding:16px;text-align:center;">
+            <div style="font-size:28px;font-weight:700;color:#276749;" id="vioCountCleared">—</div>
+            <div style="font-size:13px;color:#276749;font-weight:600;">Cleared</div>
+          </div>
         </div>
       </div>
 
-      <div style="max-height:360px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px;">
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead>
-            <tr style="background:#f8f9fa;border-bottom:2px solid #e9ecef;">
-              <th style="padding:10px 12px;text-align:left;">SN</th>
-              <th style="padding:10px 12px;text-align:left;">Type</th>
-              <th style="padding:10px 12px;text-align:left;">Description</th>
-              <th style="padding:10px 12px;text-align:left;">Date</th>
-              <th style="padding:10px 12px;text-align:left;">Recorded</th>
-            </tr>
-          </thead>
-          <tbody id="violationsTableBody">
-            <tr>
-              <td colspan="5" style="text-align:center;padding:24px;color:#aaa;">Loading…</td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="modal-body">
+        <div style="max-height:360px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="background:#f8f9fa;border-bottom:2px solid #e9ecef;">
+                <th style="padding:10px 12px;text-align:left;">SN</th>
+                <th style="padding:10px 12px;text-align:left;">Type</th>
+                <th style="padding:10px 12px;text-align:left;">Description</th>
+                <th style="padding:10px 12px;text-align:left;">Date</th>
+                <th style="padding:10px 12px;text-align:left;">Recorded</th>
+              </tr>
+            </thead>
+            <tbody id="violationsTableBody">
+              <tr>
+                <td colspan="5" style="text-align:center;padding:24px;color:#aaa;">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
