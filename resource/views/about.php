@@ -45,15 +45,15 @@ $access = getMenuAccess();
         </span>
       </div>
       <div class="hero-text">
-        <h1>Proximity 3PL System</h1>
-        <p>A smart employee proximity management platform for third-party logistics. Track attendance, manage access, and gain real-time insights — all in one place.</p>
+        <h1>Proximity System</h1>
+        <p>Empower your business with a smart employee proximity management platform featuring seamless attendance tracking, secure access control, and real-time analytics.</p>
         <div class="hero-meta">
           <span class="hero-badge">
             <i class="fas fa-code-branch"></i>
             <span id="about-version">Version 2.2.12</span>
           </span>
           <span class="hero-badge muted">
-            <i class="fas fa-map-marker-alt"></i> 3PL · Philippines
+            <i class="fas fa-map-marker-alt"></i> Proximity · Philippines
           </span>
           <span class="hero-badge muted">
             <i class="fas fa-clock"></i> Build 2025–2026
@@ -80,8 +80,8 @@ $access = getMenuAccess();
               <span class="notif-version">v2.2.12</span>
               <span class="notif-date">May 2026</span>
             </div>
-            <div class="notif-title">Audio Settings & Global Sound Control</div>
-            <div class="notif-desc">Per-user audio configuration for scan events — success, inactive, not-found, and violation sounds. Customizable audio paths stored per user via <code>user_audio_settings</code> table. Global audio manager prevents overlapping playback.</div>
+            <div class="notif-title">Real-Time Notification System</div>
+            <div class="notif-desc">Live topbar alerts for late check-ins, inactive-employee anomalies, flagged-employee scans, and new incident reports — polled every 30 s with unread pip.</div>
           </div>
         </div>
 
@@ -244,17 +244,17 @@ $access = getMenuAccess();
             </div>
 
             <div class="tl-item">
+              <div class="tl-dot green"></div>
+              <div class="tl-label">✔ Released</div>
+              <div class="tl-title">Notification System</div>
+              <div class="tl-desc">Real-time alerts for late check-ins, anomalies, and incident reports pushed to the portal topbar.</div>
+            </div>
+
+            <div class="tl-item">
               <div class="tl-dot amber"></div>
               <div class="tl-label">🔄 In Progress</div>
               <div class="tl-title">Enhanced Manual Input v2</div>
               <div class="tl-desc">Redesigned employee input form with bulk import, field validation improvements, and camera integration.</div>
-            </div>
-
-            <div class="tl-item">
-              <div class="tl-dot purple"></div>
-              <div class="tl-label">📋 Planned</div>
-              <div class="tl-title">Notification System</div>
-              <div class="tl-desc">Real-time alerts for late check-ins, anomalies, and incident reports pushed to the portal topbar.</div>
             </div>
 
             <div class="tl-item">
@@ -381,7 +381,7 @@ $access = getMenuAccess();
   <script src="../js/loading.js"></script>
   <script>
     // ── Pull version string from portal parent frame ──
-    (function () {
+    (function() {
       const verEl = document.getElementById('about-version');
       if (!verEl) return;
       try {
@@ -391,14 +391,15 @@ $access = getMenuAccess();
           const raw = vTag.textContent.trim();
           verEl.textContent = raw.replace(/^\s*\S+\s*/, '').trim() || raw;
         }
-      } catch (e) { /* cross-origin fallback: leave default */ }
+      } catch (e) {
+        /* cross-origin fallback: leave default */ }
     })();
 
     // ── Notification count badge ──
-    (function () {
-      const items   = document.querySelectorAll('.notif-item');
+    (function() {
+      const items = document.querySelectorAll('.notif-item');
       const newItems = document.querySelectorAll('.notif-item.notif-new');
-      const badge   = document.getElementById('notif-count');
+      const badge = document.getElementById('notif-count');
       if (badge && newItems.length) {
         badge.textContent = newItems.length + ' new';
       } else if (badge) {
@@ -408,4 +409,5 @@ $access = getMenuAccess();
   </script>
 
 </body>
+
 </html>

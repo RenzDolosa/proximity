@@ -300,15 +300,11 @@ if ($databaseConnected) {
           </div>
 
           <div class="form-row">
-            <div class="form-group fl-group">
-              <select id="shift" name="shift" onchange="this.classList.toggle('has-value', this.value !== '')">
-                <option value="">Select Shift</option>
-                <option value="Day Shift">Day Shift</option>
-                <option value="Night Shift">Night Shift</option>
-                <option value="Graveyard Shift">Graveyard Shift</option>
-              </select>
+            <div class="form-group fl-group" style="position:relative;">
+              <input type="text" id="shift" name="shift" placeholder=" " autocomplete="off" readonly style="cursor:pointer;">
               <label class="fl-label" for="shift">Shift <span style="color:#e74c3c">*</span></label>
             </div>
+
             <!-- <div class="form-group fl-group">
               <select id="gender" name="gender" class="has-value" onchange="this.classList.toggle('has-value', this.value !== '')">
                 <option value="">Select Gender</option>
@@ -317,6 +313,7 @@ if ($databaseConnected) {
               </select>
               <label class="fl-label" for="gender">Gender</label>
             </div> -->
+
             <div class="form-group fl-group">
               <select id="status" name="status" class="has-value" style="cursor: not-allowed;" onchange="this.classList.toggle('has-value', this.value !== '')" disabled>
                 <option value="Active">Active</option>

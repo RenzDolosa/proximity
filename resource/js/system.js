@@ -11,6 +11,7 @@ let totalRecords = 0;
 let currentAudio = null;
 
 let activeFilters = {};
+let allEmployeesUnfiltered = [];
 
 const count = employees.length;
 const label = count > 1 ? "employee's" : "employee";
@@ -364,13 +365,13 @@ function setupModalSuggestions() {
 
     function positionList() {
       const rect = input.getBoundingClientRect();
-      list.style.top  = rect.bottom + 4 + "px";
+      list.style.top = rect.bottom + 4 + "px";
       list.style.left = rect.left + "px";
       list.style.width = Math.max(rect.width, 200) + "px";
     }
 
     function selectItem(value) {
-      input.value = value;
+      input.value = opts.raw ? value : toProperCase(value);
       list.style.display = "none";
       idx = -1;
       if (opts.onSelect) opts.onSelect(value);
@@ -383,7 +384,7 @@ function setupModalSuggestions() {
         return;
       }
 
-      const lower = q.trim().toLowerCase();
+      const lower = opts.alwaysShowAll ? "" : q.trim().toLowerCase();
 
       if (opts.requireInput && !lower) {
         list.style.display = "none";
@@ -467,7 +468,7 @@ function setupModalSuggestions() {
     // ── event handlers ───────────────────────────────────────────
     const onFocus = async () => {
       if (opts.requireInput && !input.value.trim()) return;
-      show(input.value);
+      setTimeout(() => show(input.value), 0);
       if (opts.onFocus) {
         await opts.onFocus();
         show(input.value);
@@ -496,11 +497,15 @@ function setupModalSuggestions() {
       if (e.key === "ArrowDown") {
         e.preventDefault();
         idx = Math.min(idx + 1, liItems.length - 1);
-        liItems.forEach((l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""));
+        liItems.forEach(
+          (l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""),
+        );
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         idx = Math.max(idx - 1, 0);
-        liItems.forEach((l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""));
+        liItems.forEach(
+          (l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""),
+        );
       } else if (e.key === "Enter" && idx >= 0) {
         e.preventDefault();
         selectItem(liItems[idx].dataset.value);
@@ -525,18 +530,24 @@ function setupModalSuggestions() {
       }
     };
 
-    input.addEventListener("focus",   onFocus);
-    input.addEventListener("blur",    onBlur);
-    input.addEventListener("input",   onInput);
+    const onClick = () => {
+      setTimeout(() => show(input.value), 0);
+    };
+
+    input.addEventListener("focus", onFocus);
+    input.addEventListener("click", onClick);
+    input.addEventListener("blur", onBlur);
+    input.addEventListener("input", onInput);
     input.addEventListener("keydown", onKeydown);
     window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onResize);
     document.addEventListener("click", outsideClick);
 
     _modalSuggestionTeardowns.push(() => {
-      input.removeEventListener("focus",   onFocus);
-      input.removeEventListener("blur",    onBlur);
-      input.removeEventListener("input",   onInput);
+      input.removeEventListener("focus", onFocus);
+      input.removeEventListener("click", onClick);
+      input.removeEventListener("blur", onBlur);
+      input.removeEventListener("input", onInput);
       input.removeEventListener("keydown", onKeydown);
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onResize);
@@ -546,13 +557,12 @@ function setupModalSuggestions() {
   }
 
   // ── Wire up each modal field ──────────────────────────────────
-
   // ── EMPID — numeric desc, raw values ──────────────────────────
   attachModalSuggestion(
     "employee_id",
     "modal-empid-suggestions",
     () =>
-      [...allEmployees]
+      [...allEmployeesUnfiltered]
         .sort((a, b) => Number(b.id) - Number(a.id))
         .map((e) => String(e.id)),
     { raw: true, requireInput: true },
@@ -563,7 +573,7 @@ function setupModalSuggestions() {
     "fullname",
     "modal-fullname-suggestions",
     () =>
-      [...allEmployees]
+      [...allEmployeesUnfiltered]
         .sort((a, b) => {
           const lastName = (name) => {
             const parts = (name || "").trim().split(/\s+/);
@@ -580,7 +590,7 @@ function setupModalSuggestions() {
     "position",
     "modal-position-suggestions",
     () =>
-      [...allEmployees]
+      [...allEmployeesUnfiltered]
         .sort((a, b) => (a.position || "").localeCompare(b.position || ""))
         .map((e) => e.position)
         .filter(Boolean),
@@ -592,11 +602,29 @@ function setupModalSuggestions() {
     "brand",
     "modal-brand-suggestions",
     () =>
-      [...allEmployees]
+      [...allEmployeesUnfiltered]
         .sort((a, b) => (a.brand || "").localeCompare(b.brand || ""))
         .map((e) => e.brand)
         .filter(Boolean),
     { requireInput: false, raw: false },
+  );
+
+  // ── SHIFT — fixed set of values, not drawn from employee data ──────────────
+  const SHIFT_OPTIONS = ["Day Shift", "Night Shift", "Graveyard Shift"];
+
+  attachModalSuggestion(
+    "shift",
+    "modal-shift-suggestions",
+    () => SHIFT_OPTIONS,
+    {
+      raw: true,
+      requireInput: false,
+      alwaysShowAll: true,
+      onSelect: (val) => {
+        const el = document.getElementById("shift");
+        if (el) el.classList.toggle("has-value", !!val);
+      },
+    },
   );
 
   // ── QR / PROXIMITY CODE — fetched on focus, shows available codes ────────
@@ -625,13 +653,14 @@ function setupModalSuggestions() {
             }),
           ]);
 
-          const proxJson   = await proxRes.json();
+          const proxJson = await proxRes.json();
           const allEmpJson = await allEmpRes.json();
 
           if (!proxJson.success || !Array.isArray(proxJson.data)) return;
 
           const currentCode =
-            document.getElementById("qr_code")?.value.trim().toLowerCase() || "";
+            document.getElementById("qr_code")?.value.trim().toLowerCase() ||
+            "";
 
           const empList =
             allEmpJson.success && Array.isArray(allEmpJson.filter_options)
@@ -657,7 +686,9 @@ function setupModalSuggestions() {
               const numA = Number(a);
               const numB = Number(b);
               const bothNumeric = !isNaN(numA) && !isNaN(numB);
-              return bothNumeric ? numA - numB : String(a).localeCompare(String(b));
+              return bothNumeric
+                ? numA - numB
+                : String(a).localeCompare(String(b));
             });
         } catch (e) {
           console.warn("Modal QR suggestions: failed to load", e);
@@ -671,10 +702,8 @@ function setupModalSuggestions() {
     "violation",
     "modal-violation-suggestions",
     () =>
-      [...allEmployees]
-        .map((e) => (e.violation || "").trim())
-        .filter(Boolean),
-    { requireInput: true, raw: true },
+      [...allEmployees].map((e) => (e.violation || "").trim()).filter(Boolean),
+    { requireInput: false, raw: false },
   );
 }
 
@@ -2711,6 +2740,23 @@ async function loadEmployees(
 
       if (Array.isArray(data.filter_options)) {
         allEmployees = data.filter_options;
+      }
+
+      if (Object.keys(filters).length === 0) {
+        allEmployeesUnfiltered = data.filter_options ?? data.data ?? [];
+      } else if (allEmployeesUnfiltered.length === 0) {
+        fetch("manpower_backend.php?action=get&page=1&limit=99999", {
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "X-Silent-Request": "true",
+          },
+        })
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.success && Array.isArray(d.filter_options))
+              allEmployeesUnfiltered = d.filter_options;
+          })
+          .catch(() => {});
       }
 
       if (!preservePage && Object.keys(filters).length === 0) {

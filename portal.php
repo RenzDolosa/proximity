@@ -867,10 +867,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       display: none;
       z-index: 9999;
       overflow: hidden;
+      max-height: calc(100vh - 80px);
+      flex-direction: column;
     }
 
     .notif-dropdown.open {
-      display: block;
+      display: flex;
+    }
+
+    /* Sticky top header */
+    .notif-dropdown > .nd-head {
+      flex-shrink: 0;
+    }
+
+    /* Scrollable middle — live alerts + changelog items */
+    .nd-scroll-body {
+      overflow-y: auto;
+      overflow-x: hidden;
+      flex: 1 1 auto;
+      scrollbar-width: thin;
+      scrollbar-color: #cbd5e1 transparent;
+    }
+    .nd-scroll-body::-webkit-scrollbar {
+      width: 4px;
+    }
+    .nd-scroll-body::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .nd-scroll-body::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    .nd-scroll-body::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    /* Sticky footer */
+    .notif-dropdown > .nd-footer {
+      flex-shrink: 0;
     }
 
     .nd-head {
@@ -1145,11 +1179,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <div class="nd-head">
             <span class="nd-title">
               <i class="fas fa-bell" style="color:#2563eb;font-size:12px;"></i>
-              What's New
+              Notification
               <span class="nd-badge" id="ndBadge">1 new</span>
             </span>
             <a class="nd-view-all" onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=about'; closeNotif();">View all</a>
           </div>
+
+          <!-- Scrollable body: live alerts injected here by notifications.js + static changelog -->
+          <div class="nd-scroll-body" id="ndScrollBody">
 
           <!-- v2.2.12 — NEW -->
           <div class="nd-item nd-new">
@@ -1160,8 +1197,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <span class="nd-ver">v2.2.12</span>
                 <span class="nd-date">May 2026</span>
               </div>
-              <div class="nd-title-text">Audio Settings & Global Sound Control</div>
-              <div class="nd-desc">Per-user audio config for scan events — success, inactive, not-found, and violation sounds with global playback manager.</div>
+              <div class="nd-title-text">Real-Time Notification System</div>
+              <div class="nd-desc">Live topbar alerts for late check-ins, inactive-employee anomalies, flagged-employee scans, and new incident reports — polled every 30 s with unread pip.</div>
             </div>
           </div>
 
@@ -1220,6 +1257,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               <div class="nd-desc">Full platform launch: auth, multi-user isolation, iframe portal, violation tracking, Chart.js analytics.</div>
             </div>
           </div>
+
+          </div><!-- /.nd-scroll-body -->
 
           <div class="nd-footer">
             <a onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=about'; closeNotif();">
@@ -1373,6 +1412,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <script src="resource/js/req.js"></script>
   <script src="resource/js/ver.js"></script>
+  <script src="resource/js/notifications.js"></script>
   <script>
     // ── User dropdown ──
     const userPill = document.getElementById('userPill');
@@ -1414,10 +1454,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     function openNotif() {
       notifDropdown.classList.add('open');
+      // Let notifications.js re-render live alerts whenever dropdown opens
+      if (typeof window.__ntfRender === 'function') window.__ntfRender();
     }
 
     function closeNotif() {
       notifDropdown.classList.remove('open');
+      // Mark all live alerts as seen when closing
+      if (typeof window.__ntfMarkSeen === 'function') window.__ntfMarkSeen();
     }
 
     function markSeen() {
@@ -1446,6 +1490,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         openNotif();
         markSeen();
       }
+    });
+
+    // Stop clicks inside the dropdown from bubbling to document and self-closing
+    notifDropdown.addEventListener('click', function(e) {
+      e.stopPropagation();
     });
 
     // Close when clicking outside

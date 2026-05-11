@@ -22,6 +22,7 @@ A web-based proximity/NFC employee access logging and management system. It trac
 ## Features
 
 - **NFC / Proximity Scanning** — Real-time employee scan with IN/OUT toggle tracking
+- **Notification System** — Real-time topbar alerts for late check-ins, anomalies, and incident reports; polled every 30 s with unread pip indicator
 - **Employee Management (Manpower)** — Full CRUD for employee records with photo upload
 - **Access Data Log (DTL)** — Paginated, filterable scan history with auto-update
 - **Violation Log** — Record and view employee violation remarks with attachment support
@@ -80,6 +81,7 @@ htdocs/
 │   │       └── scan test.php        # Scanner test/debug controller
 │   │
 │   └── services/
+│       ├── notifications_backend.php # Real-time alert API (late check-ins, anomalies, incidents)
 │       ├── manpower_backend.php     # Employee CRUD API (employees table)
 │       ├── datalog_backend.php      # Access log API (employee_access_log)
 │       ├── qr_search_backend.php    # Proximity scan handler & IN/OUT toggle
@@ -128,6 +130,7 @@ htdocs/
 │   │   └── system-camera.css        # Camera system styles
 │   │
 │   ├── js/
+│   │   ├── notifications.js         # Real-time alert polling & topbar rendering
 │   │   ├── ver.js                   # Global version display
 │   │   ├── main.js                  # Main portal JS
 │   │   ├── dtl.js                   # Data log table (filters, pagination, auto-update)
@@ -219,6 +222,18 @@ Manages the `code` table — the registry of proximity/QR codes assigned to empl
 ### Violation Log (`violation_log_backend.php`)
 Stores structured violation records in the `violations` table (linked to `employees` via FK). Viewable via the incident report viewer (`incident_report.php`).
 
+### Notification System (`notifications_backend.php` + `notifications.js`)
+Real-time alert pipeline injected into the portal topbar bell:
+
+| Alert Type | Trigger | Severity |
+|---|---|---|
+| **Late Check-In** | Employee scans IN >30 min after shift start | Medium / High (>60 min) |
+| **Anomaly — Inactive** | Inactive/suspended/terminated employee scans IN | High |
+| **Anomaly — Flagged** | Employee with an open violation scans IN | Medium |
+| **Incident Report** | New row inserted into the `violations` table | High |
+
+`notifications.js` polls every **30 seconds** using a `?since=` timestamp cursor for incremental fetches. A red pip on the bell icon tracks unseen alerts (persisted via `localStorage`). The live-alert section appears above the existing "What's New" changelog in the dropdown. Polling auto-pauses when the browser tab is hidden and resumes on visibility.
+
 ### Manual Input (`manual input.php`)
 Allows manually recording an employee IN or OUT event without a physical scan.
 
@@ -299,7 +314,7 @@ Current version is managed and displayed via `resource/js/ver.js`.
 ```javascript
 // resource/js/ver.js
 const ver = document.getElementById('version');
-ver.innerHTML = `<i class="fas fa-code-branch"></i> Version: 2.2.10`;
+ver.innerHTML = `<i class="fas fa-code-branch"></i> Version: 2.2.12`;
 ```
 
 Update the version string in `ver.js` when releasing a new version.

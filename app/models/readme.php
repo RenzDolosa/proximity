@@ -346,7 +346,7 @@ if (file_exists($readmePath)) {
     <div class="readme-header">
       <i class="fas fa-book-open"></i>
       <span>README</span>
-      <span class="readme-badge"><i class="fas fa-code-branch"></i> v2.2.10</span>
+      <span class="readme-badge"><i class="fas fa-code-branch"></i> v2.2.12</span>
     </div>
     <?= $html ?>
   </div>
