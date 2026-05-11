@@ -285,6 +285,7 @@ $access = getMenuAccess();
     </div>
   </div>
 
+  <script src="../js/btn.js"></script>
   <script src="../js/req.js"></script>
   <script src="../js/loading.js"></script>
   <script>
@@ -296,7 +297,6 @@ $access = getMenuAccess();
       }
     }
   </script>
-  <script src="../js/ver.js"></script>
 
 </body>
 

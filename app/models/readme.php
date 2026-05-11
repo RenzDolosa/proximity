@@ -350,6 +350,8 @@ if (file_exists($readmePath)) {
     </div>
     <?= $html ?>
   </div>
+
+  <script src="../../resource/js/btn.js"></script>
 </body>
 
 </html>

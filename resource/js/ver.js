@@ -6,6 +6,7 @@ ver.style.display = 'block';
 ver.style.fontFamily = 'Roboto, Arial, sans-serif';
 ver.style.fontSize = '1.5vmin';
 ver.style.fontWeight = 'bold';
+ver.style.paddingRight = '20px';
 ver.style.position = 'fixed';
 ver.style.bottom = '1vmin';
 ver.style.right = '1.2vmin';
