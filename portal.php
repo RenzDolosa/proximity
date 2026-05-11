@@ -804,6 +804,273 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       filter: invert(1);
       opacity: 1;
     }
+
+    /* ── Notification bell ── */
+    .notif-wrapper {
+      position: relative;
+    }
+
+    .notif-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 14px;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .notif-btn:hover {
+      background: #f8fafc;
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    .notif-btn.has-new {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .notif-pip {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #ef4444;
+      border: 1.5px solid var(--surface);
+      display: none;
+    }
+
+    .notif-pip.visible {
+      display: block;
+    }
+
+    .notif-dropdown {
+      position: absolute;
+      top: calc(100% + 10px);
+      right: 0;
+      width: 360px;
+      max-width: 96vw;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+      display: none;
+      z-index: 9999;
+      overflow: hidden;
+    }
+
+    .notif-dropdown.open {
+      display: block;
+    }
+
+    .nd-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      background: #f8fafc;
+    }
+
+    .nd-title {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .nd-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 8px;
+      border-radius: 20px;
+      background: var(--accent-light);
+      border: 1px solid var(--accent-border);
+      color: var(--accent);
+    }
+
+    .nd-view-all {
+      font-size: 11.5px;
+      color: var(--accent);
+      cursor: pointer;
+      font-weight: 500;
+      text-decoration: none;
+      transition: opacity 0.15s;
+    }
+
+    .nd-view-all:hover {
+      opacity: 0.75;
+    }
+
+    .nd-item {
+      display: flex;
+      gap: 11px;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.12s;
+      cursor: default;
+    }
+
+    .nd-item:last-child {
+      border-bottom: none;
+    }
+
+    .nd-item:hover {
+      background: #f8fafc;
+    }
+
+    .nd-item.nd-new {
+      background: var(--accent-light);
+    }
+
+    .nd-item.nd-new:hover {
+      background: #e0ecff;
+    }
+
+    .nd-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 4px;
+      background: var(--text-faint);
+    }
+
+    .nd-dot.green {
+      background: #16a34a;
+    }
+
+    .nd-dot.blue {
+      background: var(--accent);
+    }
+
+    .nd-dot.amber {
+      background: #d97706;
+    }
+
+    .nd-dot.purple {
+      background: #7c3aed;
+    }
+
+    .nd-dot.gray {
+      background: var(--text-faint);
+    }
+
+    .nd-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .nd-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 3px;
+      flex-wrap: wrap;
+    }
+
+    .nd-tag {
+      font-size: 9.5px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .nd-tag.green {
+      background: #f0fdf4;
+      color: #16a34a;
+      border: 1px solid #bbf7d0;
+    }
+
+    .nd-tag.blue {
+      background: var(--accent-light);
+      color: var(--accent);
+      border: 1px solid var(--accent-border);
+    }
+
+    .nd-tag.amber {
+      background: #fffbeb;
+      color: #d97706;
+      border: 1px solid #fde68a;
+    }
+
+    .nd-tag.purple {
+      background: #faf5ff;
+      color: #7c3aed;
+      border: 1px solid #e9d5ff;
+    }
+
+    .nd-tag.gray {
+      background: #f8fafc;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+
+    .nd-ver {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      font-family: 'SFMono-Regular', Consolas, monospace;
+    }
+
+    .nd-date {
+      font-size: 10.5px;
+      color: var(--text-faint);
+      margin-left: auto;
+    }
+
+    .nd-title-text {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .nd-desc {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .nd-footer {
+      padding: 9px 14px;
+      border-top: 1px solid var(--border);
+      background: #f8fafc;
+      text-align: center;
+    }
+
+    .nd-footer a {
+      font-size: 12px;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .nd-footer a:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 
@@ -862,10 +1129,105 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="topbar-right">
 
       <?php if ($databaseConnected): ?>
-        <div class="db-badge ok"><i class="fas fa-circle"></i> DB Connected</div>
+        <div class="db-badge ok"><i class="fas fa-circle"></i> <span class="db-label">DB Connected</span></div>
       <?php else: ?>
-        <div class="db-badge err"><i class="fas fa-exclamation-circle"></i> DB Error</div>
+        <div class="db-badge err"><i class="fas fa-exclamation-circle"></i> <span class="db-label">DB Error</span></div>
       <?php endif; ?>
+
+      <!-- Notification Bell -->
+      <div class="notif-wrapper" id="notifWrapper">
+        <button class="notif-btn has-new" id="notifBtn" aria-label="Notifications">
+          <i class="fas fa-bell"></i>
+          <span class="notif-pip visible" id="notifPip"></span>
+        </button>
+
+        <div class="notif-dropdown" id="notifDropdown">
+          <div class="nd-head">
+            <span class="nd-title">
+              <i class="fas fa-bell" style="color:#2563eb;font-size:12px;"></i>
+              What's New
+              <span class="nd-badge" id="ndBadge">1 new</span>
+            </span>
+            <a class="nd-view-all" onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=about'; closeNotif();">View all</a>
+          </div>
+
+          <!-- v2.2.12 — NEW -->
+          <div class="nd-item nd-new">
+            <div class="nd-dot green"></div>
+            <div class="nd-content">
+              <div class="nd-row">
+                <span class="nd-tag green">New</span>
+                <span class="nd-ver">v2.2.12</span>
+                <span class="nd-date">May 2026</span>
+              </div>
+              <div class="nd-title-text">Audio Settings & Global Sound Control</div>
+              <div class="nd-desc">Per-user audio config for scan events — success, inactive, not-found, and violation sounds with global playback manager.</div>
+            </div>
+          </div>
+
+          <!-- v2.2.10–11 -->
+          <div class="nd-item">
+            <div class="nd-dot blue"></div>
+            <div class="nd-content">
+              <div class="nd-row">
+                <span class="nd-tag blue">Improved</span>
+                <span class="nd-ver">v2.2.10–11</span>
+                <span class="nd-date">Apr–May 2026</span>
+              </div>
+              <div class="nd-title-text">Role-Based Permission System Overhaul</div>
+              <div class="nd-desc">Granular JSON permissions per group — menu visibility, action gating, and AJAX 403 responses.</div>
+            </div>
+          </div>
+
+          <!-- v2.2.8–9 -->
+          <div class="nd-item">
+            <div class="nd-dot amber"></div>
+            <div class="nd-content">
+              <div class="nd-row">
+                <span class="nd-tag amber">Updated</span>
+                <span class="nd-ver">v2.2.8–9</span>
+                <span class="nd-date">Apr 2026</span>
+              </div>
+              <div class="nd-title-text">Employee Records — Gender, Birth & Hire Date Fields</div>
+              <div class="nd-desc">Schema expanded with gender, birth, and hired columns. Auto-migrated on startup.</div>
+            </div>
+          </div>
+
+          <!-- v2.2.6–7 -->
+          <div class="nd-item">
+            <div class="nd-dot purple"></div>
+            <div class="nd-content">
+              <div class="nd-row">
+                <span class="nd-tag purple">Feature</span>
+                <span class="nd-ver">v2.2.6–7</span>
+                <span class="nd-date">Mar–Apr 2026</span>
+              </div>
+              <div class="nd-title-text">Web NFC Proximity Scanning — Production Ready</div>
+              <div class="nd-desc">Tap-to-verify with check-in/out tracking, gate analytics, and per-state audio feedback.</div>
+            </div>
+          </div>
+
+          <!-- Core -->
+          <div class="nd-item">
+            <div class="nd-dot gray"></div>
+            <div class="nd-content">
+              <div class="nd-row">
+                <span class="nd-tag gray">Core</span>
+                <span class="nd-ver">v2.0–2.2.5</span>
+                <span class="nd-date">2025–Early 2026</span>
+              </div>
+              <div class="nd-title-text">Core System — Login, Portal, Employee Manager & Dashboard</div>
+              <div class="nd-desc">Full platform launch: auth, multi-user isolation, iframe portal, violation tracking, Chart.js analytics.</div>
+            </div>
+          </div>
+
+          <div class="nd-footer">
+            <a onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=about'; closeNotif();">
+              <i class="fas fa-arrow-right" style="font-size:11px;margin-right:4px;"></i> Open full changelog in About
+            </a>
+          </div>
+        </div>
+      </div>
 
       <!-- User pill with dropdown -->
       <div class="user-wrapper" id="userWrapper">
@@ -1040,6 +1402,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
 
     document.addEventListener('click', closeDropdown);
+
+    // ── Notification bell ──
+    const notifWrapper = document.getElementById('notifWrapper');
+    const notifBtn = document.getElementById('notifBtn');
+    const notifDropdown = document.getElementById('notifDropdown');
+    const notifPip = document.getElementById('notifPip');
+    const ndBadge = document.getElementById('ndBadge');
+
+    const NOTIF_KEY = 'notif_seen_v2212';
+
+    function openNotif() {
+      notifDropdown.classList.add('open');
+    }
+
+    function closeNotif() {
+      notifDropdown.classList.remove('open');
+    }
+
+    function markSeen() {
+      try {
+        localStorage.setItem(NOTIF_KEY, '1');
+      } catch (e) {}
+      notifPip.classList.remove('visible');
+      notifBtn.classList.remove('has-new');
+      if (ndBadge) ndBadge.style.display = 'none';
+    }
+
+    try {
+      if (localStorage.getItem(NOTIF_KEY) === '1') {
+        notifPip.classList.remove('visible');
+        notifBtn.classList.remove('has-new');
+        if (ndBadge) ndBadge.style.display = 'none';
+      }
+    } catch (e) {}
+
+    notifBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const isOpen = notifDropdown.classList.contains('open');
+      if (isOpen) {
+        closeNotif();
+      } else {
+        openNotif();
+        markSeen();
+      }
+    });
+
+    // Close when clicking outside
+    document.addEventListener('click', function(e) {
+      if (!notifWrapper.contains(e.target)) closeNotif();
+    });
+
+    // Close user dropdown when notif opens and vice versa
+    notifBtn.addEventListener('click', closeDropdown);
+    userPill.addEventListener('click', closeNotif);
   </script>
 </body>
 
