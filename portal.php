@@ -876,7 +876,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     /* Sticky top header */
-    .notif-dropdown > .nd-head {
+    .notif-dropdown>.nd-head {
       flex-shrink: 0;
     }
 
@@ -888,22 +888,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       scrollbar-width: thin;
       scrollbar-color: #cbd5e1 transparent;
     }
+
     .nd-scroll-body::-webkit-scrollbar {
       width: 4px;
     }
+
     .nd-scroll-body::-webkit-scrollbar-track {
       background: transparent;
     }
+
     .nd-scroll-body::-webkit-scrollbar-thumb {
       background: #cbd5e1;
       border-radius: 4px;
     }
+
     .nd-scroll-body::-webkit-scrollbar-thumb:hover {
       background: #94a3b8;
     }
 
     /* Sticky footer */
-    .notif-dropdown > .nd-footer {
+    .notif-dropdown>.nd-footer {
       flex-shrink: 0;
     }
 
@@ -1126,7 +1130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       <?php if ($access['proximity']): ?>
         <div class="nav-item" onclick="window.location.href='proximity.php';">
-          <img src="../../../resource/assets/icon/nfc-icon.svg" alt="NFC Icon" loading="lazy" style="width: 20px; filter: invert(0.8);"> <span class="nav-item-label">Proximity</span>
+          <img src="resource/assets/icon/nfc-icon.svg" alt="NFC Icon" loading="lazy" style="width: 20px; filter: invert(0.8);"> <span class="nav-item-label">Proximity</span>
         </div>
       <?php endif; ?>
 
@@ -1188,75 +1192,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <!-- Scrollable body: live alerts injected here by notifications.js + static changelog -->
           <div class="nd-scroll-body" id="ndScrollBody">
 
-          <!-- v2.2.12 — NEW -->
-          <div class="nd-item nd-new">
-            <div class="nd-dot green"></div>
-            <div class="nd-content">
-              <div class="nd-row">
-                <span class="nd-tag green">New</span>
-                <span class="nd-ver">v2.2.12</span>
-                <span class="nd-date">May 2026</span>
+            <!-- v2.2.12 — NEW -->
+            <div class="nd-item nd-new">
+              <div class="nd-dot green"></div>
+              <div class="nd-content">
+                <div class="nd-row">
+                  <span class="nd-tag green">New</span>
+                  <span class="nd-ver">v2.2.12</span>
+                  <span class="nd-date">May 2026</span>
+                </div>
+                <div class="nd-title-text">Real-Time Notification System</div>
+                <div class="nd-desc">Live topbar alerts for late check-ins, inactive-employee anomalies, flagged-employee scans, and new incident reports — polled every 30 s with unread pip.</div>
               </div>
-              <div class="nd-title-text">Real-Time Notification System</div>
-              <div class="nd-desc">Live topbar alerts for late check-ins, inactive-employee anomalies, flagged-employee scans, and new incident reports — polled every 30 s with unread pip.</div>
             </div>
-          </div>
 
-          <!-- v2.2.10–11 -->
-          <div class="nd-item">
-            <div class="nd-dot blue"></div>
-            <div class="nd-content">
-              <div class="nd-row">
-                <span class="nd-tag blue">Improved</span>
-                <span class="nd-ver">v2.2.10–11</span>
-                <span class="nd-date">Apr–May 2026</span>
+            <!-- v2.2.10–11 -->
+            <div class="nd-item">
+              <div class="nd-dot blue"></div>
+              <div class="nd-content">
+                <div class="nd-row">
+                  <span class="nd-tag blue">Improved</span>
+                  <span class="nd-ver">v2.2.10–11</span>
+                  <span class="nd-date">Apr–May 2026</span>
+                </div>
+                <div class="nd-title-text">Role-Based Permission System Overhaul</div>
+                <div class="nd-desc">Granular JSON permissions per group — menu visibility, action gating, and AJAX 403 responses.</div>
               </div>
-              <div class="nd-title-text">Role-Based Permission System Overhaul</div>
-              <div class="nd-desc">Granular JSON permissions per group — menu visibility, action gating, and AJAX 403 responses.</div>
             </div>
-          </div>
 
-          <!-- v2.2.8–9 -->
-          <div class="nd-item">
-            <div class="nd-dot amber"></div>
-            <div class="nd-content">
-              <div class="nd-row">
-                <span class="nd-tag amber">Updated</span>
-                <span class="nd-ver">v2.2.8–9</span>
-                <span class="nd-date">Apr 2026</span>
+            <!-- v2.2.8–9 -->
+            <div class="nd-item">
+              <div class="nd-dot amber"></div>
+              <div class="nd-content">
+                <div class="nd-row">
+                  <span class="nd-tag amber">Updated</span>
+                  <span class="nd-ver">v2.2.8–9</span>
+                  <span class="nd-date">Apr 2026</span>
+                </div>
+                <div class="nd-title-text">Employee Records — Gender, Birth & Hire Date Fields</div>
+                <div class="nd-desc">Schema expanded with gender, birth, and hired columns. Auto-migrated on startup.</div>
               </div>
-              <div class="nd-title-text">Employee Records — Gender, Birth & Hire Date Fields</div>
-              <div class="nd-desc">Schema expanded with gender, birth, and hired columns. Auto-migrated on startup.</div>
             </div>
-          </div>
 
-          <!-- v2.2.6–7 -->
-          <div class="nd-item">
-            <div class="nd-dot purple"></div>
-            <div class="nd-content">
-              <div class="nd-row">
-                <span class="nd-tag purple">Feature</span>
-                <span class="nd-ver">v2.2.6–7</span>
-                <span class="nd-date">Mar–Apr 2026</span>
+            <!-- v2.2.6–7 -->
+            <div class="nd-item">
+              <div class="nd-dot purple"></div>
+              <div class="nd-content">
+                <div class="nd-row">
+                  <span class="nd-tag purple">Feature</span>
+                  <span class="nd-ver">v2.2.6–7</span>
+                  <span class="nd-date">Mar–Apr 2026</span>
+                </div>
+                <div class="nd-title-text">Web NFC Proximity Scanning — Production Ready</div>
+                <div class="nd-desc">Tap-to-verify with check-in/out tracking, gate analytics, and per-state audio feedback.</div>
               </div>
-              <div class="nd-title-text">Web NFC Proximity Scanning — Production Ready</div>
-              <div class="nd-desc">Tap-to-verify with check-in/out tracking, gate analytics, and per-state audio feedback.</div>
             </div>
-          </div>
 
-          <!-- Core -->
-          <div class="nd-item">
-            <div class="nd-dot gray"></div>
-            <div class="nd-content">
-              <div class="nd-row">
-                <span class="nd-tag gray">Core</span>
-                <span class="nd-ver">v2.0–2.2.5</span>
-                <span class="nd-date">2025–Early 2026</span>
+            <!-- Core -->
+            <div class="nd-item">
+              <div class="nd-dot gray"></div>
+              <div class="nd-content">
+                <div class="nd-row">
+                  <span class="nd-tag gray">Core</span>
+                  <span class="nd-ver">v2.0–2.2.5</span>
+                  <span class="nd-date">2025–Early 2026</span>
+                </div>
+                <div class="nd-title-text">Core System — Login, Portal, Employee Manager & Dashboard</div>
+                <div class="nd-desc">Full platform launch: auth, multi-user isolation, iframe portal, violation tracking, Chart.js analytics.</div>
               </div>
-              <div class="nd-title-text">Core System — Login, Portal, Employee Manager & Dashboard</div>
-              <div class="nd-desc">Full platform launch: auth, multi-user isolation, iframe portal, violation tracking, Chart.js analytics.</div>
             </div>
-          </div>
 
           </div><!-- /.nd-scroll-body -->
 
@@ -1387,7 +1391,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       disabled style="opacity:0.3; cursor:not-allowed;"
       <?php endif; ?>>
       <div class="bn-nfc-pill">
-        <img src="../../../resource/assets/icon/nfc-icon.svg" alt="NFC">
+        <img src="resource/assets/icon/nfc-icon.svg" alt="NFC">
       </div>
       <span class="bn-label">NFC</span>
     </button>
