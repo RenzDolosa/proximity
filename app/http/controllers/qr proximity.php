@@ -31,8 +31,6 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // ── SECURITY: Generate a per-session CSRF token ──────────────────
-// This token is embedded into the page and sent with every POST
-// request from qp.js. The backend validates it before acting.
 if (empty($_SESSION['csrf_token'])) {
   $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }

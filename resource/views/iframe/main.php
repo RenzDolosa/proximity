@@ -52,7 +52,9 @@ $stats = [
 ];
 
 try {
-  $userDb = getUserDBConnection($userId);
+  if (!isset($userDb) || !($userDb instanceof PDO)) {
+    $userDb = getUserDBConnection($userId);
+  }
   $databaseConnected = true;
   $requiredTables = ['employees', 'code', 'employee_access_log', 'check_in_out'];
   $missingTables  = [];

@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../config/db.php';
 
 $permissions = getUserGroupPermissions();
-if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') && !canAccess($permissions, 'proximity code')) {
+if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') && !canAccess($permissions, 'proximity-code')) {
   echo '<!DOCTYPE html><html><body><script>
         if (window.top !== window.self) { window.top.history.back(); } else { window.history.back(); }
     </script></body></html>';
@@ -52,10 +52,10 @@ if ($databaseConnected) {
     $stats['today_out'] = $stmt->fetchColumn();
 
     $stmt = $userDb->prepare("
-            SELECT el.*, e.fullname 
-            FROM employee_logs el
+            SELECT el.*, e.fullname
+            FROM employee_access_log el
             JOIN employees e ON el.employee_id = e.id
-            ORDER BY el.timestamp DESC 
+            ORDER BY el.access_timestamp DESC
             LIMIT 10
         ");
     $stmt->execute();

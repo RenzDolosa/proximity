@@ -73,7 +73,7 @@ function applyIconHints(array $pages): array
   return $pages;
 }
 
-require_once 'config.php';
+require_once __DIR__ . '/config.php';
 
 // ── Auth guard FIRST (before anything else) ───────────────────────────────────
 if (!isset($_SESSION['user_id']) || !isLoggedIn()) {
@@ -161,12 +161,17 @@ $sessionUserId = (int)$userId;
 
 function getUserGroupPermissions(): array
 {
+  static $cache = null;
+  if ($cache !== null) {
+    return $cache;
+  }
+
   if (!empty($_SESSION['user_group']) && $_SESSION['user_group'] === 'Administrator') {
-    return [];
+    return $cache = [];
   }
 
   if (empty($_SESSION['user_group'])) {
-    return [];
+    return $cache = [];
   }
 
   try {
@@ -179,13 +184,15 @@ function getUserGroupPermissions(): array
     $stmt->execute([$_SESSION['user_group']]);
     $permJson = $stmt->fetchColumn();
 
-    if (!$permJson) return [];
+    if (!$permJson) {
+      return $cache = [];
+    }
 
     $perms = json_decode($permJson, true);
-    return is_array($perms) ? $perms : [];
+    return $cache = is_array($perms) ? $perms : [];
   } catch (PDOException $e) {
     error_log('getUserGroupPermissions error: ' . $e->getMessage());
-    return [];
+    return $cache = [];
   }
 }
 
@@ -408,6 +415,7 @@ function scanPortalPages(
     'db.php',
     'req.php',
     'migrate_to_webp.php',
+    'paths.php',
     // 'get_user_id.php',
     // 'ip.php',
 
@@ -436,11 +444,15 @@ function scanPortalPages(
     'reg.php',
   ]
 ): array {
+  static $memoPages = null;
+  if ($baseDirs === [] && $memoPages !== null) {
+    return $memoPages;
+  }
 
   // ── Define which folders are GROUPED (children under a parent) ────────────
   $groupedFolders = [
     'portal' => [
-      'folder'   => __DIR__ . '/../resource/views/iframe',
+      'folder'   => PATH_VIEWS_IFRAME,
       'children' => [
         [
           'key'      => 'main',
@@ -463,7 +475,7 @@ function scanPortalPages(
       ],
     ],
     'main' => [
-      'folder'   => __DIR__ . '/../app/services',
+      'folder'   => PATH_APP_SERVICES,
       'children' => [
         [
           'key'      => 'settings',
@@ -480,11 +492,11 @@ function scanPortalPages(
       ],
     ],
     'development' => [
-      'folder'   => __DIR__ . '/../tests',
+      'folder'   => PATH_TESTS,
       'children' => [],
     ],
     'settings' => [
-      'folder'   => __DIR__ . '/../resource/views',
+      'folder'   => PATH_VIEWS,
       'children' => [
         [
           'key'      => 'admin panel',
@@ -500,7 +512,7 @@ function scanPortalPages(
       ],
     ],
     'table panel' => [
-      'folder'   => __DIR__ . '/app/services',
+      'folder'   => PATH_APP_SERVICES,
       'children' => [
         [
           'key'      => 'system',
@@ -553,7 +565,7 @@ function scanPortalPages(
       ],
     ],
     'proximity' => [
-      'folder'   => __DIR__ . '/../app/http/controllers',
+      'folder'   => PATH_APP_CONTROLLERS,
       'children' => [],
     ],
   ];
@@ -568,10 +580,10 @@ function scanPortalPages(
   // ── Flat folders (iframe, udev, root) ────────────────────────────────────
   if (empty($baseDirs)) {
     $baseDirs = [
-      __DIR__ . '/../app/http/controllers',
-      __DIR__ . '/../app/services',
-      __DIR__ . '/../resource/views/iframe',
-      __DIR__ . '/../tests',
+      PATH_APP_CONTROLLERS,
+      PATH_APP_SERVICES,
+      PATH_VIEWS_IFRAME,
+      PATH_TESTS,
     ];
   }
 
@@ -601,9 +613,9 @@ function scanPortalPages(
     }
   }
 
-  // ── Root-level .php files ──────────────────────────────────────────────────
-  $rootDir = __DIR__ . '/';
-  foreach (glob($rootDir . '/*.php') ?: [] as $file) {
+  // ── PHP files in /config (legacy scan; keeps prior behavior) ───────────────
+  $rootDir = PATH_CONFIG . '/';
+  foreach (glob($rootDir . '*.php') ?: [] as $file) {
     $name        = basename($file, '.php');
     $resolvedKey = PAGE_KEY_OVERRIDES[$name] ?? $name;
 
@@ -656,6 +668,9 @@ function scanPortalPages(
     }
   }
 
+  if ($baseDirs === []) {
+    $memoPages = $pages;
+  }
   return $pages;
 }
 
@@ -706,6 +721,11 @@ function flattenPageKeys(array $pages): array
 
 function getMenuAccess(): array
 {
+  static $memoAccess = null;
+  if ($memoAccess !== null) {
+    return $memoAccess;
+  }
+
   $permissions = getUserGroupPermissions();
   $pages       = scanPortalPages();
   $access      = [];
@@ -727,5 +747,5 @@ function getMenuAccess(): array
     }
   }
 
-  return $access;
+  return $memoAccess = $access;
 }

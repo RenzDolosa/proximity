@@ -13,7 +13,9 @@ $message = '';
 $messageType = '';
 
 try {
-  $userDb = getUserDBConnection($userId);
+  if (!isset($userDb) || !($userDb instanceof PDO)) {
+    $userDb = getUserDBConnection($userId);
+  }
   $databaseConnected = true;
   $requiredTables = ['employees', 'code', 'employee_access_log', 'check_in_out'];
   $missingTables = [];
@@ -1359,6 +1361,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <!-- Main iframe -->
   <div class="main-wrap">
+    <div id="iframeOverlay" style="display:none;position:absolute;inset:0;z-index:1;cursor:default;"></div>
     <iframe src="resource/views/iframe/main.php" class="frames" allowfullscreen="allowfullscreen"></iframe>
   </div>
 
@@ -1426,11 +1429,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     function openDropdown() {
       userDropdown.classList.add('open');
       userChevron.classList.add('open');
+      setOverlay(true);
     }
 
     function closeDropdown() {
       userDropdown.classList.remove('open');
       userChevron.classList.remove('open');
+      if (!notifDropdown.classList.contains('open')) setOverlay(false);
     }
 
     userPill.addEventListener('mouseenter', openDropdown);
@@ -1448,6 +1453,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     document.addEventListener('click', closeDropdown);
 
     // ── Notification bell ──
+    const iframeOverlay = document.getElementById('iframeOverlay');
+
+    function setOverlay(active) {
+      iframeOverlay.style.display = active ? 'block' : 'none';
+    }
+
     const notifWrapper = document.getElementById('notifWrapper');
     const notifBtn = document.getElementById('notifBtn');
     const notifDropdown = document.getElementById('notifDropdown');
@@ -1458,13 +1469,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     function openNotif() {
       notifDropdown.classList.add('open');
-      // Let notifications.js re-render live alerts whenever dropdown opens
+      setOverlay(true);
       if (typeof window.__ntfRender === 'function') window.__ntfRender();
     }
 
     function closeNotif() {
       notifDropdown.classList.remove('open');
-      // Mark all live alerts as seen when closing
+      if (!userDropdown.classList.contains('open')) setOverlay(false);
       if (typeof window.__ntfMarkSeen === 'function') window.__ntfMarkSeen();
     }
 
@@ -1496,17 +1507,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
     });
 
-    // Stop clicks inside the dropdown from bubbling to document and self-closing
+    iframeOverlay.addEventListener('click', function() {
+      closeNotif();
+      closeDropdown();
+    });
+
     notifDropdown.addEventListener('click', function(e) {
       e.stopPropagation();
     });
 
-    // Close when clicking outside
     document.addEventListener('click', function(e) {
       if (!notifWrapper.contains(e.target)) closeNotif();
     });
 
-    // Close user dropdown when notif opens and vice versa
     notifBtn.addEventListener('click', closeDropdown);
     userPill.addEventListener('click', closeNotif);
   </script>

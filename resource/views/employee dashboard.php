@@ -442,7 +442,7 @@ if ($databaseConnected) {
                 <?php foreach (array_slice($recentLogs, 0, 10) as $log):
                   $userImage   = $log['profile_image'] ?? $log['image'] ?? null;
                   $imagePath   = $userImage ? "../../public/uploads/user/" . htmlspecialchars($userImage) : null;
-                  $imgSrc      = ($imagePath && file_exists($imagePath)) ? $imagePath : "../assets/logo/3PL.svg";
+                  $imgSrc      = ($imagePath && file_exists($imagePath)) ? $imagePath : "../assets/logo/nfc-logo.svg";
                   $status      = strtolower($log['status'] ?? 'unknown');
                   $check       = strtolower($log['check_status'] ?? 'unknown');
                   $statusClass = in_array($status, ['active', 'inactive']) ? "badge-{$status}" : 'badge-unknown';

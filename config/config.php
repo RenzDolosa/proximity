@@ -2,6 +2,7 @@
 // config/config.php --> database configuration
 
 require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/paths.php';
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->load();
@@ -195,6 +196,12 @@ function getUserDBConnection($userId)
     throw new Exception("Invalid user ID");
   }
 
+  static $pool = [];
+  $id = (int) $userId;
+  if (isset($pool[$id])) {
+    return $pool[$id];
+  }
+
   $dbName = DB_NAME; // USER_DB_PREFIX . intval($userId);
 
   try {
@@ -209,6 +216,7 @@ function getUserDBConnection($userId)
       ]
     );
     $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
+    $pool[$id] = $pdo;
     return $pdo;
   } catch (PDOException $e) {
     throw new Exception("User database connection failed");

@@ -13,11 +13,11 @@ let activeController = null;
 const GLOBAL_AUDIO_ENDPOINT = "../../services/global_audio.php";
 
 const AUDIO_TYPE_MAP = {
-  success:    "successSound",
-  checkout:   "checkoutSound",
-  not_found:  "noResultSound",
+  success: "successSound",
+  checkout: "checkoutSound",
+  not_found: "noResultSound",
   violations: "warningSound",
-  inactive:   "inactiveSound",
+  inactive: "inactiveSound",
 };
 
 // ─────────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ const AUDIO_TYPE_MAP = {
 // ─────────────────────────────────────────────────────────────────
 function getCsrfToken() {
   const meta = document.querySelector('meta[name="csrf-token"]');
-  return meta ? meta.content : '';
+  return meta ? meta.content : "";
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -46,30 +46,29 @@ async function loadGlobalAudio() {
     if (!json.success) throw new Error("Server returned success:false");
 
     Object.entries(AUDIO_TYPE_MAP).forEach(([audioType, elementId]) => {
-      const el    = document.getElementById(elementId);
+      const el = document.getElementById(elementId);
       if (!el) return;
 
       const entry = json.audio?.[audioType];
 
       if (entry?.data && entry.data.length > 0) {
-        el.src     = entry.data;
+        el.src = entry.data;
         el.preload = "auto";
       } else {
         const fallback = el.dataset.fallback;
         if (fallback) {
-          el.src     = fallback;
+          el.src = fallback;
           el.preload = "auto";
         }
       }
     });
-
   } catch (e) {
     console.warn("Could not load global audio; using bundled fallbacks.", e);
 
     Object.values(AUDIO_TYPE_MAP).forEach((elementId) => {
       const el = document.getElementById(elementId);
       if (el && !el.src && el.dataset.fallback) {
-        el.src     = el.dataset.fallback;
+        el.src = el.dataset.fallback;
         el.preload = "auto";
       }
     });
@@ -111,6 +110,13 @@ function setupEventListeners() {
       const query = e.target.value.trim();
       if (query !== "") searchEmployees(query);
     }
+    if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+      e.preventDefault();
+    }
+  });
+
+  searchInput.addEventListener("paste", function (e) {
+    e.preventDefault();
   });
 
   document.addEventListener("click", function (e) {
@@ -153,11 +159,11 @@ function playSound(id) {
   sound.play().catch((e) => console.log("Audio play error:", e));
 }
 
-const playSuccessSound  = () => playSound("successSound");
+const playSuccessSound = () => playSound("successSound");
 const playCheckoutSound = () => playSound("checkoutSound");
 const playInactiveSound = () => playSound("inactiveSound");
 const playNoResultSound = () => playSound("noResultSound");
-const playWarningSound  = () => playSound("warningSound");
+const playWarningSound = () => playSound("warningSound");
 
 // ─────────────────────────────────────────────────────────────────
 //  Input-block helper
@@ -184,7 +190,7 @@ function looksLikeQRCode(query) {
   const hasDigit = /\d/.test(query);
   if (!hasDigit) return false;
 
-  const isLong      = query.length >= 10;
+  const isLong = query.length >= 10;
   const hasSeparator = /[-_]/.test(query);
 
   return isLong || hasSeparator;
@@ -198,9 +204,9 @@ async function searchEmployees(query) {
   activeController = new AbortController();
   const { signal } = activeController;
 
-  const messageEl    = document.getElementById("message");
+  const messageEl = document.getElementById("message");
   const resultsTable = document.getElementById("resultsTable");
-  const resultsBody  = document.getElementById("resultsBody");
+  const resultsBody = document.getElementById("resultsBody");
 
   try {
     resultsTable.style.display = "none";
@@ -208,15 +214,15 @@ async function searchEmployees(query) {
     let url, method, fetchBody;
 
     if (looksLikeQRCode(query)) {
-      url    = "../../services/qr_search_backend.php";
+      url = "../../services/qr_search_backend.php";
       method = "POST";
       fetchBody = JSON.stringify({
-        action:      "get_by_qr",
-        qr_code:     query,
-        source:      "scanner",
+        action: "get_by_qr",
+        qr_code: query,
+        source: "scanner",
       });
     } else {
-      url    = `../../services/qr_search_backend.php?q=${encodeURIComponent(query)}`;
+      url = `../../services/qr_search_backend.php?q=${encodeURIComponent(query)}`;
       method = "GET";
     }
 
@@ -263,13 +269,13 @@ async function searchEmployees(query) {
 
     const data = await response.json();
 
-    if (!data.success && data.error_code === 'EMPLOYEE_INACTIVE') {
+    if (!data.success && data.error_code === "EMPLOYEE_INACTIVE") {
       messageEl.innerHTML = `<p class="no-results-message inactive-message">⛔ Employee Inactive</p>`;
       playInactiveSound();
       blockSearchInput();
       return;
     }
-    
+
     if (data.success) {
       currentResults = Array.isArray(data.data) ? data.data : [data.data];
 
@@ -301,9 +307,9 @@ async function searchEmployees(query) {
 function renderResults(results) {
   stopCurrentAudio();
 
-  const messageEl    = document.getElementById("message");
+  const messageEl = document.getElementById("message");
   const resultsTable = document.getElementById("resultsTable");
-  const resultsBody  = document.getElementById("resultsBody");
+  const resultsBody = document.getElementById("resultsBody");
 
   if (displayTimeout) {
     clearTimeout(displayTimeout);
@@ -347,10 +353,10 @@ function formatTimestamp(ts) {
   return isNaN(d)
     ? ts
     : d.toLocaleString(undefined, {
-        year:   "numeric",
-        month:  "short",
-        day:    "numeric",
-        hour:   "2-digit",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
       });
@@ -360,13 +366,15 @@ function formatTimestamp(ts) {
 //  Card builder
 // ─────────────────────────────────────────────────────────────────
 function buildCard(employee) {
-  const fullname    = escapeHtml(employee.fullname    || "Unknown");
-  const position    = escapeHtml(employee.position    || "Unknown");
-  const brand       = escapeHtml(employee.brand       || "N/A");
-  const status      = escapeHtml(employee.status      || "unknown");
-  const shift       = escapeHtml(employee.shift       || "N/A");
-  const violation   = employee.violation ? escapeHtml(employee.violation) : null;
-  const checkStatus = escapeHtml((employee.check_status || "OUT").toUpperCase());
+  const fullname = escapeHtml(employee.fullname || "Unknown");
+  const position = escapeHtml(employee.position || "Unknown");
+  const brand = escapeHtml(employee.brand || "N/A");
+  const status = escapeHtml(employee.status || "unknown");
+  const shift = escapeHtml(employee.shift || "N/A");
+  const violation = employee.violation ? escapeHtml(employee.violation) : null;
+  const checkStatus = escapeHtml(
+    (employee.check_status || "OUT").toUpperCase(),
+  );
 
   const initials = (employee.fullname || "UN")
     .split(" ")
