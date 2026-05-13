@@ -195,19 +195,20 @@ if ($databaseConnected) {
             </div>
           <?php endif; ?>
           <!-- Auto-update controls -->
-          <div class="auto-update-controls">
-            <label style="margin: 0;">
-              <input type="checkbox" id="autoUpdateToggle" style="width: 20px; cursor: pointer;" checked> Auto-update
-              <span id="autoUpdateStatus" class="auto-update-status active">ON</span>
-              <button onclick="forceRefresh()" style="padding: 2px; border-radius: 5px; cursor: pointer;"><i class="fas fa-refresh"></i> Refresh Now</button>
+          <div class="auto-update-controls" style="user-select: none;">
+            <label for="autoUpdateToggle" style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; margin: 0; user-select:none;">
+              <input type="checkbox" id="autoUpdateToggle" style="width: 16px; cursor: pointer;">
+              <small>Auto-update</small>
             </label>
-            <select id="updateInterval" style="width: 150px; height: 20px; padding: 0; cursor: pointer;">
-              <option value="1000" selected>Every Second</option>
-              <option value="10000">10 seconds</option>
-              <option value="30000">30 seconds</option>
-              <option value="60000">1 minute</option>
-              <option value="300000">5 minutes</option>
-            </select>
+            <span id="autoUpdateStatus" class="auto-update-status inactive" style="user-select:none;"></span>
+            <button onclick="forceRefresh()" style="padding: 2px; border-radius: 5px; cursor: pointer; user-select:none;">
+              <i class="fas fa-refresh"></i> <small>Refresh Now</small>
+            </button>
+            <div class="search-group" style="position:relative;">
+              <input type="text" id="updateInterval" placeholder="Every Second"
+                autocomplete="off" readonly style="cursor:pointer; width:130px; height: 25px;">
+              <input type="hidden" id="updateInterval_val" value="1000">
+            </div>
           </div>
           <div style="position: absolute; right: 0; padding-right: 50px; display: flex; flex-direction: column; align-items: flex-end; pointer-events: none;">
             <div id="lastUpdateTime"></div>

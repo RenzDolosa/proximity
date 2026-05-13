@@ -197,11 +197,43 @@ function setupEventListeners() {
     autoUpdateToggle.addEventListener("change", toggleAutoUpdate);
   }
 
-  const intervalSelector = document.getElementById("updateInterval");
-  if (intervalSelector) {
-    intervalSelector.addEventListener("change", updateAutoUpdateInterval);
-  }
+  setupFieldSuggestions(
+    "updateInterval",
+    "updateInterval-suggestions",
+    () => UPDATE_INTERVAL_OPTIONS.map((o) => o.label),
+    {
+      hiddenId: "updateInterval_val",
+      raw: true,
+      showAll: true,
+      noDefaultAll: true,
+      onSelect: (displayValue) => {
+        const match = UPDATE_INTERVAL_OPTIONS.find(
+          (o) => o.label.toLowerCase() === (displayValue || "").toLowerCase(),
+        );
+        const hidden = document.getElementById("updateInterval_val");
+        if (match && hidden) {
+          hidden.value = match.value;
+        }
+        if (autoUpdateEnabled) {
+          const interval = getSelectedInterval();
+          startAutoUpdate(interval);
+          showAlert(
+            `Auto-update interval changed to ${formatInterval(interval)}`,
+            "info",
+          );
+        }
+      },
+    },
+  );
 }
+
+const UPDATE_INTERVAL_OPTIONS = [
+  { label: "Every Second", value: "1000" },
+  { label: "10 seconds", value: "10000" },
+  { label: "30 seconds", value: "30000" },
+  { label: "1 minute", value: "60000" },
+  { label: "5 minutes", value: "300000" },
+];
 
 function initializeAutoUpdate() {
   const toggle = document.getElementById("autoUpdateToggle");
@@ -275,8 +307,8 @@ function formatInterval(intervalMs) {
 }
 
 function getSelectedInterval() {
-  const selector = document.getElementById("updateInterval");
-  return selector ? parseInt(selector.value) || 30000 : 30000;
+  const hidden = document.getElementById("updateInterval_val");
+  return hidden ? parseInt(hidden.value) || 1000 : 1000;
 }
 
 function startAutoUpdate(intervalMs) {
@@ -338,14 +370,17 @@ function updateAutoUpdateUI() {
   const toggle = document.getElementById("autoUpdateToggle");
   const status = document.getElementById("autoUpdateStatus");
   const lastUpdate = document.getElementById("lastUpdateTime");
-  const intervalSelector = document.getElementById("updateInterval");
+  const intervalDisplay = document.getElementById("updateInterval");
+  const intervalHidden = document.getElementById("updateInterval_val");
 
   if (toggle) {
     toggle.checked = autoUpdateEnabled;
   }
 
   if (status) {
-    status.textContent = autoUpdateEnabled ? "ON" : "OFF";
+    const strong = document.createElement("strong");
+    strong.textContent = autoUpdateEnabled ? "ON" : "OFF";
+    status.replaceChildren(strong);
     status.className = `auto-update-status ${
       autoUpdateEnabled ? "active" : "inactive"
     }`;
@@ -363,9 +398,10 @@ function updateAutoUpdateUI() {
     lastUpdate.style.display = "none";
   }
 
-  if (intervalSelector) {
-    intervalSelector.disabled = !autoUpdateEnabled;
-    intervalSelector.style.opacity = autoUpdateEnabled ? "1" : "0.5";
+  if (intervalDisplay) {
+    intervalDisplay.disabled = !autoUpdateEnabled;
+    intervalDisplay.style.opacity = autoUpdateEnabled ? "1" : "0.5";
+    intervalDisplay.style.cursor = autoUpdateEnabled ? "pointer" : "not-allowed";
   }
 }
 
@@ -1238,7 +1274,9 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     // ── Build item list ──────────────────────────────────────────
     const items = [];
 
-    items.push({ display: "Default: ALL", raw: "", special: "all" });
+    if (!options.noDefaultAll) {
+      items.push({ display: "Default: ALL", raw: "", special: "all" });
+    }
 
     if (options.noneLabel) {
       items.push({
@@ -1253,7 +1291,9 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     raw
       .map((v) => (v || "").trim())
       .filter((v) => v && v.toLowerCase() !== "none")
-      .filter((v) => !lower || v.toLowerCase().includes(lower))
+      .filter(
+        (v) => options.showAll || !lower || v.toLowerCase().includes(lower),
+      )
       .forEach((v) => {
         const key = v.toLowerCase();
         if (!seen.has(key)) seen.set(key, v);
@@ -1263,7 +1303,8 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
       items.push({ display: options.raw ? v : toProperCase(v), raw: v });
     });
 
-    const visibleItems = lower ? items.filter((i) => !i.special) : items;
+    const visibleItems =
+      lower && !options.showAll ? items.filter((i) => !i.special) : items;
 
     const hasRealItems = visibleItems.some((i) => !i.special);
     if (!visibleItems.length || (lower && !hasRealItems)) {
@@ -1284,7 +1325,7 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
 
         const safeDisplay = escapeHtml(item.display);
         let hl = safeDisplay;
-        if (lower && !item.special) {
+        if (lower && !item.special && !options.showAll) {
           const regex = new RegExp(
             `(${lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
             "gi",
@@ -1351,6 +1392,10 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
         idx = -1;
       }
     }, 150);
+  });
+
+  input.addEventListener("click", () => {
+    if (options.showAll) show(input.value);
   });
 
   input.addEventListener("input", () => {
