@@ -1,4 +1,5 @@
 .env
+.cursor
 .vscode
 fiveserver.config.js
 public
