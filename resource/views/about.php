@@ -90,10 +90,10 @@ $access = getMenuAccess();
         </div>
 
         <div class="notif-item">
-          <div class="notif-dot green"></div>
+          <div class="notif-dot amber"></div>
           <div class="notif-content">
             <div class="notif-header">
-              <span class="notif-tag green">New</span>
+              <span class="notif-tag amber">Updated</span>
               <span class="notif-version">v2.2.12</span>
               <span class="notif-date">May 2026</span>
             </div>

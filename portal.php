@@ -1088,7 +1088,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       color: var(--text-muted);
       line-height: 1.5;
       display: -webkit-box;
-      -webkit-line-clamp: 2;
+      /* -webkit-line-clamp: 2; */
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
@@ -1219,7 +1219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               <div class="nd-dot green"></div>
               <div class="nd-content">
                 <div class="nd-row">
-                  <span class="nd-tag green">New</span>
+                  <span class="nd-tag amber">Updated</span>
                   <span class="nd-ver">v2.2.12</span>
                   <span class="nd-date">May 2026</span>
                 </div>
