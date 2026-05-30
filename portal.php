@@ -1216,7 +1216,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <!-- v2.2.12 -->
             <div class="nd-item">
-              <div class="nd-dot green"></div>
+              <div class="nd-dot amber"></div>
               <div class="nd-content">
                 <div class="nd-row">
                   <span class="nd-tag amber">Updated</span>
