@@ -90,11 +90,8 @@
 }
 
 .actions-panel {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 1;
+  position: fixed;
+  z-index: 99999;
   width: 160px;
   background: #fff;
   border: 1.5px solid #e2e8f0;
@@ -133,6 +130,17 @@
     min-width: unset;
     top: auto !important;
     bottom: 80px;
+    z-index: 9999;
+  }
+
+  .actions-panel {
+    position: fixed;
+    right: 12px;
+    bottom: auto;
+    top: 50% !important;
+    left: auto !important;
+    transform: translateY(-50%) !important;
+    width: 160px;
     z-index: 9999;
   }
 }

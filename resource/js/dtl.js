@@ -21,6 +21,19 @@ let activeFilters = {};
 const count = employees.length;
 const label = count > 1 ? "employee's" : "employee";
 
+function isInputVisible(input) {
+  const parentModal = input.closest(".modal, .modal-overlay");
+  if (parentModal) {
+    const d = parentModal.style.display;
+    return d === "block" || d === "flex";
+  }
+
+  const anyModalOpen =
+    document.getElementById("deleteModal")?.style.display === "flex";
+
+  return !anyModalOpen;
+}
+
 function escapeHtml(str) {
   if (str === null || str === undefined) return "";
   return String(str)
@@ -401,7 +414,9 @@ function updateAutoUpdateUI() {
   if (intervalDisplay) {
     intervalDisplay.disabled = !autoUpdateEnabled;
     intervalDisplay.style.opacity = autoUpdateEnabled ? "1" : "0.5";
-    intervalDisplay.style.cursor = autoUpdateEnabled ? "pointer" : "not-allowed";
+    intervalDisplay.style.cursor = autoUpdateEnabled
+      ? "pointer"
+      : "not-allowed";
   }
 }
 
@@ -865,7 +880,7 @@ async function renderEmployeeTable() {
 
       return `
           <tr>
-              <td style="text-align: center; width: 50px;">${startIndex + index + 1}</td>
+              <td class="sn-cell">${startIndex + index + 1}</td>
               <td>
                 <div><strong>${toProperCase(safeFullname)}</strong></div>
                 <div class="emp-id"><strong>EMPID: ${safeEmpId}</strong></div>
@@ -878,7 +893,7 @@ async function renderEmployeeTable() {
                 <div>${safeShift}</div>
                 <div class="emp-status"><strong>Status: <span class="status-${safeStatus.toLowerCase()}">${safeStatus}</span></strong></div>
               </td>
-              <td class="Col7">
+              <td class="emp-remark">
                 <div style="display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;justify-content:center;">
                   ${
                     employee.violation && employee.violation.trim()
@@ -886,6 +901,7 @@ async function renderEmployeeTable() {
                         data-emp-id="${safeEmpId}"
                         data-fullname="${safeFullname}"
                         data-violation="${safeViolation}"
+                        tabindex="-1"
                         onclick="openViolationPopupFromBtn(this)"
                         style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
                           font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
@@ -897,7 +913,7 @@ async function renderEmployeeTable() {
                   }
                 </div>
               </td>
-              <td class="Col8">${
+              <td class="emp-img">${
                 employee.image
                   ? `<img src="${thumbSrc}" alt="${safeFullname}" class="employee-image"
                         width="48" height="48"
@@ -911,7 +927,7 @@ async function renderEmployeeTable() {
                       </div>`
                   : `<div class="ph-cont" title="${tooltipText}"><div class="employee-ph">${escapeHtml(fullnameInitials)}</div></div>`
               }</td>
-              <td class="Col9" data-qr="${safeQrCode}" onclick="copyQRCodeFromCell(this)" title="Copy Proximity code" style="cursor:pointer;">
+              <td class="emp-proximity" data-qr="${safeQrCode}" onclick="copyQRCodeFromCell(this)" title="Copy Proximity code" style="cursor:pointer;">
                 <img src="../../resource/assets/icon/nfc-icon.svg" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;"></td>
               <td class="employee-timestamp"><small>${employee.access_timestamp || "N/A"}</small></td>
               <td><div class="check-status-${(employee.check_status || "").toLowerCase()}"><div class="employee-ph">${
@@ -922,13 +938,14 @@ async function renderEmployeeTable() {
               ${
                 window.PERMISSIONS.delete
                   ? `
-            <td style="position: relative; width: 160px;">
+            <td style="position: relative; width: 160px; overflow: visible;">
 
               <!-- ACTIONS TOGGLE -->
               <button
                 onclick="toggleActionsPanel(this)"
                 data-emp-id="${safeId}"
                 class="actions-toggle-btn"
+                tabindex="-1"
                 style="
                   width: 100%;
                   padding: 6px 12px;
@@ -984,35 +1001,89 @@ async function renderEmployeeTable() {
   updatePaginationControls();
 }
 
+// ── Actions panel ─────────────────────────────────────────────────────────────
 function toggleActionsPanel(btn) {
-  const panel = btn.parentElement.querySelector(".actions-panel");
   const allPanels = document.querySelectorAll(".actions-panel");
   const allBtns = document.querySelectorAll(".actions-toggle-btn");
+  const panel = btn.parentElement.querySelector(".actions-panel");
+  const isAlreadyOpen = panel.classList.contains("actions-open");
 
+  // ── Close all open panels and return them to their original parents ──
   allPanels.forEach((p) => {
-    if (p !== panel) p.classList.remove("actions-open");
+    p.classList.remove("actions-open");
+    p.style.display = "none";
+    if (p._originalParent && p.parentElement === document.body) {
+      p._originalParent.appendChild(p);
+    }
   });
-  allBtns.forEach((b) => {
-    if (b !== btn) b.classList.remove("actions-active");
-  });
+  allBtns.forEach((b) => b.classList.remove("actions-active"));
 
-  panel.classList.toggle("actions-open");
-  btn.classList.toggle("actions-active");
+  if (isAlreadyOpen) return;
 
-  if (panel.classList.contains("actions-open") && window.innerWidth <= 480) {
-    const rect = btn.getBoundingClientRect();
-    let top = rect.bottom + 4;
-    let left = rect.left;
+  // ── Move panel to <body> to escape all overflow clipping ──
+  panel._originalParent = btn.parentElement;
+  document.body.appendChild(panel);
 
-    if (left + 160 > window.innerWidth - 8) left = window.innerWidth - 160 - 8;
-    if (top + 180 > window.innerHeight) top = rect.top - 184;
+  const rect = btn.getBoundingClientRect();
+  const panelW = 160;
+  const panelH = panel.scrollHeight || 180;
 
-    panel.style.top = top + "px";
-    panel.style.left = left + "px";
+  // Right-align panel to the right edge of the button
+  let left = rect.right - panelW;
+  // Clamp so it never bleeds off-screen
+  left = Math.max(8, Math.min(left, window.innerWidth - panelW - 8));
+
+  // Prefer opening upward; fall back to downward if not enough room
+  let top;
+  if (rect.top >= panelH + 8) {
+    top = rect.top - panelH - 4; // above the button
   } else {
-    panel.style.top = "";
-    panel.style.left = "";
+    top = rect.bottom + 4; // below the button
   }
+
+  panel.style.position = "fixed";
+  panel.style.top = Math.round(top) + "px";
+  panel.style.left = Math.round(left) + "px";
+  panel.style.width = panelW + "px";
+  panel.style.bottom = "auto";
+  panel.style.transform = "none";
+  panel.style.zIndex = "99999";
+
+  panel.classList.add("actions-open");
+  btn.classList.add("actions-active");
+}
+
+// ── Close panel when clicking outside ──────────────────────────────
+document.addEventListener("click", function (e) {
+  if (
+    !e.target.closest(".actions-toggle-btn") &&
+    !e.target.closest(".actions-panel")
+  ) {
+    document.querySelectorAll(".actions-panel").forEach((p) => {
+      p.classList.remove("actions-open");
+      p.style.display = "none";
+      if (p._originalParent && p.parentElement === document.body) {
+        p._originalParent.appendChild(p);
+      }
+    });
+    document
+      .querySelectorAll(".actions-toggle-btn")
+      .forEach((b) => b.classList.remove("actions-active"));
+  }
+});
+
+// ── Close all actions panels ──────────────────────────────────────────────────
+function closeAllActionsPanels() {
+  document.querySelectorAll(".actions-panel").forEach((p) => {
+    p.classList.remove("actions-open");
+    p.style.display = "none";
+    if (p._originalParent && p.parentElement === document.body) {
+      p._originalParent.appendChild(p);
+    }
+  });
+  document
+    .querySelectorAll(".actions-toggle-btn")
+    .forEach((b) => b.classList.remove("actions-active"));
 }
 
 function openDeleteFromBtn(btn) {
@@ -1123,11 +1194,11 @@ function updatePaginationControls() {
   }
 
   paginationDiv.innerHTML = `
-    <button class="page-arrow-btn" onclick="previousPage()" ${currentPage <= 1 ? "disabled" : ""}>
+    <button class="page-arrow-btn" tabindex="-1" onclick="previousPage()" ${currentPage <= 1 ? "disabled" : ""}>
       <i class="fas fa-arrow-left"></i>
     </button>
     ${buttonsHTML}
-    <button class="page-arrow-btn" onclick="nextPage()" ${currentPage >= totalPages ? "disabled" : ""}>
+    <button class="page-arrow-btn" tabindex="-1" onclick="nextPage()" ${currentPage >= totalPages ? "disabled" : ""}>
       <i class="fas fa-arrow-right"></i>
     </button>
     <span id="page-info">${totalRecords} total &nbsp;|&nbsp; Page ${currentPage} of ${totalPages}</span>
@@ -1268,6 +1339,12 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
   }
 
   function show(q) {
+    if (!isInputVisible(input)) {
+      list.style.display = "none";
+      idx = -1;
+      return;
+    }
+
     const lower = q.trim().toLowerCase();
     const raw = getValues();
 
@@ -1458,6 +1535,7 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
 }
 
 function openDeleteModal(employeeId = null, requireConfirmation = false) {
+  closeAllActionsPanels();
   const modal = document.getElementById("deleteModal");
   const confirmBtn = document.getElementById("confirmDeleteBtn");
   const confirmationInput = document.getElementById("confirmationInput");
@@ -1707,6 +1785,7 @@ async function deleteFilteredEmployees() {
 }
 
 function openViolationPopup(fullname, violation, employeeId) {
+  closeAllActionsPanels();
   const existing = document.getElementById("violationPopupOverlay");
   if (existing) existing.remove();
 

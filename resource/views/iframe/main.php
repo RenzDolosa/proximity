@@ -280,8 +280,8 @@ if ($databaseConnected) {
                 </div>
               <?php endif; ?>
 
-              <?php if ($access['violation']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/violation_log.php');">
+              <?php if ($access['remarks']): ?>
+                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=remarks');">
                   <div class="sc-icon"><i class="fas fa-exclamation-triangle"></i></div>
                   <div class="sc-label">Incidents</div>
                 </div>
@@ -469,7 +469,7 @@ if ($databaseConnected) {
                     <img src="../../assets/logo/mysql-logo.svg" alt="MySQL" style="width:26px;height:26px;object-fit:contain;">
                   </div>
                   <div class="mc-info">
-                    <div class="mc-title">Employee Manager</div>
+                    <div class="mc-title">Employee Management</div>
                     <div class="mc-desc">Manage employee records and information</div>
                   </div>
                   <div class="mc-action"><i class="fas fa-arrow-right"></i> Open</div>
@@ -490,7 +490,7 @@ if ($databaseConnected) {
               <?php endif; ?>
 
               <?php if ($access['m-i v2']): ?>
-                <div class="menu-card disabled">
+                <div class="menu-card" onclick="navigateWithLoading('../../../app/services/attendancelog.php');">
                   <div class="mc-icon" style="background:#f8fafc; color:#94a3b8;">
                     <img src="../../assets/logo/coming-soon.svg" alt="Coming Soon" style="width:26px;height:26px;object-fit:contain;">
                   </div>

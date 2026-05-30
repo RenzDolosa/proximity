@@ -25,10 +25,16 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
   $firstTab = 'proximity';
 } elseif ($requestedTab === 'employees' && $access['system']) {
   $firstTab = 'employees';
+} elseif ($requestedTab === 'remarks' && $access['remarks']) {
+  $firstTab = 'remarks';
+} elseif ($requestedTab === 'attendance' && $access['attendance']) {
+  $firstTab = 'attendance';
 } else {
-  if ($access['system'])         $firstTab = 'employees';
-  elseif ($access['datalog'])    $firstTab = 'scanned';
-  elseif ($access['proximity-code']) $firstTab = 'proximity';
+  if ($access['system'])              $firstTab = 'employees';
+  elseif ($access['datalog'])         $firstTab = 'scanned';
+  elseif ($access['proximity-code'])  $firstTab = 'proximity';
+  elseif ($access['remarks'])         $firstTab = 'remarks';
+  elseif ($access['attendance'])      $firstTab = 'attendance';
 }
 ?>
 <!DOCTYPE html>
@@ -67,10 +73,11 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
     .tab-btn {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 3px;
       padding: 14px 20px;
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 400;
+      height: 46px;
       color: #666;
       background: none;
       border: none;
@@ -79,6 +86,10 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
       cursor: pointer;
       transition: color 0.15s, border-color 0.15s;
       white-space: nowrap;
+    }
+
+    .tab-btn i {
+      font-size: 15px;
     }
 
     .tab-btn:hover {
@@ -139,7 +150,7 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
       }
 
       .tab-btn i {
-        font-size: 13px;
+        font-size: 14px;
       }
 
       .tab-btn .badge {
@@ -158,28 +169,50 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
 
 <body>
 
-  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.history.back();">
-    <i class="fas fa-times"></i>
-  </div>
-
   <div class="tab-bar">
+    <button class="tab-btn" tabindex="-1" onclick="if (window.self !== window.top) {
+        window.top.location.href = window.top.location.href.split('?')[0];
+      } else {
+        window.history.back();
+      }">
+      <i class="fas fa-arrow-left"></i>
+      <span>Back</span>
+    </button>
+
     <?php if ($access['system']): ?>
-      <button class="tab-btn <?= $firstTab === 'employees' ? 'active' : '' ?>" onclick="switchTab('employees', this)">
-        <i class="fas fa-users"></i> Manage Employees
+      <button class="tab-btn <?= $firstTab === 'employees' ? 'active' : '' ?>" tabindex="-1" onclick="switchTab('employees', this)">
+        <i class="fas fa-users"></i> Employees
       </button>
     <?php endif; ?>
 
     <?php if ($access['datalog']): ?>
-      <button class="tab-btn <?= $firstTab === 'scanned' ? 'active' : '' ?>" onclick="switchTab('scanned', this)">
+      <button class="tab-btn <?= $firstTab === 'scanned' ? 'active' : '' ?>" tabindex="-1" onclick="switchTab('scanned', this)">
         <i class="fas fa-list-check"></i> Scanned Log
       </button>
     <?php endif; ?>
 
     <?php if ($access['proximity-code']): ?>
-      <button class="tab-btn <?= $firstTab === 'proximity' ? 'active' : '' ?>" onclick="switchTab('proximity', this)">
+      <button class="tab-btn <?= $firstTab === 'proximity' ? 'active' : '' ?>" tabindex="-1" onclick="switchTab('proximity', this)">
         <i class="fas fa-id-card"></i> Proximity Codes
       </button>
     <?php endif; ?>
+
+    <?php if ($access['attendance']): ?>
+      <button class="tab-btn <?= $firstTab === 'attendance' ? 'active' : '' ?>" tabindex="-1" onclick="switchTab('attendance', this)">
+        <i class="fas fa-clock"></i> Attendance
+      </button>
+    <?php endif; ?>
+
+    <?php if ($access['remarks']): ?>
+      <button class="tab-btn <?= $firstTab === 'remarks' ? 'active' : '' ?>" tabindex="-1" onclick="switchTab('remarks', this)">
+        <i class="fas fa-exclamation-triangle"></i> Incidents
+      </button>
+    <?php endif; ?>
+
+    <button class="tab-btn" tabindex="-1"onclick="location.reload();">
+      <i class="fas fa-sync-alt"></i>
+      <span>Refresh</span>
+    </button>
   </div>
 
   <iframe id="frame-employees" class="tab-frame <?= $firstTab === 'employees' ? 'active' : '' ?>"
@@ -188,6 +221,10 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
     src="<?= $firstTab === 'scanned'   ? 'datalog.php' : '' ?>"></iframe>
   <iframe id="frame-proximity" class="tab-frame <?= $firstTab === 'proximity' ? 'active' : '' ?>"
     src="<?= $firstTab === 'proximity' ? 'proximity-code.php' : '' ?>"></iframe>
+  <iframe id="frame-attendance" class="tab-frame <?= $firstTab === 'attendance' ? 'active' : '' ?>"
+    src="<?= $firstTab === 'attendance' ? 'attendancelog.php' : '' ?>"></iframe>
+  <iframe id="frame-remarks" class="tab-frame <?= $firstTab === 'remarks' ? 'active' : '' ?>"
+    src="<?= $firstTab === 'remarks' ? 'violation-log.php' : '' ?>"></iframe>
 
   <script src="../../resource/js/req.js"></script>
   <script src="../../resource/js/ver.js"></script>
@@ -196,14 +233,15 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
       employees: 'system.php',
       scanned: 'datalog.php',
       proximity: 'proximity-code.php',
+      attendance: 'attendancelog.php',
+      remarks: 'violation-log.php',
     };
 
     function focusFrameSearchInput(frame) {
       try {
         const input = frame.contentWindow?.document?.getElementById('search_qr');
         if (input) input.focus();
-      } catch (e) {
-      }
+      } catch (e) {}
     }
 
     function switchTab(name, btn) {

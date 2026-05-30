@@ -284,7 +284,7 @@ try {
                 </div>
                 <div class="stat-label">Active Employees</div>
               </div>
-              <div class="stat-card" onclick="navigateWithLoading('../../../app/services/violation_log.php');">
+              <div class="stat-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=remarks');">
                 <div class="stat-top">
                   <div class="stat-icon-sm" style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i></div>
                   <div class="stat-value"><?= number_format($userStats['total_violations']); ?></div>
@@ -361,7 +361,7 @@ try {
                     value="<?= htmlspecialchars($user['phone'] ?? ''); ?>">
                 </div>
               </div>
-              <button type="submit" name="update_profile" class="btn-primary">
+              <button type="submit" name="update_profile" class="btn-primary" tabindex="-1">
                 <i class="fas fa-save"></i> Update Profile
               </button>
             </form>
@@ -408,7 +408,7 @@ try {
                   </div>
                 </div>
               </div>
-              <button type="submit" name="change_password" class="btn-primary">
+              <button type="submit" name="change_password" class="btn-primary" tabindex="-1">
                 <i class="fas fa-key"></i> Change Password
               </button>
             </form>

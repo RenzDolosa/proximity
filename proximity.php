@@ -6,6 +6,35 @@ require_once 'config/db.php';
 
 requireAccess('proximity', 'index.php');
 $access = getMenuAccess();
+
+$page = $_GET['page'] ?? '';
+
+// ── Check actual keys available (remove after debugging) ─────────────────────
+// Uncomment temporarily to confirm what keys exist:
+// var_dump(array_keys($access)); exit;
+
+// ── Safely read access flags with explicit false fallback ─────────────────────
+$canQr     = $access['qr proximity']  ?? false;
+$canManual = $access['manual input']  ?? false;
+$canFacial = $access['facial']        ?? false;
+
+// ── Resolve iframe src ────────────────────────────────────────────────────────
+if ($page === 'facial-identification' && $canFacial) {
+  $iframeSrc = 'app/services/facial-identification.php';
+
+} elseif ($canQr) {
+  $iframeSrc = 'app/http/controllers/qr proximity.php';
+
+} elseif ($canManual) {
+  $iframeSrc = 'app/http/controllers/manual input.php';
+
+} elseif ($canFacial) {
+  $iframeSrc = 'app/services/facial-identification.php';
+
+} else {
+  header('Location: index.php');
+  exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -26,7 +55,7 @@ $access = getMenuAccess();
 <body>
 
   <main class="main-content">
-    <iframe src="app/http/controllers/qr proximity.php" class="sec-frames" frameborder="0" allowfullscreen="allowfullscreen"></iframe>
+    <iframe src="<?= htmlspecialchars($iframeSrc) ?>" class="sec-frames" frameborder="0" allowfullscreen="allowfullscreen"></iframe>
   </main>
 
   <div id="portalButton"></div>
@@ -34,7 +63,7 @@ $access = getMenuAccess();
   <script src="resource/js/btn.js"></script>
   <script src="resource/js/req.js"></script>
   <script>
-    const mainFrame = document.querySelector('.frames');
+    const mainFrame = document.querySelector('.sec-frames');
     if (mainFrame) {
       mainFrame.addEventListener('load', function() {
         try {

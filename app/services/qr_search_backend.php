@@ -511,7 +511,7 @@ class LiveSearchHandler
           $result['status_changed'] = false;
         }
 
-        if ($this->logger) $this->logger->logEmployeeAccess($result, 'qr_code_scan');
+        if ($this->logger) $this->logger->logEmployeeAccess($result, 'proximity_scan');
       }
     } catch (PDOException $e) {
       $success      = false;

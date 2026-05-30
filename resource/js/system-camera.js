@@ -60,6 +60,11 @@ function populateCameraSelector() {
 function openCameraModal() {
   const modal = document.getElementById("cameraModal");
   if (!modal) return;
+
+  if (typeof _teardownModalSuggestions === 'function') {
+    _teardownModalSuggestions();
+  }
+
   modal.style.display = "flex";
   initializeCamera();
 }
@@ -71,6 +76,15 @@ function closeCameraModal() {
   stopCamera();
   destroyCropper();
   resetCameraUI();
+
+  const employeeModal = document.getElementById("employeeModal");
+  if (
+    employeeModal &&
+    employeeModal.style.display === "block" &&
+    typeof setupModalSuggestions === 'function'
+  ) {
+    setupModalSuggestions();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────

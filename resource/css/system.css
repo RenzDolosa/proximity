@@ -100,12 +100,6 @@ body {
   isolation: isolate;
 }
 
-.controls h3 {
-  padding-bottom: 0.75rem;
-  cursor: default;
-  font-size: clamp(0.9rem, 2vw, 1rem);
-}
-
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -143,6 +137,7 @@ body {
 .controls .search-row .search-group {
   flex: 1 1 140px;
   min-width: 120px;
+  height: 44px;
 }
 
 .controls .search-row .search-group input[type="date"] {
@@ -157,6 +152,18 @@ body {
   overflow: hidden;
   transition: all 0.3s ease;
   padding-bottom: 85px;
+}
+
+.sn-cell {
+  color: #aaa;
+  font-size: 12px;
+  text-align: center;
+  width: 44px;
+}
+
+.emp-name {
+  font-weight: 600;
+  color: #1a202c;
 }
 
 .emp-id {
@@ -189,11 +196,34 @@ body {
   margin-top: 2px;
 }
 
+.emp-remark {
+  max-width: 150px;
+  text-align: center;
+}
+
+.emp-img {
+  text-align: center;
+  justify-items: center;
+}
+
+.emp-proximity {
+  width: 50px;
+  text-align: center;
+  cursor: pointer;
+}
+
 .emp-records {
   display: flex;
+  font-size: 13px;
   gap: 30px;
   flex-wrap: wrap;
   justify-content: space-between;
+}
+
+.emp-records>div {
+  display: flex;
+  gap: 6px;
+  align-items: center;
 }
 
 /* .total-emp {
@@ -249,8 +279,14 @@ td {
 }
 
 th {
-  font-weight: 600;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   color: #495057;
+  border-bottom: 2px solid #e9ecef;
+  white-space: nowrap;
 }
 
 #employeeTableBody tr:last-child td:first-child {
@@ -263,6 +299,16 @@ th {
   border: none;
 }
 
+#violationTableBody tr:last-child td:first-child {
+  border-bottom-left-radius: 10px;
+  border: none;
+}
+
+#violationTableBody tr:last-child td:last-child {
+  border-bottom-right-radius: 10px;
+  border: none;
+}
+
 tr {
   background: white;
   transition: background-color 0.3s ease;
@@ -270,22 +316,6 @@ tr {
 
 tr:hover {
   background-color: #f8f9ff;
-}
-
-.Col7 {
-  max-width: 150px;
-  text-align: center;
-}
-
-.Col8 {
-  text-align: center;
-  justify-items: center;
-}
-
-.Col9 {
-  width: 50px;
-  text-align: center;
-  cursor: pointer;
 }
 
 .status-active {
@@ -333,6 +363,7 @@ tr:hover {
   align-items: center;
   border-radius: 10px;
   background: linear-gradient(135deg, #6ce29d 0%, #2c9c60 100%);
+  font-size: 0.9rem;
 }
 
 .check-out {
@@ -342,6 +373,7 @@ tr:hover {
   align-items: center;
   border-radius: 10px;
   background: linear-gradient(135deg, #f6a253 0%, #ef3838 100%);
+  font-size: 0.9rem;
 }
 
 .ph-cont {
@@ -640,7 +672,7 @@ tr:hover {
   /* ── Table ── */
   .data-table {
     overflow: visible;
-    padding-bottom: 110px; 
+    padding-bottom: 110px;
   }
 
   .data-table table {

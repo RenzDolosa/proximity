@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../../config/config.php';
 require_once __DIR__ . '/../../../config/db.php';
 
 $permissions = getUserGroupPermissions();
-if (!canAccess($permissions, 'qr proximity') && !canAccess($permissions, 'manual input')) {
+if (!canAccess($permissions, 'qr proximity') && !canAccess($permissions, 'manual input') && !canAccess($permissions, 'facial')) {
   echo '<!DOCTYPE html><html><body><script>
         if (window.top !== window.self) {
             window.top.history.back();

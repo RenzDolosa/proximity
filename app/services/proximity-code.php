@@ -5,14 +5,14 @@ require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../config/db.php';
 
 $permissions = getUserGroupPermissions();
-if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') && !canAccess($permissions, 'proximity-code')) {
+if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') && !canAccess($permissions, 'proximity-code') && !canAccess($permissions, 'remarks')) {
   echo '<!DOCTYPE html><html><body><script>
         if (window.top !== window.self) { window.top.history.back(); } else { window.history.back(); }
     </script></body></html>';
   exit;
 }
 
-requireAccess('proximity-code', 'system.php');
+requireAccess('proximity-code', 'violation-log.php');
 $access = getMenuAccess();
 
 $stats = [
@@ -56,9 +56,6 @@ if ($databaseConnected) {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Proximity Code</title>
-  <link rel="preload" href="../../resource/assets/icon/database-icon.png" as="image">
-  <link rel="preconnect" href="https://filemanager.ai">
-  <link rel="prefetch" href="https://filemanager.ai/new3/index.php?home=%2Fhtdocs%2Fuploads%2Fuser">
   <link rel="icon" href="../../resource/assets/icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../../resource/css/system.css">
   <link rel="stylesheet" href="../../resource/css/ptl.css">
@@ -97,7 +94,7 @@ if ($databaseConnected) {
             <input type="text" id="search_status" placeholder="Status" autocomplete="off" readonly style="cursor:pointer;">
             <input type="hidden" id="search_status_val" name="status">
           </div>
-          
+
           <div class="search-group">
             <input type="text" id="search_date" name="created_at" placeholder="Date">
           </div>
@@ -110,17 +107,17 @@ if ($databaseConnected) {
       <div class="form-row-btn">
         <div class="form-row">
           <div class="search-btn">
-            <button type="button" class="btn btn-primary" onclick="searchEmployees()"><i class="fas fa-search"></i> Search</button>
+            <button type="button" class="btn btn-primary" tabindex="-1" onclick="searchEmployees()"><i class="fas fa-search"></i> Search</button>
           </div>
           <div class="clear-btn">
-            <button type="button" class="btn btn-secondary" onclick="clearSearch()"><i class="fas fa-search-minus"></i> Clear</button>
+            <button type="button" class="btn btn-secondary" tabindex="-1" onclick="clearSearch()"><i class="fas fa-search-minus"></i> Clear</button>
           </div>
           <?php if (
             canAccess($permissions, 'add-proximity')    ||
             canAccess($permissions, 'import-proximity')
           ) : ?>
             <div class="dropdown">
-              <button class="btn add-dropdown" id="addTrigger" onclick="toggleAddOptions();">
+              <button class="btn add-dropdown" tabindex="-1" id="addTrigger"onclick="toggleAddOptions();">
                 <i class="fas fa-ellipsis-v"></i> Add Proximity
                 <span class="add-arrow">▼</span>
               </button>
@@ -137,7 +134,7 @@ if ($databaseConnected) {
           <?php endif; ?>
           <?php if (canAccess($permissions, 'export-proximity')) : ?>
             <div class="dropdown">
-              <button class="btn add-dropdown" id="exportTrigger" onclick="toggleExportOptions()">
+              <button class="btn add-dropdown" tabindex="-1"id="exportTrigger" onclick="toggleExportOptions()">
                 <img src="/../../resource/assets/icon/excel.svg" style="height: 20px; filter: invert(1);"> Export Data
                 <span class="add-arrow">▼</span>
               </button>
@@ -150,7 +147,7 @@ if ($databaseConnected) {
           <?php endif; ?>
           <?php if (canAccess($permissions, 'delete-proximity')) : ?>
             <div class="delete-all-btn">
-              <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All
+              <button type="button" class="btn btn-danger" tabindex="-1" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All
                 Data</button>
             </div>
           <?php endif; ?>
@@ -162,23 +159,23 @@ if ($databaseConnected) {
     <!-- Alert Messages -->
     <div class="alert-container" id="alertContainer"></div>
 
-    <!-- Proximity Code Table -->
+    <!-- ── Proximity Code Data table ─────────────────────────────────────────────── -->
     <div class="data-table">
       <div class="table-header">
         <h3>Proximity Records</h3>
         <div class="emp-records">
           <div style="display: flex; gap: 10px;">
-            <div class="total-emp"><i class="fas fa-id-card"></i></div>
+            <div class="total-emp"><i class="fas fa-id-card" style="font-size:10px;"></i></div>
             <p>Total Proximity</p>
             <h3 id="total_employees"><?php echo $stats['total_employees']; ?></h3>
           </div>
           <div style="display: flex; gap: 10px;">
-            <div class="active-emp"><i class="fas fa-rectangle-list"></i></div>
+            <div class="active-emp"><i class="fas fa-rectangle-list" style="font-size:10px;"></i></div>
             <p>Total Available</p>
             <h3 id="total_available">0</h3>
           </div>
           <div style="display: flex; gap: 10px;">
-            <div class="inactive-emp"><i class="fas fa-credit-card"></i></div>
+            <div class="inactive-emp"><i class="fas fa-credit-card" style="font-size:10px;"></i></div>
             <p>Total Occupied</p>
             <h3 id="total_occupied">0</h3>
           </div>
@@ -188,10 +185,10 @@ if ($databaseConnected) {
         <table>
           <thead>
             <tr style="border-bottom: 2px solid #e9ecef;">
-              <th>SN</th>
-              <th class="Col8">Image</th>
-              <th class="Col9">Proximity Code</th>
-              <th>Remarks</th>
+              <th class="sn-cell">SN</th>
+              <th class="emp-img">Image</th>
+              <th class="emp-proximity">Proximity Code</th>
+              <th class="emp-remark">Remarks</th>
               <th>Status</th>
               <th>Register</th>
               <th>Update</th>
@@ -204,7 +201,11 @@ if ($databaseConnected) {
             </tr>
           </thead>
           <tbody id="employeeTableBody">
-            <!-- Data will be loaded here -->
+            <tr>
+              <td colspan="15" style="text-align:center;padding:40px;color:#aaa;">
+                Loading…
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -257,10 +258,10 @@ if ($databaseConnected) {
 
       <!-- FOOTER -->
       <div class="modal-footer">
-        <button type="submit" form="employeeForm" class="btn btn-success">
+        <button type="submit" form="employeeForm" class="btn btn-success" tabindex="-1">
           <i class="fas fa-save"></i> Save Proximity Code
         </button>
-        <button type="button" class="btn btn-secondary" onclick="closeModal()">
+        <button type="button" class="btn btn-secondary" tabindex="-1" onclick="closeModal()">
           <i class="fas fa-times"></i> Cancel
         </button>
       </div>
@@ -284,8 +285,8 @@ if ($databaseConnected) {
         </div>
       </div>
 
-      <button id="confirmDeleteBtn" class="btn btn-danger">Delete</button>
-      <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
+      <button id="confirmDeleteBtn" class="btn btn-danger" tabindex="-1">Delete</button>
+      <button type="button" class="btn btn-secondary" tabindex="-1" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
     </div>
   </div>
 
@@ -326,7 +327,7 @@ if ($databaseConnected) {
               <label for="dataFile">
                 <div class="download-label">Select File</div>
               </label>
-              <a href="#" onclick="excelProxCodeTemplate()" style="display: flex; align-items: center; gap: 5px; margin-left: auto; text-decoration: none; color: #007bff;">
+              <a href="#" tabindex="-1" onclick="excelProxCodeTemplate()" style="display: flex; align-items: center; gap: 5px; margin-left: auto; text-decoration: none; color: #007bff;">
                 <i class="fas fa-download"></i> Download Excel Template
               </a>
             </div>
@@ -353,13 +354,13 @@ if ($databaseConnected) {
 
       <!-- FOOTER -->
       <div class="modal-footer">
-        <button type="button" class="btn btn-primary" onclick="previewFile()">
+        <button type="button" class="btn btn-primary" tabindex="-1" onclick="previewFile()">
           <i class="fas fa-list-ul"></i> Preview
         </button>
-        <button type="submit" class="btn btn-import">
+        <button type="submit" class="btn btn-import" tabindex="-1">
           <i class="fas fa-upload"></i> Import
         </button>
-        <button type="button" class="btn btn-secondary" onclick="closeModal()">
+        <button type="button" class="btn btn-secondary" tabindex="-1" onclick="closeModal()">
           <i class="fas fa-times"></i> Cancel
         </button>
       </div>

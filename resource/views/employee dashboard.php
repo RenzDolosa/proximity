@@ -481,7 +481,7 @@ if ($databaseConnected) {
 
             <?php if ($access['datalog']): ?>
               <div style="margin-top: 16px; text-align: center; border-top: 1px solid var(--border); padding-top: 14px;">
-                <a href="../../app/services/table panel.php?tab=datalog" class="btn-link">
+                <a href="../../app/services/table panel.php?tab=datalog" class="btn-link" tabindex="-1">
                   <i class="fas fa-history" style="margin-right:4px;"></i>View All Logs
                 </a>
               </div>

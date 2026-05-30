@@ -7,3 +7,7 @@ backup
 GADGETTRACKER
 GADGETTRACKER.zip
 htdocs.zip
+
+device-ping.php
+device-push.php
+device-push-debug.php

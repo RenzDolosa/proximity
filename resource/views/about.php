@@ -46,11 +46,11 @@ $access = getMenuAccess();
       </div>
       <div class="hero-text">
         <h1>Proximity System</h1>
-        <p>Empower your business with a smart employee proximity management platform featuring seamless attendance tracking, secure access control, and real-time analytics.</p>
+        <p>Empower your business with a smart employee proximity management platform featuring seamless attendance tracking, facial identification, secure access control, and real-time analytics.</p>
         <div class="hero-meta">
           <span class="hero-badge">
             <i class="fas fa-code-branch"></i>
-            <span id="about-version">Version 2.2.12</span>
+            <span id="about-version">Version 2.3.13</span>
           </span>
           <span class="hero-badge muted">
             <i class="fas fa-map-marker-alt"></i> Proximity · Philippines
@@ -73,6 +73,23 @@ $access = getMenuAccess();
       <div class="card-body notif-body">
 
         <div class="notif-item notif-new">
+          <div class="notif-dot green"></div>
+          <div class="notif-content">
+            <div class="notif-header">
+              <span class="notif-tag green">New</span>
+              <span class="notif-version">v2.3.13</span>
+              <span class="notif-date">May 2026</span>
+            </div>
+            <div class="notif-title">Facial Identification, Attendance Log Table & Admin Panel</div>
+            <div class="notif-desc">
+              <strong>Facial Identification:</strong> Camera-based employee recognition powered by face-api.js. Detects and matches faces against enrolled employee photos in real time, triggers audio feedback on match, and records the attendance event automatically.<br>
+              <strong>Attendance Log Table:</strong> Dedicated view over the <code>employee_attendance_log</code> table with daily stat cards (total scanned, active, inactive, today) and a paginated, filterable log joined with employee names.<br>
+              <strong>Admin Panel:</strong> System-level management for privileged users — user group creation, JSON-based permission assignment per group, action gating (add, edit, delete, export, import), and system audit logs. Admins bypass all permission checks automatically.
+            </div>
+          </div>
+        </div>
+
+        <div class="notif-item">
           <div class="notif-dot green"></div>
           <div class="notif-content">
             <div class="notif-header">
@@ -162,6 +179,22 @@ $access = getMenuAccess();
             </div>
 
             <div class="feature-item">
+              <div class="feature-icon indigo"><i class="fas fa-camera"></i></div>
+              <div>
+                <div class="fi-title">Facial Identification</div>
+                <div class="fi-desc">Camera-based employee recognition using face-api.js — matches live feed against enrolled employee photos and records attendance automatically.</div>
+              </div>
+            </div>
+
+            <div class="feature-item">
+              <div class="feature-icon teal"><i class="fas fa-calendar-check"></i></div>
+              <div>
+                <div class="fi-title">Attendance Log Table</div>
+                <div class="fi-desc">Dedicated <code>employee_attendance_log</code> view with daily stat cards and a paginated, filterable log joined with employee names.</div>
+              </div>
+            </div>
+
+            <div class="feature-item">
               <div class="feature-icon green"><i class="fas fa-users"></i></div>
               <div>
                 <div class="fi-title">Employee Manager</div>
@@ -182,6 +215,14 @@ $access = getMenuAccess();
               <div>
                 <div class="fi-title">Role-Based Access Control</div>
                 <div class="fi-desc">JSON-driven permissions per user group — page visibility, action gating, AJAX 403, and portal protection.</div>
+              </div>
+            </div>
+
+            <div class="feature-item">
+              <div class="feature-icon red"><i class="fas fa-tools"></i></div>
+              <div>
+                <div class="fi-title">Admin Panel</div>
+                <div class="fi-desc">System-level management for privileged users: user group control, permission assignment, and system audit logs.</div>
               </div>
             </div>
 
@@ -251,6 +292,20 @@ $access = getMenuAccess();
             </div>
 
             <div class="tl-item">
+              <div class="tl-dot green"></div>
+              <div class="tl-label">✔ Released</div>
+              <div class="tl-title">Facial Identification</div>
+              <div class="tl-desc">Camera-based employee recognition via face-api.js with automatic attendance recording on match.</div>
+            </div>
+
+            <div class="tl-item">
+              <div class="tl-dot green"></div>
+              <div class="tl-label">✔ Released</div>
+              <div class="tl-title">Attendance Log Table</div>
+              <div class="tl-desc">Dedicated attendance log view with daily stat cards, pagination, and employee-joined records from <code>employee_attendance_log</code>.</div>
+            </div>
+
+            <div class="tl-item">
               <div class="tl-dot amber"></div>
               <div class="tl-label">🔄 In Progress</div>
               <div class="tl-title">Enhanced Manual Input v2</div>
@@ -285,11 +340,12 @@ $access = getMenuAccess();
           <span class="tech-pill"><i class="fab fa-js" style="color:#ca8a04;"></i> Vanilla JS</span>
           <span class="tech-pill"><i class="fas fa-chart-bar" style="color:#ec4899;"></i> Chart.js</span>
           <span class="tech-pill"><i class="fas fa-broadcast-tower" style="color:#16a34a;"></i> Web NFC API</span>
+          <span class="tech-pill"><i class="fas fa-camera" style="color:#6366f1;"></i> face-api.js</span>
           <span class="tech-pill"><i class="fab fa-font-awesome" style="color:#528dd7;"></i> Font Awesome 6</span>
           <span class="tech-pill"><i class="fas fa-box" style="color:#f59e0b;"></i> Composer / Dotenv</span>
-          <span class="tech-pill"><i class="fab fa-github" style="color:#6366f1;"></i> GitHub</span>
           <span class="tech-pill"><i class="fas fa-volume-up" style="color:#0d9488;"></i> Web Audio API</span>
           <span class="tech-pill"><i class="fas fa-file-excel" style="color:#16a34a;"></i> PhpSpreadsheet</span>
+          <span class="tech-pill"><i class="fab fa-github" style="color:#6366f1;"></i> GitHub</span>
         </div>
       </div>
     </div>
@@ -366,7 +422,7 @@ $access = getMenuAccess();
             <i class="fas fa-shield-alt sn-icon"></i>
             <div>
               <div class="sn-title">Security & Privacy</div>
-              <div class="sn-desc">Employee data is stored locally in your own MySQL database. No data is shared with third parties. All access is protected by session-based authentication, CSRF tokens, and role-based permission gating.</div>
+              <div class="sn-desc">Employee data is stored locally in your own MySQL database. No data is shared with third parties. All access is protected by session-based authentication, CSRF tokens, and role-based permission gating. Facial identification runs entirely in-browser — no biometric data is transmitted to external servers.</div>
             </div>
           </div>
 
@@ -387,12 +443,12 @@ $access = getMenuAccess();
       try {
         const vTag = window.parent?.document?.getElementById('version');
         if (vTag && vTag.textContent.trim()) {
-          // Strip the FA icon text node — keep only the readable label
           const raw = vTag.textContent.trim();
           verEl.textContent = raw.replace(/^\s*\S+\s*/, '').trim() || raw;
         }
       } catch (e) {
-        /* cross-origin fallback: leave default */ }
+        /* cross-origin fallback: leave default */
+      }
     })();
 
     // ── Notification count badge ──

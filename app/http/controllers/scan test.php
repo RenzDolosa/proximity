@@ -47,7 +47,7 @@ $email = $_SESSION['email'] ?? '';
     </div>
   </background>
 
-  <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close" onclick="window.history.back()">
+  <div id="closeButton" class="close-button" tabindex="-1" role="button" aria-label="Close" onclick="window.history.back()">
     <i class="fas fa-times"></i>
   </div>
 

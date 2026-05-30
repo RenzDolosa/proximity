@@ -111,7 +111,7 @@
 .form-row-btn {
   display: inline-flex;
   gap: 1rem;
-  padding-bottom: 1rem;
+  /* padding-bottom: 1rem; */
   flex-wrap: wrap;
 }
 

@@ -1,5 +1,5 @@
 <?php
-// app/services/datalog.php --> datalog table
+// app/services/attendancelog.php --> attendance log table
 
 require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../config/db.php';
@@ -12,48 +12,40 @@ if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') &&
   exit;
 }
 
-requireAccess('datalog', 'proximity-code.php');
+requireAccess('attendance', 'proximity-code.php');
 $access = getMenuAccess();
 
 $stats = [
-  'total_scanned' => 0,
-  'active_employees' => 0,
+  'total_scanned'     => 0,
+  'active_employees'  => 0,
   'inactive_employees' => 0,
-  'today_attendance' => 0,
+  'today_attendance'  => 0,
 ];
 
 $recentLogs = [];
-$settings = [];
+$settings   = [];
 
 if ($databaseConnected) {
   try {
-    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log");
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_attendance_log");
     $stmt->execute();
     $stats['total_scanned'] = $stmt->fetchColumn();
 
-    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE status = 'Active'");
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_attendance_log WHERE status = 'Active'");
     $stmt->execute();
     $stats['active_employees'] = $stmt->fetchColumn();
 
-    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE status = 'Inactive'");
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_attendance_log WHERE status = 'Inactive'");
     $stmt->execute();
     $stats['inactive_employees'] = $stmt->fetchColumn();
 
-    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE DATE(access_timestamp) = CURDATE()");
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_attendance_log WHERE DATE(access_timestamp) = CURDATE()");
     $stmt->execute();
     $stats['today_attendance'] = $stmt->fetchColumn();
 
-    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'IN' AND DATE(access_timestamp) = CURDATE()");
-    $stmt->execute();
-    $stats['today_in'] = $stmt->fetchColumn();
-
-    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'OUT' AND DATE(access_timestamp) = CURDATE()");
-    $stmt->execute();
-    $stats['today_out'] = $stmt->fetchColumn();
-
     $stmt = $userDb->prepare("
             SELECT el.*, e.fullname
-            FROM employee_access_log el
+            FROM employee_attendance_log el
             JOIN employees e ON el.employee_id = e.id
             ORDER BY el.access_timestamp DESC
             LIMIT 10
@@ -142,12 +134,6 @@ if ($databaseConnected) {
             <input type="hidden" id="search_violation_val" name="violation">
           </div>
 
-          <!-- Check IN/OUT -->
-          <div class="search-group" style="position:relative;">
-            <input type="text" id="search_in-out" placeholder="Check In/Out" autocomplete="off" readonly style="cursor:pointer;">
-            <input type="hidden" id="search_in-out_val" name="check_status">
-          </div>
-
           <!-- Gate -->
           <div class="search-group" style="position:relative;">
             <input type="text" id="search_user_id" placeholder="Gate" autocomplete="off" readonly style="cursor:pointer;">
@@ -171,13 +157,12 @@ if ($databaseConnected) {
           <div class="clear-btn">
             <button type="button" class="btn btn-secondary" onclick="clearSearch()"><i class="fas fa-search-minus"></i> Clear</button>
           </div>
-          <?php if (canAccess($permissions, 'export-datalog')) : ?>
+          <?php if (canAccess($permissions, 'export-attendance')) : ?>
             <div class="dropdown">
               <button class="btn add-dropdown" id="exportTrigger" onclick="toggleExportOptions()">
                 <img src="/../../resource/assets/icon/excel.svg" style="height: 20px; filter: invert(1);"> Export Data
                 <span class="add-arrow">▼</span>
               </button>
-
               <div class="add-options-menu" id="exportOptionsMenu">
                 <button style="display:flex; align-items:center;" onclick="exportAllData(); hideExportOptions();"><img src="/../../resource/assets/icon/excel.svg" style="height: 20px; margin-right: 5px;">Export All Data</button>
                 <button style="display:flex; align-items:center;" onclick="exportFilteredData(); hideExportOptions();"><img src="/../../resource/assets/icon/excel.svg" style="height: 20px; margin-right: 5px;">Export Filtered Data</button>
@@ -186,7 +171,7 @@ if ($databaseConnected) {
               </div>
             </div>
           <?php endif; ?>
-          <?php if (canAccess($permissions, 'delete-datalog')) : ?>
+          <?php if (canAccess($permissions, 'delete-attendance')) : ?>
             <div class="delete-all-btn">
               <button type="button" class="btn btn-danger" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All Data</button>
             </div>
@@ -211,10 +196,6 @@ if ($databaseConnected) {
             <div id="lastUpdateTime"></div>
             <div id="autoUpdateNotification"></div>
           </div>
-          <!-- <div style="position: absolute; top: 0; right: 0; padding: 10px 50px 0px 0px; justify-content: end; pointer-events: none;">
-            <div id="lastUpdateTime"></div>
-            <div id="autoUpdateNotification"></div>
-          </div> -->
           <div class="filter-status" id="filter-status"></div>
         </div>
       </div>
@@ -223,7 +204,7 @@ if ($databaseConnected) {
     <!-- Alert Messages -->
     <div class="alert-container" id="alertContainer"></div>
 
-    <!-- ── Employee Log Data table ─────────────────────────────────────────────── -->
+    <!-- ── Attendance Log Data table ─────────────────────────────────────────────── -->
     <div class="data-table">
       <div class="table-header">
         <h3>Scanned Records</h3>
@@ -248,11 +229,6 @@ if ($databaseConnected) {
             <p>Scanned Today</p>
             <h3 id="today_attendance"><?php echo $stats['today_attendance']; ?></h3>
           </div>
-          <div style="display: flex; gap: 10px; align-items: center;"><i class="fas fa-calendar-day" style="font-size:10px;"></i>
-            <h3 id="today_in" class="check-in">IN : <?php echo $stats['today_in'] ?? 0; ?></h3>
-            <p>&</p>
-            <h3 id="today_out" class="check-out">OUT : <?php echo $stats['today_out'] ?? 0; ?></h3>
-          </div>
         </div>
       </div>
       <div class="table-scroll-wrap">
@@ -263,20 +239,19 @@ if ($databaseConnected) {
               <th>Fullname</th>
               <th>Brand / Department</th>
               <th>Shift</th>
-              <th class="emp-remark">Remarks</th> <!-- Violation -->
+              <th class="emp-remark">Remarks</th>
               <th class="emp-img">Image</th>
               <th class="emp-proximity">Proximity Code</th>
               <th>Timestamp</th>
-              <th>Check Status</th>
               <th>Gate / Operator</th>
-              <?php if (canAccess($permissions, 'delete-single-datalog')) : ?>
+              <?php if (canAccess($permissions, 'delete-single-attendance')) : ?>
                 <th>Actions</th>
               <?php endif; ?>
             </tr>
           </thead>
           <tbody id="employeeTableBody">
             <tr>
-              <td colspan="15" style="text-align:center;padding:40px;color:#aaa;">
+              <td colspan="10" style="text-align:center;padding:40px;color:#aaa;">
                 Loading…
               </td>
             </tr>
@@ -286,8 +261,8 @@ if ($databaseConnected) {
 
       <div id="no-data" class="no-data" style="display: none;">
         <div class="no-data-icon">📋</div>
-        <h3>No Employee Data Found</h3>
-        <p>Try adjusting your search criteria or load all employees to get started.</p>
+        <h3>No Attendance Data Found</h3>
+        <p>Try adjusting your search criteria or load all records to get started.</p>
       </div>
     </div>
   </div>
@@ -303,18 +278,15 @@ if ($databaseConnected) {
     <div class="modal-delete-content">
       <span class="close" onclick="closeModal()"><i class="fas fa-times"></i></span>
       <div class="modal-header">
-        <h2 id="deleteModalTitle">Delete Employee</h2>
+        <h2 id="deleteModalTitle">Delete Record</h2>
       </div>
-
       <div class="modal-body">
-        <p id="deleteModalMessage">Are you sure you want to delete this employee?</p>
-
+        <p id="deleteModalMessage">Are you sure you want to delete this record?</p>
         <div id="confirmationContainer" style="display: none; margin-top: 20px;">
           <label for="confirmationInput" style="display: block; margin-bottom: 10px; font-weight: bold;">Type "DELETE ALL" to confirm:</label>
           <input type="text" id="confirmationInput" placeholder="Type DELETE ALL" style="margin-bottom: 10px;" />
         </div>
       </div>
-
       <button id="confirmDeleteBtn" class="btn btn-danger">Delete</button>
       <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
     </div>
@@ -355,27 +327,17 @@ if ($databaseConnected) {
 
     (function() {
       if (window.innerWidth > 640) return;
-
       let clone = null;
-
       document.addEventListener('touchstart', function(e) {
         const img = e.target.closest('.employee-image');
         if (!img) return;
-
         e.preventDefault();
-
         const rect = img.getBoundingClientRect();
         const cloneSize = 130;
-
         let left = rect.left;
         let top = rect.top - cloneSize - 8;
-
         if (top < 8) top = rect.bottom + 8;
-
-        if (left + cloneSize > window.innerWidth - 8) {
-          left = window.innerWidth - cloneSize - 8;
-        }
-
+        if (left + cloneSize > window.innerWidth - 8) left = window.innerWidth - cloneSize - 8;
         clone = document.createElement('img');
         clone.src = img.src;
         clone.className = 'img-zoom-clone';
@@ -384,38 +346,34 @@ if ($databaseConnected) {
         clone.style.width = cloneSize + 'px';
         clone.style.height = cloneSize + 'px';
         document.body.appendChild(clone);
-
       }, {
         passive: false
       });
-
       document.addEventListener('touchend', function() {
         if (clone) {
           clone.remove();
           clone = null;
         }
       });
-
       document.addEventListener('touchcancel', function() {
         if (clone) {
           clone.remove();
           clone = null;
         }
       });
-
     })();
   </script>
 
   <script>
     window.PERMISSIONS = {
-      delete: <?= json_encode(canAccess($permissions, 'delete-single-datalog')) ?>
+      delete: <?= json_encode(canAccess($permissions, 'delete-single-attendance')) ?>
     };
   </script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="../../resource/js/dtl.js"></script>
+  <script src="../../resource/js/attendancelog.js"></script>
   <script src="../../resource/js/btn.js"></script>
-  <script src="../../resource/js/ea-dtl.js"></script>
+  <script src="../../resource/js/ea-attendancelog.js"></script>
   <script src="../../resource/js/opt-btn.js"></script>
   <script src="../../resource/js/loading.js"></script>
   <script src="../../resource/js/req.js"></script>

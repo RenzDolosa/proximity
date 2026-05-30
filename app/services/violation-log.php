@@ -5,12 +5,15 @@ require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../config/db.php';
 
 $permissions = getUserGroupPermissions();
-if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog')) {
+if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') && !canAccess($permissions, 'proximity-code') && !canAccess($permissions, 'remarks')) {
   echo '<!DOCTYPE html><html><body><script>
-    if (window.top !== window.self) { window.top.history.back(); } else { window.history.back(); }
-  </script></body></html>';
+        if (window.top !== window.self) { window.top.history.back(); } else { window.history.back(); }
+    </script></body></html>';
   exit;
 }
+
+requireAccess('remarks', 'system.php');
+$access = getMenuAccess();
 
 $stats = [
   'total_violations'   => 0,
@@ -46,159 +49,17 @@ if ($databaseConnected) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Violation Log</title>
+  <title><?php echo htmlspecialchars($myDatabase); ?> - Remarks Log</title>
   <link rel="icon" href="../../resource/assets/icon/database-icon.png" type="image/png">
+  <link rel="stylesheet" href="../../resource/css/system.css">
+  <link rel="stylesheet" href="../../resource/css/ptl.css">
   <link rel="stylesheet" href="../../resource/css/modal.css">
   <link rel="stylesheet" href="../../resource/css/btn.css">
   <link rel="stylesheet" href="../../resource/css/pg.css">
   <link rel="stylesheet" href="../../resource/css/loading.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
-    /* ── Reset & base ─────────────────────────────────────────────── */
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: "Roboto", "Arial", sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      color: #333;
-      cursor: default;
-    }
-
-    /* ── Scrollbar ────────────────────────────────────────────────── */
-    ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: rgba(102, 126, 234, .5);
-      border-radius: 10px;
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-      background: rgba(118, 75, 162, .8);
-    }
-
-    * {
-      scrollbar-width: thin;
-      scrollbar-color: rgba(102, 126, 234, .5) transparent;
-    }
-
-    /* ── Container ────────────────────────────────────────────────── */
-    .container {
-      position: relative;
-      margin: 0 auto;
-      padding: 1rem 1rem;
-      padding-bottom: 50px;
-    }
-
-    /* ── Controls bar (sticky) ────────────────────────────────────── */
-    .controls {
-      position: sticky;
-      top: 0;
-      z-index: 200;
-      background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%);
-      padding: 1rem 1.5rem;
-      border-radius: 10px;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, .25);
-      margin-bottom: 1rem;
-      transition: all .3s ease;
-      isolation: isolate;
-    }
-
-    .search-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-      padding-bottom: 10px;
-    }
-
-    .search-group {
-      flex: 1 1 140px;
-      min-width: 120px;
-    }
-
-    .search-group input,
-    .search-group select {
-      width: 100%;
-      padding: 8px 10px;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      font-size: 13px;
-      background: #fff;
-      outline: none;
-      transition: border-color .15s;
-    }
-
-    .search-group input:focus,
-    .search-group select:focus {
-      border-color: #667eea;
-    }
-
-    .form-row-btn .form-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-    }
-
     /* ── Data table card ──────────────────────────────────────────── */
-    .data-table {
-      background: transparent;
-      border-radius: 10px;
-      overflow: hidden;
-      transition: all .3s ease;
-      padding-bottom: 85px;
-    }
-
-    .table-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 10px;
-      background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
-      color: white;
-      padding: 1rem;
-      cursor: default;
-    }
-
-    .table-header h3 {
-      font-size: clamp(.9rem, 2vw, 1.1rem);
-      font-weight: 600;
-    }
-
-    .vio-stats {
-      display: flex;
-      gap: 24px;
-    }
-
-    .vio-stats>div {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-
-    .vio-stats p {
-      font-size: 13px;
-      opacity: .9;
-    }
-
-    .vio-stats h3 {
-      font-size: 18px;
-      font-weight: 700;
-    }
-
     .stat-dot {
       width: 20px;
       height: 20px;
@@ -219,75 +80,6 @@ if ($databaseConnected) {
 
     .stat-dot.people {
       background: rgba(100, 255, 180, .25);
-    }
-
-    .table-scroll-wrap {
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      width: 100%;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      min-width: 640px;
-    }
-
-    thead tr {
-      background: #f8f9fa;
-    }
-
-    th {
-      padding: 10px 12px;
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .5px;
-      color: #495057;
-      border-bottom: 2px solid #e9ecef;
-      white-space: nowrap;
-    }
-
-    td {
-      padding: 10px 12px;
-      border-bottom: 1px solid #f0f0f0;
-      vertical-align: middle;
-      font-size: 13px;
-      background: #fff;
-      cursor: default;
-    }
-
-    tbody tr:hover td {
-      background: #f8f9ff;
-    }
-
-    tbody tr:last-child td {
-      border-bottom: none;
-    }
-
-    tbody tr:last-child td:first-child {
-      border-bottom-left-radius: 10px;
-    }
-
-    tbody tr:last-child td:last-child {
-      border-bottom-right-radius: 10px;
-    }
-
-    .sn-cell {
-      color: #aaa;
-      font-size: 12px;
-      width: 44px;
-    }
-
-    .emp-name {
-      font-weight: 600;
-      color: #1a202c;
-    }
-
-    .emp-id {
-      font-size: 11px;
-      color: #718096;
-      margin-top: 2px;
     }
 
     .badge {
@@ -330,65 +122,9 @@ if ($databaseConnected) {
       color: #4a5568;
     }
 
-    /* ── No data ──────────────────────────────────────────────────── */
-    .no-data {
-      background: #fff;
-      border-bottom-left-radius: 10px;
-      border-bottom-right-radius: 10px;
-      text-align: center;
-      padding: 60px 20px;
-      color: #6c757d;
-    }
-
-    .no-data-icon {
-      font-size: 4rem;
-      margin-bottom: 16px;
-      opacity: .4;
-    }
-
     /* ── Delete confirmation modal ────────────────────────────────── */
-    .modal-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, .45);
-      z-index: 1000;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-
     .modal-overlay.open {
       display: flex;
-    }
-
-    .modal-delete-content {
-      background: #fff;
-      border-radius: 12px;
-      width: 100%;
-      max-width: 420px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, .18);
-      padding: 24px;
-    }
-
-    .modal-delete-content h2 {
-      font-size: 17px;
-      font-weight: 700;
-      margin-bottom: 14px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .modal-delete-content p {
-      font-size: 14px;
-      color: #4a5568;
-      line-height: 1.6;
-      margin-bottom: 20px;
-    }
-
-    .modal-delete-content p strong {
-      color: #c53030;
     }
 
     .modal-footer {
@@ -397,86 +133,37 @@ if ($databaseConnected) {
       justify-content: flex-end;
     }
 
-    /* ── Alert ────────────────────────────────────────────────────── */
-    .alert {
-      position: fixed;
-      right: 0;
-      bottom: 0;
-      padding: .5rem 1rem;
-      margin: 1rem;
+    .f-group {
+      position: relative;
+    }
+
+    .f-group:has(input[type="date"]) {
       border-radius: 8px;
-      font-weight: 500;
-      font-size: 13px;
-      z-index: 99999;
-      opacity: 1;
-      animation: slideInRight .3s ease-in-out;
     }
 
-    .alert-success {
-      background: #d4edda;
-      color: #155724;
-      border: 1px solid #c3e6cb;
+    .f-group input[type="date"] {
+      position: relative;
+      z-index: 0;
     }
 
-    .alert-error {
-      background: #f8d7da;
-      color: #721c24;
-      border: 1px solid #f5c6cb;
+    .f-group input[type="date"]:focus {
+      box-shadow: none;
+      outline: none;
     }
 
-    .alert-info {
-      background: #d7e5f8;
-      color: #1c6172;
-      border: 1px solid #c6d4f5;
+    .f-group:has(input[type="date"]:focus) {
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      border-radius: 8px;
     }
 
-    @keyframes slideInRight {
-      from {
-        transform: translateX(100%);
-        opacity: 0;
-      }
-
-      to {
-        transform: translateX(0);
-        opacity: 1;
-      }
-    }
-
-    /* ── Responsive ───────────────────────────────────────────────── */
-    @media (max-width: 640px) {
-      .container {
-        padding: 0.75rem;
-        padding-bottom: 80px;
-      }
-
-      .controls {
-        padding: .75rem;
-      }
-
-      .search-group {
-        flex: 1 1 100%;
-        min-width: unset;
-      }
-
-      .table-header {
-        flex-direction: column;
-        gap: 10px;
-      }
-
-      .vio-stats {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        width: 100%;
-      }
-
-      .vio-stats>div {
-        font-size: 12px;
-      }
-
-      table {
-        font-size: 12px;
-      }
+    .f-group input[type="date"]~.fl-label {
+      top: 0;
+      transform: translateY(-50%);
+      font-size: 0.75rem;
+      color: #667eea;
+      background: linear-gradient(to bottom, transparent 52%, #fff 50%);
+      z-index: 10;
+      position: absolute;
     }
   </style>
 </head>
@@ -518,22 +205,24 @@ if ($databaseConnected) {
             <option value="">Default: ALL Types</option>
           </select>
         </div>
-        <div class="search-group">
-          <input type="date" id="f_from" onchange="applyFilters()" title="Date from">
+        <div class="search-group f-group">
+          <input type="date" id="f_from" onchange="applyFilters()" title="Date from" placeholder=" ">
+          <label class="fl-label" for="f_from">From</label>
         </div>
-        <div class="search-group">
-          <input type="date" id="f_to" onchange="applyFilters()" title="Date to">
+        <div class="search-group f-group">
+          <input type="date" id="f_to" onchange="applyFilters()" title="Date to" placeholder=" ">
+          <label class="fl-label" for="f_to">To</label>
         </div>
       </div>
       <div class="form-row-btn">
         <div class="form-row">
           <div>
-            <button type="button" class="btn btn-primary" onclick="applyFilters()">
+            <button type="button" class="btn btn-primary" tabindex="-1" onclick="applyFilters()">
               <i class="fas fa-search"></i> Search
             </button>
           </div>
           <div>
-            <button type="button" class="btn btn-secondary" onclick="clearFilters()">
+            <button type="button" class="btn btn-secondary" tabindex="-1" onclick="clearFilters()">
               <i class="fas fa-search-minus"></i> Clear
             </button>
           </div>
@@ -542,22 +231,25 @@ if ($databaseConnected) {
       </div>
     </div>
 
+    <!-- Alert Messages -->
+    <div class="alert-container" id="alertContainer"></div>
+
     <!-- ── Data table ─────────────────────────────────────────────── -->
     <div class="data-table">
       <div class="table-header">
-        <h3>Violation Records</h3>
-        <div class="vio-stats">
-          <div>
+        <h3>Remarks Records</h3>
+        <div class="emp-records">
+          <div style="display: flex; gap: 10px;">
             <div class="stat-dot total"><i class="fas fa-gavel" style="font-size:10px;"></i></div>
             <p>Total</p>
             <h3 id="statTotal"><?= $stats['total_violations'] ?></h3>
           </div>
-          <div>
+          <div style="display: flex; gap: 10px;">
             <div class="stat-dot people"><i class="fas fa-users" style="font-size:10px;"></i></div>
             <p>Violators</p>
             <h3 id="statAffected"><?= $stats['employees_affected'] ?></h3>
           </div>
-          <div>
+          <div style="display: flex; gap: 10px;">
             <div class="stat-dot monthly"><i class="fas fa-calendar-alt" style="font-size:10px;"></i></div>
             <p>This Month</p>
             <h3 id="statMonth"><?= $stats['this_month'] ?></h3>
@@ -575,14 +267,14 @@ if ($databaseConnected) {
               <th>Description</th>
               <th>Violation Date</th>
               <th>Recorded</th>
-              <?php if (canAccess($permissions, 'delete-violation')) : ?>
+              <?php if (canAccess($permissions, 'delete-remarks')) : ?>
                 <th>Actions</th>
               <?php endif; ?>
             </tr>
           </thead>
           <tbody id="violationTableBody">
             <tr>
-              <td colspan="7" style="text-align:center;padding:40px;color:#aaa;">
+              <td colspan="15" style="text-align:center;padding:40px;color:#aaa;">
                 Loading…
               </td>
             </tr>
@@ -598,8 +290,11 @@ if ($databaseConnected) {
     </div>
   </div>
 
-  <!-- ── Fixed pagination (pg.css) ──────────────────────────────────── -->
-  <div class="pagination" id="pagination" style="display:none;"></div>
+  <div class="pagination" id="pagination" style="display: none;">
+    <button onclick="previousPage()" id="prev-btn"><i class="fas fa-arrow-left"></i> Previous</button>
+    <span id="page-info">Page 1 of 1</span>
+    <button onclick="nextPage()" id="next-btn">Next <i class="fas fa-arrow-right"></i></button>
+  </div>
 
   <!-- ── Delete confirm modal ───────────────────────────────────────── -->
   <!-- <div class="modal-overlay" id="confirmModal">
@@ -634,14 +329,14 @@ if ($databaseConnected) {
           <input type="text" id="confirmationInput" placeholder="Type DELETE ALL" style="margin-bottom: 10px;" />
         </div>
       </div>
-      <button type="button" id="confirmDeleteBtn" class="btn btn-danger" onclick="executeDelete()">Delete</button>
-      <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
+      <button type="button" id="confirmDeleteBtn" class="btn btn-danger" tabindex="-1" onclick="executeDelete()">Delete</button>
+      <button type="button" class="btn btn-secondary" tabindex="-1" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
     </div>
   </div>
 
   <script>
     window.PERMISSIONS = {
-      delete: <?= json_encode(canAccess($permissions, 'delete-violation')) ?>
+      delete: <?= json_encode(canAccess($permissions, 'delete-remarks')) ?>
     };
   </script>
 
@@ -878,7 +573,7 @@ if ($databaseConnected) {
             <td class="sn-cell">${sn}</td>
             <td>
               <div class="emp-name">${esc(v.employee_name || 'Unknown')}</div>
-              <div class="emp-id">ID: ${esc(String(v.employee_id))}</div>
+              <div class="emp-id"><strong>EMPID: ${esc(String(v.employee_id))}</strong></div>
             </td>
             <td><span class="badge ${badge}">${esc(v.violation_type || '—')}</span></td>
             <td class="desc-cell">${esc(v.violation_description || '—')}</td>
@@ -889,6 +584,7 @@ if ($databaseConnected) {
             <td>
               <button
                 class="btn btn-danger"
+                tabindex="-1"
                 style="padding:5px 12px;font-size:12px;"
                 onclick="openConfirm(${v.id}, '${esc(v.employee_name || '')}', '${esc(v.violation_type || '')}')"
                 title="Delete">
@@ -933,7 +629,7 @@ if ($databaseConnected) {
       let prev = null,
         html = '';
 
-      html += `<button class="page-arrow-btn" onclick="goTo(${currentPage - 1})"
+      html += `<button class="page-arrow-btn" tabindex="-1" onclick="goTo(${currentPage - 1})"
                  ${currentPage <= 1 ? 'disabled' : ''}>
                  <i class="fas fa-arrow-left"></i>
                </button>`;
@@ -942,12 +638,12 @@ if ($databaseConnected) {
         if (prev !== null && p - prev > 1) {
           html += `<span class="page-ellipsis">…</span>`;
         }
-        html += `<button class="page-num-btn ${currentPage === p ? 'active' : ''}"
+        html += `<button class="page-num-btn ${currentPage === p ? 'active' : ''}" tabindex="-1"
                    onclick="goTo(${p})">${p}</button>`;
         prev = p;
       }
 
-      html += `<button class="page-arrow-btn" onclick="goTo(${currentPage + 1})"
+      html += `<button class="page-arrow-btn" tabindex="-1" onclick="goTo(${currentPage + 1})"
                  ${currentPage >= totalPages ? 'disabled' : ''}>
                  <i class="fas fa-arrow-right"></i>
                </button>`;

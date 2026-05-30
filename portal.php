@@ -1132,7 +1132,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       <?php if ($access['proximity']): ?>
         <div class="nav-item" onclick="window.location.href='proximity.php';">
-          <img src="resource/assets/icon/nfc-icon.svg" alt="NFC Icon" loading="lazy" style="width: 20px; filter: invert(0.8);"> <span class="nav-item-label">Proximity</span>
+          <img src="resource/assets/icon/nfc-icon.svg" alt="NFC Icon" loading="lazy" style="width: 20px; filter: invert(0.9);"> <span class="nav-item-label">Proximity</span>
+        </div>
+      <?php endif; ?>
+
+      <?php if ($access['facial']): ?>
+        <div class="nav-item" onclick="window.location.href='proximity.php?page=facial-identification';">
+          <img src="resource/assets/icon/face-id.svg" alt="Face ID" loading="lazy" style="width: 20px; filter: invert(1);"> <span class="nav-item-label">Facial Identification</span>
         </div>
       <?php endif; ?>
 
@@ -1194,8 +1200,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <!-- Scrollable body: live alerts injected here by notifications.js + static changelog -->
           <div class="nd-scroll-body" id="ndScrollBody">
 
-            <!-- v2.2.12 — NEW -->
+            <!-- v2.3.13 — NEW -->
             <div class="nd-item nd-new">
+              <div class="nd-dot green"></div>
+              <div class="nd-content">
+                <div class="nd-row">
+                  <span class="nd-tag green">New</span>
+                  <span class="nd-ver">v2.3.13</span>
+                  <span class="nd-date">May 2026</span>
+                </div>
+                <div class="nd-title-text">Facial Identification, Attendance Log Table & Admin Panel</div>
+                <div class="nd-desc">Camera-based employee recognition via face-api.js, dedicated attendance log view with daily stats, and system-level admin panel for user group &amp; permission management.</div>
+              </div>
+            </div>
+
+            <!-- v2.2.12 -->
+            <div class="nd-item">
               <div class="nd-dot green"></div>
               <div class="nd-content">
                 <div class="nd-row">
@@ -1375,13 +1395,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </button>
 
     <!-- Scanned Log / Employee Dashboard -->
-    <?php if ($access['employee dashboard']): ?>
-      <button class="bn-item" id="bn-dash"
-        onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=employee dashboard';">
-        <i class="fas fa-list-alt"></i>
-        <span class="bn-label">Log</span>
-      </button>
-    <?php endif; ?>
+    <button class="bn-item" id="bn-dash"
+      onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=employee dashboard';">
+      <i class="fas fa-list-alt"></i>
+      <span class="bn-label">Log</span>
+    </button>
 
     <!-- Invisible spacer to hold center slot -->
     <div class="bn-item" style="visibility: hidden; pointer-events: none;" aria-hidden="true"></div>
@@ -1399,14 +1417,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <span class="bn-label">NFC</span>
     </button>
 
-    <!-- Admin Panel -->
-    <?php if ($access['admin panel']): ?>
-      <button class="bn-item" id="bn-admin"
-        onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=admin panel';">
-        <i class="fas fa-user-shield"></i>
-        <span class="bn-label">Admin</span>
-      </button>
-    <?php endif; ?>
+    <!-- Face ID -->
+    <button class="bn-item" id="bn-facial"
+      onclick="document.querySelector('.frames').src='/app/services/facial-identification.php';">
+      <img src="resource/assets/icon/face-id.svg" alt="Face ID" loading="lazy" style="width: 20px; filter: invert(1);">
+      <span class="bn-label">Face ID</span>
+    </button>
 
     <!-- Settings -->
     <button class="bn-item" id="bn-settings"
@@ -1465,7 +1481,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const notifPip = document.getElementById('notifPip');
     const ndBadge = document.getElementById('ndBadge');
 
-    const NOTIF_KEY = 'notif_seen_v2212';
+    const NOTIF_KEY = 'notif_seen_v2313';
 
     function openNotif() {
       notifDropdown.classList.add('open');
