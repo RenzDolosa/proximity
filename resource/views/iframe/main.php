@@ -490,7 +490,7 @@ if ($databaseConnected) {
               <?php endif; ?>
 
               <?php if ($access['m-i v2']): ?>
-                <div class="menu-card" onclick="navigateWithLoading('../../../app/services/attendancelog.php');">
+                <div class="menu-card" onclick="navigateWithLoading('../../../tests/m-i v2.php');">
                   <div class="mc-icon" style="background:#f8fafc; color:#94a3b8;">
                     <img src="../../assets/logo/coming-soon.svg" alt="Coming Soon" style="width:26px;height:26px;object-fit:contain;">
                   </div>
