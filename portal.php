@@ -1328,7 +1328,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
           <?php endif; ?>
           <hr class="dropdown-divider">
-          <a class="dropdown-item danger" href="?logout=1">
+          <a class="dropdown-item danger" tabindex="-1" href="?logout=1">
             <i class="fas fa-sign-out-alt"></i> Logout
           </a>
         </div>

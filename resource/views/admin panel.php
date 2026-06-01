@@ -618,17 +618,30 @@ function renderBindRows(array $pages, int $depth = 0): void
       padding: 0;
     }
 
+    :root {
+      --accent: #2563eb;
+      --accent-light: #eff6ff;
+      --bg: #f0f2f5;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --danger: #dc2626;
+      --danger-light: #ff6f6f;
+      --radius: 8px;
+    }
+
     body {
       font-family: sans-serif;
-      background: #f5f5f5;
+      background: var(--bg);
     }
 
     /* ── Tab navigation ── */
     .tab-nav {
       display: flex;
       align-items: flex-end;
-      background: #fff;
-      border-bottom: 1px solid #e0e0e0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
       padding: 0 16px;
       position: sticky;
       top: 0;
@@ -658,28 +671,29 @@ function renderBindRows(array $pages, int $depth = 0): void
     }
 
     .tab-btn:hover {
-      color: #222;
+      background: var(--bg);
+      color: var(--accent);
     }
 
     .tab-btn.active {
-      color: #222;
+      color: var(--accent);
       font-weight: 500;
-      border-bottom-color: #5340d8;
+      border-bottom-color: var(--accent);
     }
 
     .tab-btn .tab-badge {
       font-size: 11px;
-      background: #f0f0f0;
-      color: #888;
+      background: var(--bg);
+      color: var(--text-muted);
       border-radius: 999px;
       padding: 2px 8px;
-      border: 1px solid #e0e0e0;
+      border: 1px solid var(--border);
     }
 
     .tab-btn.active .tab-badge {
-      background: #eeedfe;
-      color: #534ab7;
-      border-color: #afa9ec;
+      background: var(--accent-light);
+      color: var(--accent);
+      border-color: var(--accent);
     }
 
     .tab-badge {

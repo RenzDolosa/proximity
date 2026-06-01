@@ -23,7 +23,7 @@ if (!isset($_SESSION['login_attempts'])) {
 
 $current_time    = time();
 $lockout_seconds = 3 * 60; // 3 minutes
-$max_attempts    = 5;
+$max_attempts    = 10;
 
 if (
   $_SESSION['login_attempts'] >= $max_attempts &&

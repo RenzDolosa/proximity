@@ -16,14 +16,16 @@
   --border: #e2e8f0;
   --text: #1e293b;
   --text-muted: #64748b;
+  --danger: #dc2626;
+  --danger-light: #ff6f6f;
   --radius: 8px;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: sans-serif;
   background: var(--bg);
   color: var(--text);
-  font-size: 14px;
+  font-size: 16px;
   overflow: hidden;
   height: 100vh;
   display: flex;
@@ -32,32 +34,34 @@ body {
 
 /* ── Shortcut bar ── */
 .shortcut-bar {
+  display: flex;
+  align-items: flex-end;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  padding: 0 20px;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  overflow-x: auto;
-  min-height: 46px;
-  flex-shrink: 0;
+  padding: 0 16px;
+  position: sticky;
+  top: 0;
+  z-index: 999;
 }
 
 .shortcut-item {
   display: flex;
-  flex-direction: row;
   align-items: center;
   gap: 3px;
-  padding: 6px 14px;
-  cursor: pointer;
-  border-radius: 6px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  transition:
-    background 0.15s,
-    color 0.15s;
+  padding: 14px 20px;
   font-size: 12px;
-  min-width: 64px;
+  font-weight: 400;
+  height: 46px;
+  color: #666;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+  white-space: nowrap;
 }
 
 .shortcut-item i {
