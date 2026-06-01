@@ -113,7 +113,7 @@ switch ($url) {
         </div>
       </div>
 
-      <button type="submit" class="btn" id="submitBtn">
+      <button type="submit" class="btn" tabindex="-1"id="submitBtn">
         <span class="loading"></span>
         Sign In &amp; Access Database
       </button>

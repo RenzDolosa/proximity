@@ -216,13 +216,13 @@ if (!$portalAccessGranted) {
             autocomplete="current-password"
             autofocus
             <?= (isset($attempts) && $attempts >= 5) ? 'disabled' : '' ?>>
-          <button type="button" tabindex="-1" class="password-toggle-btn" id="togglePassword" aria-label="Toggle password visibility">
+          <button type="button" class="password-toggle-btn" tabindex="-1" id="togglePassword" aria-label="Toggle password visibility">
             <i class="fas fa-eye"></i>
           </button>
         </div>
         <button
           type="submit"
-          class="unlock-button"
+          class="unlock-button" tabindex="-1"
           <?= (isset($attempts) && $attempts >= 5) ? 'disabled' : '' ?>>
           <?= (isset($attempts) && $attempts >= 5) ? 'Access Blocked' : 'Unlock Portal' ?>
         </button>

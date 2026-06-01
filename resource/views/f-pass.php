@@ -126,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <input type="email" id="email" name="email" value="<?php echo htmlspecialchars($email); ?>">
       </div>
 
-      <button type="submit" class="btn">Send Reset Instructions</button>
+      <button type="submit" class="btn" tabindex="-1">Send Reset Instructions</button>
     </form>
 
     <div class="login-link">
