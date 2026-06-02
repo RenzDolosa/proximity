@@ -171,11 +171,11 @@ try {
   <script src="../../../resource/js/ver.js"></script>
   <script>
     let employees = <?php echo $employeesJson; ?>;
-    let hasSearched = false; // Track if user has performed a search
+    let hasSearched = false;
 
     let currentAudio = null;
 
-    // ── Global-audio endpoint (relative to the scan controller page) ─────────
+    // ── Global-audio endpoint ─────────────────────────────────────────
     const GLOBAL_AUDIO_ENDPOINT = "../../services/global_audio.php";
 
     const AUDIO_TYPE_MAP = {

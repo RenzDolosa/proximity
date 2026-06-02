@@ -258,23 +258,6 @@ textarea:focus {
   transform: translateX(22px);
 }
 
-.status-enabled {
-  background: #dcfce7;
-  color: #15803d;
-  padding: 2px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-}
-.status-disabled {
-  background: #fee2e2;
-  color: #b91c1c;
-  padding: 2px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
 /* ── Floating label groups ──────────────────────────── */
 .fl-group {
   position: relative;

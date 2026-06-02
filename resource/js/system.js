@@ -1,5 +1,8 @@
 // resource/js/system.js --> system table
 
+const EmployeesBackend = "manpower_backend.php";
+const ProxcodeBackend = "proxcode_backend.php";
+
 let currentAction = "add";
 let employees = [];
 
@@ -59,69 +62,6 @@ function hideAllSuggestions(scope) {
     const owner = document.getElementById(ul.dataset.ownerInput);
     if (owner && scope.contains(owner)) ul.style.display = "none";
   });
-}
-
-function escapeHtml(str) {
-  if (str === null || str === undefined) return "";
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-function toProperCase(str) {
-  if (!str) return "";
-  const spaced = String(str).replace(/([a-z])([A-Z])/g, "$1 $2");
-  return spaced.replace(/[^\s,\-]+/g, function (txt) {
-    return txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase();
-  });
-}
-
-function formatDateDisplay(dateStr) {
-  if (!dateStr || dateStr === "—") return "—";
-  const [y, m, d] = String(dateStr).split("-");
-  if (!y || !m || !d) return escapeHtml(dateStr);
-  const date = new Date(Number(y), Number(m) - 1, Number(d));
-  if (isNaN(date.getTime())) return escapeHtml(dateStr);
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-  });
-}
-
-function calcAge(dateStr) {
-  if (!dateStr) return null;
-  const [y, m, d] = String(dateStr).split("-").map(Number);
-  if (!y || !m || !d) return null;
-  const today = new Date();
-  let age = today.getFullYear() - y;
-  const notYetThisYear =
-    today.getMonth() + 1 < m ||
-    (today.getMonth() + 1 === m && today.getDate() < d);
-  if (notYetThisYear) age--;
-  return age >= 0 ? age : null;
-}
-
-function calcTenure(dateStr) {
-  if (!dateStr) return null;
-  const [y, m, d] = String(dateStr).split("-").map(Number);
-  if (!y || !m || !d) return null;
-  const today = new Date();
-  let years = today.getFullYear() - y;
-  let months = today.getMonth() + 1 - m;
-  if (today.getDate() < d) months--;
-  if (months < 0) {
-    years--;
-    months += 12;
-  }
-  if (years < 0) return null;
-  if (years === 0 && months === 0) return "< 1 mo";
-  if (years === 0) return `${months} mo${months !== 1 ? "s" : ""}`;
-  if (months === 0) return `${years} yr${years !== 1 ? "s" : ""}`;
-  return `${years} yr${years !== 1 ? "s" : ""} ${months} mo${months !== 1 ? "s" : ""}`;
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -642,10 +582,10 @@ function setupModalSuggestions() {
       onFocus: async () => {
         try {
           const [proxRes, allEmpRes] = await Promise.all([
-            fetch("proxcode_backend.php?action=get", {
+            fetch(`${ProxcodeBackend}?action=get`, {
               headers: { "X-Requested-With": "XMLHttpRequest" },
             }),
-            fetch("manpower_backend.php?action=get&page=1&limit=1", {
+            fetch(`${EmployeesBackend}?action=get&page=1&limit=1`, {
               headers: {
                 "X-Requested-With": "XMLHttpRequest",
                 "X-Silent-Request": "true",
@@ -835,7 +775,7 @@ const playWarningSound = () => playSound("warningSound");
 
 async function syncOrphanStatuses() {
   try {
-    const response = await fetch("proxcode_backend.php?action=sync_orphans", {
+    const response = await fetch(`${ProxcodeBackend}?action=sync_orphans`, {
       headers: {
         "X-Requested-With": "XMLHttpRequest",
         "X-Silent-Request": "true",
@@ -859,7 +799,7 @@ async function syncOrphanStatuses() {
 async function loadEmployeeData(employeeId) {
   try {
     const response = await fetch(
-      `manpower_backend.php?action=get_single&id=${encodeURIComponent(employeeId)}`,
+      `${EmployeesBackend}?action=get_single&id=${encodeURIComponent(employeeId)}`,
       {
         headers: {
           "X-Requested-With": "XMLHttpRequest",
@@ -919,7 +859,7 @@ async function updateTotalEmployees() {
 
 async function updateActiveEmployees() {
   try {
-    const res = await fetch("manpower_backend.php?action=stats", {
+    const res = await fetch(`${EmployeesBackend}?action=stats`, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     const data = await res.json();
@@ -1049,14 +989,16 @@ async function renderEmployeeTable() {
   const paginationDiv = document.getElementById("pagination");
   const noDataDiv = document.getElementById("no-data");
 
-  if (employees.length === 0) {
+  if (!tbody) return;
+
+  if (!employees || employees.length === 0) {
     tbody.innerHTML = "";
-    paginationDiv.style.display = "none";
-    noDataDiv.style.display = "block";
+    if (paginationDiv) paginationDiv.style.display = "none";
+    if (noDataDiv) noDataDiv.style.display = "block";
     return;
   }
 
-  noDataDiv.style.display = "none";
+  if (noDataDiv) noDataDiv.style.display = "none";
 
   const currentEmployees = employees;
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -1069,8 +1011,8 @@ async function renderEmployeeTable() {
       const safeStatus = escapeHtml(employee.status);
       const safeShift = escapeHtml(employee.shift);
       const safeGender = escapeHtml(employee.gender || "—");
-      const safeBirth = formatDateDisplay(employee.birth);
-      const safeHired = formatDateDisplay(employee.hired);
+      const safeBirth = formatDateDisplay(employee.birth || "—");
+      const safeHired = formatDateDisplay(employee.hired || "—");
       const safeViolation = escapeHtml(employee.violation);
       const safeQrCode = escapeHtml(employee.qr_code);
       const safeImage = escapeHtml(employee.image);
@@ -1087,8 +1029,8 @@ async function renderEmployeeTable() {
 
       const isAboveFold = index < 5;
 
-      const thumbSrc = `${window.location.origin}/public/uploads/user/thumb_${safeImage}`;
-      const imageSrc = `${window.location.origin}/public/uploads/user/${safeImage}`;
+      const thumbSrc = `${window.location.origin}/../public/uploads/user/thumb_${safeImage}`;
+      const imageSrc = `${window.location.origin}/../public/uploads/user/${safeImage}`;
 
       const numericId = parseInt(employee.id, 10);
 
@@ -1096,11 +1038,11 @@ async function renderEmployeeTable() {
           <tr>
             <td class="sn-cell">${startIndex + index + 1}</td>
             <td>
-              <div><strong>${toProperCase(safeFullname)}</strong></div>
+              <div class="emp-name"><strong>${toProperCase(safeFullname)}</strong></div>
               <div class="emp-id"><strong>EMPID: ${safeId}</strong></div>
             </td>
             <td>
-              <div>${toProperCase(safeBrand)}</div>
+              <div><small>${toProperCase(safeBrand)}</small></div>
               <div class="emp-position"><strong>Position: ${toProperCase(safePosition)}</strong></div>
             </td>
             <td>
@@ -1115,12 +1057,10 @@ async function renderEmployeeTable() {
                       data-emp-id="${safeId}"
                       data-fullname="${toProperCase(safeFullname)}"
                       data-violation="${safeViolation}"
+                      class="remarks-item"
                       tabindex="-1"
                       onclick="openViolationPopupFromBtn(this)"
-                      style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
-                        font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
-                        border:0.5px solid #fca5a5;border-radius:6px;
-                        background:#fff5f5;color:#e53e3e;">
+                      title="${escapeHtml(safeViolation)}">
                       <i class="fas fa-exclamation-triangle" style="font-size:10px;"></i>
                     </button>`
                     : ""
@@ -1130,13 +1070,11 @@ async function renderEmployeeTable() {
                     ? `<button
                       data-emp-id="${safeId}"
                       data-fullname="${toProperCase(safeFullname)}"
+                      class="seemore-item"
                       tabindex="-1"
                       onclick="openViolationsModalFromBtn(this)"
-                      style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
-                        font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;
-                        border:0.5px solid #f59e0b;border-radius:6px;
-                        background:#fffbeb;color:#b45309;">
-                      &#9888; See more
+                      title="View All Remarks">
+                      See more. . .
                     </button>`
                     : `<span style="color:#aaa;font-size:11px;font-style:italic;">None</span>`
                 }
@@ -1155,10 +1093,15 @@ async function renderEmployeeTable() {
                     </div>`
                 : `<div class="ph-cont"><div class="employee-ph">${escapeHtml(fullnameInitials)}</div></div>`
             }</td>
-            <td class="emp-proximity" data-qr="${safeQrCode}" onclick="copyQRCodeFromCell(this)" title="Copy Proximity code" style="cursor:pointer;">
-              <img src="../../resource/assets/icon/nfc-icon.svg" alt="Copy Proximity code" loading="lazy" style="width: 20px; height: 20px;"></td>
+            <td data-qr="${safeQrCode}" class="emp-proximity" onclick="copyQRCodeFromCell(this)" title="Copy Proximity code" style="cursor:pointer;">
+              <svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 512 512">
+                <path d="M0 0 C1.8671875 1.1328125 1.8671875 1.1328125 3.6875 2.4375 C4.32945312 2.88867188 4.97140625 3.33984375 5.6328125 3.8046875 C12.06627036 8.87576605 16.39227202 15.57014088 20.6875 22.4375 C21.34621094 23.46746094 22.00492187 24.49742187 22.68359375 25.55859375 C51.23747477 74.33574664 50.67378716 139.45530043 36.90576172 192.44628906 C32.19944267 209.92529327 25.88960765 232.01237335 9.6875 242.4375 C2.18206673 245.55178766 -6.35065802 244.93076013 -13.875 241.9375 C-19.14967759 239.24807732 -23.73112419 235.58208816 -28.37744141 231.94384766 C-31.42555165 229.5710442 -34.50536176 227.24019229 -37.58105469 224.90332031 C-40.30508099 222.83314006 -43.02599356 220.75892945 -45.74609375 218.68359375 C-51.09985975 214.5993256 -56.45591129 210.51806505 -61.8125 206.4375 C-63.56251122 205.10418139 -65.3125112 203.77084803 -67.0625 202.4375 C-67.92875 201.7775 -68.795 201.1175 -69.6875 200.4375 C-72.3125 198.4375 -74.9375 196.4375 -77.5625 194.4375 C-78.42907227 193.7772583 -79.29564453 193.1170166 -80.18847656 192.43676758 C-81.9352363 191.10589527 -83.68198114 189.7750034 -85.42871094 188.4440918 C-89.85316371 185.07294264 -94.27788987 181.70215338 -98.703125 178.33203125 C-106.74477361 172.20728725 -114.78445594 166.08006898 -122.8125 159.9375 C-124.89869859 158.34220087 -126.98498216 156.74701295 -129.07128906 155.15185547 C-130.64134924 153.95087915 -132.21097407 152.74933357 -133.78027344 151.54736328 C-139.06420007 147.50114011 -144.35941498 143.47036492 -149.66503906 139.45263672 C-152.30619108 137.44230209 -154.93073125 135.41161082 -157.5546875 133.37890625 C-159.22341526 132.10605854 -160.89266422 130.83389376 -162.5625 129.5625 C-163.31192871 128.973479 -164.06135742 128.38445801 -164.83349609 127.77758789 C-169.81057833 124.0261219 -174.12716029 122.26475737 -180.3125 121.4375 C-183.02071018 131.93181446 -180.27502005 142.64420844 -178.4375 153.0625 C-169.81571431 202.54806425 -169.81571431 202.54806425 -179.3125 216.4375 C-183.81158383 221.30840894 -188.4569437 223.48711211 -195 223.875 C-202.53024915 223.69570835 -208.61065492 220.30643654 -214.0625 215.25 C-235.32229346 192.09379304 -236.87144312 154.02810893 -236.64868164 124.47436523 C-236.62489127 121.10962175 -236.62817992 117.74566707 -236.63476562 114.38085938 C-236.61485561 98.21599681 -235.96840475 82.30978699 -232 66.5625 C-231.7827124 65.68174805 -231.5654248 64.80099609 -231.34155273 63.89355469 C-228.32415574 52.08493076 -224.01327523 38.4774837 -213.3125 31.4375 C-207.94979312 28.26702055 -202.32020821 28.27153031 -196.3125 29.4375 C-192.09096398 31.83748382 -188.60139581 34.76885808 -184.98046875 37.98339844 C-182.20688021 40.40135706 -179.28405319 42.62373022 -176.375 44.875 C-175.19827495 45.79958133 -174.02249634 46.72536844 -172.84765625 47.65234375 C-169.33864683 50.41751679 -165.82593816 53.17795747 -162.3125 55.9375 C-158.85820963 58.65086594 -155.40433949 61.36475356 -151.953125 64.08203125 C-145.42264114 69.22176392 -138.87500641 74.33870342 -132.3125 79.4375 C-125.18920722 84.97200443 -118.08553308 90.5305816 -110.99804688 96.11083984 C-108.10441177 98.38836203 -105.20833448 100.66277541 -102.3125 102.9375 C-98.85822649 105.65088743 -95.40433952 108.36475354 -91.953125 111.08203125 C-85.42264114 116.22176392 -78.87500641 121.33870342 -72.3125 126.4375 C-66.88571801 130.65388559 -61.46481919 134.87730466 -56.0625 139.125 C-55.50264404 139.56497314 -54.94278809 140.00494629 -54.3659668 140.45825195 C-51.48061532 142.72725785 -48.59952425 145.00149711 -45.72265625 147.28125 C-40.27313516 151.59474817 -34.80485176 155.88519191 -29.25 160.0625 C-28.41339844 160.69414062 -27.57679688 161.32578125 -26.71484375 161.9765625 C-24.19631168 163.50815761 -22.21601235 164.0545055 -19.3125 164.4375 C-9.10480357 144.85115863 -9.46577344 119.72535392 -13.3125 98.4375 C-13.44188965 97.72094238 -13.5712793 97.00438477 -13.70458984 96.26611328 C-16.41204935 82.09248627 -21.16605208 68.59405778 -26.03466797 55.04760742 C-36.42156063 25.92954697 -36.42156063 25.92954697 -31.3125 11.4375 C-28.62882779 5.94656542 -25.48071594 1.42886825 -19.71484375 -0.97265625 C-13.28256384 -2.551964 -6.11637655 -2.78675144 0 0 Z " transform="translate(236.3125,130.5625)"/>
+                <path d="M0 0 C7.26898446 5.49051451 11.12104728 13.12410054 14.86499023 21.22119141 C15.38407959 22.3255957 15.90316895 23.43 16.43798828 24.56787109 C20.45869356 33.24832584 24.00310046 42.01248934 27.07055664 51.07080078 C27.89188276 53.48783179 28.74235191 55.89333608 29.59545898 58.29931641 C40.66219268 89.95873469 47.45564462 123.20833432 51.86499023 156.40869141 C52.01597168 157.46862305 52.16695313 158.52855469 52.32250977 159.62060547 C57.62579224 197.87060185 57.53667483 239.22115111 51.86499023 277.40869141 C51.75328491 278.17000366 51.64157959 278.93131592 51.52648926 279.71569824 C44.84488014 324.89943161 34.52877403 370.10531454 15.23999023 411.72119141 C14.71791992 412.85935303 14.71791992 412.85935303 14.18530273 414.02050781 C10.73888282 421.22680468 6.8187842 427.9459778 -0.38500977 431.84619141 C-1.23579102 432.31927734 -2.08657227 432.79236328 -2.96313477 433.27978516 C-9.56903839 436.7134293 -17.95627341 436.58533559 -25.10375977 434.57275391 C-34.22746272 430.37697693 -39.07560744 423.70052165 -42.60375977 414.51025391 C-44.26729381 404.79815073 -40.52962578 396.01127593 -37.19750977 387.03369141 C-36.69985116 385.66426811 -36.20345328 384.29438606 -35.70825195 382.92407227 C-34.44084721 379.42358825 -33.16170697 375.92754294 -31.87823486 372.43292236 C-4.95643159 299.10931181 6.14218564 223.84268686 -7.13500977 146.40869141 C-7.33046387 145.26513184 -7.52591797 144.12157227 -7.72729492 142.94335938 C-12.97285106 113.28242678 -22.1294479 84.52830799 -32.95629883 56.46923828 C-34.90837902 51.40062245 -36.81137668 46.3146536 -38.69750977 41.22119141 C-39.03226318 40.34213135 -39.3670166 39.46307129 -39.71191406 38.55737305 C-42.8745721 30.01394836 -44.20515601 22.22660004 -41.13500977 13.40869141 C-37.00136999 6.07564003 -30.98784591 0.31936144 -22.82641602 -2.08349609 C-15.41735805 -3.48143156 -6.60210421 -4.24441332 0 0 Z " transform="translate(457.135009765625,39.59130859375)"/>
+                <path d="M0 0 C7.7953733 6.55087912 11.53280265 15.42090184 15.76171875 24.48046875 C16.21248779 25.42623779 16.21248779 25.42623779 16.67236328 26.39111328 C32.79347085 60.37055554 41.01469222 99.12019718 43.76171875 136.48046875 C43.84784424 137.63232666 43.93396973 138.78418457 44.02270508 139.97094727 C44.70961576 149.9186128 44.96372734 159.82288009 44.94921875 169.79296875 C44.9486145 170.57115967 44.94801025 171.34935059 44.9473877 172.15112305 C44.86205494 213.03175637 39.27908005 253.78261823 25.76171875 292.48046875 C25.54225586 293.12983398 25.32279297 293.77919922 25.09667969 294.44824219 C22.06669035 303.37564745 18.30612776 311.93862076 14.32421875 320.48046875 C13.66063354 321.93211426 13.66063354 321.93211426 12.98364258 323.41308594 C8.16614773 333.51922856 2.51180624 340.64351445 -8.23828125 344.48046875 C-15.51757393 346.36861293 -22.88142079 345.56051826 -29.66015625 342.32421875 C-36.6807156 338.08361243 -40.72768524 332.46294914 -43.61328125 324.85546875 C-44.82485584 318.31296596 -44.11503764 313.00984918 -41.92578125 306.79296875 C-41.66651855 306.03169678 -41.40725586 305.2704248 -41.14013672 304.48608398 C-39.03740869 298.44503522 -36.674312 292.51824245 -34.28662109 286.58520508 C-25.49835099 264.71401966 -18.71381467 242.82167184 -15.23828125 219.48046875 C-15.12790527 218.75907715 -15.0175293 218.03768555 -14.90380859 217.29443359 C-12.61763113 202.16245899 -11.99860109 187.1316376 -11.98828125 171.85546875 C-11.98760651 170.9523999 -11.98693176 170.04933105 -11.98623657 169.11889648 C-12.004413 153.72566925 -12.76618222 138.70236989 -15.23828125 123.48046875 C-15.40457031 122.45179688 -15.57085937 121.423125 -15.7421875 120.36328125 C-20.15914921 94.12325688 -28.74989237 69.44819755 -38.22216797 44.68334961 C-38.54515366 43.83860077 -38.86813934 42.99385193 -39.20091248 42.12350464 C-39.81211422 40.52893154 -40.42580218 38.93530844 -41.04237366 37.34280396 C-44.73911997 27.728458 -45.20499335 20.16167797 -41.23828125 10.48046875 C-37.39094926 2.85330181 -31.0596262 -0.57634285 -23.23828125 -3.51953125 C-15.04641976 -5.32005608 -6.94554092 -5.02952963 0 0 Z " transform="translate(358.23828125,85.51953125)"/>
+              </svg>
+            </td>
             <td><small>${safeCreatedAt}</small></td>
-            <td><small>${safeUpdatedAt}</small></td>
+            <td class="emp-updatedAt"><small>${safeUpdatedAt}</small></td>
 
             ${
               window.PERMISSIONS.manualInOut ||
@@ -1170,25 +1113,10 @@ async function renderEmployeeTable() {
 
               <!-- ACTIONS TOGGLE -->
               <button
-                onclick="toggleActionsPanel(this)"
                 data-emp-id="${safeId}"
-                class="actions-toggle-btn"
+                class="actions-toggle-btn actions-item"
                 tabindex="-1"
-                style="
-                  width: 100%;
-                  padding: 6px 12px;
-                  font-size: 12px;
-                  font-weight: 700;
-                  letter-spacing: 1px;
-                  border: 1.5px solid #cbd5e1;
-                  border-radius: 10px;
-                  background: #fff;
-                  color: #1e293b;
-                  cursor: pointer;
-                  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-                  white-space: nowrap;
-                "
-              >
+                onclick="toggleActionsPanel(this)">
                 ACTIONS
               </button>
 
@@ -1204,33 +1132,20 @@ async function renderEmployeeTable() {
                   <button
                     data-emp-id="${numericId}"
                     data-check-status="IN"
+                    class="manual-checkin"
+                    tabindex="-1"
                     onclick="addToLogFromBtn(this)"
-                    title="Check: IN"
-                    style="
-                      display:flex; align-items:center; justify-content:center; gap:5px;
-                      padding: 7px 4px;
-                      font-size: 11px; font-weight: 700;
-                      background: linear-gradient(135deg, #4ade80, #16a34a);
-                      color: #fff; border: none;
-                      border-right: 1px solid #e2e8f0;
-                      cursor: pointer;
-                    ">
-                    <span style="width:7px;height:7px;background:#fff;border-radius:50%;display:inline-block;box-shadow:0 0 0 1.5px #15803d;"></span> IN
+                    title="Check: IN">
+                    <span class="check-dot"></span> IN
                   </button>
                   <button
                     data-emp-id="${numericId}"
                     data-check-status="OUT"
+                    class="manual-checkout"
+                    tabindex="-1"
                     onclick="addToLogFromBtn(this)"
-                    title="Check: OUT"
-                    style="
-                      display:flex; align-items:center; justify-content:center; gap:5px;
-                      padding: 7px 4px;
-                      font-size: 11px; font-weight: 700;
-                      background: linear-gradient(135deg, #fb923c, #ef4444);
-                      color: #fff; border: none;
-                      cursor: pointer;
-                    ">
-                    <span style="width:7px;height:7px;background:#fff;border-radius:50%;display:inline-block;"></span> OUT
+                    title="Check: OUT">
+                    <span class="check-dot"></span> OUT
                   </button>
                 </div>
                 `
@@ -1244,14 +1159,9 @@ async function renderEmployeeTable() {
                 <button
                   data-emp-id="${safeId}"
                   data-fullname="${safeFullname}"
-                  onclick="openLogsModalFromBtn(this)"
-                  style="
-                    width:100%; padding: 7px;
-                    font-size: 12px; font-weight: 700;
-                    background: #fff; color: #0ea5e9;
-                    border: none; border-bottom: 1px solid #e2e8f0;
-                    cursor: pointer; text-align: center;
-                  ">
+                  class="view-logs"
+                  tabindex="-1"
+                  onclick="openLogsModalFromBtn(this)">
                   <i class="fas fa-history"></i> LOGS
                 </button>
                 `
@@ -1264,14 +1174,9 @@ async function renderEmployeeTable() {
                 <!-- EDIT -->
                 <button
                   data-emp-id="${numericId}"
-                  onclick="openEditFromBtn(this)"
-                  style="
-                    width:100%; padding: 7px;
-                    font-size: 12px; font-weight: 700;
-                    background: #fff; color: #6366f1;
-                    border: none; border-bottom: 1px solid #e2e8f0;
-                    cursor: pointer; text-align: center;
-                  ">
+                  class="view-edit"
+                  tabindex="-1"
+                  onclick="openEditFromBtn(this)">
                   <i class="fas fa-edit"></i> EDIT
                 </button>
                 `
@@ -1284,14 +1189,9 @@ async function renderEmployeeTable() {
                 <!-- DELETE -->
                 <button
                   data-emp-id="${safeId}"
-                  onclick="openDeleteFromBtn(this)"
-                  style="
-                    width:100%; padding: 7px;
-                    font-size: 12px; font-weight: 700;
-                    background: #fff; color: #ef4444;
-                    border: none;
-                    cursor: pointer; text-align: center;
-                  ">
+                  class="view-delete"
+                  tabindex="-1"
+                  onclick="openDeleteFromBtn(this)">
                   <i class="fas fa-trash-alt"></i> DELETE
                 </button>
                 `
@@ -1318,7 +1218,6 @@ function toggleActionsPanel(btn) {
   const panel     = btn.parentElement.querySelector(".actions-panel");
   const isAlreadyOpen = panel.classList.contains("actions-open");
 
-  // ── Close all open panels and return them to their original parents ──
   allPanels.forEach((p) => {
     p.classList.remove("actions-open");
     p.style.display = "none";
@@ -1330,7 +1229,6 @@ function toggleActionsPanel(btn) {
 
   if (isAlreadyOpen) return;
 
-  // ── Move panel to <body> to escape all overflow clipping ──
   panel._originalParent = btn.parentElement;
   document.body.appendChild(panel);
 
@@ -1338,17 +1236,14 @@ function toggleActionsPanel(btn) {
   const panelW      = 160;
   const panelH      = panel.scrollHeight || 180;
 
-  // Right-align panel to the right edge of the button
   let left = rect.right - panelW;
-  // Clamp so it never bleeds off-screen
   left = Math.max(8, Math.min(left, window.innerWidth - panelW - 8));
 
-  // Prefer opening upward; fall back to downward if not enough room
   let top;
   if (rect.top >= panelH + 8) {
-    top = rect.top - panelH - 4;   // above the button
+    top = rect.top - panelH - 4;
   } else {
-    top = rect.bottom + 4;          // below the button
+    top = rect.bottom + 4;
   }
 
   panel.style.position  = "fixed";
@@ -2094,7 +1989,7 @@ async function deleteFilteredEmployees() {
       }
     }
 
-    const allRes = await fetch(`manpower_backend.php?${params.toString()}`, {
+    const allRes = await fetch(`${EmployeesBackend}?${params.toString()}`, {
       headers: {
         "X-Requested-With": "XMLHttpRequest",
         "X-Silent-Request": "true",
@@ -2118,7 +2013,7 @@ async function deleteFilteredEmployees() {
     formData.append("employee_ids", JSON.stringify(employeeIds));
     formData.append("filters", JSON.stringify(activeFilters));
 
-    const response = await fetch("manpower_backend.php", {
+    const response = await fetch(`${EmployeesBackend}`, {
       method: "POST",
       body: formData,
       headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -2262,7 +2157,7 @@ async function _renderAccessTab(container, employeeId) {
   if (!_logsCache[employeeId]) {
     try {
       const res = await fetch(
-        `manpower_backend.php?action=get_access_logs&id=${encodeURIComponent(employeeId)}`,
+        `${EmployeesBackend}?action=get_access_logs&id=${encodeURIComponent(employeeId)}`,
         { headers: { "X-Requested-With": "XMLHttpRequest" } },
       );
       const data = await res.json();
@@ -2349,7 +2244,7 @@ async function _renderStatusTab(container, employeeId) {
   if (!_statusHistoryCache[employeeId]) {
     try {
       const res = await fetch(
-        `manpower_backend.php?action=get_status_history&id=${encodeURIComponent(employeeId)}`,
+        `${EmployeesBackend}?action=get_status_history&id=${encodeURIComponent(employeeId)}`,
         { headers: { "X-Requested-With": "XMLHttpRequest" } },
       );
       const data = await res.json();
@@ -2437,7 +2332,7 @@ async function _renderRemarksTab(container, employeeId) {
   if (!_remarksCache[employeeId]) {
     try {
       const res = await fetch(
-        `manpower_backend.php?action=get_violations&id=${encodeURIComponent(employeeId)}`,
+        `${EmployeesBackend}?action=get_violations&id=${encodeURIComponent(employeeId)}`,
         { headers: { "X-Requested-With": "XMLHttpRequest" } },
       );
       const data = await res.json();
@@ -2520,7 +2415,7 @@ async function openViolationsModal(employeeId, fullname) {
 
   try {
     const res = await fetch(
-      `manpower_backend.php?action=get_violations&id=${encodeURIComponent(employeeId)}`,
+      `${EmployeesBackend}?action=get_violations&id=${encodeURIComponent(employeeId)}`,
       { headers: { "X-Requested-With": "XMLHttpRequest" } },
     );
     const data = await res.json();
@@ -2787,7 +2682,7 @@ async function loadEmployees(
       }
     }
 
-    const response = await fetch(`manpower_backend.php?${params.toString()}`, {
+    const response = await fetch(`${EmployeesBackend}?${params.toString()}`, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
@@ -2807,7 +2702,7 @@ async function loadEmployees(
       if (Object.keys(filters).length === 0) {
         allEmployeesUnfiltered = data.filter_options ?? data.data ?? [];
       } else if (allEmployeesUnfiltered.length === 0) {
-        fetch("manpower_backend.php?action=get&page=1&limit=99999", {
+        fetch(`${EmployeesBackend}?action=get&page=1&limit=99999`, {
           headers: {
             "X-Requested-With": "XMLHttpRequest",
             "X-Silent-Request": "true",
@@ -2939,7 +2834,7 @@ async function handleFormSubmit(e) {
 
     try {
       const checkRes = await fetch(
-        `manpower_backend.php?action=get&page=1&limit=1` +
+        `${EmployeesBackend}?action=get&page=1&limit=1` +
           `&id=${encodeURIComponent(empid)}`,
         {
           headers: {
@@ -2986,7 +2881,7 @@ async function handleFormSubmit(e) {
 
     try {
       const nameRes = await fetch(
-        `manpower_backend.php?action=get&page=1&limit=1` +
+        `${EmployeesBackend}?action=get&page=1&limit=1` +
           `&fullname=${encodeURIComponent(fullname)}`,
         {
           headers: {
@@ -3041,7 +2936,7 @@ async function handleFormSubmit(e) {
     if (qrCode) {
       try {
         const qrRes = await fetch(
-          `manpower_backend.php?action=check_qr&qr_code=${encodeURIComponent(qrCode)}`,
+          `${EmployeesBackend}?action=check_qr&qr_code=${encodeURIComponent(qrCode)}`,
           {
             headers: {
               "X-Requested-With": "XMLHttpRequest",
@@ -3100,7 +2995,7 @@ async function handleFormSubmit(e) {
       formData.set("original_id", originalId);
     }
 
-    const response = await fetch("manpower_backend.php", {
+    const response = await fetch(`${EmployeesBackend}`, {
       method: "POST",
       body: formData,
       headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -3264,7 +3159,7 @@ async function deleteEmployee(employeeId) {
     formData.append("action", "delete");
     formData.append("id", employeeId);
 
-    const response = await fetch("manpower_backend.php", {
+    const response = await fetch(`${EmployeesBackend}`, {
       method: "POST",
       body: formData,
       headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -3297,7 +3192,7 @@ async function deleteAllEmployees(employeeId) {
     formData.append("action", "delete_all");
     formData.append("id", employeeId);
 
-    const response = await fetch("manpower_backend.php", {
+    const response = await fetch(`${EmployeesBackend}`, {
       method: "POST",
       body: formData,
       headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -3328,6 +3223,70 @@ async function deleteAllEmployees(employeeId) {
   } finally {
     showLoading(false);
   }
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function toProperCase(str) {
+  if (!str) return "";
+  const spaced = String(str).replace(/([a-z])([A-Z])/g, "$1 $2");
+  return spaced.replace(/[^\s,\-]+/g, function (txt) {
+    return txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase();
+  });
+}
+
+function formatDateDisplay(dateStr) {
+  if (!dateStr || dateStr === "—") return "—";
+  const [y, m, d] = String(dateStr).split("-");
+  if (!y || !m || !d) return escapeHtml(dateStr);
+  const date = new Date(Number(y), Number(m) - 1, Number(d));
+  if (isNaN(date.getTime())) return escapeHtml(dateStr);
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
+
+function calcAge(dateStr) {
+  if (!dateStr) return null;
+  const [y, m, d] = String(dateStr).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const today = new Date();
+  let age = today.getFullYear() - y;
+  const notYetThisYear =
+    today.getMonth() + 1 < m ||
+    (today.getMonth() + 1 === m && today.getDate() < d);
+  if (notYetThisYear) age--;
+  return age >= 0 ? age : null;
+}
+
+function calcTenure(dateStr) {
+  if (!dateStr) return null;
+  const [y, m, d] = String(dateStr).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const today = new Date();
+  let years = today.getFullYear() - y;
+  let months = today.getMonth() + 1 - m;
+  if (today.getDate() < d) months--;
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+  if (years < 0) return null;
+  if (years === 0 && months === 0) return "< 1 mo";
+  if (years === 0) return `${months} mo${months !== 1 ? "s" : ""}`;
+  if (months === 0) return `${years} yr${years !== 1 ? "s" : ""}`;
+  return `${years} yr${years !== 1 ? "s" : ""} ${months} mo${months !== 1 ? "s" : ""}`;
 }
 
 function showAlert(message, type = "info") {

@@ -628,12 +628,12 @@ function renderBindRows(array $pages, int $depth = 0): void
       --text-muted: #64748b;
       --danger: #dc2626;
       --danger-light: #ff6f6f;
+      --warning: #f59e0b;
+      --warning-light: #fffbeb;
+      --success: #15803d;
+      --success-light: #8deda3;
+      --success-sub: #d4edda;
       --radius: 8px;
-    }
-
-    body {
-      font-family: sans-serif;
-      background: var(--bg);
     }
 
     /* ── Tab navigation ── */
@@ -740,37 +740,6 @@ function renderBindRows(array $pages, int $depth = 0): void
     }
 
     /* ── Stats header ── */
-    .stats-header {
-      background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 40%, #5b21b6 100%);
-      padding: 12px 18px;
-      display: flex;
-      align-items: center;
-      gap: 28px;
-      flex-wrap: wrap;
-    }
-
-    .stats-title {
-      color: #fff;
-      font-size: 15px;
-      font-weight: 700;
-      letter-spacing: .3px;
-      margin-right: 10px;
-    }
-
-    .stat-item {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      color: #fff;
-      font-size: 13px;
-      font-weight: 500;
-    }
-
-    .stat-item i {
-      font-size: 14px;
-      opacity: .85;
-    }
-
     .refresh-indicator {
       display: flex;
       align-items: center;
@@ -908,6 +877,13 @@ function renderBindRows(array $pages, int $depth = 0): void
       font-size: 13px;
       font-weight: 700;
       flex-shrink: 0;
+    }
+
+    .sn-cell {
+      color: #aaa;
+      font-size: 12px;
+      text-align: center;
+      width: 50px;
     }
 
     .user-cell {
@@ -1679,24 +1655,6 @@ function renderBindRows(array $pages, int $depth = 0): void
       }
 
       /* ── Stats header ── */
-      .stats-header {
-        padding: 10px 14px;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-
-      .stats-title {
-        font-size: 13px;
-        width: 100%;
-        margin-right: 0;
-        margin-bottom: 2px;
-      }
-
-      .stat-item {
-        font-size: 12px;
-        gap: 5px;
-      }
-
       .refresh-indicator {
         width: 100%;
         margin-left: 0;
@@ -1705,8 +1663,11 @@ function renderBindRows(array $pages, int $depth = 0): void
 
       /* ── Table ── */
       .table-wrap {
+        padding-bottom: 52px;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
+        width: 100%;
+        overflow-y: visible;
       }
 
       table {
@@ -1919,229 +1880,237 @@ function renderBindRows(array $pages, int $depth = 0): void
   </div>
 
   <!-- ══════════════════════════════════════════ TAB: USERS ══ -->
-  <div class="container">
-    <div class="tab-panel active" id="panelUsers">
-      <div class="controls">
-        <div class="search-row">
-          <button class="btn btn-primary" tabindex="-1" onclick="loadUsers()"><i class="fas fa-search"></i> Search</button>
-          <button class="btn btn-secondary" tabindex="-1" onclick="clearUsersSearch()"><i class="fas fa-times"></i> Clear</button>
-          <input id="searchUser" type="text" placeholder="Username" oninput="debounceUsers()" style="width:180px;" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
-          <input id="searchEmail" type="text" placeholder="Email" oninput="debounceUsers()" style="width:200px;" autocomplete="off">
+  <div class="container tab-panel active" id="panelUsers">
+    <div class="controls">
+      <div class="search-row">
+        <button class="btn btn-primary" tabindex="-1" onclick="loadUsers()"><i class="fas fa-search"></i> Search</button>
+        <button class="btn btn-secondary" tabindex="-1" onclick="clearUsersSearch()"><i class="fas fa-times"></i> Clear</button>
+        <input id="searchUser" type="text" placeholder="Username" oninput="debounceUsers()" style="width:180px;" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
+        <input id="searchEmail" type="text" placeholder="Email" oninput="debounceUsers()" style="width:200px;" autocomplete="off">
+        <?php if ($access['users']): ?>
+          <button class="btn btn-add" tabindex="-1" onclick="openAddUser()"><i class="fas fa-user-plus"></i> Add User</button>
+        <?php endif; ?>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="table-header">
+        <span class="table-title">Users</span>
+        <div class="emp-records">
+          <div style="display: flex; gap: 10px;">
+            <span class="stat-item total"><i class="fas fa-users"></i></span>
+            <p>Total <strong id="uStatTotal">—</strong></p>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <span class="stat-item active"><i class="fas fa-sign-in-alt"></i></span>
+            <p>Logged in <strong id="uStatLoggedIn">—</strong></p>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <span class="stat-item inactive"><i class="fas fa-user-clock"></i></span>
+            <p>Never logged <strong id="uStatNever">—</strong></p>
+          </div>
+        </div>
+        <span class="refresh-indicator">
           <?php if ($access['users']): ?>
-            <button class="btn btn-add" tabindex="-1" onclick="openAddUser()"><i class="fas fa-user-plus"></i> Add User</button>
+            <span class="pulse-dot" id="uPulseDot"></span><span>Live</span>
+          <?php else: ?>
+            <span class="pulse-dot2"></span><span>✗ Disconnected</span>
           <?php endif; ?>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="stats-header">
-          <span class="stats-title">Users</span>
-          <span class="stat-item"><i class="fas fa-users"></i> Total <strong id="uStatTotal">—</strong></span>
-          <span class="stat-item"><i class="fas fa-sign-in-alt"></i> Logged in <strong id="uStatLoggedIn">—</strong></span>
-          <span class="stat-item"><i class="fas fa-user-clock"></i> Never logged <strong id="uStatNever">—</strong></span>
-          <span class="refresh-indicator">
-            <?php if ($access['users']): ?>
-              <span class="pulse-dot" id="uPulseDot"></span><span>Live</span>
-            <?php else: ?>
-              <span class="pulse-dot2"></span><span>✗ Disconnected</span>
-            <?php endif; ?>
-          </span>
-        </div>
-        <div class="countdown-bar-wrap">
-          <div class="countdown-bar" id="uCountdownBar"></div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <colgroup>
-              <col style="width:46px">
-              <col style="width:190px">
-              <col style="width:190px">
-              <col style="width:110px">
-              <col style="width:110px">
-              <col style="width:120px">
-              <col style="width:145px">
-              <col style="width:145px">
-              <col style="width:155px">
-            </colgroup>
-            <thead>
-              <tr>
-                <th class="sn-cell">SN</th>
-                <th>Username</th>
-                <th>Email</th>
-                <th>User Group</th>
-                <th>Phone</th>
-                <th>Database</th>
-                <th>Created At</th>
-                <th>Last Login</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="userTableBody">
-              <tr class="empty-row">
-                <td colspan="9"><span class="spinner"></span> Loading users…</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="pagination" id="uPaginationWrap"></div>
-      </div>
-    </div>
-
-    <!-- ══════════════════════════════════════════ TAB: GROUPS ══ -->
-    <div class="tab-panel" id="panelGroup">
-      <div class="controls">
-        <div class="search-row">
-          <button class="btn btn-primary" tabindex="-1" onclick="loadGroups()"><i class="fas fa-search"></i> Search</button>
-          <button class="btn btn-secondary" tabindex="-1" onclick="clearGroupsSearch()"><i class="fas fa-times"></i> Clear</button>
-          <input id="groupSearchInput" type="text" placeholder="Usergroup" oninput="debounceGroups()" style="width:220px;" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
-          <?php if ($access['groups']): ?>
-            <button class="btn btn-add" tabindex="-1" onclick="openAddGroup()"><i class="fas fa-plus"></i> Add Group</button>
-          <?php endif; ?>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="stats-header">
-          <span class="stats-title">User Groups</span>
-          <span class="stat-item"><i class="fas fa-list"></i> Total <strong id="gStatTotal">—</strong></span>
-          <span class="refresh-indicator">
-            <?php if ($access['groups']): ?>
-              <span class="pulse-dot" id="gPulseDot"></span><span>Live</span>
-            <?php else: ?>
-              <span class="pulse-dot2"></span><span>✗ Disconnected</span>
-            <?php endif; ?>
-          </span>
-        </div>
-        <div class="countdown-bar-wrap">
-          <div class="countdown-bar" id="gCountdownBar"></div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <colgroup>
-              <col style="width:46px">
-              <col style="width:200px">
-              <col style="width:130px">
-              <col style="width:90px">
-              <col style="width:155px">
-              <col style="width:155px">
-              <col style="width:160px">
-            </colgroup>
-            <thead>
-              <tr>
-                <th class="sn-cell">SN</th>
-                <th>Group Name</th>
-                <th>Bound Users</th>
-                <th>Status</th>
-                <th>Created At</th>
-                <th>Last Update</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="groupTableBody">
-              <tr class="empty-row">
-                <td colspan="7"><span class="spinner"></span> Loading groups…</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="pagination" id="gPaginationWrap"></div>
-      </div>
-    </div>
-
-    <!-- ══════════════════════════════════════════ TAB: LOGS ══ -->
-    <div class="tab-panel" id="panelLogs">
-      <div class="controls">
-        <div class="search-row">
-          <button class="btn btn-primary" tabindex="-1" onclick="loadLogs()"><i class="fas fa-search"></i> Search</button>
-          <button class="btn btn-secondary" tabindex="-1" onclick="clearLogsSearch()"><i class="fas fa-times"></i> Clear</button>
-          <input id="logSearchInput" type="text" placeholder="Search action, user, IP, details…" oninput="debounceLogs()" style="padding:6px 12px;border:1px solid #ccc;border-radius:5px;font-size:13px;width:220px;">
-          <select id="logActionFilter" onchange="loadLogs()" style="padding:6px 10px;border:1px solid #ccc;border-radius:5px;font-size:13px;">
-            <option value="">All Actions</option>
-          </select>
-          <?php if ($access['system logs']): ?>
-            <button class="btn btn-danger" tabindex="-1" onclick="confirmDeleteAllLogs()"><i class="fas fa-trash"></i> Delete All Data</button>
-          <?php endif; ?>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="stats-header">
-          <span class="stats-title">System Logs</span>
-          <span class="stat-item"><i class="fas fa-list"></i> Total <strong id="lStatTotal">—</strong></span>
-          <span class="stat-item"><i class="fas fa-sign-in-alt"></i> Logins <strong id="lStatLogins">—</strong></span>
-          <span class="stat-item"><i class="fas fa-user-edit"></i> Updates <strong id="lStatUpdates">—</strong></span>
-          <span class="stat-item"><i class="fas fa-trash-alt"></i> Deletions <strong id="lStatDeletes">—</strong></span>
-          <span class="refresh-indicator">
-            <?php if ($access['system logs']): ?>
-              <span class="pulse-dot" id="lPulseDot"></span><span>Live</span>
-            <?php else: ?>
-              <span class="pulse-dot2"></span><span>✗ Disconnected</span>
-            <?php endif; ?>
-          </span>
-        </div>
-        <div class="countdown-bar-wrap">
-          <div class="countdown-bar" id="lCountdownBar"></div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th class="sn-cell">SN</th>
-                <th>Username</th>
-                <th>Action</th>
-                <th>Details</th>
-                <th>IP Address</th>
-                <th>User Agent</th>
-                <th>Created At</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="logTableBody">
-              <tr class="empty-row">
-                <td colspan="8"><span class="spinner"></span> Loading logs…</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="pagination" id="lPaginationWrap"></div>
-      </div>
-    </div>
-
-    <!-- ══════════════════════════════════════════ TAB: MYADMIN ══ -->
-    <div class="tab-panel" id="panelMyadmin">
-      <div class="controls" style="border-radius:0 8px 0 0;">
-        <span style="font-size:13px;font-weight:600;color:#374151;">
-          <i class="fas fa-database" style="color:#7c3aed;margin-right:6px;"></i> Database Export
         </span>
       </div>
-      <div class="panel" style="padding:28px 28px 24px;">
-        <div style="max-width:520px;">
-          <h3 style="font-size:15px;color:#1f2937;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
-            <i class="fas fa-file-export" style="color:#7c3aed;"></i> Export SQL Dump
-          </h3>
-          <p style="font-size:13px;color:#6b7280;margin-bottom:20px;">
-            Export the current database as a <code>.sql</code> file.
-          </p>
-          <div style="margin-bottom:18px;">
-            <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:8px;">Export Mode</label>
-            <div style="display:flex;flex-direction:column;gap:9px;">
-              <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;">
-                <input type="radio" name="exportMode" value="full" checked style="accent-color:#7c3aed;">
-                <span><strong>Structure + Data</strong> — Full export (recommended)</span>
-              </label>
-              <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;">
-                <input type="radio" name="exportMode" value="structure" style="accent-color:#7c3aed;">
-                <span><strong>Structure only</strong> — CREATE TABLE statements, no rows</span>
-              </label>
-              <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;">
-                <input type="radio" name="exportMode" value="data" style="accent-color:#7c3aed;">
-                <span><strong>Data only</strong> — INSERT statements, no schema</span>
-              </label>
-            </div>
+      <div class="countdown-bar-wrap">
+        <div class="countdown-bar" id="uCountdownBar"></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="sn-cell">SN</th>
+              <th>Username</th>
+              <th>Email</th>
+              <th>User Group</th>
+              <th>Phone</th>
+              <th>Database</th>
+              <th>Created At</th>
+              <th>Last Login</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody">
+            <tr class="empty-row">
+              <td colspan="9"><span class="spinner"></span> Loading users…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination" id="uPaginationWrap"></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════ TAB: GROUPS ══ -->
+  <div class="container tab-panel" id="panelGroup">
+    <div class="controls">
+      <div class="search-row">
+        <button class="btn btn-primary" tabindex="-1" onclick="loadGroups()"><i class="fas fa-search"></i> Search</button>
+        <button class="btn btn-secondary" tabindex="-1" onclick="clearGroupsSearch()"><i class="fas fa-times"></i> Clear</button>
+        <input id="groupSearchInput" type="text" placeholder="Usergroup" oninput="debounceGroups()" style="width:220px;" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
+        <?php if ($access['groups']): ?>
+          <button class="btn btn-add" tabindex="-1" onclick="openAddGroup()"><i class="fas fa-plus"></i> Add Group</button>
+        <?php endif; ?>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="table-header">
+        <span class="table-title">User Groups</span>
+        <div class="emp-records">
+          <div style="display: flex; gap: 10px;">
+            <span class="stat-item total"><i class="fas fa-list"></i></span>
+            <p>Total <strong id="gStatTotal">—</strong></p>
           </div>
-          <button class="btn btn-add" style="margin-left:0;" onclick="exportDatabase()">
-            <i class="fas fa-download"></i> Download SQL
-          </button>
-          <div id="exportStatus" style="display:none;margin-top:14px;font-size:13px;color:#6b7280;">
-            <span class="spinner"></span> Preparing export…
+        </div>
+        <span class="refresh-indicator">
+          <?php if ($access['groups']): ?>
+            <span class="pulse-dot" id="gPulseDot"></span><span>Live</span>
+          <?php else: ?>
+            <span class="pulse-dot2"></span><span>✗ Disconnected</span>
+          <?php endif; ?>
+        </span>
+      </div>
+      <div class="countdown-bar-wrap">
+        <div class="countdown-bar" id="gCountdownBar"></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="sn-cell">SN</th>
+              <th>Group Name</th>
+              <th>Bound Users</th>
+              <th>Status</th>
+              <th>Created At</th>
+              <th>Last Update</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="groupTableBody">
+            <tr class="empty-row">
+              <td colspan="7"><span class="spinner"></span> Loading groups…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination" id="gPaginationWrap"></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════ TAB: LOGS ══ -->
+  <div class="container tab-panel" id="panelLogs">
+    <div class="controls">
+      <div class="search-row">
+        <button class="btn btn-primary" tabindex="-1" onclick="loadLogs()"><i class="fas fa-search"></i> Search</button>
+        <button class="btn btn-secondary" tabindex="-1" onclick="clearLogsSearch()"><i class="fas fa-times"></i> Clear</button>
+        <input id="logSearchInput" type="text" placeholder="Search action, user, IP, details…" oninput="debounceLogs()" style="padding:6px 12px;border:1px solid #ccc;border-radius:5px;font-size:13px;width:220px;">
+        <select id="logActionFilter" onchange="loadLogs()" style="padding:6px 10px;border:1px solid #ccc;border-radius:5px;font-size:13px;">
+          <option value="">All Actions</option>
+        </select>
+        <?php if ($access['system logs']): ?>
+          <button class="btn btn-danger" tabindex="-1" onclick="confirmDeleteAllLogs()"><i class="fas fa-trash"></i> Delete All Data</button>
+        <?php endif; ?>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="table-header">
+        <span class="table-title">System Logs</span>
+        <div class="emp-records">
+          <div style="display: flex; gap: 10px;">
+            <span class="stat-item total"><i class="fas fa-list"></i></span>
+            <p>Total <strong id="lStatTotal">—</strong></p>
           </div>
+          <div style="display: flex; gap: 10px;">
+            <span class="stat-item active"><i class="fas fa-sign-in-alt"></i></span>
+            <p>Logins <strong id="lStatLogins">—</strong></p>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <span class="stat-item update"><i class="fas fa-user-edit"></i></span>
+            <p>Updates <strong id="lStatUpdates">—</strong></p>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <span class="stat-item inactive"><i class="fas fa-trash-alt"></i></span>
+            <p>Deletions <strong id="lStatDeletes">—</strong></p>
+          </div>
+        </div>
+        <span class="refresh-indicator">
+          <?php if ($access['system logs']): ?>
+            <span class="pulse-dot" id="lPulseDot"></span><span>Live</span>
+          <?php else: ?>
+            <span class="pulse-dot2"></span><span>✗ Disconnected</span>
+          <?php endif; ?>
+        </span>
+      </div>
+      <div class="countdown-bar-wrap">
+        <div class="countdown-bar" id="lCountdownBar"></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="sn-cell">SN</th>
+              <th>Username</th>
+              <th>Action</th>
+              <th>Details</th>
+              <th>IP Address</th>
+              <th>User Agent</th>
+              <th>Created At</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="logTableBody">
+            <tr class="empty-row">
+              <td colspan="8"><span class="spinner"></span> Loading logs…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination" id="lPaginationWrap"></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════ TAB: MYADMIN ══ -->
+  <div class="container tab-panel" id="panelMyadmin">
+    <div class="controls" style="border-radius:0 8px 0 0;">
+      <span style="font-size:13px;font-weight:600;color:#374151;">
+        <i class="fas fa-database" style="color:#7c3aed;margin-right:6px;"></i> Database Export
+      </span>
+    </div>
+    <div class="panel" style="padding:28px 28px 24px;">
+      <div style="max-width:520px;">
+        <h3 style="font-size:15px;color:#1f2937;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
+          <i class="fas fa-file-export" style="color:#7c3aed;"></i> Export SQL Dump
+        </h3>
+        <p style="font-size:13px;color:#6b7280;margin-bottom:20px;">
+          Export the current database as a <code>.sql</code> file.
+        </p>
+        <div style="margin-bottom:18px;">
+          <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:8px;">Export Mode</label>
+          <div style="display:flex;flex-direction:column;gap:9px;">
+            <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;">
+              <input type="radio" name="exportMode" value="full" checked style="accent-color:#7c3aed;">
+              <span><strong>Structure + Data</strong> — Full export (recommended)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;">
+              <input type="radio" name="exportMode" value="structure" style="accent-color:#7c3aed;">
+              <span><strong>Structure only</strong> — CREATE TABLE statements, no rows</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;">
+              <input type="radio" name="exportMode" value="data" style="accent-color:#7c3aed;">
+              <span><strong>Data only</strong> — INSERT statements, no schema</span>
+            </label>
+          </div>
+        </div>
+        <button class="btn btn-add" style="margin-left:0;" onclick="exportDatabase()">
+          <i class="fas fa-download"></i> Download SQL
+        </button>
+        <div id="exportStatus" style="display:none;margin-top:14px;font-size:13px;color:#6b7280;">
+          <span class="spinner"></span> Preparing export…
         </div>
       </div>
     </div>
@@ -2828,7 +2797,7 @@ function renderBindRows(array $pages, int $depth = 0): void
           `<button class="action-btn btn-del-row" tabindex="-1" onclick="openDeleteUser(${u.id},'${escHtml(u.username)}')"><i class="fas fa-trash"></i> Delete</button>`;
 
         return `<tr>
-          <td style="color:#aaa">${idx+1}</td>
+          <td class="sn-cell">${idx+1}</td>
           <td><div class="user-cell">
             <div class="avatar" style="background:${color}">${init}</div>
             <div>
@@ -3134,7 +3103,7 @@ function renderBindRows(array $pages, int $depth = 0): void
           `<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">Disabled</span>`;
 
         return `<tr>
-          <td style="color:#aaa">${idx+1}</td>
+          <td class="sn-cell">${idx+1}</td>
           <td><div class="user-cell">
             <div class="avatar" style="background:${color}">${escHtml(init)}</div>
             <div>
@@ -3457,7 +3426,7 @@ function renderBindRows(array $pages, int $depth = 0): void
         const color = COLORS[Math.abs(hashStr(String(colorKey))) % COLORS.length];
         const init = (log.username[0] || '?').toUpperCase();
         return `<tr>
-          <td>${idx+1}</td>
+          <td class="sn-cell">${idx+1}</td>
           <td><div class="user-cell">
             <div class="avatar" style="background:${color}">${init}</div>
             <span>${escHtml(log.username||'—')}</span>

@@ -60,7 +60,7 @@
   font-size: 14px;
   color: #333;
   transition: background-color 0.15s ease;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border);
   z-index: 1001;
 }
 
@@ -76,12 +76,8 @@
   color: #666;
 }
 
-.add-options-menu button:hover:not(:last-child) {
-  background-color: #f8f9fa;
-}
-
-.add-options-menu button:last-child:hover {
-  background-color: #f0f0f0;
+.add-options-menu button:hover {
+  background-color: var(--bg);
 }
 
 .add-options-menu button:focus {
@@ -94,7 +90,7 @@
   z-index: 99999;
   width: 160px;
   background: #fff;
-  border: 1.5px solid #e2e8f0;
+  border: 1.5px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.13);
@@ -106,10 +102,118 @@
   display: flex !important;
 }
 
+.actions-panel button:hover {
+  color: var(--accent);
+  background: var(--bg);
+}
+
 .actions-active {
   background: #f1f5f9 !important;
   border-color: #94a3b8 !important;
   color: #475569 !important;
+}
+
+.actions-item {
+  width: 100%;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: #1e293b;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  white-space: nowrap;
+}
+
+.manual-checkin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--checkin-light), var(--checkin));
+  color: #fff;
+  border: none;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.manual-checkout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--checkout-light), var(--checkout));
+  color: #fff;
+  border: none;
+  border-left: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.check-dot {
+  width: 7px;
+  height: 7px;
+  background: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 1.5px var(--accent);
+}
+
+.manual-checkin:hover .check-dot {
+  background: var(--checkin-light);
+  box-shadow: 0 0 0 1.5px var(--checkin);
+}
+
+.manual-checkout:hover .check-dot {
+  background: var(--checkout-light);
+  box-shadow: 0 0 0 1.5px var(--checkout);
+}
+
+.view-logs {
+  width: 100%;
+  padding: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #fff;
+  color: #0ea5e9;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  text-align: center;
+}
+
+.view-edit {
+  width: 100%;
+  padding: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #fff;
+  color: #6366f1;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  text-align: center;
+}
+
+.view-delete {
+  width: 100%;
+  padding: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #fff;
+  color: #ef4444;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  text-align: center;
 }
 
 @media (max-width: 640px) {

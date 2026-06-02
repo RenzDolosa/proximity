@@ -226,32 +226,33 @@ if ($databaseConnected) {
     <!-- ── Employee Log Data table ─────────────────────────────────────────────── -->
     <div class="data-table">
       <div class="table-header">
-        <h3>Scanned Records</h3>
+        <h3 class="table-title">Scanned Records</h3>
         <div class="emp-records">
           <div style="display: flex; gap: 10px;">
-            <div class="total-emp"><i class="fas fa-users" style="font-size:10px;"></i></div>
+            <div class="stat-item total"><i class="fas fa-users"></i></div>
             <p>Total Scanned</p>
             <h3 id="total_scanned"><?php echo $stats['total_scanned']; ?></h3>
           </div>
           <div style="display: flex; gap: 10px;">
-            <div class="active-emp"><i class="fas fa-user-check" style="font-size:10px;"></i></div>
+            <div class="stat-item active"><i class="fas fa-user-check"></i></div>
             <p>Active Scanned</p>
             <h3 id="active_employees"><?php echo $stats['active_employees']; ?></h3>
           </div>
           <div style="display: flex; gap: 10px;">
-            <div class="inactive-emp"><i class="fas fa-user-times" style="font-size:10px;"></i></div>
+            <div class="stat-item inactive"><i class="fas fa-user-times"></i></div>
             <p>Inactive Scanned</p>
             <h3 id="inactive_employees"><?php echo $stats['inactive_employees']; ?></h3>
           </div>
           <div style="display: flex; gap: 10px;">
-            <img src="../../resource/assets/icon/scan-icon.svg" class="scan-emp" loading="lazy">
+            <div class="stat-item"><img src="../../resource/assets/icon/scan-icon.svg" alt="Scan Icon" loading="lazy"></div>
             <p>Scanned Today</p>
             <h3 id="today_attendance"><?php echo $stats['today_attendance']; ?></h3>
           </div>
-          <div style="display: flex; gap: 10px; align-items: center;"><i class="fas fa-calendar-day" style="font-size:10px;"></i>
-            <h3 id="today_in" class="check-in">IN : <?php echo $stats['today_in'] ?? 0; ?></h3>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <div class="stat-item total"><i class="fas fa-calendar-day"></i></div>
+            <h3 id="today_in" class="stat-checkin">IN : <?php echo $stats['today_in'] ?? 0; ?></h3>
             <p>&</p>
-            <h3 id="today_out" class="check-out">OUT : <?php echo $stats['today_out'] ?? 0; ?></h3>
+            <h3 id="today_out" class="stat-checkout">OUT : <?php echo $stats['today_out'] ?? 0; ?></h3>
           </div>
         </div>
       </div>

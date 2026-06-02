@@ -63,7 +63,17 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
       --text: #1e293b;
       --text-muted: #64748b;
       --danger: #dc2626;
-      --danger-light: #ff6f6f;
+      --danger-light: #ff9ca4;
+      --danger-sub: #f8d7da;
+      --warning: #f59e0b;
+      --warning-light: #ffce85;
+      --success: #15803d;
+      --success-light: #8deda3;
+      --success-sub: #d4edda;
+      --checkin: #16a34a;
+      --checkin-light: #4ade80;
+      --checkout: #ef4444;
+      --checkout-light: #fb923c;
       --radius: 8px;
     }
 
@@ -259,6 +269,16 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
     }
 
     function switchTab(name, btn) {
+      document.querySelectorAll('.tab-frame.active').forEach(f => {
+        try {
+          f.contentWindow?.closeAllActionsPanels?.();
+          f.contentWindow?.closeModal?.();
+          f.contentWindow?.closeCameraModal?.();
+          f.contentWindow?.hideAddOptions?.();
+          f.contentWindow?.hideExportOptions?.();
+        } catch (e) {}
+      });
+
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-frame').forEach(f => f.classList.remove('active'));
       btn.classList.add('active');

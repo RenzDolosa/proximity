@@ -162,20 +162,20 @@ if ($databaseConnected) {
     <!-- ── Proximity Code Data table ─────────────────────────────────────────────── -->
     <div class="data-table">
       <div class="table-header">
-        <h3>Proximity Records</h3>
+        <h3 class="table-title">Proximity Records</h3>
         <div class="emp-records">
           <div style="display: flex; gap: 10px;">
-            <div class="total-emp"><i class="fas fa-id-card" style="font-size:10px;"></i></div>
+            <div class="stat-item total"><i class="fas fa-id-card"></i></div>
             <p>Total Proximity</p>
             <h3 id="total_employees"><?php echo $stats['total_employees']; ?></h3>
           </div>
           <div style="display: flex; gap: 10px;">
-            <div class="active-emp"><i class="fas fa-rectangle-list" style="font-size:10px;"></i></div>
+            <div class="stat-item available"><i class="fas fa-rectangle-list"></i></div>
             <p>Total Available</p>
             <h3 id="total_available">0</h3>
           </div>
           <div style="display: flex; gap: 10px;">
-            <div class="inactive-emp"><i class="fas fa-credit-card" style="font-size:10px;"></i></div>
+            <div class="stat-item occupied"><i class="fas fa-credit-card"></i></div>
             <p>Total Occupied</p>
             <h3 id="total_occupied">0</h3>
           </div>

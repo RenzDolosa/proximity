@@ -194,20 +194,20 @@ if ($databaseConnected) {
     <!-- ── Employee Data table ─────────────────────────────────────────────── -->
     <div class="data-table">
       <div class="table-header">
-        <h3>Employee Records</h3>
+        <h3 class="table-title">Employee Records</h3>
         <div class="emp-records">
           <div style="display: flex; gap: 10px;">
-            <div class="total-emp"><i class="fas fa-users" style="font-size:10px;"></i></div>
+            <div class="stat-item total"><i class="fas fa-users"></i></div>
             <p>Total Employees</p>
             <h3 id="total_employees"><?php echo $stats['total_employees']; ?></h3>
           </div>
           <div style="display: flex; gap: 10px;">
-            <div class="active-emp"><i class="fas fa-user-check" style="font-size:10px;"></i></div>
+            <div class="stat-item active"><i class="fas fa-user-check"></i></div>
             <p>Active Employees</p>
             <h3 id="active_employees"><?php echo $stats['active_employees']; ?></h3>
           </div>
           <div style="display: flex; gap: 10px;">
-            <div class="inactive-emp"><i class="fas fa-user-times" style="font-size:10px;"></i></div>
+            <div class="stat-item inactive"><i class="fas fa-user-times"></i></div>
             <p>Inactive Employees</p>
             <h3 id="inactive_employees"><?php echo $stats['inactive_employees']; ?></h3>
           </div>

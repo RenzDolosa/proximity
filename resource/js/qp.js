@@ -9,7 +9,7 @@ let displayTimeout;
 let currentAudio = null;
 let activeController = null;
 
-// ── Global-audio endpoint (relative to the scan controller page) ─────────
+// ── Global-audio endpoint ─────────────────────────────────────────
 const GLOBAL_AUDIO_ENDPOINT = "../../services/global_audio.php";
 
 const AUDIO_TYPE_MAP = {

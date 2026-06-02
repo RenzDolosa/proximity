@@ -4,9 +4,6 @@ let isDropdownAddOpen = false;
 let isDropdownExportOpen = false;
 
 function toggleAddOptions() {
-  const menu = document.getElementById("addOptionsMenu");
-  const trigger = document.getElementById("addTrigger");
-
   if (isDropdownAddOpen) {
     hideAddOptions();
   } else {
@@ -18,6 +15,7 @@ function toggleAddOptions() {
 function showAddOptions() {
   const menu = document.getElementById("addOptionsMenu");
   const trigger = document.getElementById("addTrigger");
+  if (!menu || !trigger) return;
 
   menu.classList.add("show");
   trigger.classList.add("active");
@@ -31,6 +29,7 @@ function showAddOptions() {
 function hideAddOptions() {
   const menu = document.getElementById("addOptionsMenu");
   const trigger = document.getElementById("addTrigger");
+  if (!menu || !trigger) return;
 
   menu.classList.remove("show");
   trigger.classList.remove("active");
@@ -41,15 +40,12 @@ function hideAddOptions() {
 
 function addClickOutside(event) {
   const container = document.querySelector(".dropdown");
-  if (!container.contains(event.target)) {
+  if (!container || !container.contains(event.target)) {
     hideAddOptions();
   }
 }
 
 function toggleExportOptions() {
-  const menu = document.getElementById("exportOptionsMenu");
-  const trigger = document.getElementById("exportTrigger");
-
   if (isDropdownExportOpen) {
     hideExportOptions();
   } else {
@@ -60,6 +56,7 @@ function toggleExportOptions() {
 function showExportOptions() {
   const menu = document.getElementById("exportOptionsMenu");
   const trigger = document.getElementById("exportTrigger");
+  if (!menu || !trigger) return;
 
   menu.classList.add("show");
   trigger.classList.add("active");
@@ -73,6 +70,7 @@ function showExportOptions() {
 function hideExportOptions() {
   const menu = document.getElementById("exportOptionsMenu");
   const trigger = document.getElementById("exportTrigger");
+  if (!menu || !trigger) return;
 
   menu.classList.remove("show");
   trigger.classList.remove("active");
@@ -83,7 +81,7 @@ function hideExportOptions() {
 
 function exportClickOutside(event) {
   const container = document.querySelector(".dropdown");
-  if (!container.contains(event.target)) {
+  if (!container || !container.contains(event.target)) {
     hideExportOptions();
   }
 }
