@@ -37,9 +37,16 @@ function isInputVisible(input) {
 
 // ── Event listeners setup ─────────────────────────────────────────────────────
 function setupEventListeners() {
-  document
-    .getElementById("employeeForm")
-    ?.addEventListener("submit", handleFormSubmit);
+  // ── Date range picker ──────────────────────────────────────────
+  initDateRangePicker();
+  window.onDateRangeChange = function () {
+    searchEmployees();
+  };
+
+  const form = document.getElementById("employeeForm");
+  if (form) {
+    form.addEventListener("submit", handleFormSubmit);
+  }
 
   setupFileUploadHandler();
 
@@ -375,16 +382,13 @@ async function loadEmployeesAuto() {
     params.append("page", currentPage);
     params.append("limit", itemsPerPage);
 
-    const response = await fetch(
-      `${AttendanceBackend}?${params.toString()}`,
-      {
-        headers: {
-          "X-Requested-With": "XMLHttpRequest",
-          "X-Silent-Request": "true",
-        },
-        signal: AbortSignal.timeout(10000),
+    const response = await fetch(`${AttendanceBackend}?${params.toString()}`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
       },
-    );
+      signal: AbortSignal.timeout(10000),
+    });
 
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
@@ -469,8 +473,17 @@ function getActiveFilters() {
 
   const formData = new FormData(searchForm);
   for (let [key, value] of formData.entries()) {
-    if (value && value.trim()) filters[key] = value.trim();
+    if (value && value.trim()) {
+      filters[key] = value.trim();
+    }
   }
+
+  const from = document.getElementById("f_from")?.value || "";
+  const to = document.getElementById("f_to")?.value || "";
+  if (from) filters["date_from"] = from;
+  if (to) filters["date_to"] = to;
+
+  delete filters["created_at"];
 
   return filters;
 }
@@ -627,9 +640,9 @@ async function renderEmployeeTable() {
 
       const matchedEmployeeData =
         qrImageMap[employee.qr_code.trim().toLowerCase()];
-      const safeFullname = escapeHtml(employee.fullname);
-      const safePosition = escapeHtml(employee.position);
-      const safeBrand = escapeHtml(employee.brand);
+      const safeFullname = escapeHtml(toProperCase(employee.fullname));
+      const safePosition = escapeHtml(toProperCase(employee.position));
+      const safeBrand = escapeHtml(toProperCase(employee.brand));
       const safeStatus = escapeHtml(employee.status);
       const safeShift = escapeHtml(employee.shift);
       const safeViolation = escapeHtml(employee.violation);
@@ -640,11 +653,11 @@ async function renderEmployeeTable() {
 
       if (matchedEmployeeData && matchedEmployeeData.image) {
         imageUrl = `${window.location.origin}/../public/uploads/user/${matchedEmployeeData.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${matchedEmployeeData.image}`;
-        displayName = matchedEmployeeData.fullname || employee.fullname;
+        displayName = matchedEmployeeData.fullname || safeFullname;
         tooltipText = `${toProperCase(matchedEmployeeData.fullname)}\n${toProperCase(matchedEmployeeData.position)}\n${toProperCase(matchedEmployeeData.brand)}`;
       } else if (employee.image) {
         imageUrl = `${window.location.origin}/../public/uploads/user/${employee.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${employee.image}`;
-        tooltipText = `${toProperCase(employee.fullname)}\n${toProperCase(employee.position)}\n${toProperCase(employee.brand)}`;
+        tooltipText = `${safeFullname}\n${safePosition}\n${safeBrand}`;
       }
 
       const fullnameInitials = (employee.fullname || "UN")
@@ -660,15 +673,15 @@ async function renderEmployeeTable() {
       const imageSrc = `${window.location.origin}/../public/uploads/user/${safeImage}`;
 
       return `
-        <tr>
+        <tr class="row">
           <td class="sn-cell">${startIndex + index + 1}</td>
           <td>
-            <div class="emp-name"><strong>${toProperCase(safeFullname)}</strong></div>
+            <div class="emp-name"><strong>${safeFullname}</strong></div>
             <div class="emp-id"><strong>EMPID: ${safeEmpId}</strong></div>
           </td>
           <td>
-            <div><small>${toProperCase(safeBrand)}</small></div>
-            <div class="emp-position"><strong>Position: ${toProperCase(safePosition)}</strong></div>
+            <div><small>${safeBrand}</small></div>
+            <div class="emp-position"><strong>Position: ${safePosition}</strong></div>
           </td>
           <td>
             <div><small>${safeShift}</small></div>
@@ -685,7 +698,7 @@ async function renderEmployeeTable() {
                       class="remarks-item"
                       tabindex="-1"
                       onclick="openViolationPopupFromBtn(this)"
-                      title="${escapeHtml(safeViolation)}">
+                      title="${safeViolation}">
                       <i class="fas fa-exclamation-triangle" style="font-size:10px;"></i>
                     </button>`
                   : `<span style="color:#aaa;font-size:11px;font-style:italic;">None</span>`
@@ -731,7 +744,7 @@ async function renderEmployeeTable() {
 
             <!-- FLOATING PANEL -->
             <div class="actions-panel">
-              <small style="background:linear-gradient(135deg,#1e40af 0%,#3b82f6 100%);text-align:center;color:#fff;">${toProperCase(safeFullname)}</small>
+              <small style="background:linear-gradient(135deg,#1e40af 0%,#3b82f6 100%);text-align:center;color:#fff;">${safeFullname}</small>
               
               ${
                 window.PERMISSIONS.delete
@@ -946,6 +959,9 @@ function searchEmployees() {
 function clearSearch() {
   const searchForm = document.getElementById("searchForm");
   if (searchForm) searchForm.reset();
+  if (typeof clearDateRange === "function") {
+    clearDateRange();
+  }
 
   [
     ["search_position", "search_position_val"],
@@ -1005,12 +1021,9 @@ async function loadEmployees(
     params.append("page", currentPage);
     params.append("limit", itemsPerPage);
 
-    const response = await fetch(
-      `${AttendanceBackend}?${params.toString()}`,
-      {
-        headers: { "X-Requested-With": "XMLHttpRequest" },
-      },
-    );
+    const response = await fetch(`${AttendanceBackend}?${params.toString()}`, {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
 
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
@@ -1216,15 +1229,12 @@ async function deleteFilteredEmployees() {
     params.append("page", 1);
     params.append("limit", 99999);
 
-    const allRes = await fetch(
-      `${AttendanceBackend}?${params.toString()}`,
-      {
-        headers: {
-          "X-Requested-With": "XMLHttpRequest",
-          "X-Silent-Request": "true",
-        },
+    const allRes = await fetch(`${AttendanceBackend}?${params.toString()}`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
       },
-    );
+    });
     const allData = await allRes.json();
 
     if (
@@ -1784,7 +1794,9 @@ window.addEventListener("beforeunload", () => {
 
 window.onclick = function (event) {
   const modal = document.getElementById("employeeModal");
-  if (event.target === modal) closeModal();
+  if (event.target === modal) {
+    closeModal();
+  }
 };
 
 document.addEventListener("mousedown", handleUserActivity);
@@ -1794,7 +1806,10 @@ document.addEventListener("scroll", handleUserActivity);
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", function () {
   loadEmployees();
-  setupEventListeners();
   updateDeleteButtonState();
-  setTimeout(initializeAutoUpdate, 1000);
+  setupEventListeners();
+
+  setTimeout(() => {
+    initializeAutoUpdate();
+  }, 1000);
 });

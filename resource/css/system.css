@@ -371,12 +371,12 @@ tr {
   transition: background-color 0.3s ease;
 }
 
-tr:hover td {
+.row:hover td {
   background-color: var(--bg);
   color: var(--accent);
 }
 
-tr:hover div {
+.row:hover div {
   color: var(--accent);
 }
 

@@ -188,19 +188,25 @@ class AccessLogManager
       $where .= " AND access_timestamp LIKE :access_timestamp";
       $params[':access_timestamp'] = '%' . $filters['access_timestamp'] . '%';
     }
+    if (!empty($filters['date_from'])) {
+      $where .= " AND DATE(access_timestamp) >= :date_from";
+      $params[':date_from'] = $filters['date_from'];
+    }
+    if (!empty($filters['date_to'])) {
+      $where .= " AND DATE(access_timestamp) <= :date_to";
+      $params[':date_to'] = $filters['date_to'];
+    }
 
-    // COUNT
-    $countStmt = $this->conn->prepare("SELECT COUNT(*) FROM {$this->logTable} $where");
+    $countStmt = $this->conn->prepare("SELECT COUNT(*) FROM {$this->logTable} l $where");
     foreach ($params as $key => $value) {
       $countStmt->bindValue($key, $value);
     }
     $countStmt->execute();
     $total = (int) $countStmt->fetchColumn();
 
-    // DATA
-    $offset   = ($page - 1) * $limit;
+    $offset = ($page - 1) * $limit;
     $dataStmt = $this->conn->prepare(
-      "SELECT * FROM {$this->logTable} $where ORDER BY id DESC LIMIT :limit OFFSET :offset"
+      "SELECT * FROM {$this->logTable} l $where ORDER BY id DESC LIMIT :limit OFFSET :offset"
     );
     foreach ($params as $key => $value) {
       $dataStmt->bindValue($key, $value);
@@ -210,7 +216,6 @@ class AccessLogManager
     $dataStmt->execute();
     $logs = $dataStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Resolve gate names from main users table
     $userIds     = array_unique(array_filter(array_column($logs, 'user_id')));
     $userNameMap = [];
     if (!empty($userIds)) {
@@ -239,7 +244,9 @@ class AccessLogManager
   // ── Single log entry ───────────────────────────────────────────────────
   public function getLog($id)
   {
-    $stmt = $this->conn->prepare("SELECT * FROM {$this->logTable} WHERE id = :id");
+    $stmt = $this->conn->prepare(
+      "SELECT * FROM {$this->logTable} WHERE id = :id"
+    );
     $stmt->bindParam(':id', $id);
     $stmt->execute();
     return $stmt->fetch(PDO::FETCH_ASSOC);
@@ -276,7 +283,7 @@ class AccessLogManager
     return $result;
   }
 
-  // ── DELETE: multiple log entries by ID list ────────────────────────────
+  // ── DELETE: multiple log entries by ID list ───────────────────────────────
   public function deleteLogsByIds(array $logIds)
   {
     if (empty($logIds)) return 0;
@@ -600,7 +607,18 @@ try {
         if (!empty($_GET['gate_name']))         $filters['gate_name']        = $_GET['gate_name'];
         if (!empty($_GET['user_id_none']))      $filters['user_id_none']     = '1';
         if (!empty($_GET['access_type']))       $filters['access_type']      = $_GET['access_type'];
-        if (!empty($_GET['access_timestamp']))  $filters['access_timestamp'] = $_GET['access_timestamp'];
+        if (!empty($_GET['access_timestamp'])) {
+          $d = $_GET['access_timestamp'];
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['access_timestamp'] = $d;
+        }
+        if (!empty($_GET['date_from'])) {
+          $d = $_GET['date_from'];
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_from'] = $d;
+        }
+        if (!empty($_GET['date_to'])) {
+          $d = $_GET['date_to'];
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_to'] = $d;
+        }
 
         $page  = max(1, (int)($_GET['page']  ?? 1));
         $limit = max(1, (int)($_GET['limit'] ?? 25));

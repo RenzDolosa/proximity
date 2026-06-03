@@ -38,9 +38,16 @@ function isInputVisible(input) {
 }
 
 function setupEventListeners() {
-  document
-    .getElementById("employeeForm")
-    ?.addEventListener("submit", handleFormSubmit);
+  // ── Date range picker ──────────────────────────────────────────
+  initDateRangePicker();
+  window.onDateRangeChange = function () {
+    searchEmployees();
+  };
+
+  const form = document.getElementById("employeeForm");
+  if (form) {
+    form.addEventListener("submit", handleFormSubmit);
+  }
 
   setupFileUploadHandler();
 
@@ -578,21 +585,12 @@ function getActiveFilters() {
     }
   }
 
-  if (filters.position === "__none__") {
-    filters.position = "__none__";
-  }
+  const from = document.getElementById("f_from")?.value || "";
+  const to = document.getElementById("f_to")?.value || "";
+  if (from) filters["date_from"] = from;
+  if (to) filters["date_to"] = to;
 
-  if (filters.brand === "__none__") {
-    filters.brand = "__none__";
-  }
-
-  if (filters.violation === "__none__") {
-    filters.violation = "__none__";
-  }
-
-  if (filters.user_id === "__none__") {
-    filters.user_id = "__none__";
-  }
+  delete filters["access_timestamp"];
 
   return filters;
 }
@@ -832,9 +830,9 @@ async function renderEmployeeTable() {
 
       const matchedEmployeeData =
         qrImageMap[employee.qr_code.trim().toLowerCase()];
-      const safeFullname = escapeHtml(employee.fullname);
-      const safePosition = escapeHtml(employee.position);
-      const safeBrand = escapeHtml(employee.brand);
+      const safeFullname = escapeHtml(toProperCase(employee.fullname));
+      const safePosition = escapeHtml(toProperCase(employee.position));
+      const safeBrand = escapeHtml(toProperCase(employee.brand));
       const safeStatus = escapeHtml(employee.status);
       const safeShift = escapeHtml(employee.shift);
       const safeViolation = escapeHtml(employee.violation);
@@ -845,11 +843,11 @@ async function renderEmployeeTable() {
 
       if (matchedEmployeeData && matchedEmployeeData.image) {
         imageUrl = `${window.location.origin}/../public/uploads/user/${matchedEmployeeData.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${matchedEmployeeData.image}`;
-        displayName = matchedEmployeeData.fullname || employee.fullname;
+        displayName = matchedEmployeeData.fullname || safeFullname;
         tooltipText = `${toProperCase(matchedEmployeeData.fullname)}\n${toProperCase(matchedEmployeeData.position)}\n${toProperCase(matchedEmployeeData.brand)}`;
       } else if (employee.image) {
         imageUrl = `${window.location.origin}/../public/uploads/user/${employee.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${employee.image}`;
-        tooltipText = `${toProperCase(employee.fullname)}\n${toProperCase(employee.position)}\n${toProperCase(employee.brand)}`;
+        tooltipText = `${safeFullname}\n${safePosition}\n${safeBrand}`;
       }
 
       const fullnameInitials = (employee.fullname || "UN")
@@ -865,15 +863,15 @@ async function renderEmployeeTable() {
       const imageSrc = `${window.location.origin}/../public/uploads/user/${safeImage}`;
 
       return `
-        <tr>
+        <tr class="row">
           <td class="sn-cell">${startIndex + index + 1}</td>
           <td>
-            <div class="emp-name"><strong>${toProperCase(safeFullname)}</strong></div>
+            <div class="emp-name"><strong>${safeFullname}</strong></div>
             <div class="emp-id"><strong>EMPID: ${safeEmpId}</strong></div>
           </td>
           <td>
-            <div><small>${toProperCase(safeBrand)}</small></div>
-            <div class="emp-position"><strong>Position: ${toProperCase(safePosition)}</strong></div>
+            <div><small>${safeBrand}</small></div>
+            <div class="emp-position"><strong>Position: ${safePosition}</strong></div>
           </td>
           <td>
             <div><small>${safeShift}</small></div>
@@ -919,9 +917,9 @@ async function renderEmployeeTable() {
             </svg>
           </td>
           <td class="emp-timestamp"><small>${employee.access_timestamp || "N/A"}</small></td>
-          <td><div class="check-status-${(employee.check_status || "").toLowerCase()}"><div class="employee-ph">${
-            escapeHtml(employee.check_status || "N/A")
-          }</div></div></td>
+          <td><div class="check-status-${(employee.check_status || "").toLowerCase()}"><div class="employee-ph">${escapeHtml(
+            employee.check_status || "N/A",
+          )}</div></div></td>
           <td><small>${escapeHtml(employee.gate_name || employee.user_id || "N/A")}</small></td>
 
           ${
@@ -940,7 +938,7 @@ async function renderEmployeeTable() {
 
             <!-- FLOATING PANEL -->
             <div class="actions-panel">
-              <small style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); text-align: center; color: #fff;">${toProperCase(safeFullname)}</small>
+              <small style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); text-align: center; color: #fff;">${safeFullname}</small>
 
               ${
                 window.PERMISSIONS.delete
@@ -1210,6 +1208,9 @@ function searchEmployees() {
 function clearSearch() {
   const searchForm = document.getElementById("searchForm");
   if (searchForm) searchForm.reset();
+  if (typeof clearDateRange === "function") {
+    clearDateRange();
+  }
 
   [
     ["search_position", "search_position_val"],
@@ -2345,6 +2346,7 @@ function showLoading(show) {
   }
 }
 
+// ── Cleanup ───────────────────────────────────────────────────────────────────
 window.addEventListener("beforeunload", function () {
   stopAutoUpdate();
   clearTimeout(userActivityTimer);
@@ -2361,10 +2363,11 @@ document.addEventListener("mousedown", handleUserActivity);
 document.addEventListener("keydown", handleUserActivity);
 document.addEventListener("scroll", handleUserActivity);
 
+// ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", function () {
   loadEmployees();
-  setupEventListeners();
   updateDeleteButtonState();
+  setupEventListeners();
 
   setTimeout(() => {
     initializeAutoUpdate();

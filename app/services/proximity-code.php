@@ -58,6 +58,7 @@ if ($databaseConnected) {
   <title><?php echo htmlspecialchars($myDatabase); ?> - Proximity Code</title>
   <link rel="icon" href="../../resource/assets/icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../../resource/css/system.css">
+  <link rel="stylesheet" href="../../resource/css/date-range-picker.css">
   <link rel="stylesheet" href="../../resource/css/ptl.css">
   <link rel="stylesheet" href="../../resource/css/modal.css">
   <link rel="stylesheet" href="../../resource/css/btn.css">
@@ -95,9 +96,9 @@ if ($databaseConnected) {
             <input type="hidden" id="search_status_val" name="status">
           </div>
 
-          <div class="search-group">
-            <input type="text" id="search_date" name="created_at" placeholder="Date">
-          </div>
+          <!-- Register Date -->
+          <div class="search-group date-range-pill" id="date_range_pill"></div>
+
           <div class="search-group" style="position: fixed; left: 0; top: 0; opacity: 0;">
             <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; width: 8px; cursor: default;" autocomplete="off">
           </div>
@@ -467,6 +468,7 @@ if ($databaseConnected) {
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="../../resource/js/proxcode.js"></script>
+  <script src="../../resource/js/date-range-picker.js"></script>
   <script src="../../resource/js/btn.js"></script>
   <script src="../../resource/js/ipc.js"></script>
   <script src="../../resource/js/eas.js"></script>

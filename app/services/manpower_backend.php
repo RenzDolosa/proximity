@@ -307,6 +307,14 @@ class EmployeeManager
       $where .= " AND DATE(created_at) = :created_at";
       $params[':created_at'] = $filters['created_at'];
     }
+    if (!empty($filters['date_from'])) {
+      $where .= " AND DATE(created_at) >= :date_from";
+      $params[':date_from'] = $filters['date_from'];
+    }
+    if (!empty($filters['date_to'])) {
+      $where .= " AND DATE(created_at) <= :date_to";
+      $params[':date_to'] = $filters['date_to'];
+    }
     if (!empty($filters['updated_at'])) {
       $where .= " AND DATE(updated_at) = :updated_at";
       $params[':updated_at'] = $filters['updated_at'];
@@ -1425,6 +1433,14 @@ try {
         if (!empty($_GET['created_at'])) {
           $d = $_GET['created_at'];
           if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['created_at'] = $d;
+        }
+        if (!empty($_GET['date_from'])) {
+          $d = $_GET['date_from'];
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_from'] = $d;
+        }
+        if (!empty($_GET['date_to'])) {
+          $d = $_GET['date_to'];
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_to'] = $d;
         }
         if (!empty($_GET['updated_at'])) {
           $d = $_GET['updated_at'];

@@ -36,15 +36,6 @@ function isInputVisible(input) {
   return !anyModalOpen;
 }
 
-document.addEventListener("DOMContentLoaded", function () {
-  loadCurrentUserId();
-  loadEmployees();
-  updateDeleteButtonState();
-  setupEventListeners();
-  updateTotalAvailable();
-  syncOrphanStatuses();
-});
-
 async function loadCurrentUserId() {
   try {
     const response = await fetch(`${ProxcodeBackend}?action=user_info`, {
@@ -165,6 +156,12 @@ async function updateTotalEmployees() {
 }
 
 function setupEventListeners() {
+  // ── Date range picker ──────────────────────────────────────────
+  initDateRangePicker();
+  window.onDateRangeChange = function () {
+    searchEmployees();
+  };
+
   const form = document.getElementById("employeeForm");
   if (form) {
     form.addEventListener("submit", handleFormSubmit);
@@ -178,14 +175,6 @@ function setupEventListeners() {
   searchInputs.forEach((input) => {
     input.addEventListener("input", debounce(searchEmployees, 300));
   });
-
-  const dateInput = document.getElementById("search_date");
-  if (dateInput) {
-    dateInput.addEventListener("change", function () {
-      const clearBtn = document.getElementById("clear_date_btn");
-      if (clearBtn) clearBtn.style.display = this.value ? "block" : "none";
-    });
-  }
 
   const proximityInput = document.getElementById("search_qr");
 
@@ -286,6 +275,13 @@ function getActiveFilters() {
       filters[key] = value.trim();
     }
   }
+
+  const from = document.getElementById("f_from")?.value || "";
+  const to = document.getElementById("f_to")?.value || "";
+  if (from) filters["date_from"] = from;
+  if (to) filters["date_to"] = to;
+
+  delete filters["created_at"];
 
   return filters;
 }
@@ -507,7 +503,9 @@ async function renderEmployeeTable() {
         qrImageMap[employee.qr_code.trim().toLowerCase()];
       const safeQrCode = escapeHtml(employee.qr_code);
       const safeName = escapeHtml(displayName);
-      const safeEmpId = matchedEmployeeData ? String(matchedEmployeeData.id) : "";
+      const safeEmpId = matchedEmployeeData
+        ? String(matchedEmployeeData.id)
+        : "";
       const qrLower = employee.qr_code.trim().toLowerCase();
       const isOccupied = Object.prototype.hasOwnProperty.call(
         qrImageMap,
@@ -535,7 +533,7 @@ async function renderEmployeeTable() {
       const isAboveFold = index < 5;
 
       return `
-        <tr>
+        <tr class="row">
           <td class="sn-cell">${startIndex + index + 1}</td>
           <td class="emp-img">
             ${
@@ -840,6 +838,9 @@ function searchEmployees() {
 function clearSearch() {
   const searchForm = document.getElementById("searchForm");
   if (searchForm) searchForm.reset();
+  if (typeof clearDateRange === "function") {
+    clearDateRange();
+  }
 
   [
     ["search_remarks", "search_remarks_val"],
@@ -858,14 +859,6 @@ function clearSearch() {
   activeFilters = {};
   updateDeleteButtonState();
   loadEmployees({}, false, true);
-}
-
-function clearDateFilter() {
-  const dateInput = document.getElementById("search_date");
-  const clearBtn = document.getElementById("clear_date_btn");
-  if (dateInput) dateInput.value = "";
-  if (clearBtn) clearBtn.style.display = "none";
-  searchEmployees();
 }
 
 // ── Generic field autocomplete ───────────────────────────────────────────────
@@ -1749,9 +1742,20 @@ function showLoading(show) {
   }
 }
 
+// ── Cleanup ───────────────────────────────────────────────────────────────────
 window.onclick = function (event) {
   const modal = document.getElementById("employeeModal");
   if (event.target === modal) {
     closeModal();
   }
 };
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", function () {
+  loadCurrentUserId();
+  loadEmployees();
+  updateDeleteButtonState();
+  setupEventListeners();
+  syncOrphanStatuses();
+  updateTotalAvailable();
+});

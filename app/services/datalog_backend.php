@@ -189,6 +189,14 @@ class AccessLogManager
       $where .= " AND access_timestamp LIKE :access_timestamp";
       $params[':access_timestamp'] = '%' . $filters['access_timestamp'] . '%';
     }
+    if (!empty($filters['date_from'])) {
+      $where .= " AND DATE(access_timestamp) >= :date_from";
+      $params[':date_from'] = $filters['date_from'];
+    }
+    if (!empty($filters['date_to'])) {
+      $where .= " AND DATE(access_timestamp) <= :date_to";
+      $params[':date_to'] = $filters['date_to'];
+    }
 
     $countStmt = $this->conn->prepare("SELECT COUNT(*) FROM {$this->logTable} l $where");
     foreach ($params as $key => $value) {
@@ -294,7 +302,7 @@ class AccessLogManager
     return $row ? $row['check_type'] : 'OUT'; // default OUT = never checked in
   }
 
-  // ── DELETE: single log entry from employee_access_log ───────────────────────
+  // ── DELETE: single log entry ───────────────────────────────────────────
   public function deleteLog($id)
   {
     $log = $this->getLog($id);
@@ -328,7 +336,7 @@ class AccessLogManager
     return $result;
   }
 
-  // ── DELETE: multiple log entries by ID list ──────────────────────────────────
+  // ── DELETE: multiple log entries by ID list ───────────────────────────────
   public function deleteLogsByIds(array $logIds)
   {
     if (empty($logIds)) return 0;
@@ -399,7 +407,7 @@ class AccessLogManager
     return true;
   }
 
-  // ── STATS: summary counts from employee_access_log ───────────────────────────
+  // ── STATS ──────────────────────────────────────────────────────────────
   public function getStats()
   {
     $stats = [];
@@ -731,7 +739,18 @@ try {
         if (!empty($_GET['gate_name']))         $filters['gate_name']        = $_GET['gate_name'];
         if (!empty($_GET['user_id_none']))      $filters['user_id_none']     = '1';
         if (!empty($_GET['access_type']))       $filters['access_type']      = $_GET['access_type'];
-        if (!empty($_GET['access_timestamp']))  $filters['access_timestamp'] = $_GET['access_timestamp'];
+        if (!empty($_GET['access_timestamp'])) {
+          $d = $_GET['access_timestamp'];
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['access_timestamp'] = $d;
+        }
+        if (!empty($_GET['date_from'])) {
+          $d = $_GET['date_from'];
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_from'] = $d;
+        }
+        if (!empty($_GET['date_to'])) {
+          $d = $_GET['date_to'];
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_to'] = $d;
+        }
 
         $page  = max(1, (int)($_GET['page']  ?? 1));
         $limit = max(1, (int)($_GET['limit'] ?? 25));

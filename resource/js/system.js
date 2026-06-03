@@ -109,18 +109,17 @@ async function loadGlobalAudio() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", function () {
-  loadGlobalAudio();
-  loadEmployees();
-  setupEventListeners();
-  updateDeleteButtonState();
-  syncOrphanStatuses();
-});
-
 function setupEventListeners() {
-  document
-    .getElementById("employeeForm")
-    ?.addEventListener("submit", handleFormSubmit);
+  // ── Date range picker ──────────────────────────────────────────
+  initDateRangePicker();
+  window.onDateRangeChange = function () {
+    searchEmployees();
+  };
+
+  const form = document.getElementById("employeeForm");
+  if (form) {
+    form.addEventListener("submit", handleFormSubmit);
+  }
 
   setupFileUploadHandler();
 
@@ -131,14 +130,6 @@ function setupEventListeners() {
   searchInputs.forEach((input) => {
     input.addEventListener("input", debounce(searchEmployees, 300));
   });
-
-  const dateInput = document.getElementById("search_date");
-  if (dateInput) {
-    dateInput.addEventListener("change", function () {
-      const clearBtn = document.getElementById("clear_date_btn");
-      if (clearBtn) clearBtn.style.display = this.value ? "block" : "none";
-    });
-  }
 
   const proximityInput = document.getElementById("search_qr");
 
@@ -262,20 +253,6 @@ function setupModalSuggestions() {
   _teardownModalSuggestions();
 
   // ── helper ────────────────────────────────────────────────────
-  /**
-   * Attaches a self-contained autocomplete dropdown to a modal input.
-   *
-   * @param {string}   inputId     - ID of the <input> inside the modal
-   * @param {string}   listId      - Unique ID for the private <ul> to create
-   * @param {Function} getValues   - () => string[]  — raw candidate values
-   * @param {Object}   [opts]
-   *   opts.raw        {boolean}  - skip toProperCase display transform
-   *   opts.requireInput {boolean}- only show dropdown when input has a value
-   *   opts.icon       {string}   - optional <img> src prepended to each item
-   *   opts.badge      {string}   - optional badge text appended to each item
-   *   opts.onFocus    {Function} - async hook called on focus (e.g. fetch codes)
-   *   opts.onSelect   {Function} - called after a value is selected
-   */
   function attachModalSuggestion(inputId, listId, getValues, opts = {}) {
     const input = document.getElementById(inputId);
     if (!input) return;
@@ -677,6 +654,13 @@ function getActiveFilters() {
     }
   }
 
+  const from = document.getElementById("f_from")?.value || "";
+  const to = document.getElementById("f_to")?.value || "";
+  if (from) filters["date_from"] = from;
+  if (to) filters["date_to"] = to;
+
+  delete filters["created_at"];
+
   return filters;
 }
 
@@ -1005,9 +989,9 @@ async function renderEmployeeTable() {
 
   tbody.innerHTML = currentEmployees
     .map((employee, index) => {
-      const safeFullname = escapeHtml(employee.fullname);
-      const safePosition = escapeHtml(employee.position);
-      const safeBrand = escapeHtml(employee.brand);
+      const safeFullname = escapeHtml(toProperCase(employee.fullname));
+      const safePosition = escapeHtml(toProperCase(employee.position));
+      const safeBrand = escapeHtml(toProperCase(employee.brand));
       const safeStatus = escapeHtml(employee.status);
       const safeShift = escapeHtml(employee.shift);
       const safeGender = escapeHtml(employee.gender || "—");
@@ -1035,15 +1019,15 @@ async function renderEmployeeTable() {
       const numericId = parseInt(employee.id, 10);
 
       return `
-          <tr>
+          <tr class="row">
             <td class="sn-cell">${startIndex + index + 1}</td>
             <td>
-              <div class="emp-name"><strong>${toProperCase(safeFullname)}</strong></div>
+              <div class="emp-name"><strong>${safeFullname}</strong></div>
               <div class="emp-id"><strong>EMPID: ${safeId}</strong></div>
             </td>
             <td>
-              <div><small>${toProperCase(safeBrand)}</small></div>
-              <div class="emp-position"><strong>Position: ${toProperCase(safePosition)}</strong></div>
+              <div><small>${safeBrand}</small></div>
+              <div class="emp-position"><strong>Position: ${safePosition}</strong></div>
             </td>
             <td>
               <div><small>${safeShift}</small></div>
@@ -1055,7 +1039,7 @@ async function renderEmployeeTable() {
                   employee.violation && employee.violation.trim()
                     ? `<button
                       data-emp-id="${safeId}"
-                      data-fullname="${toProperCase(safeFullname)}"
+                      data-fullname="${safeFullname}"
                       data-violation="${safeViolation}"
                       class="remarks-item"
                       tabindex="-1"
@@ -1069,7 +1053,7 @@ async function renderEmployeeTable() {
                   parseInt(employee.violation_count) > 0
                     ? `<button
                       data-emp-id="${safeId}"
-                      data-fullname="${toProperCase(safeFullname)}"
+                      data-fullname="${safeFullname}"
                       class="seemore-item"
                       tabindex="-1"
                       onclick="openViolationsModalFromBtn(this)"
@@ -1122,7 +1106,7 @@ async function renderEmployeeTable() {
 
               <!-- FLOATING PANEL -->
               <div class="actions-panel">
-                <small style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); text-align: center; color: #fff;">${toProperCase(safeFullname)}</small>
+                <small style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); text-align: center; color: #fff;">${safeFullname}</small>
 
                 ${
                   window.PERMISSIONS.manualInOut
@@ -1214,8 +1198,8 @@ async function renderEmployeeTable() {
 // ── Actions panel ─────────────────────────────────────────────────────────────
 function toggleActionsPanel(btn) {
   const allPanels = document.querySelectorAll(".actions-panel");
-  const allBtns   = document.querySelectorAll(".actions-toggle-btn");
-  const panel     = btn.parentElement.querySelector(".actions-panel");
+  const allBtns = document.querySelectorAll(".actions-toggle-btn");
+  const panel = btn.parentElement.querySelector(".actions-panel");
   const isAlreadyOpen = panel.classList.contains("actions-open");
 
   allPanels.forEach((p) => {
@@ -1232,9 +1216,9 @@ function toggleActionsPanel(btn) {
   panel._originalParent = btn.parentElement;
   document.body.appendChild(panel);
 
-  const rect        = btn.getBoundingClientRect();
-  const panelW      = 160;
-  const panelH      = panel.scrollHeight || 180;
+  const rect = btn.getBoundingClientRect();
+  const panelW = 160;
+  const panelH = panel.scrollHeight || 180;
 
   let left = rect.right - panelW;
   left = Math.max(8, Math.min(left, window.innerWidth - panelW - 8));
@@ -1246,13 +1230,13 @@ function toggleActionsPanel(btn) {
     top = rect.bottom + 4;
   }
 
-  panel.style.position  = "fixed";
-  panel.style.top       = Math.round(top)  + "px";
-  panel.style.left      = Math.round(left) + "px";
-  panel.style.width     = panelW + "px";
-  panel.style.bottom    = "auto";
+  panel.style.position = "fixed";
+  panel.style.top = Math.round(top) + "px";
+  panel.style.left = Math.round(left) + "px";
+  panel.style.width = panelW + "px";
+  panel.style.bottom = "auto";
   panel.style.transform = "none";
-  panel.style.zIndex    = "99999";
+  panel.style.zIndex = "99999";
 
   panel.classList.add("actions-open");
   btn.classList.add("actions-active");
@@ -1271,9 +1255,9 @@ document.addEventListener("click", function (e) {
         p._originalParent.appendChild(p);
       }
     });
-    document.querySelectorAll(".actions-toggle-btn").forEach((b) =>
-      b.classList.remove("actions-active")
-    );
+    document
+      .querySelectorAll(".actions-toggle-btn")
+      .forEach((b) => b.classList.remove("actions-active"));
   }
 });
 
@@ -1286,9 +1270,9 @@ function closeAllActionsPanels() {
       p._originalParent.appendChild(p);
     }
   });
-  document.querySelectorAll(".actions-toggle-btn").forEach((b) =>
-    b.classList.remove("actions-active")
-  );
+  document
+    .querySelectorAll(".actions-toggle-btn")
+    .forEach((b) => b.classList.remove("actions-active"));
 }
 
 function addToLogFromBtn(btn) {
@@ -1459,6 +1443,9 @@ function searchEmployees() {
 function clearSearch() {
   const searchForm = document.getElementById("searchForm");
   if (searchForm) searchForm.reset();
+  if (typeof clearDateRange === "function") {
+    clearDateRange();
+  }
 
   [
     ["search_position", "search_position_val"],
@@ -1480,14 +1467,6 @@ function clearSearch() {
   activeFilters = {};
   updateDeleteButtonState();
   loadEmployees({}, false, true);
-}
-
-function clearDateFilter() {
-  const dateInput = document.getElementById("search_date");
-  const clearBtn = document.getElementById("clear_date_btn");
-  if (dateInput) dateInput.value = "";
-  if (clearBtn) clearBtn.style.display = "none";
-  searchEmployees();
 }
 
 // ── Generic field autocomplete (filter bar only) ──────────────────
@@ -3323,3 +3302,12 @@ function showLoading(show) {
     body.classList.remove("loading");
   }
 }
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", function () {
+  loadGlobalAudio();
+  loadEmployees();
+  updateDeleteButtonState();
+  setupEventListeners();
+  syncOrphanStatuses();
+});

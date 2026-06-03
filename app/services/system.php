@@ -55,6 +55,7 @@ if ($databaseConnected) {
   <link rel="icon" href="../../resource/assets/icon/database-icon.png" type="image/png">
   <link rel="stylesheet" href="../../resource/css/system.css">
   <link rel="stylesheet" href="../../resource/css/system-camera.css">
+  <link rel="stylesheet" href="../../resource/css/date-range-picker.css">
   <link rel="stylesheet" href="../../resource/css/ptl.css">
   <link rel="stylesheet" href="../../resource/css/modal.css">
   <link rel="stylesheet" href="../../resource/css/btn.css">
@@ -116,20 +117,10 @@ if ($databaseConnected) {
             <input type="text" id="search_violation" placeholder="Violation" autocomplete="off" readonly style="cursor:pointer;">
             <input type="hidden" id="search_violation_val" name="violation">
           </div>
-          <div class="search-group" style="position: relative;">
-            <input type="date"
-              id="search_date"
-              name="created_at"
-              title="Filter by registration date"
-              style="padding-right: 28px; cursor: pointer; height: 44px;">
-            <button type="button"
-              id="clear_date_btn"
-              onclick="clearDateFilter()"
-              title="Clear date"
-              style="display:none; position:absolute; right:6px; top:50%; transform:translateY(-50%);
-                 background:none; border:none; cursor:pointer; font-size:14px;
-                 color:var(--color-text-secondary); padding:0; line-height:1;">✕</button>
-          </div>
+          
+          <!-- Register Date -->
+          <div class="search-group date-range-pill" id="date_range_pill"></div>
+
           <div class="search-group" style="position: fixed; left: 0; top: 0; opacity: 0;">
             <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; width: 8px; cursor: default;" autocomplete="off">
           </div>
@@ -725,6 +716,7 @@ if ($databaseConnected) {
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
   <script src="../../resource/js/system.js"></script>
   <script src="../../resource/js/system-camera.js"></script>
+  <script src="../../resource/js/date-range-picker.js"></script>
   <script src="../../resource/js/btn.js"></script>
   <script src="../../resource/js/is.js"></script>
   <script src="../../resource/js/eas.js"></script>

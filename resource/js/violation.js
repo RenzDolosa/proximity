@@ -1,30 +1,25 @@
-// resource/js/violation.js --> vilation table
+// resource/js/violation.js --> violation table
 
 const ViolationBackend = "violation_log_backend.php";
 
 // ── State ────────────────────────────────────────────────────────────
-let allVio = [];
+let allVio      = [];
 let filteredVio = [];
 let currentPage = 1;
-const PER_PAGE = 25;
+const PER_PAGE  = 25;
 let deleteTargetId = null;
-
-// ── Init ─────────────────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", loadViolations);
 
 // ── Load ─────────────────────────────────────────────────────────────
 async function loadViolations() {
   try {
-    const res = await fetch(`${ViolationBackend}?action=list`, {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+    const res  = await fetch(`${ViolationBackend}?action=list`, {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     const data = await res.json();
 
     if (data.success && Array.isArray(data.data)) {
       allVio = data.data;
-      buildTypeFilter();
+      buildTypeSuggestions();
       applyFilters();
       refreshStats();
     } else {
@@ -37,131 +32,262 @@ async function loadViolations() {
   }
 }
 
-// ── Filters ───────────────────────────────────────────────────────────
-function buildTypeFilter() {
-  const types = [
-    ...new Set(allVio.map((v) => v.violation_type).filter(Boolean)),
-  ].sort();
-  const sel = document.getElementById("f_type");
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">Default: ALL Types</option>';
-  types.forEach((t) => {
-    const o = document.createElement("option");
-    o.value = t;
-    o.textContent = t;
-    sel.appendChild(o);
-  });
-  if (cur) sel.value = cur;
-}
+// ─────────────────────────────────────────────────────────────────────
+//  FILTER SUGGESTIONS  (mirrors system.js setupFieldSuggestions)
+// ─────────────────────────────────────────────────────────────────────
+function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
+  const input  = document.getElementById(inputId);
+  if (!input) return;
 
-// ── Fullname suggestions ─────────────────────────────────────────
-let nameSuggestionIndex = -1;
+  const hidden = options.hiddenId ? document.getElementById(options.hiddenId) : null;
 
-function showNameSuggestions(query) {
-  const list = document.getElementById("name-suggestions");
-  if (!list) return;
+  // Remove any stale list from a previous call
+  document.getElementById(listId)?.remove();
 
-  const q = query.trim().toLowerCase();
+  const list = document.createElement("ul");
+  list.id = listId;
+  list.dataset.suggestionList = "1";
+  list.dataset.ownerInput     = inputId;
+  list.style.cssText = `
+    display:none;position:fixed;z-index:99999;
+    background:#fff;border:1px solid #cbd5e1;
+    border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.15);
+    list-style:none;margin:0;padding:0;
+    max-height:260px;overflow:hidden;overflow-y:auto;min-width:160px;
+  `;
+  document.body.appendChild(list);
 
-  const matches = [
-    ...new Map(
-      allVio
-        .filter((v) => !q || (v.employee_name || "").toLowerCase().includes(q))
-        .map((v) => [(v.employee_name || "").toLowerCase(), v.employee_name]),
-    ).values(),
-  ].filter(Boolean);
+  let idx = -1;
 
-  if (!matches.length || !q) {
-    list.style.display = "none";
-    nameSuggestionIndex = -1;
-    return;
+  // ── helpers ──────────────────────────────────────────────────────
+  function positionList() {
+    const rect       = input.getBoundingClientRect();
+    list.style.top   = rect.bottom + 4 + "px";
+    list.style.left  = rect.left   + "px";
+    list.style.width = Math.max(rect.width, 200) + "px";
   }
 
-  list.innerHTML = matches
-    .map((name, i) => {
-      const safeFullname = escapeHtml(name);
-      const properName = escapeHtml(toProperCase(name));
-      const regex = new RegExp(
-        `(${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
-        "gi",
-      );
-      const highlighted = properName.replace(
-        regex,
-        '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
-      );
-      return `
-      <li data-value="${properName}" data-index="${i}"
-          onmousedown="selectNameSuggestion(this.dataset.value)"
-          onmouseover="highlightNameSuggestion(${i})"
-          style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f5f9;">
-        ${highlighted}
+  function selectItem(displayValue, rawValue) {
+    if (rawValue === "") {
+      input.value  = "";
+      if (hidden) hidden.value = "";
+    } else {
+      input.value  = displayValue;
+      if (hidden) hidden.value = rawValue;
+    }
+    list.style.display = "none";
+    idx = -1;
+    if (options.onSelect) options.onSelect(rawValue);
+  }
+
+  function show(q) {
+    const lower = q.trim().toLowerCase();
+    const raw   = getValues();
+
+    // Build item list: header options first, then real values
+    const items = [];
+
+    items.push({ display: "Default: ALL", raw: "", special: "all" });
+
+    if (options.noneLabel) {
+      items.push({ display: options.noneLabel, raw: "__none__", special: "none" });
+      items.push({ display: "──────────", raw: null, special: "divider" });
+    }
+
+    const seen = new Map();
+    raw
+      .map(v => (v || "").trim())
+      .filter(v => v && v.toLowerCase() !== "none")
+      .filter(v => !lower || v.toLowerCase().includes(lower))
+      .forEach(v => {
+        const key = v.toLowerCase();
+        if (!seen.has(key)) seen.set(key, v);
+      });
+
+    [...seen.values()].forEach(v => {
+      items.push({ display: toProperCase(v), raw: v });
+    });
+
+    // When user is typing, drop the header specials — show matches only
+    const visibleItems = lower ? items.filter(i => !i.special) : items;
+
+    const hasRealItems = visibleItems.some(i => !i.special);
+    if (!visibleItems.length || (lower && !hasRealItems)) {
+      list.style.display = "none";
+      idx = -1;
+      return;
+    }
+
+    list.innerHTML = visibleItems.map((item, i) => {
+      if (item.special === "divider") {
+        return `<li data-raw="" data-display=""
+          style="padding:4px 12px;font-size:11px;color:#94a3b8;
+                 pointer-events:none;user-select:none;border-bottom:1px solid #f1f5f9;">
+          ──────────
+        </li>`;
+      }
+
+      const safeDisplay = escapeHtml(item.display);
+      let hl = safeDisplay;
+      if (lower && !item.special) {
+        const re = new RegExp(
+          `(${lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+          "gi"
+        );
+        hl = safeDisplay.replace(re, '<mark style="background:#fef08a;border-radius:2px;">$1</mark>');
+      }
+
+      const isSpecial    = item.special === "all" || item.special === "none";
+      const specialStyle = isSpecial
+        ? "font-weight:600;color:#1e40af;background:#f0f9ff;"
+        : "";
+
+      return `<li
+        data-raw="${escapeHtml(item.raw ?? "")}"
+        data-display="${safeDisplay}"
+        data-index="${i}"
+        style="padding:8px 12px;cursor:pointer;font-size:13px;
+               border-bottom:1px solid #f1f5f9;
+               display:flex;align-items:center;${specialStyle}">
+        ${hl}
       </li>`;
-    })
-    .join("");
+    }).join("");
 
-  list.style.display = "block";
-  nameSuggestionIndex = -1;
-}
+    list.querySelectorAll("li[data-raw]").forEach(li => {
+      if (li.style.pointerEvents === "none") return;
+      li.addEventListener("mousedown", e => {
+        e.preventDefault();
+        selectItem(li.dataset.display, li.dataset.raw);
+      });
+      li.addEventListener("mouseover", () => {
+        list.querySelectorAll("li").forEach(l =>
+          (l.style.background = l === li ? "#f0f9ff" : "")
+        );
+        idx = [...list.querySelectorAll("li")].indexOf(li);
+      });
+    });
 
-function selectNameSuggestion(name) {
-  const input = document.getElementById("f_name");
-  const list = document.getElementById("name-suggestions");
-  if (input) input.value = name;
-  if (list) list.style.display = "none";
-  nameSuggestionIndex = -1;
-  applyFilters();
-}
+    positionList();
+    list.style.display = "block";
+    idx = -1;
+  }
 
-function highlightNameSuggestion(index) {
-  const items = document.querySelectorAll("#name-suggestions li");
-  items.forEach((li, i) => {
-    li.style.background = i === index ? "#f0f9ff" : "";
+  // ── event wiring ────────────────────────────────────────────────
+  input.addEventListener("focus", () => show(input.value));
+  input.addEventListener("click", () => show(input.value));
+
+  input.addEventListener("blur", () => {
+    setTimeout(() => {
+      if (!list.contains(document.activeElement)) {
+        list.style.display = "none";
+        idx = -1;
+      }
+    }, 150);
   });
-  nameSuggestionIndex = index;
+
+  input.addEventListener("input", () => show(input.value));
+
+  window.addEventListener("scroll", () => {
+    if (list.style.display !== "none") positionList();
+  }, true);
+
+  window.addEventListener("resize", () => {
+    if (list.style.display !== "none") positionList();
+  });
+
+  input.addEventListener("keydown", e => {
+    const liItems = [...list.querySelectorAll("li")].filter(
+      l => l.style.pointerEvents !== "none"
+    );
+
+    if (e.key === "Tab") {
+      list.style.display = "none";
+      idx = -1;
+      return;
+    }
+    if (!liItems.length || list.style.display === "none") return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      idx = Math.min(idx + 1, liItems.length - 1);
+      liItems.forEach((l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      idx = Math.max(idx - 1, 0);
+      liItems.forEach((l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""));
+    } else if (e.key === "Enter" && idx >= 0) {
+      e.preventDefault();
+      selectItem(liItems[idx].dataset.display, liItems[idx].dataset.raw);
+    } else if (e.key === "Escape") {
+      list.style.display = "none";
+      idx = -1;
+    }
+  });
+
+  // Close when clicking outside
+  if (input._vioOutsideClick) {
+    document.removeEventListener("click", input._vioOutsideClick);
+  }
+  input._vioOutsideClick = e => {
+    if (!input.contains(e.target) && !list.contains(e.target)) {
+      list.style.display = "none";
+      idx = -1;
+    }
+  };
+  document.addEventListener("click", input._vioOutsideClick);
 }
 
-function handleNameSuggestionNav(e) {
-  const list = document.getElementById("name-suggestions");
-  const items = list ? list.querySelectorAll("li") : [];
-  if (!items.length || list.style.display === "none") return;
+// ── Wire up each filter field ─────────────────────────────────────
+function setupFilterSuggestions() {
+  // Employee name — free-text with floating suggestions (no hidden partner)
+  setupFieldSuggestions(
+    "f_name",
+    "vio-name-suggestions",
+    () => [...new Map(
+      allVio.map(v => [(v.employee_name || "").toLowerCase(), v.employee_name])
+    ).values()].filter(Boolean),
+    { onSelect: () => applyFilters() }
+  );
 
-  if (e.key === "ArrowDown") {
-    e.preventDefault();
-    nameSuggestionIndex = Math.min(nameSuggestionIndex + 1, items.length - 1);
-    highlightNameSuggestion(nameSuggestionIndex);
-  } else if (e.key === "ArrowUp") {
-    e.preventDefault();
-    nameSuggestionIndex = Math.max(nameSuggestionIndex - 1, 0);
-    highlightNameSuggestion(nameSuggestionIndex);
-  } else if (e.key === "Enter" && nameSuggestionIndex >= 0) {
-    e.preventDefault();
-    selectNameSuggestion(items[nameSuggestionIndex].dataset.value);
-  } else if (e.key === "Escape") {
-    list.style.display = "none";
-    nameSuggestionIndex = -1;
-  }
+  // Type — readonly display + hidden value (exact mirror of system.php fields)
+  setupFieldSuggestions(
+    "f_type_display",
+    "vio-type-suggestions",
+    () => allVio.map(v => v.violation_type),
+    {
+      hiddenId : "f_type_val",
+      noneLabel: "No Type",
+      onSelect : () => applyFilters(),
+    }
+  );
 }
 
-document.addEventListener("click", function (e) {
-  const list = document.getElementById("name-suggestions");
-  const input = document.getElementById("f_name");
-  if (list && input && !input.contains(e.target) && !list.contains(e.target)) {
-    list.style.display = "none";
-    nameSuggestionIndex = -1;
-  }
-});
+function buildTypeSuggestions() {
+  setupFilterSuggestions();
+}
 
+// ── Apply / clear ─────────────────────────────────────────────────
 function applyFilters() {
-  const name = document.getElementById("f_name").value.trim().toLowerCase();
-  const type = document.getElementById("f_type").value;
-  const from = document.getElementById("f_from").value;
-  const to = document.getElementById("f_to").value;
+  const name    = document.getElementById("f_name").value.trim().toLowerCase();
+  const typeRaw = document.getElementById("f_type_val").value;
 
-  filteredVio = allVio.filter((v) => {
-    if (name && !v.employee_name?.toLowerCase().includes(name)) return false;
-    if (type && v.violation_type !== type) return false;
-    if (from && v.violation_date < from) return false;
-    if (to && v.violation_date > to) return false;
+  const from = (document.getElementById("f_from")?.value || "").trim();
+  const to   = (document.getElementById("f_to")?.value   || "").trim();
+
+  filteredVio = allVio.filter(v => {
+    if (name && !(v.employee_name || "").toLowerCase().includes(name)) return false;
+
+    if (typeRaw) {
+      if (typeRaw === "__none__") {
+        if ((v.violation_type || "").trim()) return false;
+      } else {
+        if (v.violation_type !== typeRaw) return false;
+      }
+    }
+
+    if (from && (v.violation_date || "") < from) return false;
+    if (to   && (v.violation_date || "") > to)   return false;
+
     return true;
   });
 
@@ -171,42 +297,91 @@ function applyFilters() {
 }
 
 function clearFilters() {
-  ["f_name", "f_from", "f_to"].forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.value = "";
-  });
-  document.getElementById("f_type").selectedIndex = 0;
+  document.getElementById("f_name").value         = "";
+  document.getElementById("f_type_display").value = "";
+  document.getElementById("f_type_val").value     = "";
+
+  if (typeof clearDateRange === "function") {
+    clearDateRange();
+  }
+
+  document.querySelectorAll("ul[data-suggestion-list]")
+    .forEach(ul => ul.style.display = "none");
+
+  const filterStatus = document.getElementById("filter-status");
+  if (filterStatus) filterStatus.innerHTML = "";
+
   applyFilters();
 }
 
-function updateFilterStatus() {
-  const el = document.getElementById("filter-status");
-  const name = document.getElementById("f_name").value.trim();
-  const type = document.getElementById("f_type").value;
-  const from = document.getElementById("f_from").value;
-  const to = document.getElementById("f_to").value;
-  const active = [name, type, from, to].some(Boolean);
-
-  el.innerHTML = active
-    ? `<span style="
-              background:#e3f2fd;border-left:4px solid #2196F3;
-              padding:6px 12px;border-radius:4px;font-size:12px;
-              color:#1565c0;display:inline-flex;align-items:center;gap:6px;">
-            <i class="fas fa-filter"></i> Filters active — ${filteredVio.length} record${filteredVio.length !== 1 ? "s" : ""}
-           </span>`
-    : "";
+function getActiveFilters() {
+  const filters = {};
+  const name    = document.getElementById("f_name").value.trim();
+  const typeVal = document.getElementById("f_type_val").value;
+  const from    = document.getElementById("f_from")?.value || "";
+  const to      = document.getElementById("f_to")?.value   || "";
+  if (name)    filters["Employee"]   = name;
+  if (typeVal) filters["Type"]       = typeVal === "__none__" ? "No Type" : typeVal;
+  if (from)    filters["Date from"]  = from;
+  if (to)      filters["Date to"]    = to;
+  return filters;
 }
 
-// ── Render ────────────────────────────────────────────────────────────
+function updateFilterStatus() {
+  const el      = document.getElementById("filter-status");
+  if (!el) return;
+
+  const filters = getActiveFilters();
+  const active  = Object.keys(filters).length > 0;
+
+  if (!active) {
+    el.innerHTML = "";
+    return;
+  }
+
+  const filterInfo = document.createElement("div");
+  filterInfo.style.cssText = `
+    background:#e3f2fd;border-left:4px solid #2196F3;
+    padding:12px 16px;margin-left:16px;border-radius:4px;
+    font-size:14px;color:#1565c0;
+    display:inline-flex;flex-wrap:wrap;justify-content:space-between;align-items:center;
+  `;
+
+  const label = document.createElement("span");
+  label.style.cssText = "display:inline-flex;align-items:center;gap:8px;";
+
+  const icon = document.createElement("i");
+  icon.className = "fas fa-filter";
+  label.appendChild(icon);
+
+  const text = document.createElement("span");
+  text.appendChild(document.createTextNode("Active Filters: "));
+
+  Object.entries(filters).forEach(([key, value], i) => {
+    if (i > 0) text.appendChild(document.createTextNode(" | "));
+    const strong = document.createElement("strong");
+    strong.textContent = `${key}:`;
+    text.appendChild(strong);
+    text.appendChild(document.createTextNode(` ${value}`));
+  });
+
+  label.appendChild(text);
+  filterInfo.appendChild(label);
+
+  el.innerHTML = "";
+  el.appendChild(filterInfo);
+}
+
+// ── Render table ──────────────────────────────────────────────────
 function renderTable() {
-  const tbody = document.getElementById("violationTableBody");
+  const tbody        = document.getElementById("violationTableBody");
   const paginationDiv = document.getElementById("pagination");
-  const noDataDiv = document.getElementById("no-data");
+  const noDataDiv    = document.getElementById("no-data");
 
   if (!filteredVio || filteredVio.length === 0) {
     tbody.innerHTML = "";
     if (paginationDiv) paginationDiv.style.display = "none";
-    if (noDataDiv) noDataDiv.style.display = "block";
+    if (noDataDiv)     noDataDiv.style.display = "block";
     return;
   }
 
@@ -214,158 +389,135 @@ function renderTable() {
 
   const totalPages = Math.ceil(filteredVio.length / PER_PAGE);
   if (currentPage > totalPages) currentPage = totalPages;
-  if (currentPage < 1) currentPage = 1;
+  if (currentPage < 1)          currentPage = 1;
 
   const startIndex = (currentPage - 1) * PER_PAGE;
-  const slice = filteredVio.slice(startIndex, startIndex + PER_PAGE);
+  const slice      = filteredVio.slice(startIndex, startIndex + PER_PAGE);
 
-  tbody.innerHTML = slice
-    .map((v, index) => {
-      const safeFullname = escapeHtml(toProperCase(v.employee_name));
-      const safeViolation = escapeHtml(v.violation_type);
-      const safeDescription = escapeHtml(v.violation_description);
-      const safeId = escapeHtml(String(v.id));
-      const safeEmpId = escapeHtml(String(v.employee_id));
-      const badge = getBadgeClass(v.violation_type);
-      const safeDate = formatDate(v.violation_date);
-      const safeCreatedAt = formatDate(v.created_at, true);
+  tbody.innerHTML = slice.map((v, index) => {
+    const safeFullname    = escapeHtml(toProperCase(v.employee_name));
+    const safeViolation   = escapeHtml(v.violation_type);
+    const safeDescription = escapeHtml(v.violation_description);
+    const safeId          = escapeHtml(String(v.id));
+    const safeEmpId       = escapeHtml(String(v.employee_id));
+    const badge           = getBadgeClass(v.violation_type);
+    const safeDate        = formatDate(v.violation_date);
+    const safeCreatedAt   = formatDate(v.created_at, true);
 
-      return `
-          <tr>
-            <td class="sn-cell">${startIndex + index + 1}</td>
-            <td>
-              <div class="emp-name"><strong>${safeFullname}</strong></div>
-              <div class="emp-id"><strong>EMPID: ${safeEmpId}</strong></div>
-            </td>
-            <td><span class="badge ${badge}">${safeViolation || "—"}</span></td>
-            <td class="desc-cell"><small>${safeDescription || "—"}</small></td>
-            <td><small>${safeDate}</small></td>
-            <td class="emp-createdAt"><small>${safeCreatedAt}</small></td>
+    return `
+      <tr class="row">
+        <td class="sn-cell">${startIndex + index + 1}</td>
+        <td>
+          <div class="emp-name"><strong>${safeFullname}</strong></div>
+          <div class="emp-id"><strong>EMPID: ${safeEmpId}</strong></div>
+        </td>
+        <td><span class="badge ${badge}">${safeViolation || "—"}</span></td>
+        <td class="desc-cell"><small>${safeDescription || "—"}</small></td>
+        <td><small>${safeDate}</small></td>
+        <td class="emp-createdAt"><small>${safeCreatedAt}</small></td>
 
-            ${
-              window.PERMISSIONS.delete
-                ? `
-            <td style="position: relative; width: 160px; overflow: visible;">
+        ${window.PERMISSIONS.delete ? `
+        <td style="position:relative;width:160px;overflow:visible;">
+          <button
+            data-emp-id="${safeId}"
+            class="actions-toggle-btn actions-item"
+            tabindex="-1"
+            onclick="toggleActionsPanel(this)">
+            ACTIONS
+          </button>
 
-              <!-- ACTIONS TOGGLE -->
-              <button
-                data-emp-id="${safeId}"
-                class="actions-toggle-btn actions-item"
-                tabindex="-1"
-                onclick="toggleActionsPanel(this)">
-                ACTIONS
-              </button>
-
-              <!-- FLOATING PANEL -->
-              <div class="actions-panel">
-                <small style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); text-align: center; color: #fff;">${safeFullname}</small>
-
-                ${
-                  window.PERMISSIONS.delete
-                    ? `
-                <!-- DELETE -->
-                <button
-                  data-emp-id="${safeId}"
-                  data-name="${safeFullname || ''}"
-                  data-type="${safeViolation || ''}"
-                  class="view-delete"
-                  tabindex="-1"
-                  onclick="openDeleteFromBtn(this)">
-                  <i class="fas fa-trash-alt"></i> DELETE
-                </button>
-                `
-                    : ""
-                }
-
-              </div>
-            </td>
-            `
-                : ""
-            }
-          </tr>
-      `;
-    })
-    .join("");
+          <div class="actions-panel">
+            <small style="background:linear-gradient(135deg,#1e40af 0%,#3b82f6 100%);
+                          text-align:center;color:#fff;">${safeFullname}</small>
+            <button
+              data-emp-id="${safeId}"
+              data-name="${safeFullname}"
+              data-type="${safeViolation}"
+              class="view-delete"
+              tabindex="-1"
+              onclick="openDeleteFromBtn(this)">
+              <i class="fas fa-trash-alt"></i> DELETE
+            </button>
+          </div>
+        </td>
+        ` : ""}
+      </tr>
+    `;
+  }).join("");
 
   renderPagination(totalPages);
 }
 
-// ── Actions panel ─────────────────────────────────────────────────────────────
+// ── Actions panel (identical to system.js) ────────────────────────
 function toggleActionsPanel(btn) {
   const allPanels = document.querySelectorAll(".actions-panel");
-  const allBtns = document.querySelectorAll(".actions-toggle-btn");
-  const panel = btn.parentElement.querySelector(".actions-panel");
-  const isAlreadyOpen = panel.classList.contains("actions-open");
+  const allBtns   = document.querySelectorAll(".actions-toggle-btn");
+  const panel     = btn.parentElement.querySelector(".actions-panel");
+  const isOpen    = panel.classList.contains("actions-open");
 
-  allPanels.forEach((p) => {
+  allPanels.forEach(p => {
     p.classList.remove("actions-open");
     p.style.display = "none";
     if (p._originalParent && p.parentElement === document.body) {
       p._originalParent.appendChild(p);
     }
   });
-  allBtns.forEach((b) => b.classList.remove("actions-active"));
+  allBtns.forEach(b => b.classList.remove("actions-active"));
 
-  if (isAlreadyOpen) return;
+  if (isOpen) return;
 
   panel._originalParent = btn.parentElement;
   document.body.appendChild(panel);
 
-  const rect = btn.getBoundingClientRect();
+  const rect   = btn.getBoundingClientRect();
   const panelW = 160;
   const panelH = panel.scrollHeight || 180;
 
   let left = rect.right - panelW;
   left = Math.max(8, Math.min(left, window.innerWidth - panelW - 8));
 
-  let top;
-  if (rect.top >= panelH + 8) {
-    top = rect.top - panelH - 4;
-  } else {
-    top = rect.bottom + 4;
-  }
+  const top = rect.top >= panelH + 8
+    ? rect.top - panelH - 4
+    : rect.bottom + 4;
 
-  panel.style.position = "fixed";
-  panel.style.top = Math.round(top) + "px";
-  panel.style.left = Math.round(left) + "px";
-  panel.style.width = panelW + "px";
-  panel.style.bottom = "auto";
-  panel.style.transform = "none";
-  panel.style.zIndex = "99999";
+  panel.style.cssText += `
+    position:fixed;
+    top:${Math.round(top)}px;
+    left:${Math.round(left)}px;
+    width:${panelW}px;
+    bottom:auto;
+    transform:none;
+    z-index:99999;
+  `;
 
   panel.classList.add("actions-open");
   btn.classList.add("actions-active");
 }
 
-// ── Close panel when clicking outside ──────────────────────────────
 document.addEventListener("click", function (e) {
-  if (
-    !e.target.closest(".actions-toggle-btn") &&
-    !e.target.closest(".actions-panel")
-  ) {
-    document.querySelectorAll(".actions-panel").forEach((p) => {
+  if (!e.target.closest(".actions-toggle-btn") && !e.target.closest(".actions-panel")) {
+    document.querySelectorAll(".actions-panel").forEach(p => {
       p.classList.remove("actions-open");
       p.style.display = "none";
       if (p._originalParent && p.parentElement === document.body) {
         p._originalParent.appendChild(p);
       }
     });
-    document.querySelectorAll(".actions-toggle-btn").forEach((b) =>
+    document.querySelectorAll(".actions-toggle-btn").forEach(b =>
       b.classList.remove("actions-active")
     );
   }
 });
 
-// ── Close all actions panels ──────────────────────────────────────────────────
 function closeAllActionsPanels() {
-  document.querySelectorAll(".actions-panel").forEach((p) => {
+  document.querySelectorAll(".actions-panel").forEach(p => {
     p.classList.remove("actions-open");
     p.style.display = "none";
     if (p._originalParent && p.parentElement === document.body) {
       p._originalParent.appendChild(p);
     }
   });
-  document.querySelectorAll(".actions-toggle-btn").forEach((b) =>
+  document.querySelectorAll(".actions-toggle-btn").forEach(b =>
     b.classList.remove("actions-active")
   );
 }
@@ -374,39 +526,22 @@ function openDeleteFromBtn(btn) {
   openDeleteModal(btn.dataset.empId, btn.dataset.name, btn.dataset.type);
 }
 
+// ── Badges ────────────────────────────────────────────────────────
 function getBadgeClass(type) {
   if (!type) return "badge-blue";
   const t = type.toLowerCase();
-  if (t.includes("cleared")) return "badge-green";
-  if (
-    [
-      "misconduct",
-      "insubordination",
-      "harassment",
-      "violence",
-      "theft",
-      "fraud",
-    ].some((k) => t.includes(k))
-  )
-    return "badge-red";
-  if (
-    [
-      "tardiness",
-      "absenteeism",
-      "absence",
-      "late",
-      "negligence",
-      "policy",
-      "updated",
-      "initial",
-    ].some((k) => t.includes(k))
-  )
-    return "badge-warn";
+  if (t.includes("cleared"))    return "badge-green";
+  if (["misconduct","insubordination","harassment","violence","theft","fraud"]
+        .some(k => t.includes(k))) return "badge-red";
+  if (["tardiness","absenteeism","absence","late","negligence","policy","updated","initial"]
+        .some(k => t.includes(k))) return "badge-warn";
   return "badge-blue";
 }
 
+// ── Pagination ───────────────────────────────────────────────────
 function renderPagination(totalPages) {
   const pg = document.getElementById("pagination");
+  if (!pg) return;
 
   if (totalPages <= 1) {
     pg.style.display = "none";
@@ -415,8 +550,8 @@ function renderPagination(totalPages) {
 
   pg.style.display = "flex";
 
-  const delta = 2;
-  const range = new Set([1, totalPages]);
+  const delta  = 2;
+  const range  = new Set([1, totalPages]);
   for (
     let p = Math.max(2, currentPage - delta);
     p <= Math.min(totalPages - 1, currentPage + delta);
@@ -426,31 +561,30 @@ function renderPagination(totalPages) {
   }
 
   const sorted = [...range].sort((a, b) => a - b);
-  let prev = null,
-    html = "";
+  let prev = null, html = "";
 
   html += `<button class="page-arrow-btn" tabindex="-1" onclick="goTo(${currentPage - 1})"
-                 ${currentPage <= 1 ? "disabled" : ""}>
-                 <i class="fas fa-arrow-left"></i>
-               </button>`;
+             ${currentPage <= 1 ? "disabled" : ""}>
+             <i class="fas fa-arrow-left"></i>
+           </button>`;
 
   for (const p of sorted) {
     if (prev !== null && p - prev > 1) {
       html += `<span class="page-ellipsis">…</span>`;
     }
-    html += `<button class="page-num-btn ${currentPage === p ? "active" : ""}" tabindex="-1"
-                   onclick="goTo(${p})">${p}</button>`;
+    html += `<button class="page-num-btn ${currentPage === p ? "active" : ""}"
+               tabindex="-1" onclick="goTo(${p})">${p}</button>`;
     prev = p;
   }
 
   html += `<button class="page-arrow-btn" tabindex="-1" onclick="goTo(${currentPage + 1})"
-                 ${currentPage >= totalPages ? "disabled" : ""}>
-                 <i class="fas fa-arrow-right"></i>
-               </button>`;
+             ${currentPage >= totalPages ? "disabled" : ""}>
+             <i class="fas fa-arrow-right"></i>
+           </button>`;
   html += `<span id="page-info">
-                 ${filteredVio.length} total &nbsp;|&nbsp;
-                 Page ${currentPage} of ${totalPages}
-               </span>`;
+             ${filteredVio.length} total &nbsp;|&nbsp;
+             Page ${currentPage} of ${totalPages}
+           </span>`;
 
   pg.innerHTML = html;
 }
@@ -460,41 +594,50 @@ function goTo(p) {
   renderTable();
 }
 
+function previousPage() {
+  if (currentPage > 1) { currentPage--; renderTable(); }
+}
+
+function nextPage() {
+  const totalPages = Math.ceil(filteredVio.length / PER_PAGE);
+  if (currentPage < totalPages) { currentPage++; renderTable(); }
+}
+
 function showNoData() {
   document.getElementById("violationTableBody").innerHTML = "";
-  document.getElementById("no-data").style.display = "block";
-  document.getElementById("pagination").style.display = "none";
+  document.getElementById("no-data").style.display       = "block";
+  document.getElementById("pagination").style.display    = "none";
 }
 
 function refreshStats() {
   const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth() + 1;
+  const y   = now.getFullYear();
+  const m   = now.getMonth() + 1;
 
-  document.getElementById("statTotal").textContent = allVio.length;
+  document.getElementById("statTotal").textContent    = allVio.length;
   document.getElementById("statAffected").textContent = new Set(
-    allVio.map((v) => v.employee_id),
+    allVio.map(v => v.employee_id)
   ).size;
-  document.getElementById("statMonth").textContent = allVio.filter((v) => {
+  document.getElementById("statMonth").textContent = allVio.filter(v => {
     if (!v.violation_date) return false;
     const [vy, vm] = v.violation_date.split("-").map(Number);
     return vy === y && vm === m;
   }).length;
 }
 
-// ── Delete ────────────────────────────────────────────────────────────
+// ── Delete ────────────────────────────────────────────────────────
 function openDeleteModal(id, name, type) {
   closeAllActionsPanels();
   deleteTargetId = id;
   document.getElementById("deleteModalMessage").innerHTML =
     `Delete the <strong>${escapeHtml(type)}</strong> violation for
-         <strong>${escapeHtml(name)}</strong>?
-         <strong>This cannot be undone.</strong>`;
-  document.getElementById("deleteModal").classList.add("open");
+     <strong>${escapeHtml(name)}</strong>?
+     <br><strong style="color:#d63031;">This cannot be undone.</strong>`;
+  document.getElementById("deleteModal").style.display = "flex";
 }
 
 function closeModal() {
-  document.getElementById("deleteModal").classList.remove("open");
+  document.getElementById("deleteModal").style.display = "none";
   deleteTargetId = null;
 }
 
@@ -506,12 +649,10 @@ async function executeDelete() {
   fd.append("id", deleteTargetId);
 
   try {
-    const res = await fetch(`${ViolationBackend}`, {
-      method: "POST",
-      body: fd,
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+    const res  = await fetch(`${ViolationBackend}`, {
+      method : "POST",
+      body   : fd,
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     const data = await res.json();
 
@@ -532,7 +673,7 @@ document.getElementById("deleteModal").addEventListener("click", function (e) {
   if (e.target === this) closeModal();
 });
 
-// ── Utils ─────────────────────────────────────────────────────────────
+// ── Utils ──────────────────────────────────────────────────────────────
 function escapeHtml(str) {
   if (str === null || str === undefined) return "";
   return String(str)
@@ -553,20 +694,10 @@ function toProperCase(str) {
 function formatDate(str, withTime = false) {
   if (!str) return "—";
   try {
-    const d = new Date(withTime ? str : str + "T00:00:00");
+    const d    = new Date(withTime ? str : str + "T00:00:00");
     const opts = withTime
-      ? {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        }
-      : {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        };
+      ? { year:"numeric", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" }
+      : { year:"numeric", month:"short", day:"numeric" };
     return d.toLocaleDateString("en-PH", opts);
   } catch {
     return str;
@@ -574,7 +705,7 @@ function formatDate(str, withTime = false) {
 }
 
 function showAlert(message, type = "info") {
-  document.querySelectorAll(".alert").forEach((a) => a.remove());
+  document.querySelectorAll(".alert").forEach(a => a.remove());
 
   const alert = document.createElement("div");
   alert.className = `alert alert-${type}`;
@@ -605,3 +736,14 @@ function showLoading(show) {
     body.classList.remove("loading");
   }
 }
+
+// ── Init ─────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", function () {
+  initDateRangePicker();
+  loadViolations();
+  setupFilterSuggestions();
+
+  window.onDateRangeChange = function () {
+    applyFilters();
+  };
+});

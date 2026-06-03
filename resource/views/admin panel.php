@@ -2076,7 +2076,7 @@ function renderBindRows(array $pages, int $depth = 0): void
 
   <!-- ══════════════════════════════════════════ TAB: MYADMIN ══ -->
   <div class="container tab-panel" id="panelMyadmin">
-    <div class="controls" style="border-radius:0 8px 0 0;">
+    <div class="controls">
       <span style="font-size:13px;font-weight:600;color:#374151;">
         <i class="fas fa-database" style="color:#7c3aed;margin-right:6px;"></i> Database Export
       </span>
@@ -2106,7 +2106,7 @@ function renderBindRows(array $pages, int $depth = 0): void
             </label>
           </div>
         </div>
-        <button class="btn btn-add" style="margin-left:0;" onclick="exportDatabase()">
+        <button class="btn btn-add" style="margin-left:0;" tabindex="-1" onclick="exportDatabase()">
           <i class="fas fa-download"></i> Download SQL
         </button>
         <div id="exportStatus" style="display:none;margin-top:14px;font-size:13px;color:#6b7280;">
@@ -2168,8 +2168,8 @@ function renderBindRows(array $pages, int $depth = 0): void
         </div>
       </div>
       <div class="modal-actions">
-        <button class="btn-cancel" onclick="closeModal('userFormModal')">Cancel</button>
-        <button class="btn-confirm" id="btnUserFormSubmit" onclick="submitUserForm()">
+        <button class="btn-cancel" tabindex="-1" onclick="closeModal('userFormModal')">Cancel</button>
+        <button class="btn-confirm" id="btnUserFormSubmit" tabindex="-1" onclick="submitUserForm()">
           <i class="fas fa-save"></i> Register User
         </button>
       </div>
@@ -2185,8 +2185,8 @@ function renderBindRows(array $pages, int $depth = 0): void
       <h3 style="justify-content:center"><i class="fas fa-exclamation-triangle"></i> Delete User?</h3>
       <p id="deleteUserMsg">Are you sure? This action cannot be undone.</p>
       <div class="modal-actions" style="justify-content:center">
-        <button class="btn-cancel" onclick="closeModal('deleteUserModal')">Cancel</button>
-        <button class="btn-danger" id="btnConfirmDeleteUser" onclick="confirmDeleteUser()">
+        <button class="btn-cancel" tabindex="-1" onclick="closeModal('deleteUserModal')">Cancel</button>
+        <button class="btn-danger" id="btnConfirmDeleteUser" tabindex="-1" onclick="confirmDeleteUser()">
           <i class="fas fa-trash"></i> Delete
         </button>
       </div>
@@ -2199,7 +2199,7 @@ function renderBindRows(array $pages, int $depth = 0): void
       <h3><i class="fas fa-info-circle" style="color:#6d28d9"></i> Log Details</h3>
       <div class="log-detail-grid" id="viewLogContent"></div>
       <div class="modal-actions">
-        <button class="btn-cancel" onclick="closeModal('viewLogModal')">Close</button>
+        <button class="btn-cancel" tabindex="-1" onclick="closeModal('viewLogModal')">Close</button>
       </div>
     </div>
   </div>
@@ -2213,8 +2213,8 @@ function renderBindRows(array $pages, int $depth = 0): void
       <h3 style="justify-content:center"><i class="fas fa-exclamation-triangle"></i> Confirm Delete</h3>
       <p id="deleteSingleLogMsg">Delete this log entry?</p>
       <div class="modal-actions" style="justify-content:center">
-        <button class="btn-cancel" onclick="closeModal('deleteSingleLogModal')">Cancel</button>
-        <button class="btn-danger" id="btnConfirmDeleteLog" onclick="deleteSingleLog()"><i class="fas fa-trash"></i> Delete</button>
+        <button class="btn-cancel" tabindex="-1" onclick="closeModal('deleteSingleLogModal')">Cancel</button>
+        <button class="btn-danger" id="btnConfirmDeleteLog" tabindex="-1" onclick="deleteSingleLog()"><i class="fas fa-trash"></i> Delete</button>
       </div>
     </div>
   </div>
@@ -2228,8 +2228,8 @@ function renderBindRows(array $pages, int $depth = 0): void
       <h3 style="justify-content:center"><i class="fas fa-exclamation-triangle"></i> Confirm Delete All</h3>
       <p>Delete <strong>all system log records</strong>? This <strong>cannot be undone</strong>.</p>
       <div class="modal-actions" style="justify-content:center">
-        <button class="btn-cancel" onclick="closeModal('deleteAllLogsModal')">Cancel</button>
-        <button class="btn-danger" id="btnConfirmDeleteAllLogs" onclick="deleteAllLogs()"><i class="fas fa-trash"></i> Yes, Delete All</button>
+        <button class="btn-cancel" tabindex="-1" onclick="closeModal('deleteAllLogsModal')">Cancel</button>
+        <button class="btn-danger" id="btnConfirmDeleteAllLogs" tabindex="-1" onclick="deleteAllLogs()"><i class="fas fa-trash"></i> Yes, Delete All</button>
       </div>
     </div>
   </div>
@@ -2252,10 +2252,10 @@ function renderBindRows(array $pages, int $depth = 0): void
 
         <!-- Sidebar -->
         <div class="gmodal-sidebar">
-          <button class="gmodal-sidetab active" id="gSideBasic" onclick="switchGroupTab('basic')">
+          <button class="gmodal-sidetab active" id="gSideBasic" tabindex="-1" onclick="switchGroupTab('basic')">
             <i class="fas fa-id-card"></i> Basic Info
           </button>
-          <button class="gmodal-sidetab" id="gSideAccess" onclick="switchGroupTab('access')">
+          <button class="gmodal-sidetab" id="gSideAccess" tabindex="-1" onclick="switchGroupTab('access')">
             <i class="fas fa-shield-alt"></i> Bind Access
           </button>
         </div>
@@ -2299,8 +2299,8 @@ function renderBindRows(array $pages, int $depth = 0): void
 
       <!-- Footer -->
       <div class="modal-actions" style="padding:14px 24px; justify-content:flex-end;">
-        <button class="btn-cancel" onclick="closeModal('groupFormModal')">Cancel</button>
-        <button class="btn-confirm" id="btnGroupFormSubmit" onclick="submitGroupForm()">
+        <button class="btn-cancel" tabindex="-1" onclick="closeModal('groupFormModal')">Cancel</button>
+        <button class="btn-confirm" id="btnGroupFormSubmit" tabindex="-1" onclick="submitGroupForm()">
           <i class="fas fa-save"></i> <span id="gBtnLabel">Create Group</span>
         </button>
       </div>
@@ -2316,8 +2316,8 @@ function renderBindRows(array $pages, int $depth = 0): void
       <h3 style="justify-content:center"><i class="fas fa-exclamation-triangle"></i> Delete Group?</h3>
       <p id="deleteGroupMsg">Are you sure? This action cannot be undone.</p>
       <div class="modal-actions" style="justify-content:center">
-        <button class="btn-cancel" onclick="closeModal('deleteGroupModal')">Cancel</button>
-        <button class="btn-danger" id="btnConfirmDeleteGroup" onclick="confirmDeleteGroup()">
+        <button class="btn-cancel" tabindex="-1" onclick="closeModal('deleteGroupModal')">Cancel</button>
+        <button class="btn-danger" id="btnConfirmDeleteGroup" tabindex="-1" onclick="confirmDeleteGroup()">
           <i class="fas fa-trash"></i> Delete
         </button>
       </div>

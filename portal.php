@@ -1314,9 +1314,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="dh-name"><i class="fas fa-user-circle"></i> <?= htmlspecialchars($username ?? 'User'); ?></div>
             <div class="dh-sub"><?= htmlspecialchars($user['user_group'] ?? 'User'); ?></div>
           </div>
-          <div class="dropdown-item" id="changePassBtn">
-            <i class="fas fa-lock"></i> Change Password
-          </div>
+          <span style="cursor: not-allowed; display:block;">
+            <div class="dropdown-item" id="changePassBtn"
+              aria-disabled="true"
+              tabindex="-1"
+              style="opacity:0.4; pointer-events:none;">
+              <i class="fas fa-lock"></i> Change Password
+            </div>
+          </span>
           <?php if ($access['about']) : ?>
             <div class="dropdown-item" onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=about';">
               <i class="fas fa-info-circle"></i> About Us

@@ -147,32 +147,37 @@ class EmployeeManager
 
   public function getEmployees($filters = [])
   {
-    $query  = "SELECT * FROM " . $this->table . " WHERE 1=1";
+    $where  = "SELECT * FROM " . $this->table . " WHERE 1=1";
     $params = [];
 
     if (!empty($filters['qr_code'])) {
-      $query .= " AND qr_code LIKE :qr_code";
+      $where .= " AND qr_code LIKE :qr_code";
       $params[':qr_code'] = '%' . $filters['qr_code'] . '%';
     }
-
     if (isset($filters['is_active']) && $filters['is_active'] !== '') {
-      $query .= " AND is_active = :is_active";
+      $where .= " AND is_active = :is_active";
       $params[':is_active'] = (int)$filters['is_active'];
     }
-
     if (!empty($filters['created_at'])) {
-      $query .= " AND created_at LIKE :created_at";
+      $where .= " AND created_at LIKE :created_at";
       $params[':created_at'] = '%' . $filters['created_at'] . '%';
     }
-
+    if (!empty($filters['date_from'])) {
+      $where .= " AND DATE(created_at) >= :date_from";
+      $params[':date_from'] = $filters['date_from'];
+    }
+    if (!empty($filters['date_to'])) {
+      $where .= " AND DATE(created_at) <= :date_to";
+      $params[':date_to'] = $filters['date_to'];
+    }
     if (!empty($filters['updated_at'])) {
-      $query .= " AND updated_at LIKE :updated_at";
+      $where .= " AND updated_at LIKE :updated_at";
       $params[':updated_at'] = '%' . $filters['updated_at'] . '%';
     }
 
-    $query .= " ORDER BY id DESC";
+    $where .= " ORDER BY id DESC";
 
-    $stmt = $this->conn->prepare($query);
+    $stmt = $this->conn->prepare($where);
     foreach ($params as $key => $value) {
       $stmt->bindValue($key, $value);
     }
@@ -922,21 +927,20 @@ try {
 
         unset($filters['remarks']);
 
-        if (!empty($_GET['qr_code'])) {
-          $filters['qr_code'] = $_GET['qr_code'];
-        }
-
-        if (isset($_GET['is_active']) && $_GET['is_active'] !== '') {
-          $filters['is_active'] = (int)$_GET['is_active'];
-        }
-
+        if (!empty($_GET['qr_code'])) $filters['qr_code'] = sanitizeInput($_GET['qr_code']);
+        if (isset($_GET['is_active']) && $_GET['is_active'] !== '') {$filters['is_active'] = (int)$_GET['is_active'];}
         if (!empty($_GET['created_at'])) {
-          $filters['created_at'] = $_GET['created_at'];
-        } elseif (!empty($_GET['created_from']) && !empty($_GET['created_to'])) {
-          $filters['created_from'] = $_GET['created_from'];
-          $filters['created_to']   = $_GET['created_to'];
+          $d = $_GET['created_at'];
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['created_at'] = $d;
         }
-
+        if (!empty($_GET['date_from'])) {
+          $d = $_GET['date_from'];
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_from'] = $d;
+        }
+        if (!empty($_GET['date_to'])) {
+          $d = $_GET['date_to'];
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_to'] = $d;
+        }
         if (!empty($_GET['updated_at'])) {
           $filters['updated_at'] = $_GET['updated_at'];
         } elseif (!empty($_GET['updated_from']) && !empty($_GET['updated_to'])) {

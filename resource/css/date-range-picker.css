@@ -1,0 +1,345 @@
+/* resouce/css/date-range-picker.css --> date picker */
+
+/* ── Date range pill ──────────────────────────────────────────────── */
+.date-range-pill {
+  display: inline-flex;
+  align-items: center;
+  background: #fff;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  height: 44px;
+  padding: 0 12px;
+  gap: 0;
+  transition: border-color 0.15s;
+  min-width: fit-content;
+  cursor: pointer;
+  user-select: none;
+}
+
+.date-range-pill:focus-within {
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: #667eea;
+}
+
+.date-range-icon {
+  font-size: 13px;
+  color: #94a3b8;
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+.drp-display {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  gap: 0;
+  flex: 1;
+}
+
+.drp-placeholder {
+  color: #94a3b8;
+}
+
+.drp-val {
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.drp-sep {
+  color: #94a3b8;
+  padding: 0 4px;
+}
+
+.date-range-clear {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 8px;
+  flex-shrink: 0;
+  color: #94a3b8;
+  font-size: 14px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+.date-range-clear:hover {
+  color: #475569;
+}
+
+/* ── Dropdown container ───────────────────────────────────────────── */
+.drp-dropdown {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
+  font-size: 13px;
+  font-family: inherit;
+  overflow: hidden;
+  min-width: 640px;
+  width: fit-content;
+  max-width: 720px; 
+}
+
+.drp-inner {
+  display: flex;
+}
+
+/* ── Presets sidebar ──────────────────────────────────────────────── */
+.drp-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 12px;
+  border-right: 1px solid #f1f5f9;
+  min-width: 140px;
+  background: #fafbfc;
+}
+
+.drp-preset {
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 7px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #334155;
+  transition:
+    background 0.12s,
+    color 0.12s;
+  white-space: nowrap;
+}
+
+.drp-preset:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+/* ── Main panel ───────────────────────────────────────────────────── */
+.drp-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Top date/time inputs ─────────────────────────────────────────── */
+.drp-top-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fafbfc;
+}
+
+.drp-top-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 5px 10px;
+}
+
+.drp-top-date,
+.drp-top-time {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: #334155;
+  padding: 0;
+  box-shadow: none;
+}
+
+.drp-top-date {
+  width: 110px;
+}
+
+.drp-top-time {
+  width: 80px;
+  color: #64748b;
+}
+
+.drp-arrow {
+  color: #94a3b8;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.drp-top-date:focus,
+.drp-top-time:focus {
+  border: none;
+}
+
+/* ── Calendars ────────────────────────────────────────────────────── */
+.drp-calendars {
+  display: flex;
+  gap: 0;
+  padding: 12px 16px;
+  flex: 1;
+}
+
+.drp-cal {
+  flex: 1;
+}
+
+.drp-cal + .drp-cal {
+  border-left: 1px solid #f1f5f9;
+  padding-left: 16px;
+  margin-left: 4px;
+}
+
+/* ── Calendar header ──────────────────────────────────────────────── */
+.drp-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.drp-cal-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #1e293b;
+  flex: 1;
+  text-align: center;
+}
+
+.drp-nav {
+  background: none;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #64748b;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  padding: 0;
+  transition:
+    background 0.1s,
+    color 0.1s;
+}
+
+.drp-nav:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+/* ── Calendar table ───────────────────────────────────────────────── */
+.drp-cal-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.drp-cal-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-align: center;
+  padding: 4px 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.drp-day {
+  text-align: center;
+  padding: 4px 0;
+  cursor: pointer;
+  font-size: 13px;
+  color: #1e293b;
+  border-radius: 0;
+  transition:
+    background 0.1s,
+    color 0.1s;
+  position: relative;
+  height: 30px;
+  vertical-align: middle;
+}
+
+.drp-day:hover:not(.drp-day-faded) {
+  color: var(--accent);
+}
+
+.drp-day-faded {
+  color: #cbd5e1;
+  cursor: default;
+}
+
+.drp-day-faded:hover {
+  background: none;
+  color: #cbd5e1;
+}
+
+.drp-day-today {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* Selected start/end */
+.drp-day-start,
+.drp-day-end {
+  background: #3b82f6 !important;
+  color: #fff !important;
+  border-radius: 50%;
+  font-weight: 600;
+}
+
+/* In-range */
+.drp-day-range {
+  background: var(--accent-light);
+  color: #1e40af;
+  border-radius: 0;
+}
+
+/* Hover-end preview */
+.drp-day-hover-end {
+  background: #93c5fd !important;
+  color: #1e3a8a !important;
+  border-radius: 50%;
+}
+
+/* ── Footer ───────────────────────────────────────────────────────── */
+.drp-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.drp-btn-clear {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 18px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #64748b;
+  transition: background 0.12s;
+}
+
+.drp-btn-clear:hover {
+  background: #f8fafc;
+}
+
+.drp-btn-ok {
+  background: #3b82f6;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 22px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #fff;
+  font-weight: 600;
+  transition: background 0.12s;
+}
+
+.drp-btn-ok:hover {
+  background: #2563eb;
+}
