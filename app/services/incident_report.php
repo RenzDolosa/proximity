@@ -1,7 +1,7 @@
 <?php
 // app/services/incident_report.php
 
-require_once __DIR__ . '/../../config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 
 if (!isLoggedIn()) {
   if (isset($_SERVER['HTTP_X_REQUESTED_WITH'])) {
@@ -66,16 +66,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Incident Report</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="icon" href="../../resource/assets/icon/database-icon.png" type="image/png">
+  <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@700&display=swap" rel="stylesheet">
   <style>
-    *,
-    *::before,
-    *::after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
 
     /* ── Letter page size for print ── */
     @page {

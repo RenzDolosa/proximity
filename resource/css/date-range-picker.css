@@ -4,9 +4,9 @@
 .date-range-pill {
   display: inline-flex;
   align-items: center;
-  background: #fff;
-  border: 2px solid #e2e8f0;
-  border-radius: 8px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
   height: 44px;
   padding: 0 12px;
   gap: 0;
@@ -17,13 +17,13 @@
 }
 
 .date-range-pill:focus-within {
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-  border-color: #667eea;
+  box-shadow: 0 0 0 3px var(--indigo-bg-hover);
+  border-color: var(--indigo);
 }
 
 .date-range-icon {
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--slate);
   margin-right: 10px;
   flex-shrink: 0;
 }
@@ -37,16 +37,16 @@
 }
 
 .drp-placeholder {
-  color: #94a3b8;
+  color: var(--placeholder);
 }
 
 .drp-val {
-  color: #1e293b;
+  color: var(--text);
   font-weight: 500;
 }
 
 .drp-sep {
-  color: #94a3b8;
+  color: var(--placeholder);
   padding: 0 4px;
 }
 
@@ -58,27 +58,41 @@
   padding: 0;
   margin-left: 8px;
   flex-shrink: 0;
-  color: #94a3b8;
+  color: var(--text-faint);
   font-size: 14px;
   line-height: 1;
   transition: color 0.15s;
 }
+
 .date-range-clear:hover {
-  color: #475569;
+  color: var(--slate-strong);
 }
 
 /* ── Dropdown container ───────────────────────────────────────────── */
 .drp-dropdown {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
   font-size: 13px;
   font-family: inherit;
   overflow: hidden;
   min-width: 640px;
   width: fit-content;
-  max-width: 720px; 
+  max-width: 720px;
+}
+
+.lb-drp-dropdown {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
+  font-size: 13px;
+  font-family: inherit;
+  overflow: hidden;
+  min-width: 240px;
+  width: fit-content;
+  max-width: 280px;
 }
 
 .drp-inner {
@@ -91,9 +105,9 @@
   flex-direction: column;
   gap: 4px;
   padding: 16px 12px;
-  border-right: 1px solid #f1f5f9;
+  border-right: 1px solid var(--slate-border);
   min-width: 140px;
-  background: #fafbfc;
+  background: var(--slate-bg);
 }
 
 .drp-preset {
@@ -101,10 +115,10 @@
   border: none;
   text-align: left;
   padding: 7px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 13px;
-  color: #334155;
+  color: var(--slate-strong);
   transition:
     background 0.12s,
     color 0.12s;
@@ -112,8 +126,8 @@
 }
 
 .drp-preset:hover {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--blue-bg);
+  color: var(--blue);
 }
 
 /* ── Main panel ───────────────────────────────────────────────────── */
@@ -129,8 +143,8 @@
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  border-bottom: 1px solid #f1f5f9;
-  background: #fafbfc;
+  border-bottom: 1px solid var(--slate-border);
+  background: var(--slate-bg);
 }
 
 .drp-top-cell {
@@ -138,9 +152,9 @@
   align-items: center;
   gap: 6px;
   flex: 1;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   padding: 5px 10px;
 }
 
@@ -150,8 +164,9 @@
   outline: none;
   background: transparent;
   font-size: 13px;
-  color: #334155;
+  color: var(--slate-strong);
   padding: 0;
+  padding-left: 5px;
   box-shadow: none;
 }
 
@@ -161,11 +176,11 @@
 
 .drp-top-time {
   width: 80px;
-  color: #64748b;
+  color: var(--slate-strong);
 }
 
 .drp-arrow {
-  color: #94a3b8;
+  color: var(--slate);
   font-size: 18px;
   flex-shrink: 0;
 }
@@ -173,6 +188,7 @@
 .drp-top-date:focus,
 .drp-top-time:focus {
   border: none;
+  outline: none;
 }
 
 /* ── Calendars ────────────────────────────────────────────────────── */
@@ -188,7 +204,7 @@
 }
 
 .drp-cal + .drp-cal {
-  border-left: 1px solid #f1f5f9;
+  border-left: 1px solid var(--slate-border);
   padding-left: 16px;
   margin-left: 4px;
 }
@@ -204,18 +220,18 @@
 .drp-cal-title {
   font-weight: 600;
   font-size: 14px;
-  color: #1e293b;
+  color: var(--text);
   flex: 1;
   text-align: center;
 }
 
 .drp-nav {
   background: none;
-  border: 1px solid #e2e8f0;
-  border-radius: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
-  color: #64748b;
+  color: var(--slate);
   width: 22px;
   height: 22px;
   line-height: 1;
@@ -226,8 +242,8 @@
 }
 
 .drp-nav:hover {
-  background: #f1f5f9;
-  color: #1e293b;
+  background: var(--slate-bg-hover);
+  color: var(--text);
 }
 
 /* ── Calendar table ───────────────────────────────────────────────── */
@@ -240,7 +256,7 @@
 .drp-cal-table th {
   font-size: 11px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--slate);
   text-align: center;
   padding: 4px 0 6px;
   text-transform: uppercase;
@@ -252,8 +268,8 @@
   padding: 4px 0;
   cursor: pointer;
   font-size: 13px;
-  color: #1e293b;
-  border-radius: 0;
+  color: var(--text);
+  border-radius: var(--radius-na);
   transition:
     background 0.1s,
     color 0.1s;
@@ -267,13 +283,12 @@
 }
 
 .drp-day-faded {
-  color: #cbd5e1;
+  color: var(--slate);
   cursor: default;
 }
 
 .drp-day-faded:hover {
   background: none;
-  color: #cbd5e1;
 }
 
 .drp-day-today {
@@ -284,24 +299,25 @@
 /* Selected start/end */
 .drp-day-start,
 .drp-day-end {
-  background: #3b82f6 !important;
-  color: #fff !important;
+  background: var(--blue-light) !important;
+  color: var(--surface) !important;
   border-radius: 50%;
   font-weight: 600;
 }
 
 /* In-range */
 .drp-day-range {
-  background: var(--accent-light);
-  color: #1e40af;
-  border-radius: 0;
+  background: var(--blue-bg);
+  color: var(--blue-light);
+  border-radius: var(--radius-na);
 }
 
 /* Hover-end preview */
 .drp-day-hover-end {
-  background: #93c5fd !important;
-  color: #1e3a8a !important;
+  background: var(--blue-light) !important;
+  color: var(--surface) !important;
   border-radius: 50%;
+  font-weight: 600;
 }
 
 /* ── Footer ───────────────────────────────────────────────────────── */
@@ -316,30 +332,53 @@
 .drp-btn-clear {
   background: none;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 5px 18px;
   font-size: 13px;
   cursor: pointer;
-  color: #64748b;
+  color: var(--text);
   transition: background 0.12s;
 }
 
 .drp-btn-clear:hover {
-  background: #f8fafc;
+  background: var(--slate-hover);
+  color: var(--surface);
 }
 
 .drp-btn-ok {
-  background: #3b82f6;
+  background: var(--blue-light);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 5px 22px;
   font-size: 13px;
   cursor: pointer;
-  color: #fff;
+  color: var(--surface);
   font-weight: 600;
   transition: background 0.12s;
 }
 
 .drp-btn-ok:hover {
-  background: #2563eb;
+  background: var(--blue-hover);
+}
+
+.lb-drp-pill {
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border-width: 1px;
+}
+
+.lb-drp-pill .date-range-icon {
+  font-size: 11px;
+  margin-right: 6px;
+}
+
+.lb-drp-pill .drp-display {
+  font-size: 11px;
+}
+
+/* Single-date dropdown: override base min-width */
+#lb_drp_dropdown {
+  min-width: 0 !important;
+  width: auto !important;
 }

@@ -7,10 +7,10 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 ob_clean();
 
-require_once __DIR__ . '/../../config/config.php';
-require_once __DIR__ . '/../../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
-requireAccess('facial', '../../index.php');
+requireAccess('facial', ROUTE_QR_PROX);
 
 $myDb      = htmlspecialchars($_SESSION['my_database'] ?? 'My Database', ENT_QUOTES, 'UTF-8');
 $userId    = (int) ($_SESSION['user_id']  ?? 0);
@@ -33,18 +33,11 @@ try {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
-  <meta http-equiv="X-Frame-Options" content="SAMEORIGIN">
   <title><?= $myDb ?> — Facial ID</title>
-  <link rel="icon" href="../../resource/assets/icon/database-icon.png" type="image/png">
+  <link rel="icon" href="/config/asset.php?t=g4ld2" type="image/png">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
-    *,
-    *::before,
-    *::after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
 
     :root {
       --bg: #09101f;
@@ -222,6 +215,66 @@ try {
       overflow: hidden;
     }
 
+    .mirror-btn {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 8;
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: rgba(16, 24, 40, 0.70);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      color: var(--muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      transition: background .15s, color .15s, border-color .15s, transform .2s;
+    }
+
+    .mirror-btn:hover {
+      background: rgba(37, 99, 235, 0.25);
+      color: var(--accent2);
+      border-color: rgba(96, 165, 250, 0.30);
+    }
+
+    .mirror-btn.on {
+      background: rgba(37, 99, 235, 0.22);
+      color: var(--accent2);
+      border-color: rgba(96, 165, 250, 0.35);
+    }
+
+    .mirror-btn.flip-anim {
+      transform: scaleX(-1);
+    }
+
+    .mirror-btn::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: calc(100% + 8px);
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(9, 16, 31, 0.90);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 10px;
+      font-family: inherit;
+      white-space: nowrap;
+      padding: 4px 8px;
+      border-radius: 5px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .15s;
+    }
+
+    .mirror-btn:hover::after {
+      opacity: 1;
+    }
+
     #videoEl {
       position: absolute;
       inset: 0;
@@ -229,6 +282,11 @@ try {
       height: 100%;
       object-fit: cover;
       transform: scaleX(-1);
+      transition: transform .25s ease;
+    }
+
+    #videoEl.no-mirror {
+      transform: scaleX(1);
     }
 
     #overlayCanvas {
@@ -293,8 +351,8 @@ try {
       position: absolute;
       left: 50%;
       top: 50%;
-      transform: translate(-50%, -90px);
-      width: 160px;
+      transform: translate(-50%, -100px);
+      width: 200px;
       height: 2px;
       background: linear-gradient(90deg, transparent 0%, var(--accent2) 50%, transparent 100%);
       border-radius: 1px;
@@ -310,11 +368,11 @@ try {
 
       0%,
       100% {
-        top: calc(50% - 90px)
+        transform: translate(-50%, -100px);
       }
 
       50% {
-        top: calc(50% + 90px)
+        transform: translate(-50%, 100px);
       }
     }
 
@@ -342,7 +400,6 @@ try {
       background: rgba(245, 158, 11, .18);
     }
 
-    /* Verify ring — pulses around the bounding box while accumulating frames */
     .verify-hud {
       position: absolute;
       pointer-events: none;
@@ -357,7 +414,6 @@ try {
       display: block;
     }
 
-    /* Verify progress arc overlay on top-right of camera */
     .verify-arc {
       position: absolute;
       top: 14px;
@@ -390,7 +446,6 @@ try {
       stroke-width: 4;
       stroke-linecap: round;
       stroke-dasharray: 138.2;
-      /* 2π × 22 */
       stroke-dashoffset: 138.2;
       transition: stroke-dashoffset .15s linear, stroke .2s;
     }
@@ -420,35 +475,105 @@ try {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      gap: 14px;
-      background: var(--surf);
+      justify-content: flex-end;
+      padding-bottom: 28px;
+      gap: 0;
+      background: linear-gradient(to bottom,
+          transparent 0%,
+          transparent 40%,
+          rgba(9, 16, 31, 0.55) 60%,
+          rgba(9, 16, 31, 0.88) 100%);
       z-index: 5;
+      pointer-events: none;
+      transition: opacity .4s ease;
     }
 
     .preload-overlay.hidden {
-      display: none;
+      opacity: 0;
+      pointer-events: none;
     }
 
-    .preload-overlay i {
-      font-size: 38px;
+    .preload-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      background: rgba(16, 24, 40, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 14px;
+      padding: 16px 24px 18px;
+      min-width: 260px;
+      max-width: 340px;
+      pointer-events: auto;
+    }
+
+    .preload-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .preload-icon-wrap {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(37, 99, 235, 0.18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .preload-icon-wrap i {
+      font-size: 15px;
       color: var(--accent2);
-      opacity: .7;
     }
 
-    .preload-overlay p {
+    .preload-icon-wrap.spinning {
+      position: relative;
+    }
+
+    .preload-icon-wrap.spinning::after {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border-radius: 11px;
+      border: 2px solid transparent;
+      border-top-color: var(--accent2);
+      border-right-color: var(--accent2);
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .preload-text {
+      flex: 1;
+    }
+
+    .preload-msg {
       font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.3;
+    }
+
+    .preload-lbl {
+      font-size: 10px;
       color: var(--muted);
-      text-align: center;
-      max-width: 240px;
-      line-height: 1.6;
+      margin-top: 2px;
     }
 
     .preload-track {
-      width: 200px;
-      height: 6px;
+      width: 100%;
+      height: 5px;
       border-radius: 3px;
-      background: var(--surf2);
+      background: rgba(255, 255, 255, 0.07);
       overflow: hidden;
     }
 
@@ -464,7 +589,31 @@ try {
       background: var(--green);
     }
 
-    .preload-label {
+    .cam-starting {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: var(--surf);
+      z-index: 4;
+      transition: opacity .3s;
+    }
+
+    .cam-starting.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .cam-starting i {
+      font-size: 36px;
+      color: var(--accent2);
+      opacity: .5;
+    }
+
+    .cam-starting p {
       font-size: 11px;
       color: var(--muted);
     }
@@ -479,6 +628,7 @@ try {
       gap: 12px;
       color: var(--muted);
       background: var(--surf);
+      z-index: 4;
     }
 
     .cam-off i {
@@ -623,29 +773,30 @@ try {
       outline: none;
     }
 
-    /* Strict mode toggle */
-    .strict-row {
+    /* ── Mirror toggle row in side panel ── */
+    .mirror-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-top: 10px;
+      margin-top: 8px;
       padding: 7px 9px;
       background: var(--surf2);
       border-radius: 7px;
       border: 1px solid var(--border);
     }
 
-    .strict-row label {
+    .mirror-row label {
       font-size: 11px;
       color: var(--muted);
       display: flex;
       align-items: center;
       gap: 6px;
       cursor: pointer;
+      user-select: none;
     }
 
-    .strict-row label i {
-      color: var(--amber);
+    .mirror-row label i {
+      color: var(--accent2);
     }
 
     .toggle {
@@ -683,13 +834,42 @@ try {
     }
 
     .toggle input:checked+.toggle-slider {
-      background: var(--amber);
-      border-color: var(--amber);
+      background: var(--accent2);
+      border-color: var(--accent2);
     }
 
     .toggle input:checked+.toggle-slider::before {
       transform: translateX(16px);
       background: #fff;
+    }
+
+    .strict-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 10px;
+      padding: 7px 9px;
+      background: var(--surf2);
+      border-radius: 7px;
+      border: 1px solid var(--border);
+    }
+
+    .strict-row label {
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .strict-row label i {
+      color: var(--amber);
+    }
+
+    .strict-toggle .toggle input:checked+.toggle-slider {
+      background: var(--amber);
+      border-color: var(--amber);
     }
 
     .result-card {
@@ -807,7 +987,6 @@ try {
       background: var(--red);
     }
 
-    /* Consecutive-frames indicator */
     .frames-row {
       display: flex;
       gap: 4px;
@@ -986,21 +1165,167 @@ try {
       pointer-events: none;
     }
 
-    @media (max-width:680px) {
+    .last-match-sec {
+      position: static;
+      display: block;
+      width: auto;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      border-radius: 0;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      box-shadow: none;
+      padding: 12px 14px;
+      z-index: auto;
+    }
+
+    /* ── Mobile overlay drawer ── */
+    .drawer-btn {
+      display: none;
+    }
+
+    .drawer-overlay {
+      display: none;
+    }
+
+    @media (max-width: 680px) {
+      body {
+        overflow: hidden;
+      }
+
       .workspace {
         grid-template-columns: 1fr;
-        grid-template-rows: 55vh 1fr;
+        grid-template-rows: 1fr;
+        position: relative;
       }
 
+      /* Camera fills full workspace */
+      .cam-panel {
+        height: 100%;
+        width: 100%;
+      }
+
+      /* Hide side panel from normal flow */
       .side {
-        border-left: none;
-        border-top: 1px solid var(--border);
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
+        display: none;
       }
 
-      .log-feed {
-        overflow-y: visible;
+      /* Floating drawer toggle button — top right of camera */
+      .drawer-btn {
+        display: flex;
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        z-index: 20;
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        background: rgba(16, 24, 40, 0.75);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        color: var(--text);
+        cursor: pointer;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        transition: background .15s;
+      }
+
+      .drawer-btn:active {
+        background: rgba(37, 99, 235, 0.4);
+      }
+
+      /* Dim overlay behind drawer */
+      .drawer-overlay {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 29;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .25s;
+      }
+
+      .drawer-overlay.open {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      /* Slide-in drawer panel from right */
+      .side.drawer-open {
+        display: flex;
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 300px;
+        max-width: 88vw;
+        z-index: 30;
+        overflow-y: auto;
+        border-left: 1px solid var(--border);
+        box-shadow: -4px 0 24px rgba(0, 0, 0, 0.5);
+        animation: slideIn .25s ease;
+      }
+
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+        }
+
+        to {
+          transform: translateX(0);
+        }
+      }
+
+      .last-match-sec {
+        position: absolute;
+        bottom: 20px;
+        right: 12px;
+        width: 190px;
+        background: rgba(16, 24, 40, 0.88);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 10px;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        z-index: 10;
+        padding: 8px 10px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+      }
+
+      .last-match-sec.no-match {
+        display: none !important;
+      }
+
+      .last-match-sec .emp-photo,
+      .last-match-sec .emp-no-photo {
+        aspect-ratio: 16/9;
+        font-size: 24px;
+      }
+
+      .last-match-sec .emp-info {
+        padding: 6px 8px;
+      }
+
+      .last-match-sec .emp-name {
+        font-size: 12px;
+      }
+
+      .last-match-sec .emp-sub {
+        font-size: 10px;
+      }
+
+      .last-match-sec .sec-label {
+        font-size: 9px;
+        margin-bottom: 5px;
+      }
+
+      .last-match-sec .conf-label,
+      .last-match-sec .conf-track,
+      .last-match-sec .frames-row {
+        display: none !important;
       }
     }
 
@@ -1022,8 +1347,7 @@ try {
     <button class="back-btn" tabindex="-1" onclick="window.history.back()" title="Back">
       <i class="fas fa-arrow-left" style="font-size:11px;"></i>
     </button>
-    <div class="topbar-title">
-    </div>
+    <div class="topbar-title"></div>
     <div id="sPill" class="s-pill idle">
       <span class="dot"></span>
       <span id="sText">Idle</span>
@@ -1042,27 +1366,53 @@ try {
 
     <div class="cam-panel" id="camPanel">
 
-      <div class="preload-overlay" id="preloadOverlay">
-        <i class="fas fa-brain"></i>
-        <p id="preloadMsg">Loading AI models…</p>
-        <div class="preload-track">
-          <div class="preload-fill" id="preloadFill"></div>
-        </div>
-        <div class="preload-label" id="preloadLabel">Please wait</div>
+      <!-- Mirror toggle button — floats over the camera, top-left -->
+      <button class="mirror-btn on" id="mirrorBtn" tabindex="-1"
+        onclick="toggleMirror()"
+        title="Toggle mirror"
+        data-tip="Mirror: On">
+        <i class="fas fa-left-right"></i>
+      </button>
+
+      <button class="drawer-btn" id="drawerBtn" onclick="toggleDrawer()" title="Settings">
+        <i class="fas fa-sliders-h"></i>
+      </button>
+
+      <!-- Shown briefly before the camera stream starts -->
+      <div class="cam-starting" id="camStarting">
+        <i class="fas fa-camera"></i>
+        <p>Starting camera…</p>
       </div>
 
+      <!-- Translucent overlay that sits OVER the live video while models load -->
+      <div class="preload-overlay" id="preloadOverlay">
+        <div class="preload-card">
+          <div class="preload-header">
+            <div class="preload-icon-wrap spinning" id="preloadIconWrap">
+              <i class="fas fa-brain" id="preloadIcon"></i>
+            </div>
+            <div class="preload-text">
+              <div class="preload-msg" id="preloadMsg">Loading AI models…</div>
+              <div class="preload-lbl" id="preloadLabel">Please wait</div>
+            </div>
+          </div>
+          <div class="preload-track">
+            <div class="preload-fill" id="preloadFill"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shown after camera is explicitly stopped -->
       <div class="cam-off" id="camOff" style="display:none;">
         <i class="fas fa-camera"></i>
-        <p>References ready. Click <strong>Start</strong> to begin scanning.</p>
+        <p>Click <strong>Start</strong> to resume scanning.</p>
       </div>
 
       <video id="videoEl" autoplay playsinline muted></video>
       <canvas id="overlayCanvas"></canvas>
 
-      <!-- Amber verify ring drawn over bounding box area -->
       <div class="verify-hud" id="verifyHud"></div>
 
-      <!-- Arc progress indicator (top-right of camera) -->
       <div class="verify-arc" id="verifyArc">
         <svg viewBox="0 0 52 52">
           <circle class="track" cx="26" cy="26" r="22" />
@@ -1079,6 +1429,28 @@ try {
         <div class="model-bar-fill" id="modelBarFill"></div>
       </div>
       <div class="notice" id="notice" style="display:none;"></div>
+
+      <div class="last-match-sec no-match" id="lastMatchSec">
+        <div class="sec-label">Last Match</div>
+        <div id="resultBox">
+          <div class="result-card">
+            <div class="emp-no-photo"><i class="fas fa-user"></i></div>
+            <div class="emp-info">
+              <div class="emp-name" style="color:var(--muted);font-size:12px;">Awaiting scan…</div>
+              <div class="emp-sub">No identification yet</div>
+            </div>
+          </div>
+        </div>
+        <div class="conf-label">
+          <span>Confidence</span><span id="confPct">—</span>
+        </div>
+        <div class="conf-track">
+          <div class="conf-fill" id="confFill" style="width:0%;"></div>
+        </div>
+        <div class="frames-row" id="framesRow" style="display:none;">
+          <span>Verifying</span>
+        </div>
+      </div>
     </div>
 
     <!-- Side panel -->
@@ -1089,6 +1461,18 @@ try {
         <select class="cam-sel" id="camSel" onchange="switchCam()">
           <option value="">Select camera…</option>
         </select>
+
+        <!-- Mirror toggle in side panel -->
+        <div class="mirror-row">
+          <label for="mirrorToggle">
+            <i class="fas fa-left-right"></i> Mirror View
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="mirrorToggle" checked onchange="toggleMirrorFromPanel()">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
         <div class="btn-row">
           <button class="btn pri" id="startBtn" tabindex="-1" onclick="startCam()" disabled>
             <i class="fas fa-play"></i> Start
@@ -1113,12 +1497,11 @@ try {
           </button>
         </div>
 
-        <!-- Strict mode toggle -->
         <div class="strict-row">
           <label for="strictToggle">
             <i class="fas fa-shield-alt"></i> Strict Mode
           </label>
-          <label class="toggle">
+          <label class="toggle strict-toggle">
             <input type="checkbox" id="strictToggle" checked onchange="updateStrictMode()">
             <span class="toggle-slider"></span>
           </label>
@@ -1126,9 +1509,9 @@ try {
 
         <div class="slider-row">
           <label>Distance limit</label>
-          <input type="range" min="25" max="60" value="35" id="threshSlider"
+          <input type="range" min="25" max="60" value="45" id="threshSlider"
             oninput="updateThresh(this.value)" step="1">
-          <span class="slider-val" id="threshVal">0.35</span>
+          <span class="slider-val" id="threshVal">0.45</span>
         </div>
 
         <div class="slider-row">
@@ -1136,30 +1519,6 @@ try {
           <input type="range" min="1" max="6" value="3" id="framesSlider"
             oninput="updateFramesReq(this.value)" step="1">
           <span class="slider-val" id="framesVal">3</span>
-        </div>
-      </div>
-
-      <div class="sec">
-        <div class="sec-label">Last Match</div>
-        <div id="resultBox">
-          <div class="result-card">
-            <div class="emp-no-photo"><i class="fas fa-user"></i></div>
-            <div class="emp-info">
-              <div class="emp-name" style="color:var(--muted);font-size:12px;">Awaiting scan…</div>
-              <div class="emp-sub">No identification yet</div>
-            </div>
-          </div>
-        </div>
-        <div class="conf-label">
-          <span>Confidence</span><span id="confPct">—</span>
-        </div>
-        <div class="conf-track">
-          <div class="conf-fill" id="confFill" style="width:0%;"></div>
-        </div>
-        <!-- Frame accumulation dots -->
-        <div class="frames-row" id="framesRow" style="display:none;">
-          <span>Verifying</span>
-          <!-- dots injected by JS -->
         </div>
       </div>
 
@@ -1193,27 +1552,154 @@ try {
     </div>
   </div>
 
+  <audio id="successSound" data-fallback="/config/asset.php?t=ero67" preload="none"></audio>
+  <audio id="checkoutSound" data-fallback="/config/asset.php?t=jg5df" preload="none"></audio>
+  <audio id="noResultSound" data-fallback="/config/asset.php?t=sdh3f" preload="none"></audio>
+  <audio id="warningSound" data-fallback="/config/asset.php?t=l45wd" preload="none"></audio>
+  <audio id="inactiveSound" data-fallback="/config/asset.php?t=ert26" preload="none"></audio>
+
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <script>
     "use strict";
 
-    // ── Config ────────────────────────────────────────────────────────────────────
+    // ── Config ─────────────────────────────────────────────────────────────────
     const CSRF = <?= json_encode($_SESSION['csrf_token'] ?? '') ?>;
     const MODELS_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights/';
-    const DETECT_MS = 600; // ms between recognition frames (faster for accumulation)
-    const COOLDOWN_MS = 5000; // ms before same employee can be logged again
-    const MIN_DET_CONF = 0.70; // raised detector gate — reject low-quality face crops
+    const DETECT_MS = 600;
+    const COOLDOWN_MS = 5000;
+    const MIN_DET_CONF = 0.50;
 
-    // ── Strict-match config (user-adjustable) ─────────────────────────────────────
-    // Distance: 0.0 = identical descriptor, 1.0 = completely different.
-    // Default 0.35 is very tight — only near-identical faces pass.
-    let DISTANCE_LIMIT = 0.35; // slider range 0.25–0.60
-    let FRAMES_REQUIRED = 3; // how many consecutive frames must agree before confirming
-    let strictMode = true; // when false, behaves like standard single-frame matching
+    let DISTANCE_LIMIT = 0.45;
+    let FRAMES_REQUIRED = 3;
+    let strictMode = true;
 
-    // ── State ─────────────────────────────────────────────────────────────────────
+    // ── Global-audio endpoint ─────────────────────────────────────────
+    const GLOBAL_AUDIO_ENDPOINT = "global_audio.php";
+
+    const AUDIO_TYPE_MAP = {
+      success: "successSound",
+      checkout: "checkoutSound",
+      not_found: "noResultSound",
+      violations: "warningSound",
+      inactive: "inactiveSound",
+    };
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Load global audio from DB; fall back to bundled files if absent
+    // ─────────────────────────────────────────────────────────────────
+    async function loadGlobalAudio() {
+      try {
+        const res = await fetch(GLOBAL_AUDIO_ENDPOINT, {
+          credentials: "same-origin",
+          headers: {
+            "X-Requested-With": "XMLHttpRequest"
+          },
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+
+        if (!json.success) throw new Error("Server returned success:false");
+
+        Object.entries(AUDIO_TYPE_MAP).forEach(([audioType, elementId]) => {
+          const el = document.getElementById(elementId);
+          if (!el) return;
+
+          const entry = json.audio?.[audioType];
+
+          if (entry?.data && entry.data.length > 0) {
+            el.src = entry.data;
+            el.preload = "auto";
+          } else {
+            const fallback = el.dataset.fallback;
+            if (fallback) {
+              el.src = fallback;
+              el.preload = "auto";
+            }
+          }
+        });
+      } catch (e) {
+        console.warn("Could not load global audio; using bundled fallbacks.", e);
+
+        Object.values(AUDIO_TYPE_MAP).forEach((elementId) => {
+          const el = document.getElementById(elementId);
+          if (el && !el.src && el.dataset.fallback) {
+            el.src = el.dataset.fallback;
+            el.preload = "auto";
+          }
+        });
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Audio helpers
+    // ─────────────────────────────────────────────────────────────────
+    function stopCurrentAudio() {
+      if (currentAudio && !currentAudio.paused) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+      }
+      currentAudio = null;
+    }
+
+    function playSound(id) {
+      stopCurrentAudio();
+      const sound = document.getElementById(id);
+      if (!sound) return;
+      currentAudio = sound;
+      sound.currentTime = 0;
+      sound.play().catch((e) => console.log("Audio play error:", e));
+    }
+
+    const playSuccessSound = () => playSound("successSound");
+    const playCheckoutSound = () => playSound("checkoutSound");
+    const playInactiveSound = () => playSound("inactiveSound");
+    const playNoResultSound = () => playSound("noResultSound");
+    const playWarningSound = () => playSound("warningSound");
+
+    // ── Mirror state ───────────────────────────────────────────────────────────
+    let mirrorMode = true;
+
+    function applyMirror() {
+      const vid = document.getElementById('videoEl');
+      const btn = document.getElementById('mirrorBtn');
+      const chk = document.getElementById('mirrorToggle');
+
+      if (mirrorMode) {
+        vid.classList.remove('no-mirror');
+        btn.classList.add('on');
+        btn.setAttribute('data-tip', 'Mirror: On');
+      } else {
+        vid.classList.add('no-mirror');
+        btn.classList.remove('on');
+        btn.setAttribute('data-tip', 'Mirror: Off');
+      }
+
+      chk.checked = mirrorMode;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      resetVerify();
+    }
+
+    function toggleMirror() {
+      mirrorMode = !mirrorMode;
+
+      const btn = document.getElementById('mirrorBtn');
+      btn.classList.add('flip-anim');
+      setTimeout(() => btn.classList.remove('flip-anim'), 220);
+
+      applyMirror();
+    }
+
+    function toggleMirrorFromPanel() {
+      mirrorMode = document.getElementById('mirrorToggle').checked;
+      applyMirror();
+    }
+
+    // ── State ──────────────────────────────────────────────────────────────────
     let stream = null;
     let rafId = null;
+    let currentAudio = null;
     let detecting = false;
     let paused = false;
     let modelsReady = false;
@@ -1223,16 +1709,13 @@ try {
     let lastDetect = 0;
     let cooldowns = {};
     let activeDeviceId = null;
+    let cameraStreaming = false;
 
-    // Descriptor store
     let labeledDescriptors = [];
     let matcher = null;
     let loadedRef = 0;
     let totalRef = 0;
 
-    // ── Multi-frame verification state ───────────────────────────────────────────
-    // Tracks consecutive frame agreements per candidate qr_code.
-    // Structure: { qr_code: { count, distances: [] } }
     let verifyAccum = {};
 
     const stats = {
@@ -1245,47 +1728,41 @@ try {
     const canvas = document.getElementById('overlayCanvas');
     const ctx = canvas.getContext('2d');
 
-    // ── Descriptor cache helpers ──────────────────────────────────────────────────
-    const CACHE_KEY = 'faceDescCache_v1_' + <?= json_encode($_SESSION['my_database'] ?? '') ?>;
-    const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 1 day
+    // ── Descriptor cache ───────────────────────────────────────────────────────
+    const CACHE_KEY = 'faceDescCache_v2_' + <?= json_encode($_SESSION['my_database'] ?? '') ?>;
+    const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
     function saveDescriptorCache(entries) {
-      // entries: [{ qr_code, descriptor: Float32Array, emp: {...} }]
       try {
-        const payload = {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
           ts: Date.now(),
           data: entries.map(e => ({
             qr_code: e.qr_code,
-            descriptor: Array.from(e.descriptor), // Float32Array → plain array for JSON
+            image_url: e.image_url,
+            updated_at: e.updated_at ?? '',
+            descriptor: Array.from(e.descriptor),
             emp: e.emp,
           }))
-        };
-        localStorage.setItem(CACHE_KEY, JSON.stringify(payload));
-      } catch (_) {
-        /* quota exceeded — silently skip */
-      }
+        }));
+      } catch (_) {}
     }
 
     function loadDescriptorCache() {
       try {
         const raw = localStorage.getItem(CACHE_KEY);
         if (!raw) return null;
-        const payload = JSON.parse(raw);
-        if (Date.now() - payload.ts > CACHE_MAX_AGE_MS) {
+        const p = JSON.parse(raw);
+        if (Date.now() - p.ts > CACHE_MAX_AGE_MS) {
           localStorage.removeItem(CACHE_KEY);
           return null;
         }
-        return payload.data; // [{ qr_code, descriptor: number[], emp }]
+        return p.data;
       } catch (_) {
         return null;
       }
     }
 
-    function invalidateDescriptorCache() {
-      localStorage.removeItem(CACHE_KEY);
-    }
-
-    // ── Strict mode controls ──────────────────────────────────────────────────────
+    // ── Strict mode ────────────────────────────────────────────────────────────
     function updateStrictMode() {
       strictMode = document.getElementById('strictToggle').checked;
       document.getElementById('framesSlider').disabled = !strictMode;
@@ -1293,7 +1770,7 @@ try {
 
     function updateThresh(v) {
       DISTANCE_LIMIT = parseInt(v) / 100;
-      document.getElementById('threshVal').textContent = (DISTANCE_LIMIT).toFixed(2);
+      document.getElementById('threshVal').textContent = DISTANCE_LIMIT.toFixed(2);
       if (labeledDescriptors.length) rebuildMatcher();
       resetVerify();
     }
@@ -1305,11 +1782,10 @@ try {
       resetVerify();
     }
 
-    // ── Frame-dot UI ──────────────────────────────────────────────────────────────
+    // ── Frame dots ─────────────────────────────────────────────────────────────
     function rebuildFrameDots() {
       const row = document.getElementById('framesRow');
-      const dots = row.querySelectorAll('.frame-dot');
-      dots.forEach(d => d.remove());
+      row.querySelectorAll('.frame-dot').forEach(d => d.remove());
       for (let i = 0; i < FRAMES_REQUIRED; i++) {
         const d = document.createElement('div');
         d.className = 'frame-dot';
@@ -1322,12 +1798,58 @@ try {
       for (let i = 0; i < FRAMES_REQUIRED; i++) {
         const d = document.getElementById('fd' + i);
         if (!d) continue;
-        d.className = 'frame-dot' + (confirmed ? ' confirmed' : (i < count ? ' hit' : ''));
+        d.className = 'frame-dot' + (confirmed ? ' confirmed' : i < count ? ' hit' : '');
       }
     }
 
-    // ── Arc progress ──────────────────────────────────────────────────────────────
-    const CIRC = 2 * Math.PI * 22; // 138.2
+    // ── Periodic employee status refresh ──────────────────────────────────────
+    let _statusRefreshTimer = null;
+
+    function startStatusRefresh() {
+      if (_statusRefreshTimer) return;
+      _statusRefreshTimer = setInterval(async () => {
+        if (!refsReady || !cameraStreaming) return;
+        try {
+          const r = await fetch('face-employees.php');
+          const d = await r.json();
+          if (!d.success) return;
+
+          const activeQrSet = new Set(d.employees.map(e => e.qr_code));
+
+          const removed = labeledDescriptors.filter(ld => !activeQrSet.has(ld.label));
+          if (removed.length > 0) {
+            removed.forEach(ld => {
+              invalidateCachedEmployee(ld.label);
+              addLog('inf', window._empMap[ld.label]?.fullname ?? ld.label,
+                'Removed from matcher — status changed');
+            });
+            rebuildMatcher();
+            loadedRef = labeledDescriptors.length;
+            setStatus('live', `Live — ${loadedRef} references`);
+          }
+
+          d.employees.forEach(emp => {
+            if (window._empMap[emp.qr_code]) {
+              window._empMap[emp.qr_code] = {
+                ...window._empMap[emp.qr_code],
+                ...emp,
+              };
+            }
+          });
+        } catch (_) {}
+      }, 60_000);
+    }
+
+    function stopStatusRefresh() {
+      if (_statusRefreshTimer) {
+        clearInterval(_statusRefreshTimer);
+        _statusRefreshTimer = null;
+      }
+    }
+
+    // ── Arc progress ───────────────────────────────────────────────────────────
+    const CIRC = 2 * Math.PI * 22;
+
     function setArc(count, confirmed) {
       const arc = document.getElementById('verifyArc');
       const fill = document.getElementById('arcFill');
@@ -1340,9 +1862,7 @@ try {
       }
       arc.classList.add('show');
 
-      const pct = Math.min(count / req, 1);
-      const offset = CIRC * (1 - pct);
-      fill.style.strokeDashoffset = offset;
+      fill.style.strokeDashoffset = CIRC * (1 - Math.min(count / req, 1));
 
       if (confirmed) {
         fill.classList.add('done');
@@ -1355,17 +1875,18 @@ try {
       }
     }
 
-    // ── Verify HUD (amber rect overlay on canvas coords) ────────────────────────
+    // ── Verify HUD ─────────────────────────────────────────────────────────────
     function showVerifyHud(box) {
-      // box is in video pixel space; we need to map to cam-panel CSS space
       const hud = document.getElementById('verifyHud');
       const vw = video.videoWidth || 1;
       const vh = video.videoHeight || 1;
       const panel = document.getElementById('camPanel').getBoundingClientRect();
       const scaleX = panel.width / vw;
       const scaleY = panel.height / vh;
-      const mirX = vw - box.x - box.width;
-      hud.style.left = (mirX * scaleX) + 'px';
+
+      const x = mirrorMode ? (vw - box.x - box.width) : box.x;
+
+      hud.style.left = (x * scaleX) + 'px';
       hud.style.top = (box.y * scaleY) + 'px';
       hud.style.width = (box.width * scaleX) + 'px';
       hud.style.height = (box.height * scaleY) + 'px';
@@ -1376,7 +1897,7 @@ try {
       document.getElementById('verifyHud').classList.remove('show');
     }
 
-    // ── Reset verification accumulator ───────────────────────────────────────────
+    // ── Reset verify ───────────────────────────────────────────────────────────
     function resetVerify(keepQr) {
       if (keepQr) {
         Object.keys(verifyAccum).forEach(k => {
@@ -1384,15 +1905,13 @@ try {
         });
       } else {
         verifyAccum = {};
-      }
-      if (!keepQr) {
         hideVerifyHud();
         setArc(0, false);
         document.getElementById('framesRow').style.display = 'none';
       }
     }
 
-    // ── Preload overlay helpers ───────────────────────────────────────────────────
+    // ── Preload overlay helpers ────────────────────────────────────────────────
     function setPreloadMsg(m) {
       document.getElementById('preloadMsg').textContent = m;
     }
@@ -1408,8 +1927,12 @@ try {
     }
 
     function hidePreloadOverlay() {
-      document.getElementById('preloadOverlay').classList.add('hidden');
-      document.getElementById('camOff').style.display = 'flex';
+      const el = document.getElementById('preloadOverlay');
+      el.classList.add('hidden');
+      document.getElementById('preloadIconWrap').classList.remove('spinning');
+      setTimeout(() => {
+        el.style.display = 'none';
+      }, 450);
     }
 
     function setRefProgress(loaded, total) {
@@ -1421,7 +1944,7 @@ try {
       if (loaded >= total && total > 0) f.classList.add('done');
     }
 
-    // ── Load models ───────────────────────────────────────────────────────────────
+    // ── Load models ────────────────────────────────────────────────────────────
     async function loadModels() {
       setPreloadMsg('Loading AI models…');
       setPreloadLabel('Detection model');
@@ -1437,14 +1960,12 @@ try {
       modelsReady = true;
     }
 
-    // ── Rebuild matcher ───────────────────────────────────────────────────────────
     function rebuildMatcher() {
       if (!labeledDescriptors.length) return;
-      const dist = strictMode ? DISTANCE_LIMIT : 0.6;
-      matcher = new faceapi.FaceMatcher(labeledDescriptors, dist);
+      matcher = new faceapi.FaceMatcher(labeledDescriptors, strictMode ? DISTANCE_LIMIT : 0.6);
     }
 
-    // ── Preload references (lazy, one-by-one) ────────────────────────────────────
+    // ── Preload references ─────────────────────────────────────────────────────
     async function preloadReferences() {
       if (refsLoading) return;
       refsLoading = true;
@@ -1452,7 +1973,6 @@ try {
       setPreloadLabel('Fetching employee list…');
       setPreloadPct(0);
 
-      // ── Fetch employee list from server ─────────────────────────────────────────
       let employees;
       try {
         const r = await fetch('face-employees.php');
@@ -1461,7 +1981,7 @@ try {
           setPreloadMsg('No employee photos found.');
           setPreloadLabel('Upload photos in the employee system first.');
           hidePreloadOverlay();
-          document.getElementById('startBtn').disabled = false;
+          document.getElementById('startBtn').disabled = cameraStreaming;
           return;
         }
         employees = d.employees;
@@ -1472,32 +1992,39 @@ try {
         setPreloadMsg('Could not load employee list.');
         setPreloadLabel('Check your connection and reload.');
         hidePreloadOverlay();
-        document.getElementById('startBtn').disabled = false;
+        document.getElementById('startBtn').disabled = cameraStreaming;
         return;
       }
 
-      // ── Try loading from cache ─────────────────────────────────────────────────
       const cached = loadDescriptorCache();
-      const cachedMap = new Map(
-        cached ? cached.map(c => [c.qr_code, c]) : []
-      );
-
+      const cachedMap = new Map(cached ? cached.map(c => [c.qr_code, c]) : []);
       const currentQrSet = new Set(employees.map(e => e.qr_code));
 
-      const cacheComplete = cached &&
-        employees.every(e => cachedMap.has(e.qr_code));
+      if (cached && cached.length !== employees.length) {
+        localStorage.removeItem(CACHE_KEY);
+        cachedMap.clear();
+      }
+
+      const cacheComplete = cached && employees.every(e => {
+        const c = cachedMap.get(e.qr_code);
+        return c && c.image_url === e.image_url && c.updated_at === (e.updated_at ?? '');
+      });
 
       if (cacheComplete) {
-        // ── Fast path: restore from cache ────────────────────────────────────────
         setPreloadMsg('Restoring from cache…');
+        const freshEntries = [];
+
         for (const entry of cached) {
           if (!currentQrSet.has(entry.qr_code)) continue;
-          const descriptor = new Float32Array(entry.descriptor);
           labeledDescriptors.push(
-            new faceapi.LabeledFaceDescriptors(entry.qr_code, [descriptor])
+            new faceapi.LabeledFaceDescriptors(entry.qr_code, [new Float32Array(entry.descriptor)])
           );
+          freshEntries.push(entry);
           loadedRef++;
         }
+
+        saveDescriptorCache(freshEntries);
+
         rebuildMatcher();
         setPreloadPct(100);
         setRefProgress(loadedRef, totalRef);
@@ -1506,67 +2033,81 @@ try {
         hidePreloadOverlay();
         refsReady = true;
         rebuildFrameDots();
-        document.getElementById('startBtn').disabled = loadedRef === 0;
-        setStatus('idle', `Ready — ${loadedRef} references`);
+        document.getElementById('startBtn').disabled = cameraStreaming || loadedRef === 0;
+        setStatus('live', `Live — ${loadedRef} references`);
+        if (cameraStreaming && !detecting) startDetecting();
         return;
       }
 
-      // ── Slow path: process images, fill in missing entries ────────────────────
       const newCacheEntries = [];
+      const BATCH_SIZE = 5;
 
-      for (let i = 0; i < employees.length; i++) {
-        const emp = employees[i];
-        setPreloadLabel(`Processing ${i + 1} / ${employees.length}: ${emp.fullname}`);
+      async function processEmployee(emp, index) {
+        setPreloadLabel(`Processing ${index + 1} / ${employees.length}: ${emp.fullname}`);
 
         if (cachedMap.has(emp.qr_code)) {
           const entry = cachedMap.get(emp.qr_code);
-          const descriptor = new Float32Array(entry.descriptor);
-          labeledDescriptors.push(
-            new faceapi.LabeledFaceDescriptors(emp.qr_code, [descriptor])
-          );
-          newCacheEntries.push({
-            qr_code: emp.qr_code,
-            descriptor: entry.descriptor,
-            emp
-          });
-          loadedRef++;
-
-        } else {
-          try {
-            const img = await faceapi.fetchImage(emp.image_url);
-            const det = await faceapi
-              .detectSingleFace(img, new faceapi.SsdMobilenetv1Options({
-                minConfidence: 0.5
-              }))
-              .withFaceLandmarks()
-              .withFaceDescriptor();
-
-            if (det) {
-              labeledDescriptors.push(
-                new faceapi.LabeledFaceDescriptors(emp.qr_code, [det.descriptor])
-              );
-              newCacheEntries.push({
-                qr_code: emp.qr_code,
-                descriptor: Array.from(det.descriptor),
-                emp,
-              });
-              loadedRef++;
-              rebuildMatcher();
-
-              if (!refsReady) {
-                refsReady = true;
-                document.getElementById('startBtn').disabled = false;
-                setStatus('idle', 'Ready (partial refs)');
-                rebuildFrameDots();
-              }
-            }
-          } catch (_) {}
+          // Validate the cached entry is still current
+          if (entry.image_url === emp.image_url && entry.updated_at === (emp.updated_at ?? '')) {
+            labeledDescriptors.push(
+              new faceapi.LabeledFaceDescriptors(emp.qr_code, [new Float32Array(entry.descriptor)])
+            );
+            newCacheEntries.push({
+              qr_code: emp.qr_code,
+              image_url: emp.image_url,
+              updated_at: emp.updated_at ?? '',
+              descriptor: entry.descriptor,
+              emp,
+            });
+            loadedRef++;
+            return;
+          }
         }
 
-        setPreloadPct(Math.round(((i + 1) / employees.length) * 100));
-        setRefProgress(loadedRef, totalRef);
+        // Not cached or stale — fetch and compute descriptor
+        try {
+          const img = await faceapi.fetchImage(emp.image_url);
+          const det = await faceapi
+            .detectSingleFace(img, new faceapi.SsdMobilenetv1Options({
+              minConfidence: 0.3
+            }))
+            .withFaceLandmarks()
+            .withFaceDescriptor();
 
-        saveDescriptorCache(newCacheEntries);
+          if (det) {
+            labeledDescriptors.push(
+              new faceapi.LabeledFaceDescriptors(emp.qr_code, [det.descriptor])
+            );
+            newCacheEntries.push({
+              qr_code: emp.qr_code,
+              image_url: emp.image_url,
+              updated_at: emp.updated_at ?? '',
+              descriptor: Array.from(det.descriptor),
+              emp,
+            });
+            loadedRef++;
+            rebuildMatcher();
+
+            if (!refsReady) {
+              refsReady = true;
+              document.getElementById('startBtn').disabled = cameraStreaming;
+              setStatus('live', 'Live (loading refs…)');
+              rebuildFrameDots();
+              if (cameraStreaming && !detecting) startDetecting();
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Process in parallel batches
+      for (let i = 0; i < employees.length; i += BATCH_SIZE) {
+        const batch = employees.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map((emp, j) => processEmployee(emp, i + j)));
+
+        const done = Math.min(i + BATCH_SIZE, employees.length);
+        setPreloadPct(Math.round((done / employees.length) * 100));
+        setRefProgress(loadedRef, totalRef);
+        saveDescriptorCache(newCacheEntries); // save after each batch
       }
 
       if (loadedRef === 0) {
@@ -1575,57 +2116,24 @@ try {
       } else {
         setPreloadMsg('References ready.');
         setPreloadLabel(`${loadedRef} of ${totalRef} employees loaded`);
-        setStatus('idle', `Ready — ${loadedRef} references`);
+        setStatus('live', `Live — ${loadedRef} references`);
         rebuildMatcher();
         saveDescriptorCache(newCacheEntries);
       }
 
       hidePreloadOverlay();
-      document.getElementById('startBtn').disabled = loadedRef === 0;
+      document.getElementById('startBtn').disabled = cameraStreaming || loadedRef === 0;
     }
 
-    // ── Camera ────────────────────────────────────────────────────────────────────
-    async function discoverCameras(preserveDeviceId) {
-      const sel = document.getElementById('camSel');
-      try {
-        const devs = await navigator.mediaDevices.enumerateDevices();
-        const cams = devs.filter(d => d.kind === 'videoinput');
-
-        if (!cams.length) {
-          sel.innerHTML = '<option value="">No cameras found</option>';
-          sel.disabled = true;
-          return null;
-        }
-
-        sel.innerHTML = cams.map((c, i) =>
-          `<option value="${esc(c.deviceId)}"
-         ${c.deviceId === preserveDeviceId ? 'selected' : ''}>
-         ${esc(c.label || 'Camera ' + (i + 1))}
-       </option>`
-        ).join('');
-
-        sel.disabled = cams.length <= 1;
-
-        return sel.value || null;
-      } catch (e) {
-        sel.innerHTML = '<option value="">Unavailable</option>';
-        sel.disabled = true;
-        return null;
-      }
-    }
-
-    async function startCam(forceDeviceId) {
+    // ── Camera stream ──────────────────────────────────────────────────────────
+    async function startVideoStream(forceDeviceId) {
       if (!window.isSecureContext) {
-        alert('Camera requires HTTPS. Please access via HTTPS or localhost.');
-        return;
-      }
-      if (!refsReady) {
-        alert('References are still loading. Please wait a moment.');
-        return;
+        document.getElementById('camStarting').querySelector('p').textContent =
+          'HTTPS required for camera access.';
+        return false;
       }
 
       const selectedDevice = await discoverCameras(forceDeviceId ?? activeDeviceId);
-
       const deviceId = forceDeviceId ?? selectedDevice;
 
       const videoConstraints = {
@@ -1634,26 +2142,21 @@ try {
         },
         height: {
           ideal: 720
-        },
+        }
       };
-      if (deviceId) {
-        videoConstraints.deviceId = {
-          exact: deviceId
-        };
-      } else {
-        videoConstraints.facingMode = 'user';
-      }
+      if (deviceId) videoConstraints.deviceId = {
+        exact: deviceId
+      };
+      else videoConstraints.facingMode = 'user';
 
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: videoConstraints,
-          audio: false,
+          audio: false
         });
 
         const track = stream.getVideoTracks()[0];
-        const settings = track.getSettings();
-        activeDeviceId = settings.deviceId ?? deviceId ?? null;
-
+        activeDeviceId = track.getSettings().deviceId ?? deviceId ?? null;
         await discoverCameras(activeDeviceId);
 
         video.srcObject = stream;
@@ -1662,25 +2165,42 @@ try {
         });
         video.play();
 
+        document.getElementById('camStarting').classList.add('hidden');
         document.getElementById('camOff').style.display = 'none';
         document.getElementById('cf').style.display = '';
         document.getElementById('scanLine').classList.add('active');
-        document.getElementById('startBtn').disabled = true;
+
+        cameraStreaming = true;
+
         document.getElementById('stopBtn').disabled = false;
         document.getElementById('pauseBtn').disabled = false;
-        setStatus('live', `Live — ${loadedRef} references`);
-        startDetecting();
+        document.getElementById('startBtn').disabled = true;
 
+        return true;
       } catch (err) {
         activeDeviceId = null;
+        cameraStreaming = false;
         const map = {
           NotAllowedError: 'Camera permission denied.',
           NotFoundError: 'No camera device found.',
           NotReadableError: 'Camera is in use by another application.',
           OverconstrainedError: 'Selected camera no longer available.',
         };
-        alert(map[err.name] || 'Camera error: ' + err.message);
-        setStatus('idle', 'Camera error');
+        document.getElementById('camStarting').querySelector('p').textContent =
+          map[err.name] || 'Camera error: ' + err.message;
+        return false;
+      }
+    }
+
+    async function startCam(forceDeviceId) {
+      if (!refsReady) {
+        alert('References are still loading. Please wait a moment.');
+        return;
+      }
+      await startVideoStream(forceDeviceId);
+      if (cameraStreaming && refsReady && !detecting) {
+        startDetecting();
+        setStatus('live', `Live — ${loadedRef} references`);
       }
     }
 
@@ -1695,35 +2215,68 @@ try {
       }
       detecting = false;
       paused = false;
+      cameraStreaming = false;
       video.srcObject = null;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       document.getElementById('camOff').style.display = 'flex';
+      document.getElementById('camStarting').classList.remove('hidden');
+      document.getElementById('camStarting').querySelector('p').textContent = 'Starting camera…';
       document.getElementById('cf').style.display = 'none';
       document.getElementById('scanLine').classList.remove('active');
       document.getElementById('startBtn').disabled = !refsReady;
       document.getElementById('stopBtn').disabled = true;
       document.getElementById('pauseBtn').disabled = true;
       resetVerify();
+      stopStatusRefresh();
       setStatus('idle', 'Stopped');
       hideNotice();
+
+      document.getElementById('lastMatchSec').classList.add('no-match');
+    }
+
+    async function discoverCameras(preserveDeviceId) {
+      const sel = document.getElementById('camSel');
+      try {
+        const devs = await navigator.mediaDevices.enumerateDevices();
+        const cams = devs.filter(d => d.kind === 'videoinput');
+        if (!cams.length) {
+          sel.innerHTML = '<option value="">No cameras found</option>';
+          sel.disabled = true;
+          return null;
+        }
+        sel.innerHTML = cams.map((c, i) =>
+          `<option value="${esc(c.deviceId)}" ${c.deviceId === preserveDeviceId ? 'selected' : ''}>
+           ${esc(c.label || 'Camera ' + (i + 1))}</option>`
+        ).join('');
+        sel.disabled = cams.length <= 1;
+        return sel.value || null;
+      } catch (e) {
+        sel.innerHTML = '<option value="">Unavailable</option>';
+        sel.disabled = true;
+        return null;
+      }
     }
 
     async function switchCam() {
       const chosenId = document.getElementById('camSel').value;
-
       if (chosenId && chosenId === activeDeviceId) return;
 
       if (stream) {
         stream.getTracks().forEach(t => t.stop());
         stream = null;
         detecting = false;
+        cameraStreaming = false;
         video.srcObject = null;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         document.getElementById('scanLine').classList.remove('active');
         resetVerify();
       }
 
-      await startCam(chosenId || null);
+      const ok = await startVideoStream(chosenId || null);
+      if (ok && refsReady && !detecting) {
+        startDetecting();
+        setStatus('live', `Live — ${loadedRef} references`);
+      }
     }
 
     function togglePause() {
@@ -1735,7 +2288,53 @@ try {
       setStatus(paused ? 'idle' : 'live', paused ? 'Paused' : `Live — ${loadedRef} references`);
     }
 
-    // ── Detection loop ────────────────────────────────────────────────────────────
+    // ── Canvas label renderer (stacked, with pill background) ─────────────────────
+    function drawLabel(ctx, lines, x, boxTop) {
+      const FONT_SIZE = 12;
+      const PAD_X = 6;
+      const PAD_Y = 4;
+      const LINE_H = FONT_SIZE + 4;
+      const RADIUS = 4;
+
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.font = `bold ${FONT_SIZE}px system-ui, sans-serif`;
+
+      const lineWidths = lines.map(l => ctx.measureText(l.text).width);
+      const maxW = Math.max(...lineWidths);
+      const totalH = lines.length * LINE_H + PAD_Y * 2;
+      const rx = Math.max(0, x);
+      const ry = Math.max(0, boxTop - totalH - 2);
+
+      const clampedX = Math.min(rx, canvas.width - maxW - PAD_X * 2 - 2);
+
+      ctx.fillStyle = 'rgba(9, 16, 31, 0.78)';
+      roundRect(ctx, clampedX, ry, maxW + PAD_X * 2, totalH, RADIUS);
+      ctx.fill();
+
+      lines.forEach((line, i) => {
+        ctx.fillStyle = line.color;
+        ctx.fillText(line.text, clampedX + PAD_X, ry + PAD_Y + FONT_SIZE + i * LINE_H);
+      });
+
+      ctx.restore();
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    // ── Detection loop ─────────────────────────────────────────────────────────
     function startDetecting() {
       if (detecting) return;
       detecting = true;
@@ -1779,8 +2378,11 @@ try {
       const seenThisFrame = new Set();
 
       ctx.save();
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
+
+      if (mirrorMode) {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+      }
 
       for (const det of dets) {
         const best = matcher.findBestMatch(det.descriptor);
@@ -1790,13 +2392,35 @@ try {
 
         const effectiveLimit = strictMode ? DISTANCE_LIMIT : 0.6;
         const isCandidate = best.label !== 'unknown' && dist <= effectiveLimit;
-        const color = isCandidate ? '#f59e0b' : '#ef4444';
 
-        ctx.strokeStyle = color;
+        ctx.strokeStyle = isCandidate ? '#f59e0b' : '#ef4444';
         ctx.lineWidth = 2;
         ctx.strokeRect(box.x, box.y, box.width, box.height);
 
         if (isCandidate) {
+          // ── Reject low-confidence candidates immediately ──────────────────
+          const confPct = Math.round(conf * 100);
+          if (confPct < 68) {
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            const screenXlo = mirrorMode ? (canvas.width - box.x - box.width) : box.x;
+            drawLabel(ctx, [{
+              text: `Unknown ${Math.round(conf * 100)}%`,
+              color: '#ef4444'
+            }, ], screenXu + 4, box.y);
+            ctx.restore();
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(box.x, box.y, box.width, box.height);
+
+            const nowLo = Date.now();
+            if (!window._lastLowConfSound || nowLo - window._lastLowConfSound > 4000) {
+              window._lastLowConfSound = nowLo;
+              playNoResultSound();
+            }
+            continue;
+          }
+
           seenThisFrame.add(best.label);
 
           if (!verifyAccum[best.label]) verifyAccum[best.label] = {
@@ -1812,12 +2436,21 @@ try {
 
           const label = window._empMap[best.label]?.fullname ?? best.label;
           const statusTxt = confirmed ? '✓ CONFIRMED' : `${acc.count}/${req}`;
-          ctx.fillStyle = confirmed ? '#10b981' : '#f59e0b';
-          ctx.font = 'bold 12px system-ui';
+
           ctx.save();
-          const mirX = canvas.width - box.x - box.width;
           ctx.setTransform(1, 0, 0, 1, 0, 0);
-          ctx.fillText(`${label}  ${Math.round(conf * 100)}%  ${statusTxt}`, mirX + 4, box.y - 6);
+
+          const screenX = mirrorMode ? (canvas.width - box.x - box.width) : box.x;
+
+          drawLabel(ctx, [{
+              text: label,
+              color: confirmed ? '#10b981' : '#f59e0b'
+            },
+            {
+              text: `${Math.round(conf * 100)}%  ${statusTxt}`,
+              color: confirmed ? '#10b981' : '#f59e0b'
+            },
+          ], screenX + 4, box.y);
           ctx.restore();
 
           showVerifyHud(box);
@@ -1833,17 +2466,16 @@ try {
             ctx.strokeRect(box.x, box.y, box.width, box.height);
 
             const avgDist = acc.distances.reduce((a, b) => a + b, 0) / acc.distances.length;
-            const avgConf = Math.max(0, 1 - avgDist);
-
-            handleMatch(best.label, avgConf, box);
+            handleMatch(best.label, Math.max(0, 1 - avgDist), box);
           }
         } else {
-          ctx.fillStyle = '#ef4444';
-          ctx.font = 'bold 12px system-ui';
           ctx.save();
-          const mirXu = canvas.width - box.x - box.width;
           ctx.setTransform(1, 0, 0, 1, 0, 0);
-          ctx.fillText(`Unknown  ${Math.round(conf * 100)}%`, mirXu + 4, box.y - 6);
+          const screenXu = mirrorMode ? (canvas.width - box.x - box.width) : box.x;
+          drawLabel(ctx, [{
+            text: `Low conf. ${confPct}%`,
+            color: '#ef4444'
+          }, ], screenXlo + 4, box.y);
           ctx.restore();
         }
       }
@@ -1851,9 +2483,7 @@ try {
       ctx.restore();
 
       Object.keys(verifyAccum).forEach(qr => {
-        if (!seenThisFrame.has(qr)) {
-          delete verifyAccum[qr];
-        }
+        if (!seenThisFrame.has(qr)) delete verifyAccum[qr];
       });
 
       if (Object.keys(verifyAccum).length === 0) {
@@ -1863,9 +2493,18 @@ try {
       }
     }
 
-    // ── Match handler ─────────────────────────────────────────────────────────────
+    // ── Match handler ──────────────────────────────────────────────────────────
     async function handleMatch(qrCode, confidence, box) {
-      if (Math.round(confidence * 100) < 60) return;
+      if (Math.round(confidence * 100) < 68) {
+        playNoResultSound();
+        addLog('no', 'Low confidence', `Face detected at ${Math.round(confidence * 100)}% — below threshold`);
+        stats.s++;
+        stats.n++;
+        document.getElementById('stS').textContent = stats.s;
+        document.getElementById('stN').textContent = stats.n;
+        flashResult('err');
+        return;
+      }
 
       const now = Date.now();
       if (cooldowns[qrCode] && (now - cooldowns[qrCode]) < COOLDOWN_MS) return;
@@ -1876,18 +2515,8 @@ try {
       setArc(0, false);
       document.getElementById('framesRow').style.display = 'none';
 
-      stats.s++;
-      stats.m++;
-      document.getElementById('stS').textContent = stats.s;
-      document.getElementById('stM').textContent = stats.m;
-
-      const emp = window._empMap[qrCode];
-      setStatus('matched', `Matched: ${emp?.fullname ?? qrCode}`);
-      showResultCard(emp, checkType, Math.round(confidence * 100));
-      updateConfBar(Math.round(confidence * 100));
-      flashResult('ok');
-      addLog('ok', emp?.fullname ?? qrCode, `${checkType} · ${Math.round(confidence * 100)}% · dist ${(1 - confidence).toFixed(3)}`);
-
+      // ── Validate with server FIRST before committing to UI ────────────
+      let serverEmp = null;
       try {
         const r = await fetch('face-identify.php', {
           method: 'POST',
@@ -1901,36 +2530,98 @@ try {
           }),
         });
         const d = await r.json();
-        if (!d.success) addLog('inf', 'Server error', d.message ?? 'Failed to write log');
+
+        if (!d.success) {
+          if (d.result === 'not_found' || d.result === 'inactive') {
+            invalidateCachedEmployee(qrCode);
+          }
+
+          const rejectedEmp = d.employee ?? window._empMap[qrCode];
+          const rejectedName = rejectedEmp?.fullname ?? qrCode;
+          const reason = d.result === 'inactive' ? 'Inactive employee' : (d.message ?? 'Rejected by server');
+
+          addLog('no', rejectedName, reason);
+          stats.s++;
+          stats.n++;
+          document.getElementById('stS').textContent = stats.s;
+          document.getElementById('stN').textContent = stats.n;
+          flashResult('err');
+
+          if (d.result === 'inactive') {
+            playInactiveSound();
+          } else {
+            playNoResultSound();
+          }
+
+          setTimeout(() => {
+            if (cameraStreaming && !paused) setStatus('live', `Live — ${loadedRef} references`);
+          }, 2500);
+          return;
+        }
+
+        serverEmp = d.employee;
       } catch (e) {
         addLog('inf', 'Network error', 'Could not reach face-identify.php');
+        return;
       }
 
-      // After cooldown delay, reset status back to live
+      // ── Server confirmed — now update UI ──────────────────────────────
+      stats.s++;
+      stats.m++;
+      document.getElementById('stS').textContent = stats.s;
+      document.getElementById('stM').textContent = stats.m;
+
+      if (serverEmp) window._empMap[qrCode] = {
+        ...window._empMap[qrCode],
+        ...serverEmp,
+        image_url: window._empMap[qrCode]?.image_url
+      };
+
+      const emp = window._empMap[qrCode];
+      setStatus('matched', `Matched: ${emp?.fullname ?? qrCode}`);
+      showResultCard(emp, checkType, Math.round(confidence * 100));
+      updateConfBar(Math.round(confidence * 100));
+      flashResult('ok');
+      addLog('ok', emp?.fullname ?? qrCode,
+        `${checkType} · ${Math.round(confidence * 100)}% · dist ${(1 - confidence).toFixed(3)}`);
+
+      if (emp?.violation && emp.violation.trim() !== '') {
+        playWarningSound();
+      } else if ((emp?.status || '').toLowerCase() === 'inactive') {
+        playInactiveSound();
+      } else if (checkType === 'OUT') {
+        playCheckoutSound();
+      } else {
+        playSuccessSound();
+      }
+
       setTimeout(() => {
-        if (detecting && !paused) setStatus('live', `Live — ${loadedRef} references`);
+        if (cameraStreaming && !paused) setStatus('live', `Live — ${loadedRef} references`);
       }, 2500);
     }
 
-    // ── UI helpers ────────────────────────────────────────────────────────────────
+    // ── UI helpers ─────────────────────────────────────────────────────────────
     function showResultCard(emp, cs, pct) {
       if (!emp) return;
+
+      document.getElementById('lastMatchSec').classList.remove('no-match');
       document.getElementById('resultBox').innerHTML = `
-    <div class="result-card">
-      <img class="emp-photo" src="${esc(emp.image_url)}"
-           onerror="this.outerHTML='<div class=emp-no-photo><i class=\\'fas fa-user\\'></i></div>'">
-      <div class="emp-info">
-        <div class="emp-name">${esc(emp.fullname)}</div>
-        <div class="emp-sub">${esc(emp.position)} &middot; ${esc(emp.brand)}</div>
-        <div class="emp-badges">
-          <span class="badge ${cs==='IN'?'in':'out'}">
-            <i class="fas fa-${cs==='IN'?'sign-in-alt':'sign-out-alt'}" style="margin-right:3px;"></i>${cs}
-          </span>
-          <span class="badge ${emp.status==='Active'?'act':'ina'}">${esc(emp.status)}</span>
-          ${emp.shift ? `<span class="badge shf">${esc(emp.shift)}</span>` : ''}
+        <div class="result-card">
+          <img class="emp-photo" src="${esc(emp.image_url)}"
+              onerror="this.outerHTML='<div class=emp-no-photo><i class=\\'fas fa-user\\'></i></div>'">
+          <div class="emp-info">
+            <div class="emp-name">${esc(emp.fullname)}</div>
+            <div class="emp-sub">${esc(emp.position)} &middot; ${esc(emp.brand)}</div>
+            <div class="emp-badges">
+              <span class="badge ${cs==='IN'?'in':'out'}">
+                <i class="fas fa-${cs==='IN'?'sign-in-alt':'sign-out-alt'}" style="margin-right:3px;"></i>${cs}
+              </span>
+              <span class="badge ${emp.status==='Active'?'act':'ina'}">${esc(emp.status)}</span>
+              ${emp.shift ? `<span class="badge shf">${esc(emp.shift)}</span>` : ''}
+            </div>
+          </div>
         </div>
-      </div>
-    </div>`;
+      `;
     }
 
     function updateConfBar(pct) {
@@ -1946,6 +2637,20 @@ try {
       setTimeout(() => {
         el.className = 'flash';
       }, 800);
+    }
+
+    function invalidateCachedEmployee(qrCode) {
+      labeledDescriptors = labeledDescriptors.filter(ld => ld.label !== qrCode);
+      delete window._empMap[qrCode];
+      if (labeledDescriptors.length) rebuildMatcher();
+
+      try {
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (!raw) return;
+        const p = JSON.parse(raw);
+        p.data = p.data.filter(e => e.qr_code !== qrCode);
+        localStorage.setItem(CACHE_KEY, JSON.stringify(p));
+      } catch (_) {}
     }
 
     function addLog(type, name, meta) {
@@ -1984,15 +2689,8 @@ try {
     function setStatus(state, text) {
       const p = document.getElementById('sPill');
       const d = p.querySelector('.dot');
-      const S = {
-        idle: 'idle',
-        loading: 'loading',
-        live: 'live',
-        matched: 'matched',
-        verifying: 'verifying',
-        nomatch: 'nomatch'
-      };
-      p.className = 's-pill ' + (S[state] ?? 'idle');
+      p.className = 's-pill ' +
+        (['idle', 'loading', 'live', 'matched', 'verifying', 'nomatch'].includes(state) ? state : 'idle');
       d.className = 'dot' + (['live', 'loading', 'verifying'].includes(state) ? ' pulse' : '');
       document.getElementById('sText').textContent = text;
     }
@@ -2009,40 +2707,76 @@ try {
 
     function esc(s) {
       if (!s) return '';
-      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
-    // ── Init ──────────────────────────────────────────────────────────────────────
+    // ── Init ───────────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', async () => {
       if (!window.isSecureContext) {
         setPreloadMsg('HTTPS required.');
         setPreloadLabel('Camera API is disabled on non-secure origins.');
         document.getElementById('startBtn').disabled = true;
+        document.getElementById('camStarting').querySelector('p').textContent = 'HTTPS required.';
         return;
       }
 
-      setStatus('loading', 'Loading models…');
+      setStatus('loading', 'Starting…');
+
+      const camOk = await startVideoStream();
+
       await loadModels();
 
-      preloadReferences(); // background — not awaited
+      preloadReferences();
 
-      try {
-        const perm = await navigator.permissions.query({
-          name: 'camera'
-        });
-        if (perm.state === 'granted') {
-          const tid = setInterval(() => {
-            if (refsReady) {
-              clearInterval(tid);
-              startCam();
-            }
-          }, 300);
-        }
-      } catch (_) {}
+      if (!camOk) {
+        document.getElementById('startBtn').disabled = cameraStreaming;
+        document.getElementById('camStarting').querySelector('p').textContent =
+          'Grant camera permission, then click Start.';
+      }
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+      loadGlobalAudio();
+      startStatusRefresh();
     });
 
     window.addEventListener('beforeunload', stopCam);
+  </script>
+
+  <div class="drawer-overlay" id="drawerOverlay" onclick="toggleDrawer()"></div>
+
+  <script>
+    // ── Mobile drawer ──────────────────────────────────────────────────────────
+    function toggleDrawer() {
+      const side = document.querySelector('.side');
+      const overlay = document.getElementById('drawerOverlay');
+      const isOpen = side.classList.contains('drawer-open');
+      side.classList.toggle('drawer-open', !isOpen);
+      overlay.classList.toggle('open', !isOpen);
+    }
+
+    // ── Move last-match-sec into side panel on desktop ─────────────────────────
+    function positionLastMatch() {
+      const sec = document.getElementById('lastMatchSec');
+      const side = document.querySelector('.side');
+      const stats = side.querySelector('.sec:has(.stats-grid)');
+
+      if (window.innerWidth > 680) {
+        if (sec.parentElement !== side) {
+          side.insertBefore(sec, stats);
+        }
+      } else {
+        const camPanel = document.getElementById('camPanel');
+        if (sec.parentElement !== camPanel) {
+          camPanel.appendChild(sec);
+        }
+      }
+    }
+
+    positionLastMatch();
+    window.addEventListener('resize', positionLastMatch);
   </script>
 </body>
 

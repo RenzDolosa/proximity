@@ -68,16 +68,16 @@ document.getElementById("password").addEventListener("input", function () {
   }
 });
 
-function togglePasswordVisibility(field, button) {
-  const icon = button.querySelector("i");
+function togglePasswordVisibility(fieldId, btn) {
+  const icon = btn.querySelector("i");
 
-  if (field.type === "password") {
-    field.type = "text";
+  if (fieldId.type === "password") {
+    fieldId.type = "text";
     icon.className = "fas fa-eye-slash";
-    button.setAttribute("aria-label", "Hide password");
+    btn.setAttribute("aria-label", "Hide password");
   } else {
-    field.type = "password";
+    fieldId.type = "password";
     icon.className = "fas fa-eye";
-    button.setAttribute("aria-label", "Show password");
+    btn.setAttribute("aria-label", "Show password");
   }
 }

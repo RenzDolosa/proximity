@@ -1,7 +1,7 @@
 <?php
 // app/services/global_audio.php
 
-require_once __DIR__ . '/../../config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 
 if (!isLoggedIn()) {
   header('Content-Type: application/json');

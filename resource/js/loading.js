@@ -11,39 +11,52 @@ const LoadingManager = {
   },
 
   setupEventListeners() {
-    window.addEventListener('beforeunload', () => this.show());
-    window.addEventListener('load', () => {
-      setTimeout(() => this.hide(), 500);
-    });
+    const SKELETON_PAGES = [
+      "system",
+      "datalog",
+      "proximity-code",
+      "violation-log",
+      "attendance-log",
+    ];
+    const currentPage = document.body?.dataset?.page || "";
+    const isSkeletonPage = SKELETON_PAGES.includes(currentPage);
 
-    window.addEventListener('pageshow', (event) => {
-      if (event.persisted) {
-        this.hide();
+    window.addEventListener("beforeunload", () => this.show());
+
+    window.addEventListener("load", () => {
+      if (!isSkeletonPage) {
+        setTimeout(() => this.hide(), 500);
       }
     });
 
-    document.addEventListener('DOMContentLoaded', () => {
-      setTimeout(() => this.hide(), 300);
+    window.addEventListener("pageshow", (event) => {
+      if (event.persisted) this.hide();
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+      if (!isSkeletonPage) {
+        setTimeout(() => this.hide(), 300);
+      }
     });
   },
 
   getElements() {
     return {
-      screen: document.getElementById('loading-screen'),
-      content: document.querySelector('.loading-content'),
-      spinner: document.querySelector('.spinner'),
-      text: document.querySelector('.loading-text'),
-      subtext: document.querySelector('.loading-subtext'),
-      container: document.querySelector('.container')
+      screen: document.getElementById("loading-screen"),
+      content: document.querySelector(".loading-content"),
+      spinner: document.querySelector(".spinner"),
+      text: document.querySelector(".loading-text"),
+      subtext: document.querySelector(".loading-subtext"),
+      container: document.querySelector(".container"),
     };
   },
 
   show(options = {}) {
     const {
-      text = 'Loading',
-      subtext = 'Please wait while we prepare your content',
-      type = 'default',
-      showProgress = false
+      text = "Loading",
+      subtext = "Please wait while we prepare your content",
+      type = "default",
+      showProgress = false,
     } = options;
 
     const elements = this.getElements();
@@ -54,21 +67,22 @@ const LoadingManager = {
       this.hideTimeout = null;
     }
 
-    if (elements.text) elements.text.textContent = text + '...';
+    if (elements.text) elements.text.textContent = text + "...";
     if (elements.subtext) elements.subtext.textContent = subtext;
     if (elements.spinner) {
-      elements.spinner.className = 'spinner';
-      if (type === 'dots') {
-        elements.spinner.classList.add('dots');
-        elements.spinner.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+      elements.spinner.className = "spinner";
+      if (type === "dots") {
+        elements.spinner.classList.add("dots");
+        elements.spinner.innerHTML =
+          '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
       }
     }
 
     this.updateProgress(showProgress);
 
-    elements.screen?.classList.add('active');
-    elements.content?.classList.remove('error', 'success');
-    elements.container?.classList.add('loading');
+    elements.screen?.classList.add("active");
+    elements.content?.classList.remove("error", "success");
+    elements.container?.classList.add("loading");
 
     this.isActive = true;
   },
@@ -79,45 +93,46 @@ const LoadingManager = {
     const elements = this.getElements();
     if (!elements.screen) return;
 
-    elements.screen?.classList.remove('active');
-    elements.container?.classList.remove('loading');
+    elements.screen?.classList.remove("active");
+    elements.container?.classList.remove("loading");
 
     this.isActive = false;
   },
 
-  showSuccess(text = 'Success', duration = 1500) {
+  showSuccess(text = "Success", duration = 1500) {
     const elements = this.getElements();
     if (!elements.content) return;
 
-    elements.content.classList.add('success');
+    elements.content.classList.add("success");
     if (elements.text) elements.text.textContent = text;
-    if (elements.subtext) elements.subtext.textContent = 'Operation completed';
+    if (elements.subtext) elements.subtext.textContent = "Operation completed";
 
     if (this.hideTimeout) clearTimeout(this.hideTimeout);
     this.hideTimeout = setTimeout(() => this.hide(), duration);
   },
 
-  showError(text = 'Error', duration = 2000) {
+  showError(text = "Error", duration = 2000) {
     const elements = this.getElements();
     if (!elements.content) return;
 
-    elements.content.classList.add('error');
+    elements.content.classList.add("error");
     if (elements.text) elements.text.textContent = text;
-    if (elements.subtext) elements.subtext.textContent = 'Please try again or contact support';
+    if (elements.subtext)
+      elements.subtext.textContent = "Please try again or contact support";
 
     if (this.hideTimeout) clearTimeout(this.hideTimeout);
     this.hideTimeout = setTimeout(() => this.hide(), duration);
   },
 
   updateProgress(show = false) {
-    let progressBar = document.querySelector('.loading-progress');
+    let progressBar = document.querySelector(".loading-progress");
 
     if (show) {
       if (!progressBar) {
-        const content = document.querySelector('.loading-content');
+        const content = document.querySelector(".loading-content");
         if (content) {
-          const progress = document.createElement('div');
-          progress.className = 'loading-progress';
+          const progress = document.createElement("div");
+          progress.className = "loading-progress";
           progress.innerHTML = '<div class="loading-progress-bar"></div>';
           content.appendChild(progress);
         }
@@ -129,7 +144,7 @@ const LoadingManager = {
 
   setOperation(key, duration = 2000) {
     this.show();
-    
+
     if (this.operations.has(key)) {
       clearTimeout(this.operations.get(key));
     }
@@ -140,7 +155,7 @@ const LoadingManager = {
     }, duration);
 
     this.operations.set(key, timeout);
-  }
+  },
 };
 
 // ── Initialize on script load ────
@@ -155,21 +170,39 @@ function hideLoadingScreen() {
   LoadingManager.hide();
 }
 
-function navigateWithLoading(url) {
-  LoadingManager.show({
-    text: 'Loading',
-    subtext: 'Redirecting...'
-  });
+const SKELETON_PAGES = [
+  "system",
+  "datalog",
+  "proximity-code",
+  "violation-log",
+  "attendance-log",
+];
 
-  setTimeout(() => {
+function navigateWithLoading(url) {
+  const isSkeletonDest = SKELETON_PAGES.some((page) =>
+    url.includes(page)
+  );
+
+  if (isSkeletonDest) {
+    LoadingManager.show({
+      text: "Loading",
+      subtext: "Redirecting...",
+    });
     window.location.href = url;
-  }, 300);
+  } else {
+    LoadingManager.show({
+      text: "Loading",
+      subtext: "Redirecting...",
+    });
+    window.location.href = url;
+    setTimeout(() => LoadingManager.hide(), 3000);
+  }
 }
 
-function showLoadingForOperation(operationName = 'Processing') {
+function showLoadingForOperation(operationName = "Processing") {
   LoadingManager.show({
     text: operationName,
-    subtext: 'Please wait while we process your request'
+    subtext: "Please wait while we process your request",
   });
 }
 
@@ -179,52 +212,52 @@ function hideLoadingForOperation() {
 
 function showLoadingForSearch() {
   LoadingManager.show({
-    text: 'Searching',
-    subtext: 'Looking for employees...'
+    text: "Searching",
+    subtext: "Looking for employees...",
   });
 }
 
 function showLoadingForClear() {
   LoadingManager.show({
-    text: 'Clearing Search',
-    subtext: 'Refreshing results...'
+    text: "Clearing Search",
+    subtext: "Refreshing results...",
   });
 }
 
 function showLoadingForExport() {
   LoadingManager.show({
-    text: 'Exporting Data',
-    subtext: 'Preparing your download...',
-    showProgress: true
+    text: "Exporting Data",
+    subtext: "Preparing your download...",
+    showProgress: true,
   });
 }
 
 function showLoadingForImport() {
   LoadingManager.show({
-    text: 'Importing Data',
-    subtext: 'Processing file...',
-    showProgress: true
+    text: "Importing Data",
+    subtext: "Processing file...",
+    showProgress: true,
   });
 }
 
 function showLoadingForDelete() {
   LoadingManager.show({
-    text: 'Deleting',
-    subtext: 'Please wait...'
+    text: "Deleting",
+    subtext: "Please wait...",
   });
 }
 
 function showLoadingForSave() {
   LoadingManager.show({
-    text: 'Saving',
-    subtext: 'Storing information...'
+    text: "Saving",
+    subtext: "Storing information...",
   });
 }
 
 function showLoadingForCustomOperation(operationName, duration = 2000) {
   LoadingManager.show({
     text: operationName,
-    subtext: 'Please wait...'
+    subtext: "Please wait...",
   });
 
   setTimeout(() => {
@@ -233,33 +266,32 @@ function showLoadingForCustomOperation(operationName, duration = 2000) {
 }
 
 // ── Enhanced form submission handling ──
-document.addEventListener('DOMContentLoaded', function() {
-
-  document.querySelectorAll('[data-action="export"]').forEach(button => {
-    button.addEventListener('click', function() {
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll('[data-action="export"]').forEach((button) => {
+    button.addEventListener("click", function () {
       showLoadingForExport();
       setTimeout(() => LoadingManager.hide(), 2000);
     });
   });
 
-  document.querySelectorAll('[data-action="import"]').forEach(button => {
-    button.addEventListener('click', function() {
+  document.querySelectorAll('[data-action="import"]').forEach((button) => {
+    button.addEventListener("click", function () {
       showLoadingForImport();
       setTimeout(() => LoadingManager.hide(), 3000);
     });
   });
 
-  document.querySelectorAll('[data-action="delete"]').forEach(button => {
-    button.addEventListener('click', function() {
+  document.querySelectorAll('[data-action="delete"]').forEach((button) => {
+    button.addEventListener("click", function () {
       showLoadingForDelete();
       setTimeout(() => LoadingManager.hide(), 1500);
     });
   });
 
-  const searchInput = document.getElementById('search_employee');
+  const searchInput = document.getElementById("search_employee");
   if (searchInput) {
     let searchTimeout;
-    searchInput.addEventListener('input', function() {
+    searchInput.addEventListener("input", function () {
       clearTimeout(searchTimeout);
       if (this.value.length > 0) {
         showLoadingForSearch();
@@ -271,27 +303,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // ── Hide nav in iframe mode ──
 if (window.self !== window.top) {
-  document.addEventListener('DOMContentLoaded', function() {
-    const nav = document.querySelector('nav, header.navbar, .navbar');
-    if (nav) nav.style.display = 'none';
+  document.addEventListener("DOMContentLoaded", function () {
+    const nav = document.querySelector("nav, header.navbar, .navbar");
+    if (nav) nav.style.display = "none";
   });
 }
 
 // ── AJAX request interceptor ──
 const originalFetch = window.fetch;
-window.fetch = function(...args) {
+window.fetch = function (...args) {
   const options = args[1] || {};
   const headers = options.headers || {};
-  
-  const isSilent = 
-    headers['X-Silent-Request'] === 'true' ||
-    (typeof isAutoUpdating !== 'undefined' && isAutoUpdating);
 
-  const method = (options.method || 'GET').toUpperCase();
-  const isWrite = method !== 'GET';
+  const isSilent =
+    headers["X-Silent-Request"] === "true" ||
+    (typeof isAutoUpdating !== "undefined" && isAutoUpdating);
+
+  const method = (options.method || "GET").toUpperCase();
+  const isWrite = method !== "GET";
 
   if (!isSilent && isWrite) {
-    LoadingManager.show({ text: 'Loading', type: 'dots' });
+    LoadingManager.show({ text: "Loading", type: "dots" });
   }
 
   return originalFetch.apply(this, args).finally(() => {
@@ -302,6 +334,6 @@ window.fetch = function(...args) {
 };
 
 // ── Export for external use ──
-if (typeof module !== 'undefined' && module.exports) {
+if (typeof module !== "undefined" && module.exports) {
   module.exports = LoadingManager;
 }

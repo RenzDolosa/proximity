@@ -4,8 +4,6 @@
   "use strict";
 
   // ── Config ────────────────────────────────────────────────────────────────
-  const ENDPOINT = "../../app/services/global_audio.php";
-
   const AUDIO_TYPES = [
     {
       key: "success",
@@ -56,7 +54,7 @@
       </p>
       <div class="audio-grid" id="global-audio-grid"></div>
       <div id="global-audio-msg" style="font-size:12px;margin-top:10px;"></div>
-      <button id="global-audio-save-btn" class="btn-primary" tabindex="-1" style="margin-top:7px;">
+      <button id="global-audio-save-btn" class="btn btn-primary" tabindex="-1" style="margin-top:7px;">
         <i class="fas fa-save"></i> Save Audio Settings
       </button>`;
 
@@ -117,7 +115,7 @@
   // ── Load from server ──────────────────────────────────────────────────────
   async function loadAll() {
     try {
-      const res = await fetch(ENDPOINT, {
+      const res = await fetch(`${GlobalAudioBackend}`, {
         credentials: "same-origin",
         headers: { "X-Requested-With": "XMLHttpRequest" },
       });
@@ -203,7 +201,7 @@
 
       try {
         const method = isDelete ? "DELETE" : "POST";
-        const res = await fetch(ENDPOINT, {
+        const res = await fetch(GlobalAudioBackend, {
           method,
           credentials: "same-origin",
           headers: {
@@ -257,5 +255,10 @@
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
-  document.addEventListener("DOMContentLoaded", buildCard);
+  document.addEventListener("DOMContentLoaded", async function () {
+    const ready = await resolveEndpoints();
+    if (!ready) return;
+
+    buildCard();
+  });
 })();

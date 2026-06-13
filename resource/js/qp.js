@@ -1,5 +1,8 @@
 // resource/js/qp.js --> qr proximity scanner/viewer
 
+let QrProximityBackend = null;
+let GlobalAudioBackend = null;
+
 const searchInput = document.getElementById("searchInput");
 const body = document.body;
 
@@ -10,8 +13,6 @@ let currentAudio = null;
 let activeController = null;
 
 // ── Global-audio endpoint ─────────────────────────────────────────
-const GLOBAL_AUDIO_ENDPOINT = "../../services/global_audio.php";
-
 const AUDIO_TYPE_MAP = {
   success: "successSound",
   checkout: "checkoutSound",
@@ -35,7 +36,7 @@ function getCsrfToken() {
 // ─────────────────────────────────────────────────────────────────
 async function loadGlobalAudio() {
   try {
-    const res = await fetch(GLOBAL_AUDIO_ENDPOINT, {
+    const res = await fetch(`${GlobalAudioBackend}`, {
       credentials: "same-origin",
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
@@ -110,14 +111,14 @@ function setupEventListeners() {
       const query = e.target.value.trim();
       if (query !== "") searchEmployees(query);
     }
-    if ((e.ctrlKey || e.metaKey) && e.key === "v") {
-      e.preventDefault();
-    }
+    // if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+    //   e.preventDefault();
+    // }
   });
 
-  searchInput.addEventListener("paste", function (e) {
-    e.preventDefault();
-  });
+  // searchInput.addEventListener("paste", function (e) {
+  //   e.preventDefault();
+  // });
 
   document.addEventListener("click", function (e) {
     if (!e.target.matches("input,button,select,textarea,a"))
@@ -214,7 +215,7 @@ async function searchEmployees(query) {
     let url, method, fetchBody;
 
     if (looksLikeQRCode(query)) {
-      url = "../../services/qr_search_backend.php";
+      url = `${QrProximityBackend}`;
       method = "POST";
       fetchBody = JSON.stringify({
         action: "get_by_qr",
@@ -222,7 +223,7 @@ async function searchEmployees(query) {
         source: "scanner",
       });
     } else {
-      url = `../../services/qr_search_backend.php?q=${encodeURIComponent(query)}`;
+      url = `${QrProximityBackend}?q=${encodeURIComponent(query)}`;
       method = "GET";
     }
 
@@ -294,7 +295,6 @@ async function searchEmployees(query) {
     }
   } catch (error) {
     if (error.name === "AbortError") return;
-    console.error("Search error:", error);
     messageEl.innerHTML =
       '<div class="error-message">Failed to search. Please check your connection.</div>';
     currentResults = [];
@@ -425,7 +425,10 @@ function escapeHtml(text) {
 // ─────────────────────────────────────────────────────────────────
 //  Init
 // ─────────────────────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async function() {
+  const ready = await resolveEndpoints();
+  if (!ready) return;
+
   loadGlobalAudio();
   setupEventListeners();
 });

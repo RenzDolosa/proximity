@@ -1,12 +1,8 @@
 // resource/js/ea-attendancelog.js
-// Export engine for the Attendance Log page.
-// Mirrors ea-dtl.js but fetches from attendancelog_backend.php (not datalog_backend.php)
-// and adds a persistent Export Log panel that records every export action.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EXPORT LOG  — in-session ledger of every export, rendered as a sticky table
 // ─────────────────────────────────────────────────────────────────────────────
-
 const _exportLog = {
   entries: [],
 
@@ -346,7 +342,7 @@ function _ealEsc(str) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CORE FETCH HELPER  — points to attendancelog_backend.php
+// CORE FETCH HELPER
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function fetchAllAttendanceForExport(filters = {}) {
@@ -370,7 +366,7 @@ async function fetchAllAttendanceForExport(filters = {}) {
     }
   }
 
-  const response = await fetch(`attendancelog_backend.php?${params}`, {
+  const response = await fetch(`${AttendanceBackend}?${params}`, {
     headers: {
       "Content-Type": "application/json",
       "X-Requested-With": "XMLHttpRequest",

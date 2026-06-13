@@ -1,10 +1,10 @@
 <?php
 // tests/test.php --> test project
 
-require_once '../cnfg/config.php';
-require_once '../cnfg/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
-requireAccess('test', '../iframe/main/php');
+requireAccess('test', ROUTE_HOME);
 $access = getMenuAccess();
 
 // Get dashboard statistics if database is connected
@@ -103,8 +103,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $databaseConnected) {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Dashboard</title>
-  <link rel="icon" href="res/icon/database-icon.png" type="image/png">
-  <link rel="stylesheet" href="../css/btn.css">
+  <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
+  <link rel="stylesheet" href="/config/asset.php?t=c24hj">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <style>
     * {
       margin: 0;
@@ -676,9 +677,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $databaseConnected) {
     </div>
   </div>
 
-  <script src="../src/btn.js"></script>
-  <script src="../src/req.js"></script>
-  <script src="../src/ver.js"></script>
+  <script src="/config/asset.php?t=m6efw"></script>
+  <script src="/config/asset.php?t=j7k8l.js"></script>
+  <script src="/config/asset.php?t=m9n0o.js"></script>
   <script>
     function toggleEmployeeForm() {
       const form = document.getElementById('employeeForm');

@@ -228,7 +228,7 @@ async function handleImportSubmit(e) {
 
     updateImportStatus("Importing employees to database...");
 
-    const response = await fetch("../../app/services/datalog_backend.php", {
+    const response = await fetch(`${AccessLogBackend}`, {
       method: "POST",
       body: formData,
       headers: {

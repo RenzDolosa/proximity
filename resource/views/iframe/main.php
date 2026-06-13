@@ -1,10 +1,15 @@
 <?php
 // resource/views/iframe/main.php --> main panel controller
 
-require_once __DIR__ . '/../../../config/config.php';
-require_once __DIR__ . '/../../../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
-requireAccess('main', '../../../proximity.php', true);
+if (!isLoggedIn()) {
+  http_response_code(403);
+  exit;
+}
+
+requireAccess('main', ROUTE_PROXIMITY);
 $access = getMenuAccess();
 
 $userId = $_SESSION['user_id'] ?? null;
@@ -13,7 +18,7 @@ $userGroup = $_SESSION['user_group'] ?? '';
 // ── Page router ──
 $page = $_GET['page'] ?? null;
 
-$iframePages = ['admin panel', 'account', 'employee dashboard', 'settings', 'about'];
+$iframePages = ['admin panel', 'account', 'employee dashboard', 'settings', 'about', 'table panel'];
 
 $includedPages = ['account', 'employee dashboard', 'f-pass', 'reg', 'settings'];
 
@@ -34,7 +39,7 @@ if ($page && in_array($page, $includedPages)) {
 }
 
 if (!isset($_SESSION['user_id'])) {
-  header('Location: ../../../index.php');
+  header('Location:', ROUTE_LOGIN);
   exit();
 }
 
@@ -162,11 +167,15 @@ if ($databaseConnected) {
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?= htmlspecialchars($myDatabase ?? 'My Database'); ?> - Dashboard</title>
-  <link rel="icon" href="../../assets/icon/database-icon.png" type="image/png">
+  <title><?= htmlspecialchars($myDatabase ?? 'My Database'); ?> - Home</title>
+  <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
+  <!-- <link rel="stylesheet" href="/config/asset.php?t=a57s4"> -->
+  <link rel="stylesheet" href="/config/asset.php?t=mq4wc">
+  <link rel="stylesheet" href="/config/asset.php?t=c24hj">
+  <link rel="stylesheet" href="/config/asset.php?t=rtf2w">
+  <link rel="stylesheet" href="/config/asset.php?t=q5fwr">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <link rel="stylesheet" href="../../css/main.css">
-  <link rel="stylesheet" href="../../css/loading.css">
 </head>
 
 <body>
@@ -182,19 +191,19 @@ if ($databaseConnected) {
   <!-- Top shortcut nav -->
   <div class="shortcut-bar">
     <?php if ($access['table panel']): ?>
-      <div class="shortcut-item" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=employees');">
+      <div class="shortcut-item" data-action-app="mainFrame-employees">
         <i class="fas fa-users"></i>
         <span>Employees</span>
       </div>
     <?php endif; ?>
     <?php if ($access['scan test']): ?>
-      <div class="shortcut-item" onclick="navigateWithLoading('../../../app/http/controllers/scan test.php');">
+      <div class="shortcut-item" data-action-app="mainFrame-scanTest">
         <i class="fas fa-qrcode"></i>
         <span>Scan Test</span>
       </div>
     <?php endif; ?>
     <?php if ($access['admin panel']): ?>
-      <div class="shortcut-item" onclick="navigateWithLoading('../admin panel.php#users');">
+      <div class="shortcut-item" data-action-app="mainFrame-adminPanel">
         <i class="fas fa-user-shield"></i>
         <span>Admin Panel</span>
       </div>
@@ -236,23 +245,23 @@ if ($databaseConnected) {
             <div class="shortcuts-grid">
 
               <?php if ($access['system']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=employees');">
+                <div class="sc-card" data-action-app="mainFrame-employees">
                   <div class="sc-icon"><i class="fas fa-user-plus"></i></div>
                   <div class="sc-label">Input Employee</div>
                 </div>
               <?php endif; ?>
 
               <?php if ($access['datalog']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=datalog');">
+                <div class="sc-card" data-action-app="mainFrame-datalog">
                   <div class="sc-icon"><i class="fas fa-list-check"></i></div>
                   <div class="sc-label">Scanned Log</div>
                 </div>
               <?php endif; ?>
 
               <?php if ($access['proximity-code']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=proximity');">
+                <div class="sc-card" data-action-app="mainFrame-proximity">
                   <div class="sc-icon">
-                    <img src="../../../resource/assets/logo/nfc-logo.svg" alt="NFC"
+                    <img src="/config/asset.php?t=cfk4d" alt="NFC"
                       class="icon-accent" style="width:18px;height:18px;">
                   </div>
                   <div class="sc-label">Proximity Center</div>
@@ -260,28 +269,28 @@ if ($databaseConnected) {
               <?php endif; ?>
 
               <?php if ($access['scan test']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../../../app/http/controllers/scan test.php');">
+                <div class="sc-card" data-action-app="mainFrame-scanTest">
                   <div class="sc-icon"><i class="fas fa-qrcode"></i></div>
                   <div class="sc-label">Test Live Search</div>
                 </div>
               <?php endif; ?>
 
               <?php if ($access['employee dashboard']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../employee dashboard.php');">
+                <div class="sc-card" data-action-app="mainFrame-dashboard">
                   <div class="sc-icon"><i class="fas fa-chart-line"></i></div>
                   <div class="sc-label">Insights</div>
                 </div>
               <?php endif; ?>
 
               <?php if ($access['account info']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../account.php');">
+                <div class="sc-card" data-action-app="mainFrame-account">
                   <div class="sc-icon"><i class="fas fa-id-card"></i></div>
                   <div class="sc-label">Account Info</div>
                 </div>
               <?php endif; ?>
 
               <?php if ($access['remarks']): ?>
-                <div class="sc-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=remarks');">
+                <div class="sc-card" data-action-app="mainFrame-remarks">
                   <div class="sc-icon"><i class="fas fa-exclamation-triangle"></i></div>
                   <div class="sc-label">Incidents</div>
                 </div>
@@ -464,9 +473,9 @@ if ($databaseConnected) {
             <div class="menu-list">
 
               <?php if ($access['table panel']): ?>
-                <div class="menu-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=employees');">
+                <div class="menu-card" data-action-app="mainFrame-employees">
                   <div class="mc-icon" style="background:#eff6ff; color:#2563eb;">
-                    <img src="../../assets/logo/mysql-logo.svg" alt="MySQL" style="width:26px;height:26px;object-fit:contain;">
+                    <img src="/config/asset.php?t=dfk34" alt="MySQL" style="width:26px;height:26px;object-fit:contain;">
                   </div>
                   <div class="mc-info">
                     <div class="mc-title">Employee Management</div>
@@ -477,9 +486,9 @@ if ($databaseConnected) {
               <?php endif; ?>
 
               <?php if ($access['scan test']): ?>
-                <div class="menu-card" onclick="navigateWithLoading('../../../app/http/controllers/scan test.php');">
+                <div class="menu-card" data-action-app="mainFrame-scanTest">
                   <div class="mc-icon" style="background:#f0fdf4; color:#16a34a;">
-                    <img src="../../assets/icon/nfc-icon.svg" alt="NFC" style="width:26px;height:26px;object-fit:contain;">
+                    <img src="/config/asset.php?t=gnks2" alt="NFC" style="width:26px;height:26px;object-fit:contain;">
                   </div>
                   <div class="mc-info">
                     <div class="mc-title">Test Live Search</div>
@@ -490,9 +499,9 @@ if ($databaseConnected) {
               <?php endif; ?>
 
               <?php if ($access['m-i v2']): ?>
-                <div class="menu-card" onclick="navigateWithLoading('../../../tests/m-i v2.php');">
+                <div class="menu-card" data-action-app="mainFrame-test">
                   <div class="mc-icon" style="background:#f8fafc; color:#94a3b8;">
-                    <img src="../../assets/logo/coming-soon.svg" alt="Coming Soon" style="width:26px;height:26px;object-fit:contain;">
+                    <img src="/config/asset.php?t=fgbk4" alt="Coming Soon" style="width:26px;height:26px;object-fit:contain;">
                   </div>
                   <div class="mc-info">
                     <div class="mc-title">Under Development</div>
@@ -509,11 +518,16 @@ if ($databaseConnected) {
     </div>
   </div>
 
-  <script src="../../js/req.js"></script>
-  <script src="../../js/loading.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-
+  <script src="/config/route-config.php?page=mainFrame"></script>
+  <script src="/config/route-config.php?page=endpoint"></script>
+  <script src="/config/asset.php?t=p1q2r"></script>
+  <script src="/config/asset.php?t=j7k8l"></script>
+  <script src="/config/asset.php?t=oqw56"></script>
+  <script src="/config/asset.php?t=kg56e"></script>
   <script>
+    let AccessLogBackend = null;
+
     function drawHlines(chart) {
       const yScale = chart.scales.y;
       if (!yScale) return;
@@ -539,24 +553,6 @@ if ($databaseConnected) {
 
       ctx.restore();
     }
-
-    // ── Live clock ──────────────────────────────────────────────────────────────
-    function updateTime() {
-      const now = new Date();
-      document.getElementById('wb-time').textContent = now.toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-      document.getElementById('wb-date').textContent = now.toLocaleDateString([], {
-        weekday: 'short',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
-    }
-    updateTime();
-    setInterval(updateTime, 1000);
 
     // ── Gate chart colors ─────────────────────────────────────────────────────────
     const gateColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ec4899', '#8b5cf6',
@@ -702,7 +698,7 @@ if ($databaseConnected) {
       const yesterdayStr = yd.toDateString();
 
       const fetches = [...months].map(function(ym) {
-        const url = '../../../app/services/datalog_backend.php' +
+        const url = `${AccessLogBackend}` +
           '?action=list' +
           '&access_timestamp=' + encodeURIComponent(ym) +
           '&limit=9999&page=1';
@@ -900,7 +896,7 @@ if ($databaseConnected) {
       }
 
       const fetches = [...months].map(function(ym) {
-        const url = '../../../app/services/datalog_backend.php' +
+        const url = `${AccessLogBackend}` +
           '?action=list' +
           '&access_timestamp=' + encodeURIComponent(ym) +
           '&limit=9999&page=1';
@@ -1060,7 +1056,9 @@ if ($databaseConnected) {
     }
 
     renderChart('volume');
-    fetchAttendanceData();
+    window.__endpointsReady.then(function() {
+      fetchAttendanceData();
+    });
   </script>
 </body>
 

@@ -389,7 +389,7 @@ async function handleImportSubmit(e) {
 
     updateImportStatus("Importing employees to database...");
 
-    const response = await fetch("../../app/services/manpower_backend.php", {
+    const response = await fetch(`${EmployeesBackend}`, {
       method: "POST",
       body: formData,
       headers: {

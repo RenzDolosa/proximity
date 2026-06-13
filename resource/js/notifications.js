@@ -7,7 +7,6 @@
   const POLL_MS = 30_000;
   const MAX_DISPLAY = 8;
   const SEEN_KEY = "ntf_seen_ids_v2";
-  const ENDPOINT = "app/services/notifications_backend.php";
 
   // ── DOM refs ─────────────────────────────────────────────────────────────
   const notifBtn = document.getElementById("notifBtn");
@@ -171,7 +170,7 @@
     divider.style.cssText =
       "padding:6px 14px 4px;font-size:10px;font-weight:600;text-transform:uppercase;" +
       "letter-spacing:.06em;color:#94a3b8;background:#f8fafc;border-bottom:1px solid var(--border,#e2e8f0);";
-    divider.textContent = "What's New";
+    divider.textContent = "";
     section.insertAdjacentElement("afterend", divider);
 
     return section;
@@ -203,10 +202,23 @@
         "padding:8px 14px;font-size:11.5px;text-align:center;color:var(--accent,#2563eb);cursor:pointer;";
       more.innerHTML = `<i class="fas fa-plus-circle" style="font-size:10px;"></i> ${liveAlerts.length - MAX_DISPLAY} more alert(s)`;
       more.onclick = () => {
-        if (typeof document.querySelector === "function") {
-          const frames = document.querySelector(".frames");
-          if (frames)
-            frames.src = "resource/views/iframe/main.php?page=admin panel";
+        const token = window.__ROUTES?.["portal-adminPanel"];
+        if (token) {
+          fetch("/config/resolve.php", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token }),
+          })
+            .then((r) => {
+              if (r.status === 403) {
+                window.top.location.href = "/index.php";
+                return null;
+              }
+              return r.json();
+            })
+            .then((data) => {
+              if (data?.url) document.querySelector(".frames").src = data.url;
+            });
         }
         closeNotifDropdown();
       };
@@ -223,8 +235,11 @@
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
   async function fetchAlerts() {
+    const backend = window.__NotificationBackend;
+    if (!backend) return;
+
     try {
-      let url = ENDPOINT;
+      let url = backend;
       if (lastServerTime) url += "?since=" + encodeURIComponent(lastServerTime);
 
       const resp = await fetch(url, { credentials: "same-origin" });
@@ -270,8 +285,11 @@
 
   // ── Boot ──────────────────────────────────────────────────────────────────
   ensureLiveSection();
-  fetchAlerts();
-  pollTimer = setInterval(fetchAlerts, POLL_MS);
+  (async () => {
+    await (window.__endpointsReady || Promise.resolve());
+    fetchAlerts();
+    pollTimer = setInterval(fetchAlerts, POLL_MS);
+  })();
 
   window.__ntfRender = () => {
     ensureLiveSection();

@@ -1,6 +1,4 @@
-/*
- * panel.js  (fixed)
- */
+// panel.js
 
 /* ═══════════════════════════════════════════════════════════
   TAB CONTROLLER
@@ -1147,7 +1145,7 @@ async function _prx_init() {
 
 async function _prx_loadUserId() {
   try {
-    const res = await fetch("../cnfg/proxcode_backend.php?action=user_info", {
+    const res = await fetch(`${ProxcodeBackend}?action=user_info`, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     if (res.ok) {
@@ -1167,7 +1165,7 @@ async function prx_loadEmployees(filters = {}, preservePage = false) {
     PRX.activeFilters = filters;
     const { remarks: remarksFilter, ...backendFilters } = filters;
     const params = new URLSearchParams({ action: "get", ...backendFilters });
-    const res = await fetch(`../cnfg/proxcode_backend.php?${params}`, {
+    const res = await fetch(`${ProxcodeBackend}?${params}`, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1204,7 +1202,7 @@ let _prx_systemQRCache = null;
 async function _prx_getSystemQRs() {
   if (_prx_systemQRCache) return _prx_systemQRCache;
   try {
-    const res  = await fetch("../cnfg/manpower_backend.php?action=get", {
+    const res  = await fetch(`${EmployeesBackend}?action=get`, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     const data = await res.json();
@@ -1222,7 +1220,7 @@ let _prx_qrMapCache = null;
 async function _prx_buildQRMap() {
   if (_prx_qrMapCache) return _prx_qrMapCache;
   try {
-    const res  = await fetch("../cnfg/manpower_backend.php?action=get", {
+    const res  = await fetch(`${EmployeesBackend}?action=get`, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     const data = await res.json();
@@ -1386,7 +1384,7 @@ async function prx_openModal(action, employeeId = null) {
 
 async function _prx_loadCodeData(id) {
   try {
-    const res  = await fetch(`../cnfg/proxcode_backend.php?action=get_single&id=${id}`, {
+    const res  = await fetch(`${ProxcodeBackend}?action=get_single&id=${id}`, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     const data = await res.json();
@@ -1418,7 +1416,7 @@ async function prx_handleFormSubmit(e) {
     _showLoading(true);
     const fd  = new FormData(e.target);
     fd.append("action", PRX.currentAction);
-    const res = await fetch("../cnfg/proxcode_backend.php", {
+    const res = await fetch(`${ProxcodeBackend}`, {
       method: "POST", body: fd, headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1511,7 +1509,7 @@ async function _prx_deleteOne(id) {
     const fd = new FormData();
     fd.append("action", "delete");
     fd.append("id", id);
-    const res  = await fetch("../cnfg/proxcode_backend.php", {
+    const res  = await fetch(`${ProxcodeBackend}`, {
       method: "POST", body: fd, headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     const data = await res.json();
@@ -1536,7 +1534,7 @@ async function _prx_deleteFiltered() {
     fd.append("action", "delete_filtered");
     fd.append("employee_ids", JSON.stringify(ids));
     fd.append("filters", JSON.stringify(_getFilters("prx-searchForm")));
-    const res  = await fetch("../cnfg/proxcode_backend.php", {
+    const res  = await fetch(`${ProxcodeBackend}`, {
       method: "POST", body: fd, headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

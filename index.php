@@ -1,30 +1,15 @@
 <?php
 // index.php --> main login
 
-require_once 'config/config.php';
-require_once 'app/http/auth/login.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/app/http/auth/login.php';
 
-if (isLoggedIn()) {
-  header('Location: portal.php');
+$page = $_GET['page'] ?? '';
+
+// ── Dispatch page sub-views ────────────────────────────────────────────────
+if ($page === 'forget') {
+  include 'resource/views/f-pass.php';
   exit;
-}
-
-$url = $_GET['url'] ?? 'home';
-$url = rtrim($url, '/');
-
-switch ($url) {
-  case 'portal':
-    include 'portal.php';
-    break;
-  case 'register':
-    include 'resource/views/reg.php';
-    break;
-  case 'proximity3pl':
-    include 'proximity.php';
-    break;
-  default:
-
-    break;
 }
 ?>
 
@@ -36,27 +21,25 @@ switch ($url) {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; script-src 'self';">
-  <meta http-equiv="X-Content-Type-Options" content="nosniff">
-  <meta http-equiv="X-Frame-Options" content="DENY">
   <meta http-equiv="X-XSS-Protection" content="1; mode=block">
   <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
   <title>Login</title>
-  <link rel="preload" href="resource/assets/icon/database-icon.png" as="image">
-  <link rel="preload" href="resource/assets/logo/database.svg" as="image">
-  <link rel="icon" href="resource/assets/icon/database-icon.png" type="image/png">
-  <link rel="stylesheet" href="resource/css/r-l.css">
+  <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
+  <link rel="stylesheet" href="/config/asset.php?t=a1b2c">
+  <link rel="stylesheet" href="/config/asset.php?t=c24hj">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
 <body>
 
-  <version_compare style="z-index: 1000;">
+  <version_compare>
     <p id="version"></p>
   </version_compare>
 
   <div class="container">
     <div class="header">
-      <div><img src="resource/assets/logo/database.svg" alt="My Database Logo" class="logo" loading="lazy"></div>
+      <div><img src="/config/asset.php?t=v5w6x" alt="My Database Logo" class="logo" loading="lazy"></div>
       <h2>Proximity Data</h2>
       <p class="subtitle">Sign in to your Proximity Database</p>
     </div>
@@ -104,33 +87,37 @@ switch ($url) {
             placeholder="Enter your password"
             maxlength="255"
             autocomplete="current-password">
-          <button type="button" tabindex="-1"
-            class="password-toggle-btn"
+          <button type="button"
+            class="toggle-pw-sub"
             id="togglePassword"
+            tabindex="-1"
             aria-label="Toggle password visibility">
             <i class="fas fa-eye"></i>
           </button>
         </div>
       </div>
 
-      <button type="submit" class="btn" tabindex="-1" id="submitBtn">
+      <button type="submit" class="btn-sub btn-primary" tabindex="-1" id="submitBtn">
         <span class="loading"></span>
         Sign In &amp; Access Database
       </button>
     </form>
 
     <div class="forgot-password">
-      <a href="resource/views/f-pass.php">Forgot your password?</a>
+      <a data-action-root="forget">Forgot your password?</a>
     </div>
 
     <div class="register-link">
-      <!-- Don't have an account? <a href="reg.php">Create one here</a> -->
+      <!-- Don't have an account? <a href="#">Create one here</a> -->
     </div>
   </div>
 
-  <script src="resource/js/li.js"></script>
-  <script src="resource/js/req.js"></script>
-  <script src="resource/js/ver.js"></script>
+  <script src="/config/route-config.php?page=login"></script>
+  <script src="/config/route-config.php?page=endpoint"></script>
+  <script src="/config/asset.php?t=p1q2r"></script>
+  <script src="/config/asset.php?t=g5h6i"></script>
+  <script src="/config/asset.php?t=j7k8l"></script>
+  <script src="/config/asset.php?t=m9n0o"></script>
 </body>
 
 </html>

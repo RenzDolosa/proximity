@@ -1,8 +1,8 @@
 <?php
 // app/services/table panel.php --> table tab panel
 
-require_once __DIR__ . '/../../config/config.php';
-require_once __DIR__ . '/../../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
 $permissions = getUserGroupPermissions();
 if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') && !canAccess($permissions, 'proximity-code')) {
@@ -12,8 +12,10 @@ if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') &&
   exit;
 }
 
-requireAccess('table panel', '../../resource/views/iframe/main.php');
+requireAccess('table panel', ROUTE_HOME);
 $access = getMenuAccess();
+
+$myDatabase = $_SESSION['my_database'] ?? 'My Database';
 
 $requestedTab = $_GET['tab'] ?? null;
 
@@ -44,151 +46,10 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?></title>
-  <link rel="preload" href="../../resource/assets/icon/database-icon.png" as="image">
-  <link rel="icon" href="../../resource/assets/icon/database-icon.png" type="image/png">
+  <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
+  <link rel="stylesheet" href="/config/asset.php?t=c24hj">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    :root {
-      --accent: #2563eb;
-      --accent-light: #eff6ff;
-      --bg: #f0f2f5;
-      --surface: #ffffff;
-      --border: #e2e8f0;
-      --text: #1e293b;
-      --text-muted: #64748b;
-      --danger: #dc2626;
-      --danger-light: #ff9ca4;
-      --danger-sub: #f8d7da;
-      --warning: #f59e0b;
-      --warning-light: #ffce85;
-      --success: #15803d;
-      --success-light: #8deda3;
-      --success-sub: #d4edda;
-      --checkin: #16a34a;
-      --checkin-light: #4ade80;
-      --checkout: #ef4444;
-      --checkout-light: #fb923c;
-      --radius: 8px;
-    }
-
-    body {
-      font-family: sans-serif;
-      background: var(--bg);
-    }
-
-    .tab-bar {
-      display: flex;
-      align-items: flex-end;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0 16px;
-      position: sticky;
-      top: 0;
-      z-index: 999;
-    }
-
-    .tab-btn {
-      display: flex;
-      align-items: center;
-      gap: 3px;
-      padding: 14px 20px;
-      font-size: 12px;
-      font-weight: 400;
-      height: 46px;
-      color: #666;
-      background: none;
-      border: none;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -1px;
-      cursor: pointer;
-      transition: color 0.15s, border-color 0.15s;
-      white-space: nowrap;
-    }
-
-    .tab-btn i {
-      font-size: 15px;
-    }
-
-    .tab-btn:hover {
-      background: var(--bg);
-      color: var(--accent);
-    }
-
-    .tab-btn.active {
-      color: var(--accent);
-      font-weight: 500;
-      border-bottom-color: var(--accent);
-    }
-
-    .tab-btn .badge {
-      font-size: 11px;
-      background: var(--bg);
-      color: var(--text-muted);
-      border-radius: 999px;
-      padding: 2px 8px;
-      border: 1px solid var(--border);
-    }
-
-    .tab-btn.active .badge {
-      background: var(--accent-light);
-      color: var(--accent);
-      border-color: var(--accent);
-    }
-
-    .tab-frame {
-      display: none;
-      width: 100%;
-      height: calc(100vh - 51px);
-      border: none;
-    }
-
-    .tab-frame.active {
-      display: block;
-    }
-
-    @media (max-width: 480px) {
-
-      /* ── Tab bar ── */
-      .tab-bar {
-        padding: 0 8px;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-      }
-
-      .tab-bar::-webkit-scrollbar {
-        display: none;
-      }
-
-      .tab-btn {
-        padding: 12px 14px;
-        font-size: 12px;
-        gap: 6px;
-        flex-shrink: 0;
-      }
-
-      .tab-btn i {
-        font-size: 14px;
-      }
-
-      .tab-btn .badge {
-        font-size: 10px;
-        padding: 1px 6px;
-      }
-
-      .tab-frame {
-        height: calc(100vh - 45px);
-      }
-
-    }
-  </style>
-  <link rel="stylesheet" href="../../resource/css/btn.css">
 </head>
 
 <body>
@@ -233,7 +94,7 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
       </button>
     <?php endif; ?>
 
-    <button class="tab-btn" tabindex="-1" onclick="location.reload();">
+    <button class="tab-btn" tabindex="-1" onclick="reloadActiveTab()">
       <i class="fas fa-sync-alt"></i>
       <span>Refresh</span>
     </button>
@@ -246,18 +107,18 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
   <iframe id="frame-proximity" class="tab-frame <?= $firstTab === 'proximity' ? 'active' : '' ?>"
     src="<?= $firstTab === 'proximity' ? 'proximity-code.php' : '' ?>"></iframe>
   <iframe id="frame-attendance" class="tab-frame <?= $firstTab === 'attendance' ? 'active' : '' ?>"
-    src="<?= $firstTab === 'attendance' ? 'attendancelog.php' : '' ?>"></iframe>
+    src="<?= $firstTab === 'attendance' ? 'attendance-log.php' : '' ?>"></iframe>
   <iframe id="frame-remarks" class="tab-frame <?= $firstTab === 'remarks' ? 'active' : '' ?>"
     src="<?= $firstTab === 'remarks' ? 'violation-log.php' : '' ?>"></iframe>
 
-  <script src="../../resource/js/req.js"></script>
-  <script src="../../resource/js/ver.js"></script>
+  <script src="/config/asset.php?t=j7k8l"></script>
+  <script src="/config/asset.php?t=m9n0o"></script>
   <script>
     const srcs = {
       employees: 'system.php',
       scanned: 'datalog.php',
       proximity: 'proximity-code.php',
-      attendance: 'attendancelog.php',
+      attendance: 'attendance-log.php',
       remarks: 'violation-log.php',
     };
 
@@ -289,6 +150,13 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
       }
       frame.classList.add('active');
       setTimeout(() => focusFrameSearchInput(frame), 50);
+    }
+
+    function reloadActiveTab() {
+      const activeFrame = document.querySelector('.tab-frame.active');
+      if (activeFrame) {
+        activeFrame.src = activeFrame.src;
+      }
     }
 
     document.querySelectorAll('.tab-btn').forEach(btn => {

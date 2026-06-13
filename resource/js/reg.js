@@ -1,13 +1,5 @@
 // resource/js/reg.js --> register
 
-document.addEventListener("DOMContentLoaded", function () {
-  addPasswordToggle();
-  enhanceFormValidation();
-  autoHideAlerts();
-  handleFormSubmission();
-  testServerConnection();
-});
-
 function testServerConnection() {
   fetch(window.location.pathname, { method: "HEAD" }).catch((err) => {
     console.error("Server connection issue:", err);
@@ -353,3 +345,12 @@ function autoHideAlerts() {
     }
   });
 }
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", function () {
+  addPasswordToggle();
+  enhanceFormValidation();
+  autoHideAlerts();
+  handleFormSubmission();
+  testServerConnection();
+});

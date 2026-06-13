@@ -1,10 +1,10 @@
 <?php
 // resource/views/about.php
 
-require_once __DIR__ . '/../../config/config.php';
-require_once __DIR__ . '/../../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
-requireAccess('about', '../../proximity.php', true);
+requireAccess('about', ROUTE_HOME);
 $access = getMenuAccess();
 ?>
 <!DOCTYPE html>
@@ -15,9 +15,10 @@ $access = getMenuAccess();
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>About – <?= htmlspecialchars($myDatabase ?? 'Proximity 3PL'); ?></title>
-  <link rel="icon" href="../assets/icon/database-icon.png" type="image/png">
+  <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
+  <link rel="stylesheet" href="/config/asset.php?t=l234w">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <link rel="stylesheet" href="../css/about.css">
 </head>
 
 <body>
@@ -37,7 +38,7 @@ $access = getMenuAccess();
     <div class="about-hero">
       <div class="hero-logo">
         <img
-          src="../assets/logo/proximity-logo.svg"
+          src="/config/asset.php?t=aur2d"
           alt="Proximity 3PL Logo"
           onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
         <span class="hero-icon-fallback" style="display:none;">
@@ -432,9 +433,11 @@ $access = getMenuAccess();
 
   </div><!-- /.page-body -->
 
-  <script src="../js/btn.js"></script>
-  <script src="../js/req.js"></script>
-  <script src="../js/loading.js"></script>
+  <script src="/config/route-config.php?page=mainFrame"></script>
+  <script src="/config/asset.php?t=p1q2r"></script>
+  <script src="/config/asset.php?t=m6efw"></script>
+  <script src="/config/asset.php?t=j7k8l"></script>
+  <script src="/config/asset.php?t=oqw56"></script>
   <script>
     // ── Pull version string from portal parent frame ──
     (function() {

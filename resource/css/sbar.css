@@ -10,7 +10,8 @@
   padding: 1.3vmin;
   z-index: 1000;
   cursor: default;
-  background-color: #f0f0f0;
+  background-color: var(--gray-bg-hover);
+  box-shadow: 0 0 10px rgb(0, 0, 0, 0.5);
   transform: translateX(97%);
   transition: transform 0.3s ease-in-out;
 }
@@ -28,13 +29,13 @@
 .side-btn {
   margin-left: 0.5vmin;
   margin-bottom: 0.3vmin;
-  border-bottom: 0.3vmin solid #e9ecef;
+  border-bottom: 0.3vmin solid var(--border);
   cursor: pointer;
 }
 
 .s-header {
-  background: linear-gradient(135deg, #2c3e50, #3498db);
-  color: white;
+  background: linear-gradient(135deg, var(--text) 0%, var(--info) 100%);
+  color: var(--surface);
   width: 42vmin;
   height: 6vmin;
   padding: 0.5vmin;
@@ -82,7 +83,7 @@
   font-size: 2vmin;
   padding: 1vmin 2vmin;
   gap: 1vmin;
-  background: #f8f9fa;
+  background: var(--slate-bg);
 }
 
 .s-search-section img {
@@ -93,5 +94,5 @@
 
 .s-search-section p{
   font-size: 1.5vmin;
-  color: #666;
+  color: var(--text-muted);
 }

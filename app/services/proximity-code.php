@@ -1,8 +1,8 @@
 <?php
 // app/services/proximity-code.php --> proximity table
 
-require_once __DIR__ . '/../../config/config.php';
-require_once __DIR__ . '/../../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
 $permissions = getUserGroupPermissions();
 if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') && !canAccess($permissions, 'proximity-code') && !canAccess($permissions, 'remarks')) {
@@ -12,7 +12,7 @@ if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') &&
   exit;
 }
 
-requireAccess('proximity-code', 'violation-log.php');
+requireAccess('proximity-code', ROUTE_APP_ATTENDANCE);
 $access = getMenuAccess();
 
 $stats = [
@@ -56,29 +56,22 @@ if ($databaseConnected) {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Proximity Code</title>
-  <link rel="icon" href="../../resource/assets/icon/database-icon.png" type="image/png">
-  <link rel="stylesheet" href="../../resource/css/system.css">
-  <link rel="stylesheet" href="../../resource/css/date-range-picker.css">
-  <link rel="stylesheet" href="../../resource/css/ptl.css">
-  <link rel="stylesheet" href="../../resource/css/modal.css">
-  <link rel="stylesheet" href="../../resource/css/btn.css">
-  <link rel="stylesheet" href="../../resource/css/is.css">
-  <link rel="stylesheet" href="../../resource/css/opt-btn.css">
-  <link rel="stylesheet" href="../../resource/css/pg.css">
-  <link rel="stylesheet" href="../../resource/css/loading.css">
+  <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
+  <link rel="stylesheet" href="/config/asset.php?t=yde24">
+  <link rel="stylesheet" href="/config/asset.php?t=a5dh7">
+  <!-- <link rel="stylesheet" href="/config/asset.php?t=mq4wc"> -->
+  <link rel="stylesheet" href="/config/asset.php?t=g5f2v">
+  <link rel="stylesheet" href="/config/asset.php?t=c24hj">
+  <link rel="stylesheet" href="/config/asset.php?t=j35za">
+  <link rel="stylesheet" href="/config/asset.php?t=p5sdi">
+  <link rel="stylesheet" href="/config/asset.php?t=x48xd">
+  <link rel="stylesheet" href="/config/asset.php?t=rtf2w">
+  <link rel="stylesheet" href="/config/asset.php?t=q5fwr">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
 <body>
-  <!-- Loading Screen -->
-  <div id="loading-screen">
-    <div class="loading-content">
-      <div class="spinner"></div>
-      <div class="loading-text">Loading...</div>
-      <div class="loading-subtext">Please wait while we prepare your content</div>
-    </div>
-  </div>
-
   <div class="container">
     <!-- Search and Filter Controls -->
     <div class="controls">
@@ -97,21 +90,31 @@ if ($databaseConnected) {
           </div>
 
           <!-- Register Date -->
-          <div class="search-group date-range-pill" id="date_range_pill"></div>
+          <div class="search-group date-range-pill" id="date_range_pill" style="cursor:pointer;">
+            <i class="fas fa-clock date-range-icon"></i>
+            <span class="drp-display" id="drp_display">
+              <span class="drp-placeholder">Start Date</span>
+              <span class="drp-sep"> - </span>
+              <span class="drp-placeholder">End Date</span>
+            </span>
+            <button type="button" id="date_range_clear" class="date-range-clear" title="Clear dates" style="display:none;">✕</button>
+            <input type="hidden" id="f_from" name="date_from">
+            <input type="hidden" id="f_to" name="date_to">
+          </div>
 
           <div class="search-group" style="position: fixed; left: 0; top: 0; opacity: 0;">
             <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; width: 8px; cursor: default;" autocomplete="off">
           </div>
         </div>
-        <img src="../../resource/assets/icon/nfc-icon.svg" alt="Proximity" loading="lazy" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
+        <img src="/config/asset.php?t=gnks2" alt="Proximity" loading="lazy" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
       </form>
       <div class="form-row-btn">
         <div class="form-row">
           <div class="search-btn">
-            <button type="button" class="btn btn-primary" tabindex="-1" onclick="searchEmployees()"><i class="fas fa-search"></i> Search</button>
+            <button type="button" class="btn btn-primary" tabindex="-1" onclick="searchEmployees()" disabled style="opacity:0.4;cursor:not-allowed;"><i class="fas fa-search"></i> Search</button>
           </div>
           <div class="clear-btn">
-            <button type="button" class="btn btn-secondary" tabindex="-1" onclick="clearSearch()"><i class="fas fa-search-minus"></i> Clear</button>
+            <button type="button" class="btn btn-secondary" tabindex="-1" onclick="clearSearch()" disabled style="opacity:0.4;cursor:not-allowed;"><i class="fas fa-search-minus"></i> Clear</button>
           </div>
           <?php if (
             canAccess($permissions, 'add-proximity')    ||
@@ -136,19 +139,19 @@ if ($databaseConnected) {
           <?php if (canAccess($permissions, 'export-proximity')) : ?>
             <div class="dropdown">
               <button class="btn add-dropdown" tabindex="-1"id="exportTrigger" onclick="toggleExportOptions()">
-                <img src="/../../resource/assets/icon/excel.svg" style="height: 20px; filter: invert(1);"> Export Data
+                <img src="/config/asset.php?t=xpet4" style="height: 20px; filter: invert(1);"> Export Data
                 <span class="add-arrow">▼</span>
               </button>
               <div class="add-options-menu" id="exportOptionsMenu">
-                <button style="display:flex; align-items:center;" onclick="exportAllCodes(); hideExportOptions();"><img src="/../../resource/assets/icon/excel.svg" style="height: 20px; margin-right: 5px;">Export All Data</button>
-                <button style="display:flex; align-items:center;" onclick="exportFilteredCodes(); hideExportOptions();"><img src="/../../resource/assets/icon/excel.svg" style="height: 20px; margin-right: 5px;">Export Filtered Data</button>
+                <button style="display:flex; align-items:center;" onclick="exportAllCodes(); hideExportOptions();"><img src="/config/asset.php?t=xpet4" style="height: 20px; margin-right: 5px;">Export All Data</button>
+                <button style="display:flex; align-items:center;" onclick="exportFilteredCodes(); hideExportOptions();"><img src="/config/asset.php?t=xpet4" style="height: 20px; margin-right: 5px;">Export Filtered Data</button>
                 <button onclick="hideExportOptions();"><i class="fas fa-times"></i> Cancel</button>
               </div>
             </div>
           <?php endif; ?>
           <?php if (canAccess($permissions, 'delete-proximity')) : ?>
             <div class="delete-all-btn">
-              <button type="button" class="btn btn-danger" tabindex="-1" onclick="openDeleteModal(null, true)"><i class="fas fa-trash-alt"></i> Delete All
+              <button type="button" class="btn btn-danger" tabindex="-1" onclick="openDeleteModal(null, true)" disabled style="opacity:0.4;cursor:not-allowed;"><i class="fas fa-trash-alt"></i> Delete All
                 Data</button>
             </div>
           <?php endif; ?>
@@ -202,11 +205,31 @@ if ($databaseConnected) {
             </tr>
           </thead>
           <tbody id="employeeTableBody">
-            <tr>
-              <td colspan="15" style="text-align:center;padding:40px;color:#aaa;">
-                Loading…
-              </td>
-            </tr>
+            <script>
+              (function() {
+                const hasActions = <?= json_encode(
+                  canAccess($permissions, 'edit-proximity') ||
+                  canAccess($permissions, 'delete-single-proximity')
+                ) ?>;
+                const pulse = (w, h='12px', r='6px') =>
+                  `<div style="width:${w};height:${h};border-radius:${r};background:linear-gradient(90deg,#e2e8f0 25%,#f1f5f9 50%,#e2e8f0 75%);background-size:600px 100%;animation:skel-shimmer 1.4s ease-in-out infinite;display:inline-block;vertical-align:middle;"></div>`;
+                const rows = Array.from({length: 25}, (_, i) =>
+                  `<tr class="skel-row" style="animation-delay:${i*60}ms;background:white;">
+                    <td class="sn-cell" style="padding:10px 8px;height:52px;vertical-align:middle;">${pulse('24px','10px','4px')}</td>
+                    <td style="padding:10px 8px;height:52px;text-align:center;vertical-align:middle;">${pulse('44px','44px','50%')}</td>
+                    <td style="padding:10px 8px;height:52px;text-align:center;vertical-align:middle;">${pulse('28px','28px','50%')}</td>
+                    <td style="padding:10px 8px;vertical-align:middle;">
+                      <div style="display:flex;flex-direction:column;gap:5px;align-items:center;text-align:center;">${pulse('40%')}${pulse('50%', '10px')}</div>
+                    </td>
+                    <td style="padding:10px 8px;height:52px;text-align:start;vertical-align:middle;">${pulse('50px','22px','11px')}</td>
+                    <td style="padding:10px 8px;vertical-align:middle;">${pulse('80px','10px')}</td>
+                    <td style="padding:10px 8px;vertical-align:middle;">${pulse('80px','10px')}</td>
+                    ${hasActions ? `<td style="padding:10px 8px;vertical-align:middle;">${pulse('72px','26px','6px')}</td>` : ''}
+                  </tr>`
+                ).join('');
+                document.currentScript.insertAdjacentHTML('beforebegin', rows);
+              })();
+            </script>
           </tbody>
         </table>
       </div>
@@ -328,9 +351,9 @@ if ($databaseConnected) {
               <label for="dataFile">
                 <div class="download-label">Select File</div>
               </label>
-              <a href="#" tabindex="-1" onclick="excelProxCodeTemplate()" style="display: flex; align-items: center; gap: 5px; margin-left: auto; text-decoration: none; color: #007bff;">
+              <button type="button" class="btn" tabindex="-1" onclick="excelTemplate()" style="display:flex;background:transparent;align-items:center;gap:5px;margin-left:auto;text-decoration:none;color:#007bff;">
                 <i class="fas fa-download"></i> Download Excel Template
-              </a>
+              </button>
             </div>
             <div class="file-upload">
               <input type="file" id="dataFile" name="dataFile" accept=".csv,.xlsx,.xls" required>
@@ -367,11 +390,6 @@ if ($databaseConnected) {
       </div>
     </div>
   </div>
-
-  <audio id="successSound" src="../../resource/assets/sounds/success.mp3" preload="auto"></audio>
-  <audio id="noResultSound" src="../../resource/assets/sounds/noResultsFound.mp3" preload="auto"></audio>
-  <audio id="warningSound" src="../../resource/assets/sounds/ohh-ow.mp3" preload="auto"></audio>
-  <audio id="inactiveSound" src="../../resource/assets/sounds/inactive.mp3" preload="auto"></audio>
 
   <button class="filter-fab" id="filterFab" onclick="toggleDrawer()">
     <i class="fas fa-sliders-h"></i> Filters
@@ -467,14 +485,16 @@ if ($databaseConnected) {
   </script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="../../resource/js/proxcode.js"></script>
-  <script src="../../resource/js/date-range-picker.js"></script>
-  <script src="../../resource/js/btn.js"></script>
-  <script src="../../resource/js/ipc.js"></script>
-  <script src="../../resource/js/eas.js"></script>
-  <script src="../../resource/js/opt-btn.js"></script>
-  <script src="../../resource/js/loading.js"></script>
-  <script src="../../resource/js/req.js"></script>
+  <script src="/config/route-config.php?page=endpoint"></script>
+  <script src="/config/asset.php?t=p1q2r"></script>
+  <script src="/config/asset.php?t=xzjg8"></script>
+  <script src="/config/asset.php?t=kaew3"></script>
+  <script src="/config/asset.php?t=m6efw"></script>
+  <script src="/config/asset.php?t=ds6ed"></script>
+  <script src="/config/asset.php?t=dxer5"></script>
+  <script src="/config/asset.php?t=as3ks"></script>
+  <script src="/config/asset.php?t=oqw56"></script>
+  <script src="/config/asset.php?t=j7k8l"></script>
 </body>
 
 </html>

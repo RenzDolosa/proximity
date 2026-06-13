@@ -1,198 +1,133 @@
 // resource/js/acct.js --> account
 
 document.addEventListener("DOMContentLoaded", function () {
+  // ── Auto-hide server-rendered alerts ───────────────────────────
+  document.querySelectorAll("#alertContainer .alert").forEach((alert) => {
+    setTimeout(() => {
+      alert.style.transition = "opacity 0.5s ease";
+      alert.style.opacity = "0";
+      setTimeout(() => alert.remove(), 500);
+    }, 5000);
+  });
+
+  // ── Password form validation ────────────────────────────────────
   const passwordForm = document.querySelector(
-    'form[method="POST"]:has([name="change_password"])'
+    'form[method="POST"]:has([name="change_password"])',
   );
   if (passwordForm) {
     passwordForm.addEventListener("submit", function (e) {
       const newPassword = document.getElementById("new_password").value;
       const confirmPassword = document.getElementById("confirm_password").value;
-
       if (newPassword !== confirmPassword) {
         e.preventDefault();
         showAlert("New passwords do not match!", "error");
-        return false;
       }
     });
   }
 
-  const alerts = document.querySelectorAll(".alert");
-  alerts.forEach((alert) => {
-    setTimeout(() => {
-      alert.style.opacity = "0";
-      alert.style.transition = "opacity 0.5s ease";
-      setTimeout(() => alert.remove(), 500);
-    }, 5000);
-  });
-});
-
-
-document.addEventListener("DOMContentLoaded", function () {
-  addPasswordToggle();
+  // ── Live password strength + match indicators ───────────────────
   enhanceFormValidation();
-  autoHideAlerts();
 });
-
-function addPasswordToggle() {
-  const passwordFields = [
-    "current_password",
-    "new_password",
-    "confirm_password",
-  ];
-
-  passwordFields.forEach((fieldId) => {
-    const field = document.getElementById(fieldId);
-    if (field) {
-      const toggleBtn = document.createElement("button");
-      toggleBtn.type = "button";
-      toggleBtn.className = "password-toggle-btn";
-      toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
-      toggleBtn.setAttribute("aria-label", "Toggle password visibility");
-
-      const wrapper = document.createElement("div");
-      wrapper.className = "password-input-wrapper";
-      field.parentNode.insertBefore(wrapper, field);
-      wrapper.appendChild(field);
-      wrapper.appendChild(toggleBtn);
-
-      toggleBtn.addEventListener("click", function () {
-        togglePasswordVisibility(field, toggleBtn);
-      });
-    }
-  });
-}
-
-function togglePasswordVisibility(field, button) {
-  const icon = button.querySelector("i");
-
-  if (field.type === "password") {
-    field.type = "text";
-    icon.className = "fas fa-eye-slash";
-    button.setAttribute("aria-label", "Hide password");
-  } else {
-    field.type = "password";
-    icon.className = "fas fa-eye";
-    button.setAttribute("aria-label", "Show password");
-  }
-}
 
 function enhanceFormValidation() {
   const newPasswordField = document.getElementById("new_password");
   const confirmPasswordField = document.getElementById("confirm_password");
+  if (!newPasswordField || !confirmPasswordField) return;
 
-  if (newPasswordField && confirmPasswordField) {
-    newPasswordField.addEventListener("input", function () {
-      validatePasswordStrength(this.value);
-    });
-
-    confirmPasswordField.addEventListener("input", function () {
-      validatePasswordMatch(newPasswordField.value, this.value);
-    });
-  }
+  newPasswordField.addEventListener("input", function () {
+    validatePasswordStrength(this.value);
+  });
+  confirmPasswordField.addEventListener("input", function () {
+    validatePasswordMatch(newPasswordField.value, this.value);
+  });
 }
 
 function validatePasswordStrength(password) {
-  const strengthIndicator =
+  const indicator =
     document.querySelector(".password-strength") ||
     createPasswordStrengthIndicator();
-  const requirements = {
-    length: password.length >= 8,
-    uppercase: /[A-Z]/.test(password),
-    lowercase: /[a-z]/.test(password),
-    number: /\d/.test(password),
-  };
-
-  const score = Object.values(requirements).filter(Boolean).length;
-  const strength = ["Very Weak", "Weak", "Fair", "Good", "Strong"][
-    Math.min(score, 4)
-  ];
+  const score = [
+    password.length >= 8,
+    /[A-Z]/.test(password),
+    /[a-z]/.test(password),
+    /\d/.test(password),
+  ].filter(Boolean).length;
+  const labels = ["Very Weak", "Weak", "Fair", "Good", "Strong"];
   const colors = ["#ff4444", "#ff8800", "#ffbb33", "#00C851", "#007E33"];
-
-  strengthIndicator.textContent = `Password Strength: ${strength}`;
-  strengthIndicator.style.color = colors[Math.min(score, 4)];
-  strengthIndicator.style.display = password.length > 0 ? "block" : "none";
+  indicator.textContent = `Password Strength: ${labels[Math.min(score, 4)]}`;
+  indicator.style.color = colors[Math.min(score, 4)];
+  indicator.style.display = password.length > 0 ? "block" : "none";
 }
 
 function createPasswordStrengthIndicator() {
   const indicator = document.createElement("div");
   indicator.className = "password-strength";
-  indicator.style.fontSize = "0.85rem";
-  indicator.style.marginTop = "5px";
-  indicator.style.display = "none";
-
-  const newPasswordField = document.getElementById("new_password");
-  newPasswordField.parentNode.insertBefore(
-    indicator,
-    newPasswordField.nextSibling
-  );
-
+  indicator.style.cssText = "font-size:0.85rem;margin-top:5px;display:none;";
+  const field = document.getElementById("new_password");
+  field.parentNode.insertBefore(indicator, field.nextSibling);
   return indicator;
 }
 
 function validatePasswordMatch(newPassword, confirmPassword) {
-  const matchIndicator =
+  const indicator =
     document.querySelector(".password-match") || createPasswordMatchIndicator();
-
-  if (confirmPassword.length === 0) {
-    matchIndicator.style.display = "none";
+  if (!confirmPassword.length) {
+    indicator.style.display = "none";
     return;
   }
-
-  if (newPassword === confirmPassword) {
-    matchIndicator.textContent = "✓ Passwords match";
-    matchIndicator.style.color = "#00C851";
-  } else {
-    matchIndicator.textContent = "✗ Passwords do not match";
-    matchIndicator.style.color = "#ff4444";
-  }
-
-  matchIndicator.style.display = "block";
+  const matches = newPassword === confirmPassword;
+  indicator.textContent = matches
+    ? "✓ Passwords match"
+    : "✗ Passwords do not match";
+  indicator.style.color = matches ? "#00C851" : "#ff4444";
+  indicator.style.display = "block";
 }
 
 function createPasswordMatchIndicator() {
   const indicator = document.createElement("div");
   indicator.className = "password-match";
-  indicator.style.fontSize = "0.85rem";
-  indicator.style.marginTop = "5px";
-  indicator.style.display = "none";
-
-  const confirmPasswordField = document.getElementById("confirm_password");
-  confirmPasswordField.parentNode.insertBefore(
-    indicator,
-    confirmPasswordField.nextSibling
-  );
-
+  indicator.style.cssText = "font-size:0.85rem;margin-top:5px;display:none;";
+  const field = document.getElementById("confirm_password");
+  field.parentNode.insertBefore(indicator, field.nextSibling);
   return indicator;
 }
 
-function autoHideAlerts() {
-  const alerts = document.querySelectorAll(".alert");
-  alerts.forEach((alert) => {
-    setTimeout(() => {
-      alert.style.opacity = "0";
-      alert.style.transition = "opacity 0.5s ease";
-      setTimeout(() => {
-        alert.style.display = "none";
-      }, 500);
-    }, 5000);
-  });
-}
+document.querySelectorAll("#alertContainer .alert").forEach((alert) => {
+  alert.style.opacity = "1";
+  setTimeout(() => {
+    alert.style.transition = "opacity 0.5s ease";
+    alert.style.opacity = "0";
+    setTimeout(() => alert.remove(), 500);
+  }, 1000);
+});
 
 function showAlert(message, type = "info") {
-  const existingAlerts = document.querySelectorAll(".alert");
-  existingAlerts.forEach((alert) => alert.remove());
+  const container = document.getElementById("alertContainer");
+  if (!container) return;
+
+  container.querySelectorAll(".alert").forEach((el) => el.remove());
 
   const alert = document.createElement("div");
   alert.className = `alert alert-${type}`;
-  alert.innerHTML = `
-    <span>${message}</span>
-    <button onclick="this.parentElement.remove()" style="float: right; background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 5px;"><i class="fas fa-times"></i></button>
-  `;
 
-  document.body.insertBefore(alert, document.body.firstChild);
+  const msgSpan = document.createElement("span");
+  msgSpan.textContent = message;
+
+  const closeBtn = document.createElement("button");
+  closeBtn.style.cssText =
+    "float:right;background:none;border:none;font-size:18px;cursor:pointer;margin-left:5px;";
+  closeBtn.innerHTML = `<i class="fas fa-times"></i>`;
+  closeBtn.onclick = () => alert.remove();
+
+  alert.appendChild(msgSpan);
+  alert.appendChild(closeBtn);
+  container.appendChild(alert);
 
   setTimeout(() => {
-    if (alert.parentElement) alert.remove();
+    alert.style.transition = "opacity 0.5s ease";
+    alert.style.opacity = "0";
+    setTimeout(() => {
+      if (alert.parentElement) alert.remove();
+    }, 500);
   }, 5000);
 }

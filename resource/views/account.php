@@ -1,10 +1,10 @@
 <?php
 // resource/views/account.php --> account
 
-require_once __DIR__ . '/../../config/config.php';
-require_once __DIR__ . '/../../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
-requireAccess('account info', '../iframe/main.php');
+requireAccess('account info', ROUTE_HOME);
 $access = getMenuAccess();
 
 $userId = $_SESSION['user_id'] ?? null;
@@ -179,10 +179,14 @@ try {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($myDatabase); ?> - Account Info</title>
-  <link rel="icon" href="../assets/icon/database-icon.png" type="image/png">
+  <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
+  <!-- <link rel="stylesheet" href="/config/asset.php?t=h46e2"> -->
+  <link rel="stylesheet" href="/config/asset.php?t=mq4wc">
+  <link rel="stylesheet" href="/config/asset.php?t=c24hj">
+  <link rel="stylesheet" href="/config/asset.php?t=rtf2w">
+  <link rel="stylesheet" href="/config/asset.php?t=q5fwr">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <link rel="stylesheet" href="../css/acct.css">
-  <link rel="stylesheet" href="../css/loading.css">
 </head>
 
 <body>
@@ -206,19 +210,19 @@ try {
       <span>Back</span>
     </div>
     <?php if ($access['table panel']): ?>
-      <div class="shortcut-item" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=employees');">
+      <div class="shortcut-item" data-action-app="mainFrame-employees">
         <i class="fas fa-users"></i>
         <span>Employees</span>
       </div>
     <?php endif; ?>
     <?php if ($access['scan test']): ?>
-      <div class="shortcut-item" onclick="navigateWithLoading('../../../app/http/controllers/scan test.php');">
+      <div class="shortcut-item" data-action-app="mainFrame-scanTest">
         <i class="fas fa-qrcode"></i>
         <span>Scan Test</span>
       </div>
     <?php endif; ?>
     <?php if ($access['admin panel']): ?>
-      <div class="shortcut-item" onclick="navigateWithLoading('admin panel.php#users');">
+      <div class="shortcut-item" data-action-app="mainFrame-adminPanel">
         <i class="fas fa-user-shield"></i>
         <span>Admin Panel</span>
       </div>
@@ -249,14 +253,6 @@ try {
       </div>
     </div>
 
-    <!-- Alert message -->
-    <?php if ($message): ?>
-      <div class="alert alert-<?= htmlspecialchars($messageType, ENT_QUOTES) ?>">
-        <span><?= htmlspecialchars($message, ENT_QUOTES) ?></span>
-        <button onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>
-      </div>
-    <?php endif; ?>
-
     <!-- Two-column: Profile + Security -->
     <div class="two-col">
 
@@ -266,51 +262,12 @@ try {
         <!-- Profile Information -->
         <div class="card">
           <div class="card-header">
-            <span class="card-title"><i class="fas fa-user" style="color:#3b82f6;margin-right:6px;"></i>Employee Stats</span>
-          </div>
-          <div class="card-body">
-            <div class="stats-grid">
-              <div class="stat-card">
-                <div class="stat-top">
-                  <div class="stat-icon-sm" style="color:#3b82f6;"><i class="fas fa-users"></i></div>
-                  <div class="stat-value"><?= number_format($userStats['total_employees']); ?></div>
-                </div>
-                <div class="stat-label">Total Employees</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-top">
-                  <div class="stat-icon-sm" style="color:#22c55e;"><i class="fas fa-user-check"></i></div>
-                  <div class="stat-value"><?= number_format($userStats['active_employees']); ?></div>
-                </div>
-                <div class="stat-label">Active Employees</div>
-              </div>
-              <div class="stat-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=remarks');">
-                <div class="stat-top">
-                  <div class="stat-icon-sm" style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i></div>
-                  <div class="stat-value"><?= number_format($userStats['total_violations']); ?></div>
-                </div>
-                <div class="stat-label">Total Incidents</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-top">
-                  <div class="stat-icon-sm" style="color:#f59e0b;"><i class="fas fa-history"></i></div>
-                  <div class="stat-value"><?= number_format($userStats['recent_activity']); ?></div>
-                </div>
-                <div class="stat-label">Activity (30 days)</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Profile Information -->
-        <div class="card">
-          <div class="card-header">
             <span class="card-title"><i class="fas fa-user" style="color:#3b82f6;margin-right:6px;"></i>Profile Information</span>
           </div>
           <div class="card-body">
 
             <div class="db-block">
-              <img src="../assets/icon/database-icon.png" alt="DB">
+              <img src="/config/asset.php?t=s3t4u" alt="DB">
               <div>
                 <div class="db-name" style="color:<?= $databaseConnected ? '#16a34a' : '#dc2626' ?>;">
                   <?= htmlspecialchars($myDatabase) ?>
@@ -361,7 +318,7 @@ try {
                     value="<?= htmlspecialchars($user['phone'] ?? ''); ?>">
                 </div>
               </div>
-              <button type="submit" name="update_profile" class="btn-primary" tabindex="-1">
+              <button type="submit" name="update_profile" class="btn btn-primary" tabindex="-1">
                 <i class="fas fa-save"></i> Update Profile
               </button>
             </form>
@@ -408,7 +365,7 @@ try {
                   </div>
                 </div>
               </div>
-              <button type="submit" name="change_password" class="btn-primary" tabindex="-1">
+              <button type="submit" name="change_password" class="btn btn-primary" tabindex="-1">
                 <i class="fas fa-key"></i> Change Password
               </button>
             </form>
@@ -416,30 +373,28 @@ try {
         </div>
       </div>
     </div>
+
+    <!-- Alert Messages -->
+    <div class="alert-container" id="alertContainer">
+      <?php if ($message): ?>
+        <div class="alert alert-<?= htmlspecialchars($messageType, ENT_QUOTES) ?>">
+          <span><?= htmlspecialchars($message, ENT_QUOTES) ?></span>
+          <button style="float:right;background:none;border:none;font-size:18px;cursor:pointer;margin-left:5px;"
+            onclick="this.parentElement.remove()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      <?php endif; ?>
+    </div>
   </div>
 
-  <script src="../js/btn.js"></script>
-  <script src="../js/req.js"></script>
-  <script src="../js/loading.js"></script>
+  <script src="/config/route-config.php?page=mainFrame"></script>
+  <script src="/config/asset.php?t=p1q2r"></script>
+  <script src="/config/asset.php?t=m6efw"></script>
+  <script src="/config/asset.php?t=j7k8l"></script>
+  <script src="/config/asset.php?t=oqw56"></script>
+  <script src="/config/asset.php?t=kg56e"></script>
   <script>
-    // ── Live clock ──────────────────────────────────────────────────────────────
-    function updateTime() {
-      const now = new Date();
-      document.getElementById('wb-time').textContent = now.toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-      document.getElementById('wb-date').textContent = now.toLocaleDateString([], {
-        weekday: 'short',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
-    }
-    updateTime();
-    setInterval(updateTime, 1000);
-    
     function togglePw(fieldId, btn) {
       const input = document.getElementById(fieldId);
       const icon = btn.querySelector('i');
@@ -448,7 +403,6 @@ try {
       icon.className = isHidden ? 'fas fa-eye-slash' : 'fas fa-eye';
     }
   </script>
-
 </body>
 
 </html>

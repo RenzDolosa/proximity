@@ -1,11 +1,10 @@
 <?php
 // resource/views/f-pass.php --> forget password
 
-require_once __DIR__ . '/../../config/config.php';
-// require_once '../../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 
 if (isset($_SESSION['user_id'])) {
-  header('Location: ../../portal.php');
+  header('Location:', ROUTE_HOME);
   exit();
 }
 
@@ -91,9 +90,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Forgot Password</title>
-  <link rel="preload" href="../assets/icon/database-icon.png" as="image">
-  <link rel="icon" href="../assets/icon/database-icon.png" type="image/png">
-  <link rel="stylesheet" href="../css/r-l.css">
+  <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
+  <link rel="stylesheet" href="/config/asset.php?t=a1b2c">
+  <link rel="stylesheet" href="/config/asset.php?t=c24hj">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
@@ -101,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <div class="container">
     <div class="header">
-      <div><img src="../assets/logo/database.svg" alt="My Database Logo" class="logo" loading="lazy"></div>
+      <div><img src="/config/asset.php?t=v5w6x" alt="My Database Logo" class="logo" loading="lazy"></div>
       <h2>Forgot Password</h2>
       <p class="subtitle">Enter your email address and we'll send you instructions to reset your password.</p>
     </div>
@@ -126,16 +126,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <input type="email" id="email" name="email" value="<?php echo htmlspecialchars($email); ?>">
       </div>
 
-      <button type="submit" class="btn" tabindex="-1">Send Reset Instructions</button>
+      <button type="submit" class="btn-sub btn-primary" tabindex="-1">Send Reset Instructions</button>
     </form>
 
     <div class="login-link">
-      <a href="../../index.php">← Back to Login</a>
+      <a data-action-dir="login">← Back to Login</a>
     </div>
   </div>
 
-  <script src="../assets/js/req.js"></script>
-  <script src="../assets/js/ver.js"></script>
+  <script src="/config/route-config.php?page=login"></script>
+  <script src="/config/asset.php?t=p1q2r"></script>
+  <script src="/config/asset.php?t=j7k8l"></script>
+  <script src="/config/asset.php?t=m9n0o"></script>
 </body>
 
 </html>

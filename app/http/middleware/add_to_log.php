@@ -22,7 +22,7 @@ header('Access-Control-Allow-Headers: Content-Type, X-Requested-With, Authorizat
 header('Access-Control-Max-Age: 86400');
 
 // ── Config (already guards session_start internally) ────────
-require_once '../../../config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 
 // ── Discard any stray output before we echo JSON ────────────
 ob_clean();
@@ -42,6 +42,12 @@ if (!isset($_SESSION['user_id'])) {
     'error_code' => 'AUTH_REQUIRED'
   ]);
   exit();
+}
+
+if (strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') !== 'xmlhttprequest') {
+  http_response_code(403);
+  echo json_encode(['success' => false, 'message' => 'Direct access not allowed.']);
+  exit;
 }
 
 $currentUserId = $_SESSION['user_id'];
@@ -526,17 +532,9 @@ try {
   $response = [
     'success' => false,
     'message' => $e->getMessage(),
-    'error_details' => [
-      'file' => $e->getFile(),
-      'line' => $e->getLine()
-    ]
   ];
-  error_log("Add to log error: " . $e->getMessage());
+    error_log("Add to log error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
 }
 
-if (!isset($_GET['debug']) && !isset($_POST['debug'])) {
-  unset($response['error_details']);
-}
-
-echo json_encode($response, JSON_PRETTY_PRINT);
+echo json_encode($response);
 exit;

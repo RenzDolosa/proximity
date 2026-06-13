@@ -1,7 +1,7 @@
 // resource/js/proxcode.js --> proximity table
 
-const EmployeesBackend = "manpower_backend.php";
-const ProxcodeBackend = "proxcode_backend.php";
+let EmployeesBackend = null;
+let ProxcodeBackend = null;
 
 let currentAction = "add";
 let employees = [];
@@ -535,22 +535,24 @@ async function renderEmployeeTable() {
       return `
         <tr class="row">
           <td class="sn-cell">${startIndex + index + 1}</td>
-          <td class="emp-img">
-            ${
-              imageUrl
-                ? `<img src="${imageUrl}" alt="${safeName}" class="employee-image"
-                      width="48" height="48"
-                      loading="${isAboveFold ? "eager" : "lazy"}"
-                      decoding="async"
-                      title="${tooltipText}"
-                      ${isAboveFold ? 'fetchpriority="high"' : ""}
-                      onerror="this.onerror=null;this.style.display='none';this.parentElement.querySelector('.employee-ph-fallback').style.display='flex';">
-                    <div class="employee-ph-fallback ph-cont" style="display:none;" title="${tooltipText}">
-                      <div class="employee-ph">${escapeHtml(displayInitials)}</div>
-                    </div>`
-                : `<div class="ph-cont" title="${tooltipText}"><div class="employee-ph">${escapeHtml(displayInitials)}</div></div>`
-            }
-          </td>
+          <td class="emp-img">${
+            imageUrl
+              ? `<div class="img-skeleton-wrap">
+                  <div class="img-skel-shimmer"></div>
+                  <img src="${imageUrl}" alt="${safeName}" class="employee-image"
+                    width="45" height="45"
+                    loading="${isAboveFold ? "eager" : "lazy"}"
+                    decoding="async"
+                    title="${tooltipText}"
+                    ${isAboveFold ? 'fetchpriority="high"' : ""}
+                    onload="this.classList.add('loaded');this.previousElementSibling.classList.add('hidden');"
+                    onerror="this.onerror=null;this.style.display='none';this.parentElement.querySelector('.employee-ph-fallback').style.display='flex';">
+                  <div class="employee-ph-fallback ph-cont" style="display:none;" title="${tooltipText}">
+                    <div class="employee-ph">${escapeHtml(displayInitials)}</div>
+                  </div>
+                </div>`
+              : `<div class="ph-cont" title="${tooltipText}"><div class="employee-ph">${escapeHtml(displayInitials)}</div></div>`
+          }</td>
           <td data-qr="${safeQrCode}" class="emp-proximity" onclick="copyQRCodeFromCell(this)" title="Copy Proximity code" style="cursor:pointer;">
             <svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 512 512">
               <path d="M0 0 C1.8671875 1.1328125 1.8671875 1.1328125 3.6875 2.4375 C4.32945312 2.88867188 4.97140625 3.33984375 5.6328125 3.8046875 C12.06627036 8.87576605 16.39227202 15.57014088 20.6875 22.4375 C21.34621094 23.46746094 22.00492187 24.49742187 22.68359375 25.55859375 C51.23747477 74.33574664 50.67378716 139.45530043 36.90576172 192.44628906 C32.19944267 209.92529327 25.88960765 232.01237335 9.6875 242.4375 C2.18206673 245.55178766 -6.35065802 244.93076013 -13.875 241.9375 C-19.14967759 239.24807732 -23.73112419 235.58208816 -28.37744141 231.94384766 C-31.42555165 229.5710442 -34.50536176 227.24019229 -37.58105469 224.90332031 C-40.30508099 222.83314006 -43.02599356 220.75892945 -45.74609375 218.68359375 C-51.09985975 214.5993256 -56.45591129 210.51806505 -61.8125 206.4375 C-63.56251122 205.10418139 -65.3125112 203.77084803 -67.0625 202.4375 C-67.92875 201.7775 -68.795 201.1175 -69.6875 200.4375 C-72.3125 198.4375 -74.9375 196.4375 -77.5625 194.4375 C-78.42907227 193.7772583 -79.29564453 193.1170166 -80.18847656 192.43676758 C-81.9352363 191.10589527 -83.68198114 189.7750034 -85.42871094 188.4440918 C-89.85316371 185.07294264 -94.27788987 181.70215338 -98.703125 178.33203125 C-106.74477361 172.20728725 -114.78445594 166.08006898 -122.8125 159.9375 C-124.89869859 158.34220087 -126.98498216 156.74701295 -129.07128906 155.15185547 C-130.64134924 153.95087915 -132.21097407 152.74933357 -133.78027344 151.54736328 C-139.06420007 147.50114011 -144.35941498 143.47036492 -149.66503906 139.45263672 C-152.30619108 137.44230209 -154.93073125 135.41161082 -157.5546875 133.37890625 C-159.22341526 132.10605854 -160.89266422 130.83389376 -162.5625 129.5625 C-163.31192871 128.973479 -164.06135742 128.38445801 -164.83349609 127.77758789 C-169.81057833 124.0261219 -174.12716029 122.26475737 -180.3125 121.4375 C-183.02071018 131.93181446 -180.27502005 142.64420844 -178.4375 153.0625 C-169.81571431 202.54806425 -169.81571431 202.54806425 -179.3125 216.4375 C-183.81158383 221.30840894 -188.4569437 223.48711211 -195 223.875 C-202.53024915 223.69570835 -208.61065492 220.30643654 -214.0625 215.25 C-235.32229346 192.09379304 -236.87144312 154.02810893 -236.64868164 124.47436523 C-236.62489127 121.10962175 -236.62817992 117.74566707 -236.63476562 114.38085938 C-236.61485561 98.21599681 -235.96840475 82.30978699 -232 66.5625 C-231.7827124 65.68174805 -231.5654248 64.80099609 -231.34155273 63.89355469 C-228.32415574 52.08493076 -224.01327523 38.4774837 -213.3125 31.4375 C-207.94979312 28.26702055 -202.32020821 28.27153031 -196.3125 29.4375 C-192.09096398 31.83748382 -188.60139581 34.76885808 -184.98046875 37.98339844 C-182.20688021 40.40135706 -179.28405319 42.62373022 -176.375 44.875 C-175.19827495 45.79958133 -174.02249634 46.72536844 -172.84765625 47.65234375 C-169.33864683 50.41751679 -165.82593816 53.17795747 -162.3125 55.9375 C-158.85820963 58.65086594 -155.40433949 61.36475356 -151.953125 64.08203125 C-145.42264114 69.22176392 -138.87500641 74.33870342 -132.3125 79.4375 C-125.18920722 84.97200443 -118.08553308 90.5305816 -110.99804688 96.11083984 C-108.10441177 98.38836203 -105.20833448 100.66277541 -102.3125 102.9375 C-98.85822649 105.65088743 -95.40433952 108.36475354 -91.953125 111.08203125 C-85.42264114 116.22176392 -78.87500641 121.33870342 -72.3125 126.4375 C-66.88571801 130.65388559 -61.46481919 134.87730466 -56.0625 139.125 C-55.50264404 139.56497314 -54.94278809 140.00494629 -54.3659668 140.45825195 C-51.48061532 142.72725785 -48.59952425 145.00149711 -45.72265625 147.28125 C-40.27313516 151.59474817 -34.80485176 155.88519191 -29.25 160.0625 C-28.41339844 160.69414062 -27.57679688 161.32578125 -26.71484375 161.9765625 C-24.19631168 163.50815761 -22.21601235 164.0545055 -19.3125 164.4375 C-9.10480357 144.85115863 -9.46577344 119.72535392 -13.3125 98.4375 C-13.44188965 97.72094238 -13.5712793 97.00438477 -13.70458984 96.26611328 C-16.41204935 82.09248627 -21.16605208 68.59405778 -26.03466797 55.04760742 C-36.42156063 25.92954697 -36.42156063 25.92954697 -31.3125 11.4375 C-28.62882779 5.94656542 -25.48071594 1.42886825 -19.71484375 -0.97265625 C-13.28256384 -2.551964 -6.11637655 -2.78675144 0 0 Z " transform="translate(236.3125,130.5625)"/>
@@ -1408,8 +1410,9 @@ async function loadEmployees(
   preservePage = false,
   silent = false,
 ) {
+  setControlButtonsDisabled(true);
   try {
-    if (!silent) showLoading(true);
+    // if (!silent) showLoading(true);
 
     if (Object.keys(filters).length === 0 && hasActiveFilters()) {
       filters = getActiveFilters();
@@ -1483,7 +1486,9 @@ async function loadEmployees(
       "error",
     );
   } finally {
-    if (!silent) showLoading(false);
+    // if (!silent) showLoading(false);
+    setControlButtonsDisabled(false);
+    updateDeleteButtonState();
   }
 }
 
@@ -1742,6 +1747,21 @@ function showLoading(show) {
   }
 }
 
+function setControlButtonsDisabled(disabled) {
+  const selectors = [
+    '.search-btn .btn',
+    '.clear-btn .btn',
+    '.delete-all-btn .btn-danger',
+  ];
+  selectors.forEach((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return;
+    el.disabled = disabled;
+    el.style.opacity = disabled ? '0.4' : '';
+    el.style.cursor = disabled ? 'not-allowed' : '';
+  });
+}
+
 // ── Cleanup ───────────────────────────────────────────────────────────────────
 window.onclick = function (event) {
   const modal = document.getElementById("employeeModal");
@@ -1751,7 +1771,10 @@ window.onclick = function (event) {
 };
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", async function () {
+  const ready = await resolveEndpoints();
+  if (!ready) return;
+
   loadCurrentUserId();
   loadEmployees();
   updateDeleteButtonState();

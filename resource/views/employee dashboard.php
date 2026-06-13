@@ -1,29 +1,30 @@
 <?php
 // resource/views/employee dashboard.php --> employee dashboard
 
-require_once __DIR__ . '/../../config/config.php';
-require_once __DIR__ . '/../../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
-requireAccess('employee dashboard', 'iframe/main.php');
+requireAccess('employee dashboard', ROUTE_HOME);
 $access = getMenuAccess();
 
 $userId = $_SESSION['user_id'] ?? null;
 $recentLogs = [];
 
 $stats = [
-  'total_employees'    => 0,
-  'active_employees'   => 0,
-  'inactive_employees' => 0,
-  'total_department'   => 0,
-  'total_position'     => 0,
-  'total_scanned'      => 0,
-  'active_scan'        => 0,
-  'inactive_scan'      => 0,
-  'today_attendance'   => 0,
-  'today_in'           => 0,
-  'today_out'          => 0,
-  'total_proxcode'     => 0,
-  'total_main_gate'    => 0,
+  'total_employees'     => 0,
+  'active_employees'    => 0,
+  'inactive_employees'  => 0,
+  'total_department'    => 0,
+  'total_position'      => 0,
+  'total_scanned'       => 0,
+  'active_scan'         => 0,
+  'inactive_scan'       => 0,
+  'today_attendance'    => 0,
+  'today_in'            => 0,
+  'today_out'           => 0,
+  'total_proxcode'      => 0,
+  'total_violations'    => 0,
+  'total_main_gate'     => 0,
 ];
 
 try {
@@ -54,19 +55,20 @@ try {
 if ($databaseConnected) {
   try {
     $queries = [
-      'total_employees'    => "SELECT COUNT(*) FROM employees",
-      'active_employees'   => "SELECT COUNT(*) FROM employees WHERE status = 'Active'",
-      'inactive_employees' => "SELECT COUNT(*) FROM employees WHERE status = 'Inactive'",
-      'total_department'   => "SELECT COUNT(DISTINCT brand) FROM employees WHERE brand IS NOT NULL AND TRIM(brand) != ''",
-      'total_position'     => "SELECT COUNT(DISTINCT position) FROM employees WHERE position IS NOT NULL AND TRIM(position) != ''",
-      'total_scanned'      => "SELECT COUNT(*) FROM employee_access_log",
-      'active_scan'        => "SELECT COUNT(*) FROM employee_access_log WHERE status = 'Active'",
-      'inactive_scan'      => "SELECT COUNT(*) FROM employee_access_log WHERE status = 'Inactive'",
-      'today_attendance'   => "SELECT COUNT(*) FROM employee_access_log WHERE DATE(access_timestamp) = CURDATE()",
-      'today_in'           => "SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'IN' AND DATE(access_timestamp) = CURDATE()",
-      'today_out'          => "SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'OUT' AND DATE(access_timestamp) = CURDATE()",
-      'total_proxcode'     => "SELECT COUNT(*) FROM code",
-      'total_main_gate'    => "SELECT COUNT(*) FROM users WHERE user_group = 'Main Gate'",
+      'total_employees'     => "SELECT COUNT(*) FROM employees",
+      'active_employees'    => "SELECT COUNT(*) FROM employees WHERE status = 'Active'",
+      'inactive_employees'  => "SELECT COUNT(*) FROM employees WHERE status = 'Inactive'",
+      'total_violations'    => "SELECT COUNT(*) FROM employees WHERE violation <> ''",
+      'total_department'    => "SELECT COUNT(DISTINCT brand) FROM employees WHERE brand IS NOT NULL AND TRIM(brand) != ''",
+      'total_position'      => "SELECT COUNT(DISTINCT position) FROM employees WHERE position IS NOT NULL AND TRIM(position) != ''",
+      'total_scanned'       => "SELECT COUNT(*) FROM employee_access_log",
+      'active_scan'         => "SELECT COUNT(*) FROM employee_access_log WHERE status = 'Active'",
+      'inactive_scan'       => "SELECT COUNT(*) FROM employee_access_log WHERE status = 'Inactive'",
+      'today_attendance'    => "SELECT COUNT(*) FROM employee_access_log WHERE DATE(access_timestamp) = CURDATE()",
+      'today_in'            => "SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'IN' AND DATE(access_timestamp) = CURDATE()",
+      'today_out'           => "SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'OUT' AND DATE(access_timestamp) = CURDATE()",
+      'total_proxcode'      => "SELECT COUNT(*) FROM code",
+      'total_main_gate'     => "SELECT COUNT(*) FROM users WHERE user_group = 'Main Gate'",
     ];
 
     foreach ($queries as $key => $sql) {
@@ -132,10 +134,15 @@ if ($databaseConnected) {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($myDatabase); ?> - Employee Dashboard</title>
-  <link rel="icon" href="../assets/icon/database-icon.png" type="image/png">
+  <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
+  <!-- <link rel="stylesheet" href="/config/asset.php?t=n8hsr"> -->
+  <link rel="stylesheet" href="/config/asset.php?t=a5dh7">
+  <link rel="stylesheet" href="/config/asset.php?t=mq4wc">
+  <link rel="stylesheet" href="/config/asset.php?t=c24hj">
+  <link rel="stylesheet" href="/config/asset.php?t=rtf2w">
+  <link rel="stylesheet" href="/config/asset.php?t=q5fwr">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <link rel="stylesheet" href="../css/emp-db.css">
-  <link rel="stylesheet" href="../css/loading.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 </head>
 
@@ -160,19 +167,19 @@ if ($databaseConnected) {
       <span>Back</span>
     </div>
     <?php if ($access['table panel']): ?>
-      <div class="shortcut-item" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=employees');">
+      <div class="shortcut-item" data-action-app="mainFrame-employees">
         <i class="fas fa-users"></i>
         <span>Employees</span>
       </div>
     <?php endif; ?>
     <?php if ($access['scan test']): ?>
-      <div class="shortcut-item" onclick="navigateWithLoading('../../../app/http/controllers/scan test.php');">
+      <div class="shortcut-item" data-action-app="mainFrame-scanTest">
         <i class="fas fa-qrcode"></i>
         <span>Scan Test</span>
       </div>
     <?php endif; ?>
     <?php if ($access['admin panel']): ?>
-      <div class="shortcut-item" onclick="navigateWithLoading('admin panel.php#users');">
+      <div class="shortcut-item" data-action-app="mainFrame-adminPanel">
         <i class="fas fa-user-shield"></i>
         <span>Admin Panel</span>
       </div>
@@ -185,105 +192,26 @@ if ($databaseConnected) {
 
   <div class="page-body">
 
-    <div class="two-col-card">
-
-      <!-- Welcome banner -->
-      <div class="welcome-banner">
-        <div class="wb-left">
-          <h2><i class="fas fa-chart-line" style="margin-right:8px;opacity:.8;"></i>Employee Data Insights</h2>
-          <p>Connected to <strong><?= htmlspecialchars($myDatabase); ?></strong></p>
-          <?php if ($databaseConnected): ?>
-            <div class="status-pill ok"><i class="fas fa-circle"></i> Database connected</div>
-          <?php else: ?>
-            <div class="status-pill err"><i class="fas fa-exclamation-circle"></i> Connection error</div>
-          <?php endif; ?>
-        </div>
-        <div class="wb-right">
-          <i class="fas fa-clock" style="margin-right:4px;"></i>
-          <span id="wb-time"></span><br>
-          <span id="wb-date" style="margin-top:3px;display:block;"></span>
-        </div>
+    <!-- Welcome banner -->
+    <div class="welcome-banner">
+      <div class="wb-left">
+        <h2><i class="fas fa-chart-line" style="margin-right:8px;opacity:.8;"></i>Employee Data Insights</h2>
+        <p>Connected to <strong><?= htmlspecialchars($myDatabase); ?></strong></p>
+        <?php if ($databaseConnected): ?>
+          <div class="status-pill ok"><i class="fas fa-circle"></i> Database connected</div>
+        <?php else: ?>
+          <div class="status-pill err"><i class="fas fa-exclamation-circle"></i> Connection error</div>
+        <?php endif; ?>
       </div>
-
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title"><i class="fas fa-users" style="color:#3b82f6;margin-right:6px;"></i>Employee Stats</span>
-        </div>
-        <div class="card-body">
-          <div class="stats-grid">
-            <div class="stat-card">
-              <div class="stat-top">
-                <div class="stat-icon-sm" style="color:#3b82f6;"><i class="fas fa-users"></i></div>
-                <div class="stat-value"><?= number_format($stats['total_employees']); ?></div>
-              </div>
-              <div class="stat-label">Total Employees</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-top">
-                <div class="stat-icon-sm" style="color:#22c55e;"><i class="fas fa-user-check"></i></div>
-                <div class="stat-value"><?= number_format($stats['active_employees']); ?></div>
-              </div>
-              <div class="stat-label">Active</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-top">
-                <div class="stat-icon-sm" style="color:#ef4444;"><i class="fas fa-user-times"></i></div>
-                <div class="stat-value"><?= number_format($stats['inactive_employees']); ?></div>
-              </div>
-              <div class="stat-label">Inactive</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-top">
-                <div class="stat-icon-sm" style="color:#8b5cf6;"><i class="fas fa-id-card"></i></div>
-                <div class="stat-value"><?= number_format($stats['total_proxcode']); ?></div>
-              </div>
-              <div class="stat-label">Proximity Codes</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title"><i class="fas fa-fingerprint" style="color:#f59e0b;margin-right:6px;"></i>Access Log Stats</span>
-        </div>
-        <div class="card-body">
-          <div class="stats-grid">
-            <div class="stat-card">
-              <div class="stat-top">
-                <div class="stat-icon-sm" style="color:#3b82f6;"><i class="fas fa-list"></i></div>
-                <div class="stat-value"><?= number_format($stats['total_scanned']); ?></div>
-              </div>
-              <div class="stat-label">Total Scanned</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-top">
-                <div class="stat-icon-sm" style="color:#22c55e;"><i class="fas fa-check-circle"></i></div>
-                <div class="stat-value"><?= number_format($stats['active_scan']); ?></div>
-              </div>
-              <div class="stat-label">Active Scans</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-top">
-                <div class="stat-icon-sm" style="color:#ef4444;"><i class="fas fa-times-circle"></i></div>
-                <div class="stat-value"><?= number_format($stats['inactive_scan']); ?></div>
-              </div>
-              <div class="stat-label">Inactive Scans</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-top">
-                <div class="stat-icon-sm" style="color:#f97316;"><i class="fas fa-calendar-day"></i></div>
-                <div class="stat-value"><?= number_format($stats['today_attendance']); ?></div>
-              </div>
-              <div class="stat-label">Today &nbsp;<span style="font-weight:400;font-size:10px;">In:<?= $stats['today_in']; ?> Out:<?= $stats['today_out']; ?></span></div>
-            </div>
-          </div>
-        </div>
+      <div class="wb-right">
+        <i class="fas fa-clock" style="margin-right:4px;"></i>
+        <span id="wb-time"></span><br>
+        <span id="wb-date" style="margin-top:3px;display:block;"></span>
       </div>
     </div>
 
-    <!-- Two-column: Stats + Recent Activity -->
-    <div class="two-col">
+    <!-- Three-column: Stats + Recent Activity -->
+    <div class="three-col">
 
       <!-- Left: Stats cards -->
       <div style="display: flex; flex-direction: column; gap: 5px;">
@@ -291,6 +219,89 @@ if ($databaseConnected) {
         <div class="card">
           <div class="card-header">
             <span class="card-title"><i class="fas fa-users" style="color:#3b82f6;margin-right:6px;"></i>Employee Stats</span>
+          </div>
+          <div class="card-body">
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#3b82f6;"><i class="fas fa-users"></i></div>
+                  <div class="stat-value"><?= number_format($stats['total_employees']); ?></div>
+                </div>
+                <div class="stat-label">Total Employees</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#22c55e;"><i class="fas fa-user-check"></i></div>
+                  <div class="stat-value"><?= number_format($stats['active_employees']); ?></div>
+                </div>
+                <div class="stat-label">Active</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#ef4444;"><i class="fas fa-user-times"></i></div>
+                  <div class="stat-value"><?= number_format($stats['inactive_employees']); ?></div>
+                </div>
+                <div class="stat-label">Inactive</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#8b5cf6;"><i class="fas fa-id-card"></i></div>
+                  <div class="stat-value"><?= number_format($stats['total_proxcode']); ?></div>
+                </div>
+                <div class="stat-label">Proximity Codes</div>
+              </div>
+              <div class="stat-card" data-action-app="mainFrame-remarks">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i></div>
+                  <div class="stat-value"><?= number_format($stats['total_violations']); ?></div>
+                </div>
+                <div class="stat-label">Total Incidents</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i class="fas fa-fingerprint" style="color:#f59e0b;margin-right:6px;"></i>Access Log Stats</span>
+          </div>
+          <div class="card-body">
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#3b82f6;"><i class="fas fa-list"></i></div>
+                  <div class="stat-value"><?= number_format($stats['total_scanned']); ?></div>
+                </div>
+                <div class="stat-label">Total Scanned</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#22c55e;"><i class="fas fa-check-circle"></i></div>
+                  <div class="stat-value"><?= number_format($stats['active_scan']); ?></div>
+                </div>
+                <div class="stat-label">Active Scans</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#ef4444;"><i class="fas fa-times-circle"></i></div>
+                  <div class="stat-value"><?= number_format($stats['inactive_scan']); ?></div>
+                </div>
+                <div class="stat-label">Inactive Scans</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#f97316;"><i class="fas fa-calendar-day"></i></div>
+                  <div class="stat-value"><?= number_format($stats['today_attendance']); ?></div>
+                </div>
+                <div class="stat-label">Today &nbsp;<span style="font-weight:400;font-size:10px;">In:<?= $stats['today_in']; ?> Out:<?= $stats['today_out']; ?></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i class="fas fa-ellipsis-h" style="color:#3b82f6;margin-right:6px;"></i>Other Stats</span>
           </div>
           <div class="card-body">
             <div class="stats-grid">
@@ -379,7 +390,7 @@ if ($databaseConnected) {
           </div>
           <div class="card-body">
             <div class="db-block">
-              <img src="../assets/icon/database-icon.png" alt="DB">
+              <img src="/config/asset.php?t=s3t4u" alt="DB">
               <div>
                 <div class="db-name" style="color:<?= $databaseConnected ? '#16a34a' : '#dc2626' ?>;">
                   <?= htmlspecialchars($myDatabase) ?>
@@ -442,7 +453,7 @@ if ($databaseConnected) {
                 <?php foreach (array_slice($recentLogs, 0, 10) as $log):
                   $userImage   = $log['profile_image'] ?? $log['image'] ?? null;
                   $imagePath   = $userImage ? "../../public/uploads/user/" . htmlspecialchars($userImage) : null;
-                  $imgSrc      = ($imagePath && file_exists($imagePath)) ? $imagePath : "../assets/logo/nfc-logo.svg";
+                  $imgSrc      = ($imagePath && file_exists($imagePath)) ? $imagePath : "/config/asset.php?t=cfk4d";
                   $status      = strtolower($log['status'] ?? 'unknown');
                   $check       = strtolower($log['check_status'] ?? 'unknown');
                   $statusClass = in_array($status, ['active', 'inactive']) ? "badge-{$status}" : 'badge-unknown';
@@ -452,7 +463,7 @@ if ($databaseConnected) {
                     <img src="<?= $imgSrc; ?>"
                       alt="<?= htmlspecialchars($log['fullname'] ?? 'User'); ?>"
                       class="activity-avatar"
-                      onerror="this.src='../assets/logo/3PL.svg';">
+                      onerror="this.src='/config/asset.php?t=g4ld2';">
                     <div class="activity-info" style="padding-left: 12px;">
                       <div class="activity-name">
                         <strong><?= htmlspecialchars(mb_convert_case($log['fullname'] ?? 'Unknown Employee', MB_CASE_TITLE, 'UTF-8')); ?></strong>
@@ -481,9 +492,9 @@ if ($databaseConnected) {
 
             <?php if ($access['datalog']): ?>
               <div style="margin-top: 16px; text-align: center; border-top: 1px solid var(--border); padding-top: 14px;">
-                <a href="../../app/services/table panel.php?tab=datalog" class="btn-link" tabindex="-1">
+                <button data-action-app="mainFrame-datalog" class="btn btn-link" tabindex="-1">
                   <i class="fas fa-history" style="margin-right:4px;"></i>View All Logs
-                </a>
+                </button>
               </div>
             <?php endif; ?>
           </div>
@@ -491,26 +502,13 @@ if ($databaseConnected) {
       </div>
 
       <div>
-        <div class="card" style="height:100%;">
+        <div class="card">
           <div class="card-header">
             <span class="card-title">
               <i class="fas fa-user-check" style="color:#f59e0b;margin-right:6px;"></i>
               Today's Scan
             </span>
-            <input type="date"
-              id="lb-date-picker"
-              value="<?= htmlspecialchars($selectedDate) ?>"
-              max="<?= date('Y-m-d') ?>"
-              style="
-                font-size:10px;
-                color:var(--text-muted);
-                border:1px solid var(--border);
-                border-radius:4px;
-                padding:2px 6px;
-                background:var(--surface);
-                cursor:pointer;
-                outline:none;
-              ">
+            <div id="lb_date_pill" class="date-range-pill lb-drp-pill"></div>
           </div>
           <div class="card-body" style="padding:12px 16px; display:flex; flex-direction:column; height:520px;">
             <?php if (!empty($leaderboard)): ?>
@@ -579,28 +577,14 @@ if ($databaseConnected) {
     </div>
   </div>
 
-  <script src="../js/btn.js"></script>
-  <script src="../js/req.js"></script>
-  <script src="../js/loading.js"></script>
+  <script src="/config/route-config.php?page=mainFrame"></script>
+  <script src="/config/asset.php?t=p1q2r"></script>
+  <script src="/config/asset.php?t=kter8"></script>
+  <script src="/config/asset.php?t=m6efw"></script>
+  <script src="/config/asset.php?t=j7k8l"></script>
+  <script src="/config/asset.php?t=oqw56"></script>
+  <script src="/config/asset.php?t=kg56e"></script>
   <script>
-    // ── Live clock ──────────────────────────────────────────────────────────────
-    function updateTime() {
-      const now = new Date();
-      document.getElementById('wb-time').textContent = now.toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-      document.getElementById('wb-date').textContent = now.toLocaleDateString([], {
-        weekday: 'short',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
-    }
-    updateTime();
-    setInterval(updateTime, 1000);
-
     // ── Gate chart colors ─────────────────────────────────────────────────────────
     const gateColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ec4899', '#8b5cf6',
       '#f97316', '#06b6d4', '#84cc16', '#a855f7', '#14b8a6'
@@ -723,23 +707,24 @@ if ($databaseConnected) {
           </div>`;
       }).join('');
     }
+  </script>
+  <script>
+    // ── Init leaderboard date picker ──────────────────────────────────
+    initLbDatePicker();
 
-    document.getElementById('lb-date-picker').addEventListener('change', function() {
-      const date = this.value;
-      const cardBody = document.getElementById('lb-date-picker')
-        .closest('.card')
-        .querySelector('.card-body');
+    // ── Called by picker on Apply ─────────────────────────────────────
+    window.onLbDateChange = function(date) {
+      const card = document.getElementById('lb_date_pill').closest('.card');
+      const cardBody = card.querySelector('.card-body');
 
       cardBody.innerHTML = `
         <table class="lb-table" style="table-layout:fixed;width:100%;">
-          <thead>
-            <tr>
-              <th>#</th><th>Employee</th>
-              <th style="color:#22c55e;">In</th>
-              <th style="color:#f59e0b;">Out</th>
-              <th>Total</th>
-            </tr>
-          </thead>
+          <thead><tr>
+            <th>#</th><th>Employee</th>
+            <th style="color:#22c55e;">In</th>
+            <th style="color:#f59e0b;">Out</th>
+            <th>Total</th>
+          </tr></thead>
         </table>
         <div class="lb-scroll">
           <table class="lb-table" style="table-layout:fixed;width:100%;">
@@ -752,7 +737,7 @@ if ($databaseConnected) {
         </div>
         <div class="lb-footer" id="lb-footer"></div>`;
 
-      fetch(`partials/chart.php?lb_date=${date}`)
+      fetch(`partials/chart.php?lb_date=${encodeURIComponent(date)}`)
         .then(r => {
           if (!r.ok) throw new Error('HTTP ' + r.status);
           return r.json();
@@ -769,10 +754,9 @@ if ($databaseConnected) {
 
           if (!success || !data.length) {
             tbody.innerHTML = `
-              <div class="no-data">
-                <i class="fas fa-history"></i>
-                No scan activity available.
-              </div>`;
+              <tr><td colspan="5">
+                <div class="no-data"><i class="fas fa-history"></i> No scan activity for this date.</div>
+              </td></tr>`;
             footer.innerHTML = `
               <span style="color:var(--text-muted);">0 employees</span>
               <span style="display:flex;gap:12px;">
@@ -788,40 +772,44 @@ if ($databaseConnected) {
 
           tbody.innerHTML = data.map((row, i) => {
             const rank = i + 1;
-            const name = row.fullname.replace(/\w\S*/g, t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
+            const name = row.fullname.replace(/\w\S*/g,
+              t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
             const truncated = name.length > 18 ? name.slice(0, 18) + '…' : name;
             const rankCell = rank <= 3 ?
-              `<td style="text-align:center;color:${rankColors[i]};font-size:11px;font-weight:700;"><i class="fas fa-circle" style="font-size:8px;"></i></td>` :
+              `<td style="text-align:center;color:${rankColors[i]};font-size:11px;font-weight:700;">
+                  <i class="fas fa-circle" style="font-size:8px;"></i></td>` :
               `<td style="text-align:center;font-size:11px;font-weight:700;color:var(--text-muted);">${rank}</td>`;
             totalIn += parseInt(row.total_in);
             totalOut += parseInt(row.total_out);
             return `<tr>
-          ${rankCell}
-          <td title="${name}" style="text-align:left;font-weight:500;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${truncated}</td>
-          <td class="lb-in"    style="text-align:right;">${row.total_in}</td>
-          <td class="lb-out"   style="text-align:right;">${row.total_out}</td>
-          <td class="lb-total" style="text-align:right;">${row.total}</td>
-        </tr>`;
+            ${rankCell}
+            <td title="${name}" style="text-align:left;font-weight:500;max-width:110px;
+              overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${truncated}</td>
+            <td class="lb-in"    style="text-align:right;">${row.total_in}</td>
+            <td class="lb-out"   style="text-align:right;">${row.total_out}</td>
+            <td class="lb-total" style="text-align:right;">${row.total}</td>
+          </tr>`;
           }).join('');
 
           footer.innerHTML = `
-        <span style="color:var(--text-muted);">${data.length} employee${data.length !== 1 ? 's' : ''}</span>
-        <span style="display:flex;gap:12px;">
-          <span class="lb-in">In: ${totalIn.toLocaleString()}</span>
-          <span class="lb-out">Out: ${totalOut.toLocaleString()}</span>
-        </span>`;
+          <span style="color:var(--text-muted);">
+            ${data.length} employee${data.length !== 1 ? 's' : ''}
+          </span>
+          <span style="display:flex;gap:12px;">
+            <span class="lb-in">In: ${totalIn.toLocaleString()}</span>
+            <span class="lb-out">Out: ${totalOut.toLocaleString()}</span>
+          </span>`;
         })
         .catch(err => {
           console.error('Fetch error:', err);
           const tbody = document.getElementById('lb-tbody');
           if (tbody) tbody.innerHTML = `
-        <tr><td colspan="5" style="text-align:center;padding:20px;color:#ef4444;">
-          Failed to load data.
-        </td></tr>`;
+          <tr><td colspan="5" style="text-align:center;padding:20px;color:#ef4444;">
+            Failed to load data.
+          </td></tr>`;
         });
-    });
+    };
   </script>
-
 </body>
 
 </html>

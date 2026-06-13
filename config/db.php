@@ -30,6 +30,7 @@ const PAGE_ICONS = [
   'test'               => 'fa-flask',
   'readme'             => 'fa-book-open',
   'about'              => 'fa-info-circle',
+  
   // Buttons and actions: (not pages)
   'add-system'                  => 'fa-user-plus',
   'edit-system'                 => 'fa-edit',
@@ -80,7 +81,7 @@ function applyIconHints(array $pages): array
   return $pages;
 }
 
-require_once __DIR__ . '/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 
 // ── Auth guard FIRST (before anything else) ───────────────────────────────────
 if (!isset($_SESSION['user_id']) || !isLoggedIn()) {
@@ -373,7 +374,7 @@ function requireAccess(string $pageKey, string $redirectUrl = '../index.php'): v
       </a>
     </div>
 
-    <script src="/resource/js/req.js"></script>
+    <script src="/config/asset.php?t=j7k8l"></script>
     <script>
       var url = '<?= htmlspecialchars($redirectUrl, ENT_QUOTES) ?>';
 
@@ -418,11 +419,14 @@ function scanPortalPages(
     // 'login.php',
     // 'database.php',
     // 'add_to_log.php',
+    'asset.php',
     'config.php',
     'db.php',
-    'req.php',
     'migrate_to_webp.php',
     'paths.php',
+    'req.php',
+    'resolve.php',
+    'route-config.php',
     // 'get_user_id.php',
     // 'ip.php',
 
@@ -436,7 +440,7 @@ function scanPortalPages(
     'proxcode_backend.php',
     'violation-log.php',
     'violation_log_backend.php',
-    'attendancelog.php',
+    'attendance-log.php',
     'attendancelog_backend.php',
 
     'ea-dtl.php',
@@ -474,7 +478,7 @@ function scanPortalPages(
       'children' => [
         [
           'key'      => 'main',
-          'label'    => 'Main',
+          'label'    => 'Home',
           'icon'     => 'fa-home',
           'children' => [],
         ],

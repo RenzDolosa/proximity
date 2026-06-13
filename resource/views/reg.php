@@ -1,10 +1,10 @@
 <?php
 // resource/views/reg.php --> register
 
-require_once __DIR__ . '/../../config/config.php';
-require_once __DIR__ . '/../../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
-requireAccess('register', 'index.php');
+requireAccess('register', ROUTE_LOGIN);
 $access = getMenuAccess();
 
 $errors = [];
@@ -110,27 +110,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Register</title>
-  <link rel="preload" href="../icon/database-icon.png" as="image">
-  <link rel="icon" href="res/icon/database-icon.png" type="image/png">
-  <link rel="stylesheet" href="res/css/r-l.css">
-  <link rel="stylesheet" href="res/css/btn.css">
+  <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
+  <link rel="stylesheet" href="/config/asset.php?t=a1b2c">
+  <link rel="stylesheet" href="/config/asset.php?t=c24hj">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
 <body>
 
-  <version_compare style="z-index: 1000;">
+  <version_compare>
     <p id="version"></p>
   </version_compare>
 
   <div id="closeButton" class="close-button" role="button" tabindex="0" aria-label="Close"
-    onclick="window.location='res/iframe/ptl.php'">
+    data-action-dir="register">
     <i class="fas fa-times"></i>
   </div>
 
   <div class="container">
     <div class="header">
-      <div><img src="res/logo/database.svg" alt="My Database Logo" class="logo" loading="lazy"></div>
+      <div><img src="/config/asset.php?t=v5w6x" alt="My Database Logo" class="logo" loading="lazy"></div>
       <h2>Create Your Account</h2>
       <p class="subtitle">Sign up to Proximity Database</p>
     </div>
@@ -218,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </form>
 
     <!-- <div class="login-link">
-      Already have an account? <a href="index.php">Sign in here</a>
+      Already have an account? <a href="#">Sign in here</a>
     </div> -->
   </div>
 
@@ -227,7 +227,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     document.addEventListener("keydown", function(e) {
       if (e.key === "Escape" && closeBtn) {
-        window.location = "res/iframe/main.php";
+        window.location = "/iframe/main.php";
       }
     });
 
@@ -239,9 +239,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
     });
   </script>
-  <script src="res/src/reg.js"></script>
-  <script src="res/src/req.js"></script>
-  <script src="res/src/ver.js"></script>
+  <script src="/config/route-config.php?page=login"></script>
+  <script src="/config/asset.php?t=p1q2r"></script>
+  <script src="/config/asset.php?t=zgq2a"></script>
+  <script src="/config/asset.php?t=j7k8l"></script>
+  <script src="/config/asset.php?t=m9n0o"></script>
 </body>
 
 </html>

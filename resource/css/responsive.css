@@ -1,0 +1,577 @@
+/* resource/css/responsive.css
+ * ─────────────────────────────────────────────────────────────────
+ * Centralised responsive layer — imported LAST so overrides land.
+ * Covers: desktop shrink (641-1024px), tablet (641-900px),
+ *         mobile (≤640px) gaps, and component-specific fixes.
+ * ─────────────────────────────────────────────────────────────────
+ */
+
+/* ══════════════════════════════════════════════════════════════════
+   0.  GLOBAL BASE — viewport meta guard
+   Ensure nothing ever causes horizontal scroll on any page.
+   ══════════════════════════════════════════════════════════════════ */
+html {
+  overflow-x: hidden;
+}
+
+body {
+  min-width: 0 !important;   /* override any accidental min-width */
+}
+
+img,
+video,
+iframe,
+embed,
+object {
+  max-width: 100%;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   1.  LARGE DESKTOP  ≤ 1200px
+   Two-col / three-col grids start squeezing.
+   ══════════════════════════════════════════════════════════════════ */
+@media (max-width: 1200px) {
+  /* ptl.css: give the left column a bit more room to breathe */
+  .two-col,
+  .two-col-card {
+    grid-template-columns: minmax(300px, 380px) 1fr;
+  }
+
+  .three-col {
+    grid-template-columns: 1fr 1fr minmax(180px, 240px);
+  }
+
+  .three-col-card {
+    grid-template-columns: minmax(300px, 380px) 1fr 1fr;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   2.  MEDIUM DESKTOP / TABLET LANDSCAPE  ≤ 1024px
+   ══════════════════════════════════════════════════════════════════ */
+@media (max-width: 1024px) {
+  /* ── Portal layouts ── */
+  .two-col,
+  .two-col-card {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .three-col {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .three-col-card {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  /* ── system.css: header wraps on mid-width ── */
+  .header {
+    padding: 0.75rem 1.25rem;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* ── system.css: table header wraps stats ── */
+  .table-header {
+    flex-wrap: wrap;
+    height: auto;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+
+  /* ── m-i.css: employee grid 2-col ── */
+  .employee-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+
+  /* ── about.css ── */
+  .about-grid {
+    gap: 12px;
+  }
+
+  /* ── date-range-picker: allow it to shrink ── */
+  .drp-dropdown {
+    min-width: min(640px, 95vw);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   3.  TABLET PORTRAIT  ≤ 900px
+   ══════════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  /* ── Portal: fully collapse multi-col ── */
+  .two-col,
+  .two-col-card,
+  .three-col,
+  .three-col-card {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  /* ── Status row: 2-col grid ── */
+  .status-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    flex-direction: unset;
+    gap: 0;
+    padding: 12px 16px;
+  }
+
+  .status-item {
+    padding: 10px 0;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    width: 100%;
+  }
+
+  .status-item:nth-child(odd) {
+    border-right: 1px solid var(--border);
+    padding-right: 12px;
+  }
+
+  .status-item:nth-child(even) {
+    padding-left: 12px;
+  }
+
+  .status-item:last-child {
+    border-bottom: none;
+  }
+
+  .status-item:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+    border-right: none;
+    padding-right: 0;
+    border-bottom: none;
+  }
+
+  /* ── system.css: table becomes horizontally scrollable ── */
+  .table-scroll-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .data-table table {
+    min-width: 700px;
+  }
+
+  /* ── modal.css: form layout collapses ── */
+  .form-layout {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  /* ── m-i.css: full width single column cards ── */
+  .employee-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── is.css: importProgress panel fits viewport ── */
+  #importProgress {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* ── about.css: contact row ── */
+  .contact-row {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── shortcut bar: scrollable ── */
+  .shortcut-bar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .shortcut-bar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   4.  MOBILE  ≤ 640px
+   Augments / fills gaps in existing per-file @media (max-width:640px)
+   rules. Nothing here should conflict — only adds missing cases.
+   ══════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+
+  /* ── root.css: sidebar variables ── */
+  :root {
+    --sidebar-w:        48px;
+    --sidebar-expanded: 200px;
+    --topbar-h:         44px;
+  }
+
+  /* ── PORTAL (ptl.css) ─────────────────────────────────── */
+
+  /* iframe that fills the screen */
+  .sec-frames {
+    width: 100vw;
+    height: calc(100dvh - 46px); /* account for shortcut bar */
+    border: none;
+  }
+
+  /* shortcut bar text: hide label, keep icon on very narrow */
+  .shortcut-item span {
+    display: none;
+  }
+
+  /* ── SYSTEM TABLE (system.css) ────────────────────────── */
+
+  /* controls drawer: ensure close button lands above keyboard */
+  .controls.drawer-open {
+    padding-bottom: 120px;
+  }
+
+  /* filter-fab: already in system.css, ensure it exists */
+  .filter-fab {
+    display: flex;
+  }
+
+  /* search group full-width */
+  .search-group {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* date inputs full-width */
+  .controls .search-row .search-group input[type="date"] {
+    width: 100%;
+    font-size: 14px;
+  }
+
+  /* ── MODAL (modal.css) ────────────────────────────────── */
+
+  .modal-content,
+  .modal-delete-content {
+    margin: 0;
+    width: 100%;
+    max-width: 100vw;
+    max-height: 90dvh;
+    border-radius: 16px 16px 0 0;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
+
+  .modal,
+  .modal-overlay {
+    align-items: flex-end; /* sheet slides from bottom */
+  }
+
+  .modal-flex .modal-content {
+    border-radius: 16px 16px 0 0;
+    max-height: 90dvh;
+  }
+
+  .form-row {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .form-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  /* ── IMPORT SYSTEM (is.css) ───────────────────────────── */
+
+  #importProgress {
+    position: static;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 1rem;
+  }
+
+  .download-label {
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  /* ── DATE RANGE PICKER (date-range-picker.css) ─────────── */
+
+  .drp-dropdown {
+    min-width: 0;
+    width: 100vw;
+    max-width: 100vw;
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    bottom: 0 !important;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.2);
+    max-height: 90dvh;
+    overflow-y: auto;
+  }
+
+  .drp-inner {
+    flex-direction: column;
+  }
+
+  .drp-presets {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    padding: 10px 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--slate-border);
+    min-width: 0;
+  }
+
+  .drp-preset {
+    font-size: 12px;
+    padding: 5px 10px;
+  }
+
+  .drp-calendars {
+    flex-direction: column;
+    padding: 8px 10px;
+    gap: 4px;
+  }
+
+  .drp-top-inputs {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 12px;
+  }
+
+  .drp-top-cell {
+    flex: 1 1 120px;
+  }
+
+  .drp-arrow {
+    display: none; /* too small; dates speak for themselves */
+  }
+
+  /* ── M-I  (manual input, m-i.css) ────────────────────── */
+
+  .container {
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .header h1 {
+    font-size: 1.5rem;
+  }
+
+  .stats-bar {
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+  }
+
+  .stat-item {
+    flex: 1 1 120px;
+    padding: 10px 16px;
+  }
+
+  .results-section {
+    height: auto;
+    min-height: 50dvh;
+  }
+
+  .employee-card {
+    padding: 16px;
+  }
+
+  .employee-details {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  /* ── R-L (register/login, r-l.css) ───────────────────── */
+
+  body.login-page,
+  body.register-page {
+    padding: 12px;
+  }
+
+  /* ── REQ (access/portal auth, req.css) ────────────────── */
+
+  .access-container {
+    padding: 24px 20px;
+    border-radius: 16px;
+  }
+
+  .access-title {
+    font-size: 22px;
+  }
+
+  .access-subtitle {
+    font-size: 14px;
+  }
+
+  /* ── ABOUT (about.css) ────────────────────────────────── */
+
+  .about-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .notif-date {
+    display: none;
+  }
+
+  .notif-header {
+    gap: 5px;
+  }
+
+  /* ── SBAR (sidebar widget, sbar.css) ─────────────────── */
+
+  .side-bar {
+    width: 80vmin;
+  }
+
+  /* ── SYSTEM CAMERA (system-camera.css) ───────────────── */
+
+  .camera-modal {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .camera-modal-content {
+    border-radius: 16px 16px 0 0;
+    max-height: 95dvh;
+    max-width: 100vw;
+  }
+
+  .camera-modal-header h2 {
+    font-size: 15px;
+  }
+
+  /* ── PAGINATION (pg.css) — already handled, ensure clear  */
+  .pagination {
+    bottom: 0;
+  }
+
+  /* ── BTN (btn.css) ──────────────────────────────────────  */
+
+  /* Stack form-row-btn buttons on mobile */
+  .form-row-btn {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .form-row-btn .btn,
+  .form-row-btn .btn-sub {
+    width: 100%;
+  }
+
+  /* tab-nav: same as tab-bar treatment */
+  .tab-nav {
+    padding: 0 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .tab-nav::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   5.  VERY SMALL  ≤ 400px  (compact phones)
+   ══════════════════════════════════════════════════════════════════ */
+@media (max-width: 400px) {
+  /* ── Portal shortcut bar: tighter ── */
+  .shortcut-item {
+    padding: 6px 8px;
+    min-width: 40px;
+    font-size: 10px;
+  }
+
+  .shortcut-item i {
+    font-size: 13px;
+  }
+
+  /* ── Status row: stack fully ── */
+  .status-row {
+    grid-template-columns: 1fr;
+  }
+
+  .status-item:nth-child(odd) {
+    border-right: none;
+    padding-right: 0;
+  }
+
+  .status-item:nth-child(even) {
+    padding-left: 0;
+  }
+
+  .status-item {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .status-item:last-child {
+    border-bottom: none;
+  }
+
+  /* ── Stats grid: 1 column ── */
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Shortcuts grid: 2 cols ── */
+  .shortcuts-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* ── Welcome banner: vertical ── */
+  .welcome-banner {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .wb-right {
+    text-align: left;
+  }
+
+  /* ── Pagination: tighter ── */
+  .page-num-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 10px;
+  }
+
+  .page-arrow-btn {
+    padding: 4px 6px;
+    font-size: 10px;
+  }
+
+  /* ── About page: single column for team ── */
+  .team-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* ── Modal: nearly full height ── */
+  .modal-content,
+  .modal-delete-content {
+    max-height: 95dvh;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   6.  PRINT  — hide interactive chrome
+   ══════════════════════════════════════════════════════════════════ */
+@media print {
+  .shortcut-bar,
+  .filter-fab,
+  .pagination,
+  .add-dropdown,
+  .tab-bar,
+  .tab-nav,
+  .actions-panel,
+  #loading-screen {
+    display: none !important;
+  }
+
+  .data-table {
+    padding-bottom: 0;
+  }
+}

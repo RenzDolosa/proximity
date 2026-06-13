@@ -1,8 +1,8 @@
 <?php
 // resource/views/admin panel.php --> admin panel system
 
-require_once __DIR__ . '/../../config/config.php';
-require_once __DIR__ . '/../../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
 $permissions = getUserGroupPermissions();
 if (!canAccess($permissions, 'users') && !canAccess($permissions, 'groups') && !canAccess($permissions, 'system logs') && !canAccess($permissions, 'phpmyadmin')) {
@@ -16,8 +16,10 @@ if (!canAccess($permissions, 'users') && !canAccess($permissions, 'groups') && !
   exit;
 }
 
-requireAccess('admin panel', 'settings.php');
+requireAccess('admin panel', ROUTE_SETTINGS);
 $access = getMenuAccess();
+
+$sessionUserId = (int)($_SESSION['user_id'] ?? 0);
 
 // ════════════════════════════════════════════════════════════════════════════
 // AJAX HANDLERS
@@ -606,118 +608,13 @@ function renderBindRows(array $pages, int $depth = 0): void
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin Panel</title>
-  <link rel="icon" href="../assets/icon/database-icon.png" type="image/png">
-  <link rel="stylesheet" href="../css/system.css">
-  <link rel="stylesheet" href="../css/btn.css">
+  <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
+  <link rel="stylesheet" href="/config/asset.php?t=yde24">
+  <link rel="stylesheet" href="/config/asset.php?t=c24hj">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
 
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    :root {
-      --accent: #2563eb;
-      --accent-light: #eff6ff;
-      --bg: #f0f2f5;
-      --surface: #ffffff;
-      --border: #e2e8f0;
-      --text: #1e293b;
-      --text-muted: #64748b;
-      --danger: #dc2626;
-      --danger-light: #ff6f6f;
-      --warning: #f59e0b;
-      --warning-light: #fffbeb;
-      --success: #15803d;
-      --success-light: #8deda3;
-      --success-sub: #d4edda;
-      --radius: 8px;
-    }
-
-    /* ── Tab navigation ── */
-    .tab-nav {
-      display: flex;
-      align-items: flex-end;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0 16px;
-      position: sticky;
-      top: 0;
-      z-index: 999;
-    }
-
-    .tab-btn {
-      display: flex;
-      align-items: center;
-      gap: 3px;
-      padding: 14px 20px;
-      font-size: 12px;
-      font-weight: 400;
-      height: 46px;
-      color: #666;
-      background: none;
-      border: none;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -1px;
-      cursor: pointer;
-      transition: color 0.15s, border-color 0.15s;
-      white-space: nowrap;
-    }
-
-    .tab-btn i {
-      font-size: 15px;
-    }
-
-    .tab-btn:hover {
-      background: var(--bg);
-      color: var(--accent);
-    }
-
-    .tab-btn.active {
-      color: var(--accent);
-      font-weight: 500;
-      border-bottom-color: var(--accent);
-    }
-
-    .tab-btn .tab-badge {
-      font-size: 11px;
-      background: var(--bg);
-      color: var(--text-muted);
-      border-radius: 999px;
-      padding: 2px 8px;
-      border: 1px solid var(--border);
-    }
-
-    .tab-btn.active .tab-badge {
-      background: var(--accent-light);
-      color: var(--accent);
-      border-color: var(--accent);
-    }
-
-    .tab-badge {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 20px;
-      height: 20px;
-      padding: 0 5px;
-      border-radius: 10px;
-      font-size: 11px;
-      font-weight: 700;
-      background: rgba(255, 255, 255, .25);
-      color: inherit;
-    }
-
-    .tab-panel {
-      display: none;
-    }
-
-    .tab-panel.active {
-      display: block;
-    }
-
     /* ── Buttons ── */
     .btn-add {
       background: linear-gradient(135deg, #6ce29d 0%, #2c9c60 100%);
@@ -1621,32 +1518,6 @@ function renderBindRows(array $pages, int $depth = 0): void
         padding: 0;
       }
 
-      /* ── Tab navigation ── */
-      .tab-nav {
-        gap: 2px;
-        padding: 0 2px;
-        overflow-x: auto;
-        flex-wrap: nowrap;
-      }
-
-      .tab-btn {
-        padding: 9px 12px 10px;
-        font-size: 11px;
-        gap: 5px;
-        white-space: nowrap;
-        flex-shrink: 0;
-      }
-
-      .tab-btn i {
-        font-size: 12px;
-      }
-
-      .tab-badge {
-        min-width: 16px;
-        height: 16px;
-        font-size: 9px;
-      }
-
       .btn-add,
       .btn-danger {
         margin-left: 0;
@@ -1873,7 +1744,7 @@ function renderBindRows(array $pages, int $depth = 0): void
       </button>
     <?php endif; ?>
 
-    <button class="tab-btn" tabindex="-1" onclick="location.reload();">
+    <button class="tab-btn" tabindex="-1" onclick="reloadActiveTab()">
       <i class="fas fa-sync-alt"></i>
       <span>Refresh</span>
     </button>
@@ -2090,7 +1961,9 @@ function renderBindRows(array $pages, int $depth = 0): void
           Export the current database as a <code>.sql</code> file.
         </p>
         <div style="margin-bottom:18px;">
-          <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:8px;">Export Mode</label>
+          <p style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:8px;">
+            Export Mode
+          </p>
           <div style="display:flex;flex-direction:column;gap:9px;">
             <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;">
               <input type="radio" name="exportMode" value="full" checked style="accent-color:#7c3aed;">
@@ -2123,35 +1996,35 @@ function renderBindRows(array $pages, int $depth = 0): void
       <div class="err-box" id="userFormErr"></div>
       <div class="form-grid">
         <div class="form-row">
-          <label>First name <span style="color:#ef4444">*</span></label>
+          <label for="fFirstName">First name <span style="color:#ef4444">*</span></label>
           <input type="text" id="fFirstName" placeholder="Firstname">
         </div>
         <div class="form-row">
-          <label>Last name <span style="color:#ef4444">*</span></label>
+          <label for="fLastName">Last name <span style="color:#ef4444">*</span></label>
           <input type="text" id="fLastName" placeholder="Lastname">
         </div>
       </div>
       <div class="form-grid">
         <div class="form-row">
-          <label>Username <span style="color:#ef4444">*</span></label>
+          <label for="fUsername">Username <span style="color:#ef4444">*</span></label>
           <input type="text" id="fUsername" placeholder="Minimum 3 characters">
         </div>
         <div class="form-row">
-          <label>Email <span style="color:#ef4444">*</span></label>
+          <label for="fEmail">Email <span style="color:#ef4444">*</span></label>
           <input type="email" id="fEmail" placeholder="user@example.com">
         </div>
       </div>
       <div class="form-row">
-        <label>User Group <span style="color:#ef4444">*</span></label>
+        <label for="fUsergroup">User Group <span style="color:#ef4444">*</span></label>
         <select id="fUsergroup">
           <option value="">— Select group —</option>
         </select>
       </div>
       <div class="form-row">
-        <label>Password <span id="pwHint" style="font-weight:400;color:#9ca3af">(min 8 chars, upper, lower, number)</span></label>
+        <label for="fPassword">Password <span id="pwHint" style="font-weight:400;color:#9ca3af">(min 8 chars, upper, lower, number)</span></label>
         <div style="position:relative;display:flex;align-items:center;">
           <input type="password" id="fPassword" placeholder="Password" style="padding-right:36px;width:100%;">
-          <button type="button" tabindex="-1" onclick="togglePw('fPassword',this)"
+          <button type="button" class="toggle-pw" tabindex="-1" onclick="togglePw('fPassword',this)"
             style="position:absolute;right:10px;background:none;border:none;cursor:pointer;color:#9ca3af;font-size:13px;padding:0;line-height:1;">
             <i class="fas fa-eye"></i>
           </button>
@@ -2159,17 +2032,17 @@ function renderBindRows(array $pages, int $depth = 0): void
       </div>
       <div class="form-grid">
         <div class="form-row">
-          <label>Phone</label>
+          <label for="fPhone">Phone</label>
           <input type="text" id="fPhone" placeholder="09XXXXXXXXX">
         </div>
         <div class="form-row">
-          <label>My database <span style="color:#ef4444">*</span></label>
+          <label for="fDatabase">My database <span style="color:#ef4444">*</span></label>
           <input type="text" id="fDatabase" placeholder="e.g. AdminServer">
         </div>
       </div>
       <div class="modal-actions">
-        <button class="btn-cancel" tabindex="-1" onclick="closeModal('userFormModal')">Cancel</button>
-        <button class="btn-confirm" id="btnUserFormSubmit" tabindex="-1" onclick="submitUserForm()">
+        <button class="btn btn-cancel" tabindex="-1" onclick="closeModal('userFormModal')">Cancel</button>
+        <button class="btn btn-confirm" id="btnUserFormSubmit" tabindex="-1" onclick="submitUserForm()">
           <i class="fas fa-save"></i> Register User
         </button>
       </div>
@@ -2185,8 +2058,8 @@ function renderBindRows(array $pages, int $depth = 0): void
       <h3 style="justify-content:center"><i class="fas fa-exclamation-triangle"></i> Delete User?</h3>
       <p id="deleteUserMsg">Are you sure? This action cannot be undone.</p>
       <div class="modal-actions" style="justify-content:center">
-        <button class="btn-cancel" tabindex="-1" onclick="closeModal('deleteUserModal')">Cancel</button>
-        <button class="btn-danger" id="btnConfirmDeleteUser" tabindex="-1" onclick="confirmDeleteUser()">
+        <button class="btn btn-cancel" tabindex="-1" onclick="closeModal('deleteUserModal')">Cancel</button>
+        <button class="btn btn-danger" id="btnConfirmDeleteUser" tabindex="-1" onclick="confirmDeleteUser()">
           <i class="fas fa-trash"></i> Delete
         </button>
       </div>
@@ -2199,7 +2072,7 @@ function renderBindRows(array $pages, int $depth = 0): void
       <h3><i class="fas fa-info-circle" style="color:#6d28d9"></i> Log Details</h3>
       <div class="log-detail-grid" id="viewLogContent"></div>
       <div class="modal-actions">
-        <button class="btn-cancel" tabindex="-1" onclick="closeModal('viewLogModal')">Close</button>
+        <button class="btn btn-cancel" tabindex="-1" onclick="closeModal('viewLogModal')">Close</button>
       </div>
     </div>
   </div>
@@ -2213,8 +2086,8 @@ function renderBindRows(array $pages, int $depth = 0): void
       <h3 style="justify-content:center"><i class="fas fa-exclamation-triangle"></i> Confirm Delete</h3>
       <p id="deleteSingleLogMsg">Delete this log entry?</p>
       <div class="modal-actions" style="justify-content:center">
-        <button class="btn-cancel" tabindex="-1" onclick="closeModal('deleteSingleLogModal')">Cancel</button>
-        <button class="btn-danger" id="btnConfirmDeleteLog" tabindex="-1" onclick="deleteSingleLog()"><i class="fas fa-trash"></i> Delete</button>
+        <button class="btn btn-cancel" tabindex="-1" onclick="closeModal('deleteSingleLogModal')">Cancel</button>
+        <button class="btn btn-danger" id="btnConfirmDeleteLog" tabindex="-1" onclick="deleteSingleLog()"><i class="fas fa-trash"></i> Delete</button>
       </div>
     </div>
   </div>
@@ -2228,8 +2101,8 @@ function renderBindRows(array $pages, int $depth = 0): void
       <h3 style="justify-content:center"><i class="fas fa-exclamation-triangle"></i> Confirm Delete All</h3>
       <p>Delete <strong>all system log records</strong>? This <strong>cannot be undone</strong>.</p>
       <div class="modal-actions" style="justify-content:center">
-        <button class="btn-cancel" tabindex="-1" onclick="closeModal('deleteAllLogsModal')">Cancel</button>
-        <button class="btn-danger" id="btnConfirmDeleteAllLogs" tabindex="-1" onclick="deleteAllLogs()"><i class="fas fa-trash"></i> Yes, Delete All</button>
+        <button class="btn btn-cancel" tabindex="-1" onclick="closeModal('deleteAllLogsModal')">Cancel</button>
+        <button class="btn btn-danger" id="btnConfirmDeleteAllLogs" tabindex="-1" onclick="deleteAllLogs()"><i class="fas fa-trash"></i> Yes, Delete All</button>
       </div>
     </div>
   </div>
@@ -2252,10 +2125,10 @@ function renderBindRows(array $pages, int $depth = 0): void
 
         <!-- Sidebar -->
         <div class="gmodal-sidebar">
-          <button class="gmodal-sidetab active" id="gSideBasic" tabindex="-1" onclick="switchGroupTab('basic')">
+          <button class="side-tab gmodal-sidetab active" id="gSideBasic" tabindex="-1" onclick="switchGroupTab('basic')">
             <i class="fas fa-id-card"></i> Basic Info
           </button>
-          <button class="gmodal-sidetab" id="gSideAccess" tabindex="-1" onclick="switchGroupTab('access')">
+          <button class="side-tab gmodal-sidetab" id="gSideAccess" tabindex="-1" onclick="switchGroupTab('access')">
             <i class="fas fa-shield-alt"></i> Bind Access
           </button>
         </div>
@@ -2266,11 +2139,11 @@ function renderBindRows(array $pages, int $depth = 0): void
           <!-- Basic Info panel -->
           <div class="gmodal-tabpanel active" id="gPanelBasic">
             <div class="form-row">
-              <label>* User group <span style="color:#ef4444; font-size:11px; font-weight:400">(required)</span></label>
+              <label for="gGroupName">* User group <span style="color:#ef4444; font-size:11px; font-weight:400">(required)</span></label>
               <input type="text" id="gGroupName" placeholder="e.g. Administrator, HR, Warehouse">
             </div>
             <div class="form-row" style="margin-top:6px;">
-              <label>Description <span style="color:#9ca3af; font-weight:400; font-size:11px">(optional)</span></label>
+              <label for="gDescription">Description <span style="color:#9ca3af; font-weight:400; font-size:11px">(optional)</span></label>
               <textarea id="gDescription" class="desc-textarea" placeholder="Short description of this group's role…"></textarea>
             </div>
             <div class="toggle-row" style="margin-top:8px;">
@@ -2299,8 +2172,8 @@ function renderBindRows(array $pages, int $depth = 0): void
 
       <!-- Footer -->
       <div class="modal-actions" style="padding:14px 24px; justify-content:flex-end;">
-        <button class="btn-cancel" tabindex="-1" onclick="closeModal('groupFormModal')">Cancel</button>
-        <button class="btn-confirm" id="btnGroupFormSubmit" tabindex="-1" onclick="submitGroupForm()">
+        <button class="btn btn-cancel" tabindex="-1" onclick="closeModal('groupFormModal')">Cancel</button>
+        <button class="btn btn-confirm" id="btnGroupFormSubmit" tabindex="-1" onclick="submitGroupForm()">
           <i class="fas fa-save"></i> <span id="gBtnLabel">Create Group</span>
         </button>
       </div>
@@ -2316,8 +2189,8 @@ function renderBindRows(array $pages, int $depth = 0): void
       <h3 style="justify-content:center"><i class="fas fa-exclamation-triangle"></i> Delete Group?</h3>
       <p id="deleteGroupMsg">Are you sure? This action cannot be undone.</p>
       <div class="modal-actions" style="justify-content:center">
-        <button class="btn-cancel" tabindex="-1" onclick="closeModal('deleteGroupModal')">Cancel</button>
-        <button class="btn-danger" id="btnConfirmDeleteGroup" tabindex="-1" onclick="confirmDeleteGroup()">
+        <button class="btn btn-cancel" tabindex="-1" onclick="closeModal('deleteGroupModal')">Cancel</button>
+        <button class="btn btn-danger" id="btnConfirmDeleteGroup" tabindex="-1" onclick="confirmDeleteGroup()">
           <i class="fas fa-trash"></i> Delete
         </button>
       </div>
@@ -2345,7 +2218,7 @@ function renderBindRows(array $pages, int $depth = 0): void
         </table>
       </div>
       <div class="modal-actions" style="margin-top:14px;">
-        <button class="btn-cancel" onclick="closeModal('viewGroupUsersModal')">Close</button>
+        <button class="btn btn-cancel" onclick="closeModal('viewGroupUsersModal')">Close</button>
       </div>
     </div>
   </div>
@@ -2399,6 +2272,20 @@ function renderBindRows(array $pages, int $depth = 0): void
       });
       if (tab === 'group' && allGroups.length === 0) loadGroups().then(startGroupsCountdown);
       if (tab === 'logs' && allLogs.length === 0) {
+        loadLogActionOptions();
+        loadLogs().then(startLogsCountdown);
+      }
+    }
+
+    function reloadActiveTab() {
+      if (activeTab === 'users') {
+        stopUsersCountdown();
+        loadUsers().then(startUsersCountdown);
+      } else if (activeTab === 'group') {
+        stopGroupsCountdown();
+        loadGroups().then(startGroupsCountdown);
+      } else if (activeTab === 'logs') {
+        stopLogsCountdown();
         loadLogActionOptions();
         loadLogs().then(startLogsCountdown);
       }
@@ -2785,16 +2672,16 @@ function renderBindRows(array $pages, int $depth = 0): void
         const isRoot = +u.id === 1 && u.user_group === 'Administrator';
 
         const editBtn = !IS_USERS ?
-          `<div class="lock-wrap"><button class="action-btn btn-edit-row" disabled><i class="fas fa-lock" style="opacity:.5"></i> Edit</button><span class="tip">Administrators only</span></div>` :
-          `<button class="action-btn btn-edit-row" tabindex="-1" onclick="openEditUser(${u.id})"><i class="fas fa-edit"></i> Edit</button>`;
+          `<div class="lock-wrap"><button class="btn action-btn btn-edit-row" disabled><i class="fas fa-lock" style="opacity:.5"></i> Edit</button><span class="tip">Administrators only</span></div>` :
+          `<button class="btn action-btn btn-edit-row" tabindex="-1" onclick="openEditUser(${u.id})"><i class="fas fa-edit"></i> Edit</button>`;
 
         const delBtn = !IS_USERS ?
-          `<div class="lock-wrap"><button class="action-btn btn-del-row" disabled><i class="fas fa-lock" style="opacity:.5"></i> Delete</button><span class="tip">Administrators only</span></div>` :
+          `<div class="lock-wrap"><button class="btn action-btn btn-del-row" disabled><i class="fas fa-lock" style="opacity:.5"></i> Delete</button><span class="tip">Administrators only</span></div>` :
           isSelf ?
-          `<div class="lock-wrap"><button class="action-btn btn-del-row" disabled><i class="fas fa-trash"></i> Delete</button></div>` :
+          `<div class="lock-wrap"><button class="btn action-btn btn-del-row" disabled><i class="fas fa-trash"></i> Delete</button></div>` :
           isRoot ?
-          `<div class="lock-wrap"><button class="action-btn btn-del-row" disabled><i class="fas fa-trash"></i> Delete</button><span class="tip">Root Administrator cannot be deleted</span></div>` :
-          `<button class="action-btn btn-del-row" tabindex="-1" onclick="openDeleteUser(${u.id},'${escHtml(u.username)}')"><i class="fas fa-trash"></i> Delete</button>`;
+          `<div class="lock-wrap"><button class="btn action-btn btn-del-row" disabled><i class="fas fa-trash"></i> Delete</button><span class="tip">Root Administrator cannot be deleted</span></div>` :
+          `<button class="btn action-btn btn-del-row" tabindex="-1" onclick="openDeleteUser(${u.id},'${escHtml(u.username)}')"><i class="fas fa-trash"></i> Delete</button>`;
 
         return `<tr>
           <td class="sn-cell">${idx+1}</td>
@@ -3120,8 +3007,8 @@ function renderBindRows(array $pages, int $depth = 0): void
           <td>${escHtml(g.created_at ? g.created_at.slice(0,16) : '—')}</td>
           <td>${escHtml(g.updated_at ? g.updated_at.slice(0,16) : '—')}</td>
           <td><div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="action-btn btn-edit-row" tabindex="-1" onclick="openEditGroup(${g.id})"><i class="fas fa-edit"></i> Edit</button>
-            <button class="action-btn btn-del-row" tabindex="-1" onclick="openDeleteGroup(${g.id},'${escHtml(g.group_name)}',${g.bound_users})"><i class="fas fa-trash"></i> Delete</button>
+            <button class="btn action-btn btn-edit-row" tabindex="-1" onclick="openEditGroup(${g.id})"><i class="fas fa-edit"></i> Edit</button>
+            <button class="btn action-btn btn-del-row" tabindex="-1" onclick="openDeleteGroup(${g.id},'${escHtml(g.group_name)}',${g.bound_users})"><i class="fas fa-trash"></i> Delete</button>
           </div></td>
         </tr>`;
       }).join('');
@@ -3437,8 +3324,8 @@ function renderBindRows(array $pages, int $depth = 0): void
           <td class="details-cell" title="${escHtml(log.user_agent||'')}">${escHtml(log.user_agent||'—')}</td>
           <td>${escHtml(log.created_at||'—')}</td>
           <td style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="action-btn btn-view-log" tabindex="-1" onclick="viewLog(${log.id})"><i class="fas fa-eye"></i> View</button>
-            <button class="action-btn btn-del-log" tabindex="-1" onclick="openDeleteLog(${log.id},'${escHtml(log.username||'this entry')}')"><i class="fas fa-trash"></i> Delete</button>
+            <button class="btn action-btn btn-view-log" tabindex="-1" onclick="viewLog(${log.id})"><i class="fas fa-eye"></i> View</button>
+            <button class="btn action-btn btn-del-log" tabindex="-1" onclick="openDeleteLog(${log.id},'${escHtml(log.username||'this entry')}')"><i class="fas fa-trash"></i> Delete</button>
           </td>
         </tr>`;
       }).join('');
@@ -3620,7 +3507,9 @@ function renderBindRows(array $pages, int $depth = 0): void
       });
     });
   </script>
-  <script src="../js/btn.js"></script>
+  <script src="/config/route-config.php?page=mainFrame"></script>
+  <script src="/config/asset.php?t=p1q2r"></script>
+  <script src="/config/asset.php?t=m6efw"></script>
 </body>
 
 </html>

@@ -36,7 +36,7 @@ async function fetchAllEmployeesForExport(filters = {}) {
       }
     }
 
-    const response = await fetch(`datalog_backend.php?${params.toString()}`, {
+    const response = await fetch(`${AccessLogBackend}?${params.toString()}`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",

@@ -5,12 +5,6 @@
   pointer-events: none;
 } */
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
 body {
   margin: 0;
   font-family: "roboto", "arial";
@@ -37,7 +31,7 @@ body {
 
 h2 {
   text-align: center;
-  color: #333;
+  color: var(--text);
   font-size: 1.2vmin;
   font-weight: 500;
   letter-spacing: 0.5vmin;
@@ -73,7 +67,7 @@ input[type="text"] {
 
 .div-container {
   display: flex;
-  background: white;
+  background: var(--surface);
   justify-content: center;
   width: 100vmin;
   height: 90vmin;
@@ -108,7 +102,7 @@ input[type="text"] {
 }
 
 .div-position {
-  background: white;
+  background: var(--surface);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -126,7 +120,7 @@ input[type="text"] {
   justify-content: center;
   align-items: center;
   border-radius: 50%;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: var(--grad-brand);
   margin: 0 auto;
 }
 
@@ -146,7 +140,7 @@ input[type="text"] {
   width: 40vmin;
   max-height: 80vh;
   padding: 1vmin;
-  background: linear-gradient(135deg, #d4edda 0%, #00ff3cc2 100%);
+  background: linear-gradient(135deg, var(--success-sub) 0%, var(--checkin-light) 100%);
   border-radius: 1vmin;
   text-align: left;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
@@ -162,7 +156,7 @@ input[type="text"] {
   width: 40vmin;
   max-height: 80vh;
   padding: 1vmin;
-  background: linear-gradient(135deg, #f8d7da 0%, #ff0015d5 100%);
+  background: linear-gradient(135deg, var(--danger-sub) 0%, var(--checkout) 100%);
   border-radius: 1vmin;
   text-align: left;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
@@ -176,7 +170,7 @@ input[type="text"] {
   justify-content: center;
   align-items: center;
   border-radius: 10vmin;
-  background: linear-gradient(135deg, #6ce29d 0%, #2c9c60 100%);
+  background: linear-gradient(135deg, var(--green-border-strong) 0%, var(--green-hover) 100%);
 }
 
 .check-status-out {
@@ -185,7 +179,7 @@ input[type="text"] {
   justify-content: center;
   align-items: center;
   border-radius: 10vmin;
-  background: linear-gradient(135deg, #f6a253 0%, #ef3838 100%);
+  background: linear-gradient(135deg, var(--warning-light) 0%, var(--checkout) 100%);
 }
 
 .without-violation {
@@ -195,7 +189,7 @@ input[type="text"] {
   width: 40vmin;
   max-height: 50vh;
   padding: 1vmin;
-  background: linear-gradient(135deg, #d4edda 0%, #00ff3cc2 100%);
+  background: linear-gradient(135deg, var(--success-sub) 0%, var(--checkin-light) 100%);
   border-radius: 1vmin;
   text-align: left;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
@@ -209,7 +203,7 @@ input[type="text"] {
   width: 40vmin;
   max-height: 40vh;
   padding: 1vmin;
-  background: linear-gradient(135deg, #f8d7da 0%, #ff0015d5 100%);
+  background: linear-gradient(135deg, var(--danger-sub) 0%, var(--checkout) 100%);
   border-radius: 1vmin;
   text-align: left;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
@@ -221,7 +215,7 @@ input[type="text"] {
   max-height: 30vh;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: lightgray transparent;
+  scrollbar-color: var(--border-hover) transparent;
 }
 
 .div-padding {
@@ -270,7 +264,7 @@ input[type="text"] {
 .employee-placeholder {
   font-size: 40vmin;
   font-weight: bold;
-  background: linear-gradient(270deg, #ffffff, #4ecdc4, #45b7d1, #96ceb4);
+  background: var(--grad-text);
   background-size: 400% 400%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -280,7 +274,7 @@ input[type="text"] {
 
 #message {
   text-align: center;
-  color: #666;
+  color: var(--text-muted);
   font-size: 1vmin;
   font-style: italic;
 }
@@ -288,7 +282,7 @@ input[type="text"] {
 .loading {
   text-align: center;
   padding: 1vmin;
-  color: #667eea;
+  color: var(--indigo);
   font-size: 1vmin;
   pointer-events: none;
 }
@@ -298,7 +292,7 @@ input[type="text"] {
   display: inline-block;
   width: 1vmin;
   height: 1vmin;
-  border: 0.2vmin solid #667eea;
+  border: 0.2vmin solid var(--indigo);
   border-radius: 50%;
   border-top-color: transparent;
   animation: spin 1s linear infinite;
@@ -330,7 +324,7 @@ input[type="text"] {
   background-size: 300% 300%;
   background-clip: text;
   -webkit-background-clip: text;
-  -webkit-text-fill-color: #c0392b !important;
+  -webkit-text-fill-color: var(--red-hover) !important;
   text-shadow: none;
   opacity: 0;
   animation:
@@ -359,7 +353,7 @@ input[type="text"] {
   background-size: 300% 300%;
   background-clip: text;
   -webkit-background-clip: text;
-  -webkit-text-fill-color: #c0392b !important;
+  -webkit-text-fill-color: var(--red-hover) !important;
   text-shadow: none;
   opacity: 0;
   animation: fadeOut 3s ease-out;
@@ -414,13 +408,13 @@ input[type="text"] {
 
 @keyframes bg-flash {
   0% {
-    background-color: #e8ecf1;
+    background-color: var(--slate-bg-hover);
   }
   50% {
-    background-color: #e7f3ff;
+    background-color: var(--blue-bg);
   }
   100% {
-    background-color: #e8ecf1;
+    background-color: var(--slate-bg-hover);
   }
 }
 

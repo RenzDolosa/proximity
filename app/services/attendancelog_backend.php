@@ -1,7 +1,7 @@
 <?php
 // app/services/attendancelog_backend.php --> attendance log table backend
 
-require_once __DIR__ . '/../../config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 
 // ── Security headers ──────────────────────────────────────────────────────────
 if (!isset($_GET['serve_file']) && !isset($_GET['api_info']) && !isset($_GET['health_check'])) {

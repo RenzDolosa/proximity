@@ -36,7 +36,7 @@ async function fetchAllEmployeesForExport(filters = {}) {
       }
     }
 
-    const response = await fetch(`manpower_backend.php?${params.toString()}`, {
+    const response = await fetch(`${EmployeesBackend}?${params.toString()}`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -68,7 +68,7 @@ async function fetchAllEmployeesForExport(filters = {}) {
 async function fetchAllCodesForExport() {
   try {
     const response = await fetch(
-      "proxcode_backend.php?action=get&page=1&limit=999999",
+      `${ProxcodeBackend}?action=get&page=1&limit=999999`,
       {
         method: "GET",
         headers: {
@@ -809,7 +809,7 @@ async function exportFilteredCodes() {
     if (currentFilters.created_at)
       serverParams.append("created_at", currentFilters.created_at);
 
-    const res = await fetch(`proxcode_backend.php?${serverParams.toString()}`, {
+    const res = await fetch(`${ProxcodeBackend}?${serverParams.toString()}`, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     const json = await res.json();

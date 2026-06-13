@@ -3,7 +3,7 @@
 // Returns alerts for: late check-ins, anomalies, incident reports
 // Called by resource/js/notifications.js via polling
 
-require_once __DIR__ . '/../../config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 
 header('Content-Type: application/json');
 header('X-Content-Type-Options: nosniff');

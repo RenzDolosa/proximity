@@ -1,10 +1,10 @@
 <?php
 // config/req.php --> portal access
 
-require_once 'config.php';
-require_once 'db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
-requireAccess('main', '../proximity.php', true);
+requireAccess('main', ROUTE_QR_PROX);
 $access = getMenuAccess();
 
 $portalAccessGranted = isset($_SESSION['portal_access_granted']) && $_SESSION['portal_access_granted'] === true;
@@ -142,11 +142,12 @@ if (!$portalAccessGranted) {
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Portal Access</title>
-    <link rel="preload" href="resource/assets/icon/database-icon.png" as="image">
-    <link rel="icon" href="resource/assets/icon/database-icon.png" type="image/png">
-    <link rel="stylesheet" href="resource/css/req.css">
-    <link rel="stylesheet" href="resource/css/sbar.css">
-    <link rel="stylesheet" href="resource/css/loading.css">
+    <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
+    <link rel="stylesheet" href="/config/asset.php?t=f48sv">
+    <link rel="stylesheet" href="/config/asset.php?t=c24hj">
+    <link rel="stylesheet" href="/config/asset.php?t=ht5sf">
+    <link rel="stylesheet" href="/config/asset.php?t=q5fwr">
+    <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
       .error-alert {
@@ -173,15 +174,43 @@ if (!$portalAccessGranted) {
 
     <div class="side-bar" style="top: 0;">
       <?php if ($access['proximity']): ?>
-        <div onclick="window.location.href='proximity.php';" class="side-btn">
+        <div data-action-dir="require-proximity" class="side-btn">
           <div class="s-header">
             <h1>Proximity</h1>
           </div>
           <div class="s-search-section">
-            <img src="resource/assets/icon/nfc-icon.svg" alt="NFC Icon" loading="lazy">
+            <img src="/config/asset.php?t=gnks2" alt="NFC Icon" loading="lazy">
             <div>
               <h3>Live Search</h3>
-              <p>Web pass verifier application</p>
+              <p>Proximity verifier application</p>
+            </div>
+          </div>
+        </div>
+      <?php endif; ?>
+      <?php if ($access['facial']): ?>
+        <div data-action-dir="require-facial" class="side-btn">
+          <div class="s-header">
+            <h1>Face ID</h1>
+          </div>
+          <div class="s-search-section">
+            <img src="/config/asset.php?t=g4ld2" alt="Face ID" loading="lazy">
+            <div>
+              <h3>Face Search</h3>
+              <p>Facial verifier application</p>
+            </div>
+          </div>
+        </div>
+      <?php endif; ?>
+      <?php if ($access['manual input']): ?>
+        <div data-action-dir="require-manual" class="side-btn">
+          <div class="s-header">
+            <h1>Manual Entry</h1>
+          </div>
+          <div class="s-search-section">
+            <img src="/config/asset.php?t=t43us" alt="Manual Entry" loading="lazy">
+            <div>
+              <h3>Manual Search</h3>
+              <p>Manual verifier application</p>
             </div>
           </div>
         </div>
@@ -215,16 +244,16 @@ if (!$portalAccessGranted) {
             placeholder="Enter portal access password"
             autocomplete="current-password"
             autofocus
-            <?= (isset($attempts) && $attempts >= 5) ? 'disabled' : '' ?>>
-          <button type="button" class="password-toggle-btn" tabindex="-1" id="togglePassword" aria-label="Toggle password visibility">
+            <?= (isset($attempts) && $attempts >= 10) ? 'disabled' : '' ?>>
+          <button type="button" class="toggle-pw-sub" tabindex="-1" id="togglePassword" aria-label="Toggle password visibility">
             <i class="fas fa-eye"></i>
           </button>
         </div>
         <button
           type="submit"
-          class="unlock-button" tabindex="-1"
-          <?= (isset($attempts) && $attempts >= 5) ? 'disabled' : '' ?>>
-          <?= (isset($attempts) && $attempts >= 5) ? 'Access Blocked' : 'Unlock Portal' ?>
+          class="btn-sub btn-primary" tabindex="-1"
+          <?= (isset($attempts) && $attempts >= 10) ? 'disabled' : '' ?>>
+          <?= (isset($attempts) && $attempts >= 10) ? 'Access Blocked' : 'Unlock Portal' ?>
         </button>
       </form>
 
@@ -233,9 +262,11 @@ if (!$portalAccessGranted) {
       </p>
     </div>
 
-    <script src="resource/js/req.js"></script>
-    <script src="resource/js/ver.js"></script>
-    <script src="resource/js/loading.js"></script>
+    <script src="/config/route-config.php?page=require"></script>
+    <script src="/config/asset.php?t=p1q2r"></script>
+    <script src="/config/asset.php?t=j7k8l"></script>
+    <script src="/config/asset.php?t=m9n0o"></script>
+    <script src="/config/asset.php?t=oqw56"></script>
   </body>
 
   </html>

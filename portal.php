@@ -1,11 +1,11 @@
 <?php
 // portal.php --> portal iframe for main.php
 
-require_once 'config/config.php';
-require_once 'config/db.php';
-require_once 'config/req.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/req.php';
 
-requireAccess('portal', 'proximity.php', true);
+requireAccess('portal', $_SERVER['DOCUMENT_ROOT'] . '/proximity.php');
 $access = getMenuAccess();
 
 $user = getCurrentUser();
@@ -113,39 +113,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($myDatabase ?? 'My Database'); ?> - Portal</title>
-  <link rel="preload" href="resource/assets/icon/database-icon.png" as="image">
-  <link rel="icon" href="resource/assets/icon/database-icon.png" type="image/png">
+  <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
+  <link rel="stylesheet" href="/config/asset.php?t=c24hj">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
-    *,
-    *::before,
-    *::after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    :root {
-      --sidebar-w: 54px;
-      --sidebar-expanded: 220px;
-      --topbar-h: 50px;
-      --accent: #2563eb;
-      --accent-light: #eff6ff;
-      --bg: #f0f2f5;
-      --surface: #ffffff;
-      --border: #e2e8f0;
-      --text: #1e293b;
-      --text-muted: #64748b;
-      --sidebar-bg: #1e2433;
-      --sidebar-text: #cbd5e1;
-      --sidebar-hover: rgba(255, 255, 255, 0.08);
-      --sidebar-active: rgba(37, 99, 235, 0.25);
-      --sidebar-active-text: #60a5fa;
-      --radius: 8px;
-    }
-
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: "roboto", "arial";
       background: var(--bg);
       color: var(--text);
       font-size: 14px;
@@ -677,7 +651,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       background: var(--sidebar-bg);
       border-top: 1px solid rgba(255, 255, 255, 0.08);
       align-items: center;
-      justify-content: space-around;
+      justify-content: space-evenly;
       z-index: 200;
       padding: 0 4px;
       padding-bottom: env(safe-area-inset-bottom);
@@ -753,6 +727,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     .bn-item.active {
       color: #60a5fa;
+    }
+
+    .bn-item:focus {
+      outline: none;
     }
 
     .bn-item i {
@@ -1119,37 +1097,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-logo">
-      <img src="resource/assets/logo/mysql.svg" alt="Logo" style="color: white; filter: invert(1);">
+      <img src="/config/asset.php?t=sk4ds" alt="Logo" style="color: white; filter: invert(1);">
       <span class="sidebar-logo-text"><?= htmlspecialchars($myDatabase ?? 'My Database'); ?></span>
     </div>
 
     <nav class="sidebar-nav">
       <div class="nav-section-label">Main</div>
 
-      <div class="nav-item" onclick="document.querySelector('.frames').src='resource/views/iframe/main.php';">
+      <div class="nav-item" data-action="portal-home">
         <i class="fas fa-home"></i> <span class="nav-item-label">Home</span>
       </div>
 
       <?php if ($access['proximity']): ?>
-        <div class="nav-item" onclick="window.location.href='proximity.php';">
-          <img src="resource/assets/icon/nfc-icon.svg" alt="NFC Icon" loading="lazy" style="width: 20px; filter: invert(0.9);"> <span class="nav-item-label">Proximity</span>
+        <div class="nav-item" data-action-dir="portal-proximity">
+          <img src="/config/asset.php?t=gnks2" alt="NFC Icon" loading="lazy" style="width: 20px; filter: invert(0.9);"> <span class="nav-item-label">Proximity</span>
         </div>
       <?php endif; ?>
 
       <?php if ($access['facial']): ?>
-        <div class="nav-item" onclick="window.location.href='proximity.php?page=facial-identification';">
-          <img src="resource/assets/icon/face-id.svg" alt="Face ID" loading="lazy" style="width: 20px; filter: invert(1);"> <span class="nav-item-label">Facial Identification</span>
+        <div class="nav-item" data-action-dir="portal-facial">
+          <img src="/config/asset.php?t=g4ld2" alt="Face ID" loading="lazy" style="width: 20px; filter: invert(1);"> <span class="nav-item-label">Facial Identification</span>
         </div>
       <?php endif; ?>
 
       <?php if ($access['employee dashboard']): ?>
-        <div class="nav-item" onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=employee dashboard';">
+        <div class="nav-item" data-action="portal-dashboard">
           <i class="fas fa-chart-bar"></i> <span class="nav-item-label">Employee Dashboard</span>
         </div>
       <?php endif; ?>
 
       <?php if ($access['admin panel']): ?>
-        <div class="nav-item" onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=admin panel';">
+        <div class="nav-item" data-action="portal-adminPanel">
           <i class="fas fa-user-shield"></i> <span class="nav-item-label">Admin Panel</span>
         </div>
       <?php endif; ?>
@@ -1159,7 +1137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <version_compare>
         <div class="version-tag" id="version"></div>
       </version_compare>
-      <div class="nav-item" onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=settings';">
+      <div class="nav-item" data-action="portal-settings">
         <i class="fas fa-cog"></i> <span class="nav-item-label">Settings</span>
       </div>
     </div>
@@ -1172,6 +1150,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <strong>Portal</strong> <span>&nbsp;/ Management Panel</span>
       </div>
     </div>
+
     <div class="topbar-right">
 
       <?php if ($databaseConnected): ?>
@@ -1194,107 +1173,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               Notification
               <span class="nd-badge" id="ndBadge">1 new</span>
             </span>
-            <a class="nd-view-all" onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=about'; closeNotif();">View all</a>
+            <a class="nd-view-all" data-action="portal-about" onclick="closeNotif();">View all</a>
           </div>
 
-          <!-- Scrollable body: live alerts injected here by notifications.js + static changelog -->
           <div class="nd-scroll-body" id="ndScrollBody">
-
-            <!-- v2.3.13 — NEW -->
-            <div class="nd-item nd-new">
-              <div class="nd-dot green"></div>
-              <div class="nd-content">
-                <div class="nd-row">
-                  <span class="nd-tag green">New</span>
-                  <span class="nd-ver">v2.3.13</span>
-                  <span class="nd-date">May 2026</span>
-                </div>
-                <div class="nd-title-text">Facial Identification, Attendance Log Table & Admin Panel</div>
-                <div class="nd-desc">Camera-based employee recognition via face-api.js, dedicated attendance log view with daily stats, and system-level admin panel for user group &amp; permission management.</div>
-              </div>
-            </div>
-
-            <!-- v2.2.12 -->
-            <div class="nd-item">
-              <div class="nd-dot amber"></div>
-              <div class="nd-content">
-                <div class="nd-row">
-                  <span class="nd-tag amber">Updated</span>
-                  <span class="nd-ver">v2.2.12</span>
-                  <span class="nd-date">May 2026</span>
-                </div>
-                <div class="nd-title-text">Real-Time Notification System</div>
-                <div class="nd-desc">Live topbar alerts for late check-ins, inactive-employee anomalies, flagged-employee scans, and new incident reports — polled every 30 s with unread pip.</div>
-              </div>
-            </div>
-
-            <!-- v2.2.10–11 -->
-            <div class="nd-item">
-              <div class="nd-dot blue"></div>
-              <div class="nd-content">
-                <div class="nd-row">
-                  <span class="nd-tag blue">Improved</span>
-                  <span class="nd-ver">v2.2.10–11</span>
-                  <span class="nd-date">Apr–May 2026</span>
-                </div>
-                <div class="nd-title-text">Role-Based Permission System Overhaul</div>
-                <div class="nd-desc">Granular JSON permissions per group — menu visibility, action gating, and AJAX 403 responses.</div>
-              </div>
-            </div>
-
-            <!-- v2.2.8–9 -->
-            <div class="nd-item">
-              <div class="nd-dot amber"></div>
-              <div class="nd-content">
-                <div class="nd-row">
-                  <span class="nd-tag amber">Updated</span>
-                  <span class="nd-ver">v2.2.8–9</span>
-                  <span class="nd-date">Apr 2026</span>
-                </div>
-                <div class="nd-title-text">Employee Records — Gender, Birth & Hire Date Fields</div>
-                <div class="nd-desc">Schema expanded with gender, birth, and hired columns. Auto-migrated on startup.</div>
-              </div>
-            </div>
-
-            <!-- v2.2.6–7 -->
-            <div class="nd-item">
-              <div class="nd-dot purple"></div>
-              <div class="nd-content">
-                <div class="nd-row">
-                  <span class="nd-tag purple">Feature</span>
-                  <span class="nd-ver">v2.2.6–7</span>
-                  <span class="nd-date">Mar–Apr 2026</span>
-                </div>
-                <div class="nd-title-text">Web NFC Proximity Scanning — Production Ready</div>
-                <div class="nd-desc">Tap-to-verify with check-in/out tracking, gate analytics, and per-state audio feedback.</div>
-              </div>
-            </div>
-
-            <!-- Core -->
-            <div class="nd-item">
-              <div class="nd-dot gray"></div>
-              <div class="nd-content">
-                <div class="nd-row">
-                  <span class="nd-tag gray">Core</span>
-                  <span class="nd-ver">v2.0–2.2.5</span>
-                  <span class="nd-date">2025–Early 2026</span>
-                </div>
-                <div class="nd-title-text">Core System — Login, Portal, Employee Manager & Dashboard</div>
-                <div class="nd-desc">Full platform launch: auth, multi-user isolation, iframe portal, violation tracking, Chart.js analytics.</div>
-              </div>
-            </div>
-
-          </div><!-- /.nd-scroll-body -->
+          </div>
 
           <div class="nd-footer">
-            <a onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=about'; closeNotif();">
+            <a data-action="portal-about" onclick="closeNotif();">
               <i class="fas fa-arrow-right" style="font-size:11px;margin-right:4px;"></i> Open full changelog in About
             </a>
           </div>
         </div>
       </div>
 
-      <!-- User pill with dropdown -->
+      <!-- User pill -->
       <div class="user-wrapper" id="userWrapper">
         <div class="user-pill" id="userPill">
           <div class="user-avatar" id="topbarAvatar">
@@ -1310,8 +1203,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <div class="user-dropdown" id="userDropdown">
-          <div class="dropdown-header" <?php if ($access['account info']): ?> onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=account';" <?php endif; ?>>
-            <div class="dh-name"><i class="fas fa-user-circle"></i> <?= htmlspecialchars($username ?? 'User'); ?></div>
+          <div class="dropdown-header" <?php if ($access['account info']): ?> data-action="portal-account" <?php endif; ?>>
+            <div class="dh-name"><i class="fas fa-user-circle"></i> <?= htmlspecialchars($firstName . " " . $lastName ?? 'User'); ?></div>
             <div class="dh-sub"><?= htmlspecialchars($user['user_group'] ?? 'User'); ?></div>
           </div>
           <span style="cursor: not-allowed; display:block;">
@@ -1323,12 +1216,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
           </span>
           <?php if ($access['about']) : ?>
-            <div class="dropdown-item" onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=about';">
+            <div class="dropdown-item" data-action="portal-about">
               <i class="fas fa-info-circle"></i> About Us
             </div>
           <?php endif; ?>
           <?php if ($access['readme']) : ?>
-            <div class="dropdown-item" onclick="document.querySelector('.frames').src='app/models/readme.php';">
+            <div class="dropdown-item" data-action="portal-readme">
               <i class="fas fa-book-open"></i> README
             </div>
           <?php endif; ?>
@@ -1342,66 +1235,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
   </header>
 
-  <!-- Change Password Modal — submits as a normal POST form to portal.php -->
-  <!-- <div class="cp-overlay" id="cpOverlay">
-    <div class="cp-modal">
-      <div class="cp-modal-head">
-        <h3><i class="fas fa-lock" style="margin-right:6px;font-size:13px;"></i>Change Password</h3>
-        <button class="cp-close" id="cpClose" type="button">&#x2715;</button>
-      </div>
-
-      <form method="POST" action="portal.php" id="cpForm">
-        <div class="cp-modal-body">
-          <div class="cp-field">
-            <label for="cpOld">Current Password</label>
-            <input type="password" name="current_password" id="cpOld"
-              autocomplete="current-password" placeholder="Enter current password">
-          </div>
-          <div class="cp-field">
-            <label for="cpNew">New Password</label>
-            <input type="password" name="new_password" id="cpNew"
-              autocomplete="new-password" placeholder="Min. 8 chars, upper, lower, number">
-          </div>
-          <div class="cp-field">
-            <label for="cpConfirm">Confirm New Password</label>
-            <input type="password" name="confirm_password" id="cpConfirm"
-              autocomplete="new-password" placeholder="Re-enter new password">
-          </div>
-
-          <div class="cp-msg <?= $messageType === 'error' ? 'err' : ($messageType === 'success' ? 'ok' : ''); ?>"
-            id="cpMsg">
-            <?= htmlspecialchars($message); ?>
-          </div>
-        </div>
-
-        <div class="cp-modal-foot">
-          <button type="button" class="cp-btn-cancel" id="cpCancel">Cancel</button>
-          <button type="submit" name="change_password" class="cp-btn-confirm" id="cpConfirmBtn">
-            Confirm
-          </button>
-        </div>
-      </form>
-    </div>
-  </div> -->
-
   <!-- Main iframe -->
   <div class="main-wrap">
     <div id="iframeOverlay" style="display:none;position:absolute;inset:0;z-index:1;cursor:default;"></div>
-    <iframe src="resource/views/iframe/main.php" class="frames" allowfullscreen="allowfullscreen"></iframe>
+    <iframe class="frames" allowfullscreen="allowfullscreen"></iframe>
   </div>
 
   <nav class="bottom-nav" id="bottomNav">
 
     <!-- Home -->
     <button class="bn-item" id="bn-home"
-      onclick="document.querySelector('.frames').src='resource/views/iframe/main.php';">
+      data-action="portal-home">
       <i class="fas fa-home"></i>
       <span class="bn-label">Home</span>
     </button>
 
     <!-- Scanned Log / Employee Dashboard -->
     <button class="bn-item" id="bn-dash"
-      onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=employee dashboard';">
+      data-action="portal-dashboard">
       <i class="fas fa-list-alt"></i>
       <span class="bn-label">Log</span>
     </button>
@@ -1412,137 +1263,100 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <!-- NFC — absolutely centered regardless of sibling count -->
     <button class="bn-item nfc-btn" id="bn-nfc"
       <?php if ($access['proximity']): ?>
-      onclick="window.location.href='proximity.php';"
+      data-action-dir="portal-proximity"
       <?php else: ?>
       disabled style="opacity:0.3; cursor:not-allowed;"
       <?php endif; ?>>
       <div class="bn-nfc-pill">
-        <img src="resource/assets/icon/nfc-icon.svg" alt="NFC">
+        <img src="/config/asset.php?t=gnks2" alt="NFC">
       </div>
       <span class="bn-label">NFC</span>
     </button>
 
-    <!-- Face ID -->
-    <button class="bn-item" id="bn-facial"
-      onclick="document.querySelector('.frames').src='/app/services/facial-identification.php';">
-      <img src="resource/assets/icon/face-id.svg" alt="Face ID" loading="lazy" style="width: 20px; filter: invert(1);">
-      <span class="bn-label">Face ID</span>
-    </button>
+    <?php if ($access['facial']): ?>
+      <!-- Face ID -->
+      <button class="bn-item" id="bn-facial"
+        data-action-dir="portal-facial">
+        <img src="/config/asset.php?t=g4ld2" alt="Face ID" loading="lazy" style="width: 20px; filter: invert(1);">
+        <span class="bn-label">Face ID</span>
+      </button>
+    <?php else: ?>
+      <button class="bn-item" id="bn-facial"
+        data-action="portal-proxcode">
+        <img src="/config/asset.php?t=cfk4d" alt="Code" loading="lazy" style="width: 20px; filter: invert(1);">
+        <span class="bn-label">Code</span>
+      </button>
+    <?php endif; ?>
 
     <!-- Settings -->
     <button class="bn-item" id="bn-settings"
-      onclick="document.querySelector('.frames').src='resource/views/iframe/main.php?page=settings';">
+      data-action="portal-settings">
       <i class="fas fa-cog"></i>
       <span class="bn-label">Settings</span>
     </button>
 
   </nav>
 
-  <script src="resource/js/req.js"></script>
-  <script src="resource/js/ver.js"></script>
-  <script src="resource/js/notifications.js"></script>
+  <script src="/config/route-config.php?page=portal"></script>
+  <script src="/config/route-config.php?page=endpoint"></script>
+  <script src="/config/asset.php?t=p1q2r"></script>
+  <script src="/config/asset.php?t=jl4ds"></script>
+  <script src="/config/asset.php?t=j7k8l"></script>
+  <script src="/config/asset.php?t=m9n0o"></script>
+  <script src="/config/asset.php?t=ipe4s"></script>
   <script>
-    // ── User dropdown ──
-    const userPill = document.getElementById('userPill');
-    const userDropdown = document.getElementById('userDropdown');
-    const userChevron = document.getElementById('userChevron');
+    (function() {
+      const INTERVAL = 10000;
+      let wasOffline = false;
 
-    function openDropdown() {
-      userDropdown.classList.add('open');
-      userChevron.classList.add('open');
-      setOverlay(true);
-    }
+      function checkConnectivity(callback) {
+        if (!navigator.onLine) {
+          callback(false);
+          return;
+        }
 
-    function closeDropdown() {
-      userDropdown.classList.remove('open');
-      userChevron.classList.remove('open');
-      if (!notifDropdown.classList.contains('open')) setOverlay(false);
-    }
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4000);
 
-    userPill.addEventListener('mouseenter', openDropdown);
-    document.getElementById('userWrapper').addEventListener('mouseleave', function() {
-      setTimeout(function() {
-        if (!document.getElementById('userWrapper').matches(':hover')) closeDropdown();
-      }, 100);
-    });
-
-    userPill.addEventListener('click', function(e) {
-      e.stopPropagation();
-      openDropdown();
-    });
-
-    document.addEventListener('click', closeDropdown);
-
-    // ── Notification bell ──
-    const iframeOverlay = document.getElementById('iframeOverlay');
-
-    function setOverlay(active) {
-      iframeOverlay.style.display = active ? 'block' : 'none';
-    }
-
-    const notifWrapper = document.getElementById('notifWrapper');
-    const notifBtn = document.getElementById('notifBtn');
-    const notifDropdown = document.getElementById('notifDropdown');
-    const notifPip = document.getElementById('notifPip');
-    const ndBadge = document.getElementById('ndBadge');
-
-    const NOTIF_KEY = 'notif_seen_v2313';
-
-    function openNotif() {
-      notifDropdown.classList.add('open');
-      setOverlay(true);
-      if (typeof window.__ntfRender === 'function') window.__ntfRender();
-    }
-
-    function closeNotif() {
-      notifDropdown.classList.remove('open');
-      if (!userDropdown.classList.contains('open')) setOverlay(false);
-      if (typeof window.__ntfMarkSeen === 'function') window.__ntfMarkSeen();
-    }
-
-    function markSeen() {
-      try {
-        localStorage.setItem(NOTIF_KEY, '1');
-      } catch (e) {}
-      notifPip.classList.remove('visible');
-      notifBtn.classList.remove('has-new');
-      if (ndBadge) ndBadge.style.display = 'none';
-    }
-
-    try {
-      if (localStorage.getItem(NOTIF_KEY) === '1') {
-        notifPip.classList.remove('visible');
-        notifBtn.classList.remove('has-new');
-        if (ndBadge) ndBadge.style.display = 'none';
+        fetch('/config/asset.php?t=s3t4u&_=' + Date.now(), {
+            method: 'HEAD',
+            cache: 'no-store',
+            signal: controller.signal
+          })
+          .then(res => {
+            clearTimeout(timeout);
+            callback(res.ok);
+          })
+          .catch(() => {
+            clearTimeout(timeout);
+            callback(false);
+          });
       }
-    } catch (e) {}
 
-    notifBtn.addEventListener('click', function(e) {
-      e.stopPropagation();
-      const isOpen = notifDropdown.classList.contains('open');
-      if (isOpen) {
-        closeNotif();
+      function handleConnectivity(isOnline) {
+        if (!isOnline && !wasOffline) {
+          wasOffline = true;
+          showAlert('No internet connection', 'warning');
+        } else if (isOnline && wasOffline) {
+          wasOffline = false;
+          showAlert('Back online', 'success');
+        }
+      }
+
+      function startPolling() {
+        checkConnectivity(handleConnectivity);
+        setInterval(() => checkConnectivity(handleConnectivity), INTERVAL);
+      }
+
+      window.addEventListener('offline', () => handleConnectivity(false));
+      window.addEventListener('online', () => checkConnectivity(handleConnectivity));
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startPolling);
       } else {
-        openNotif();
-        markSeen();
+        startPolling();
       }
-    });
-
-    iframeOverlay.addEventListener('click', function() {
-      closeNotif();
-      closeDropdown();
-    });
-
-    notifDropdown.addEventListener('click', function(e) {
-      e.stopPropagation();
-    });
-
-    document.addEventListener('click', function(e) {
-      if (!notifWrapper.contains(e.target)) closeNotif();
-    });
-
-    notifBtn.addEventListener('click', closeDropdown);
-    userPill.addEventListener('click', closeNotif);
+    })();
   </script>
 </body>
 

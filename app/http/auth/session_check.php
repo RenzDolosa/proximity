@@ -1,7 +1,7 @@
 <?php
 // app/http/auth/session_check.php --> login sessions checker
 
-require_once '../../../config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 
 header('Content-Type: application/json');
 

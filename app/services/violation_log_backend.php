@@ -1,7 +1,7 @@
 <?php
 // app/services/violation_log_backend.php --> Violation Log CRUD backend
 
-require_once __DIR__ . '/../../config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 
 // ── Auth guard ───────────────────────────────────────────────────────────────
 if (!isset($_SESSION['user_id'])) {

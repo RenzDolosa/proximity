@@ -1,12 +1,15 @@
 <?php
 // app/services/face-employees.php — UNCHANGED
+
 ob_start();
 if (session_status() === PHP_SESSION_NONE) session_start();
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 header('Content-Type: application/json');
-require_once __DIR__ . '/../../config/config.php';
+
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+
 ob_clean();
 
 if (!isset($_SESSION['user_id'])) {
@@ -26,10 +29,10 @@ $diskBase = rtrim(dirname(dirname(__DIR__)), '/') . '/public/uploads/user/';
 try {
   $db   = getUserDBConnection($userId);
   $stmt = $db->prepare(
-    "SELECT id, qr_code, fullname, position, brand, status, shift, image
-     FROM employees
-     WHERE status = 'Active' AND image IS NOT NULL AND image != ''
-     ORDER BY fullname ASC"
+    "SELECT id, qr_code, fullname, position, brand, status, shift, violation, image
+      FROM employees
+      WHERE status = 'Active' AND image IS NOT NULL AND image != ''
+      ORDER BY fullname ASC"
   );
   $stmt->execute();
   $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -47,6 +50,8 @@ try {
       'brand'     => $row['brand'],
       'status'    => $row['status'],
       'shift'     => $row['shift'],
+      'violation' => $row['violation'] ?? '',
+      'updated_at' => $row['updated_at'] ?? '',
       'image_url' => $baseUrl . rawurlencode($filename),
     ];
   }

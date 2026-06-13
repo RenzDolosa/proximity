@@ -1,17 +1,17 @@
 <?php
 // resource/views/settings.php --> settings
 
-require_once __DIR__ . '/../../config/config.php';
-require_once __DIR__ . '/../../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
-requireAccess('settings', 'iframe/main.php');
+requireAccess('settings', ROUTE_HOME);
 $access = getMenuAccess();
 
 $userId    = $_SESSION['user_id'] ?? null;
 $userGroup = $_SESSION['user_group'] ?? '';
 
 if (!isLoggedIn()) {
-  header('Location: ../index.php');
+  header('Location:', ROUTE_LOGIN);
   exit;
 }
 
@@ -267,14 +267,18 @@ $audioIconMap = [
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($user['my_database'] ?? 'System', ENT_QUOTES) ?> – Settings</title>
-  <link rel="icon" href="../assets/icon/database-icon.png" type="image/png">
+  <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <link rel="stylesheet" href="../css/sett.css">
-  <link rel="stylesheet" href="../css/loading.css">
+  <link rel="stylesheet" href="/config/asset.php?t=by9d3">
+  <link rel="stylesheet" href="/config/asset.php?t=mq4wc">
+  <link rel="stylesheet" href="/config/asset.php?t=c24hj">
+  <link rel="stylesheet" href="/config/asset.php?t=rtf2w">
+  <link rel="stylesheet" href="/config/asset.php?t=q5fwr">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
 <body>
-
   <!-- Loading Screen -->
   <div id="loading-screen">
     <div class="loading-content">
@@ -295,19 +299,19 @@ $audioIconMap = [
       <span>Back</span>
     </div>
     <?php if ($access['table panel']): ?>
-      <div class="shortcut-item" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=employees');">
+      <div class="shortcut-item" data-action-app="mainFrame-employees">
         <i class="fas fa-users"></i>
         <span>Employees</span>
       </div>
     <?php endif; ?>
     <?php if ($access['scan test']): ?>
-      <div class="shortcut-item" onclick="navigateWithLoading('../../../app/http/controllers/scan test.php');">
+      <div class="shortcut-item" data-action-app="mainFrame-scanTest">
         <i class="fas fa-qrcode"></i>
         <span>Scan Test</span>
       </div>
     <?php endif; ?>
     <?php if ($access['admin panel']): ?>
-      <div class="shortcut-item" onclick="navigateWithLoading('admin panel.php#users');">
+      <div class="shortcut-item" data-action-app="mainFrame-adminPanel">
         <i class="fas fa-user-shield"></i>
         <span>Admin Panel</span>
       </div>
@@ -326,9 +330,9 @@ $audioIconMap = [
         <h2><i class="fas fa-cogs" style="margin-right:8px;opacity:.8;"></i>Settings &amp; Configuration</h2>
         <p>Connected to <strong><?= htmlspecialchars($myDatabase) ?></strong></p>
         <?php if ($databaseConnected): ?>
-          <div class="status-pill ok"><i class="fas fa-circle" style="font-size:7px;"></i> Database connected</div>
+          <div class="status-pill ok"><i class="fas fa-circle"></i> Database connected</div>
         <?php else: ?>
-          <div class="status-pill err"><i class="fas fa-exclamation-circle" style="font-size:9px;"></i> Connection error</div>
+          <div class="status-pill err"><i class="fas fa-exclamation-circle"></i> Connection error</div>
         <?php endif; ?>
       </div>
       <div class="wb-right">
@@ -337,14 +341,6 @@ $audioIconMap = [
         <span id="wb-date" style="margin-top:3px;display:block;"></span>
       </div>
     </div>
-
-    <!-- Alert message -->
-    <?php if ($message): ?>
-      <div class="alert alert-<?= htmlspecialchars($messageType, ENT_QUOTES) ?>">
-        <span><?= htmlspecialchars($message, ENT_QUOTES) ?></span>
-        <button onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>
-      </div>
-    <?php endif; ?>
 
     <!-- Two-column: Profile + Security -->
     <div class="two-col">
@@ -355,50 +351,12 @@ $audioIconMap = [
         <!-- Profile Information -->
         <div class="card">
           <div class="card-header">
-            <span class="card-title"><i class="fas fa-user" style="color:#3b82f6;margin-right:6px;"></i>Employee Stats</span>
-          </div>
-          <div class="card-body">
-            <div class="stats-grid">
-              <div class="stat-card">
-                <div class="stat-top">
-                  <div class="stat-icon" style="color:#3b82f6;"><i class="fas fa-users"></i></div>
-                  <div class="stat-value"><?= number_format($userStats['total_employees']) ?></div>
-                </div>
-                <div class="stat-label">Total Employees</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-top">
-                  <div class="stat-icon" style="color:#22c55e;"><i class="fas fa-user-check"></i></div>
-                  <div class="stat-value"><?= number_format($userStats['active_employees']) ?></div>
-                </div>
-                <div class="stat-label">Active Employees</div>
-              </div>
-              <div class="stat-card" onclick="navigateWithLoading('../../../app/services/table panel.php?tab=remarks');">
-                <div class="stat-top">
-                  <div class="stat-icon" style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i></div>
-                  <div class="stat-value"><?= number_format($userStats['total_violations']) ?></div>
-                </div>
-                <div class="stat-label">Total Incidents</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-top">
-                  <div class="stat-icon" style="color:#f59e0b;"><i class="fas fa-history"></i></div>
-                  <div class="stat-value"><?= number_format($userStats['recent_activity']) ?></div>
-                </div>
-                <div class="stat-label">Activity (30 days)</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title"><i class="fas fa-database" style="color:#3b82f6;margin-right:6px;"></i>Database &amp; Profile</span>
+            <span class="card-title"><i class="fas fa-user" style="color:#3b82f6;margin-right:6px;"></i>Profile Information</span>
           </div>
           <div class="card-body">
 
             <div class="db-block">
-              <img src="../assets/icon/database-icon.png" alt="MySQL">
+              <img src="/config/asset.php?t=s3t4u" alt="MySQL">
               <div>
                 <div class="db-name" style="color:<?= $databaseConnected ? '#16a34a' : '#dc2626' ?>;">
                   <?= htmlspecialchars($myDatabase) ?>
@@ -432,16 +390,16 @@ $audioIconMap = [
 
             <?php if ($access['admin panel']): ?>
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <button onclick="navigateWithLoading('admin panel.php#users')" class="btn-outline">
+                <button data-action-app="mainFrame-user" class="btn btn-secondary">
                   <i class="fas fa-users-cog"></i> Users Management
                 </button>
-                <button onclick="navigateWithLoading('admin panel.php#group')" class="btn-outline">
+                <button data-action-app="mainFrame-group" class="btn btn-secondary">
                   <i class="fas fa-layer-group"></i> Users Group
                 </button>
-                <button onclick="navigateWithLoading('admin panel.php#logs')" class="btn-outline">
+                <button data-action-app="mainFrame-logs" class="btn btn-secondary">
                   <i class="fas fa-history"></i> System Logs
                 </button>
-                <button onclick="navigateWithLoading('admin panel.php#myadmin')" class="btn-outline">
+                <button data-action-app="mainFrame-myAdmin" class="btn btn-secondary">
                   <i class="fas fa-database"></i> PHP MyAdmin
                 </button>
               </div>
@@ -468,46 +426,29 @@ $audioIconMap = [
         </div>
       </div>
     </div>
+
+    <!-- Alert Messages -->
+    <div class="alert-container" id="alertContainer">
+      <?php if ($message): ?>
+        <div class="alert alert-<?= htmlspecialchars($messageType, ENT_QUOTES) ?>">
+          <span><?= htmlspecialchars($message, ENT_QUOTES) ?></span>
+          <button style="float:right;background:none;border:none;font-size:18px;cursor:pointer;margin-left:5px;"
+            onclick="this.parentElement.remove()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      <?php endif; ?>
+    </div>
   </div>
 
-  <script src="../js/btn.js"></script>
-  <script src="../js/global_audio_settings.js"></script>
-  <script src="../js/req.js"></script>
-  <script src="../js/loading.js"></script>
-  <script>
-    // ── Live clock ──────────────────────────────────────────────────────────────
-    function updateTime() {
-      const now = new Date();
-      document.getElementById('wb-time').textContent = now.toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-      document.getElementById('wb-date').textContent = now.toLocaleDateString([], {
-        weekday: 'short',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
-    }
-    updateTime();
-    setInterval(updateTime, 1000);
-    
-    document.querySelectorAll('.audio-grid input[type="file"]').forEach(function(input) {
-      input.addEventListener('change', function() {
-        var key = this.id.replace('audio_', '');
-        var shown = document.getElementById('chosen_' + key);
-        if (shown) shown.textContent = this.files[0] ? this.files[0].name : '';
-      });
-    });
-
-    document.getElementById('audioForm').addEventListener('submit', function() {
-      var btn = document.getElementById('saveBtn');
-      btn.disabled = true;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
-    });
-  </script>
-
+  <script src="/config/route-config.php?page=mainFrame"></script>
+  <script src="/config/route-config.php?page=endpoint"></script>
+  <script src="/config/asset.php?t=p1q2r"></script>
+  <script src="/config/asset.php?t=m6efw"></script>
+  <script src="/config/asset.php?t=xd6ls"></script>
+  <script src="/config/asset.php?t=j7k8l"></script>
+  <script src="/config/asset.php?t=oqw56"></script>
+  <script src="/config/asset.php?t=kg56e"></script>
 </body>
 
 </html>

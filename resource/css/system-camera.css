@@ -6,7 +6,7 @@
   position: fixed;
   z-index: 2000;
   inset: 0;
-  background-color: rgba(0, 0, 0, 0.92);
+  background-color: var(--overlay-heavy);
   align-items: center;
   justify-content: center;
   padding: 12px;
@@ -15,7 +15,7 @@
 
 /* ── Modal card ───────────────────────────────────────────── */
 .camera-modal-content {
-  background-color: #161616;
+  background-color: var(--dark-bg);
   width: 100%;
   max-width: 900px;
   border-radius: 14px;
@@ -30,13 +30,13 @@
 /* ── Header ───────────────────────────────────────────────── */
 .camera-modal-header {
   padding: 16px 20px;
-  border-bottom: 1px solid #2a2a2a;
+  border-bottom: 1px solid var(--dark-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--grad-brand);
   border-radius: 14px 14px 0 0;
-  color: #fff;
+  color: var(--dark-text);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -53,7 +53,7 @@
   background: none;
   border: none;
   font-size: 22px;
-  color: #fff;
+  color: var(--dark-text);
   cursor: pointer;
   width: 38px;
   height: 38px;
@@ -72,8 +72,8 @@
 /* ── Body ─────────────────────────────────────────────────── */
 .camera-modal-body {
   padding: 16px;
-  background-color: #161616;
-  color: #fff;
+  background-color: var(--dark-bg);
+  color: var(--dark-text);
   border-radius: 0 0 14px 14px;
   display: flex;
   flex-direction: column;
@@ -94,14 +94,14 @@
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  background-color: #242424;
+  background-color: var(--dark-surface-alt);
   border-radius: 8px;
-  border: 1px solid #333;
+  border: 1px solid var(--dark-border-soft);
 }
 
 .camera-selector-container label {
   font-weight: 600;
-  color: #aaa;
+  color: var(--dark-text-muted);
   margin: 0;
   white-space: nowrap;
   font-size: 13px;
@@ -114,21 +114,21 @@
   flex: 1;
   min-width: 0;
   padding: 8px 10px;
-  background-color: #161616;
-  color: #fff;
-  border: 1px solid #667eea;
+  background-color: var(--dark-bg);
+  color: var(--dark-text);
+  border: 1px solid var(--indigo);
   border-radius: 6px;
   font-size: 13px;
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
 }
 #cameraSelector:hover:not(:disabled) {
-  border-color: #764ba2;
-  background-color: #1e1e1e;
+  border-color: var(--grad-brand-end);
+  background-color: var(--dark-surface);
 }
 #cameraSelector:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: var(--indigo);
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.25);
 }
 #cameraSelector:disabled {
@@ -136,17 +136,17 @@
   cursor: not-allowed;
 }
 #cameraSelector option {
-  background-color: #1a1a1a;
-  color: #fff;
+  background-color: var(--dark-surface);
+  color: var(--dark-text);
 }
 
 /* ── Status banner ────────────────────────────────────────── */
 .camera-status {
   padding: 10px 14px;
-  background-color: #242424;
+  background-color: var(--dark-surface-alt);
   border-radius: 8px;
   font-size: 13px;
-  color: #aaa;
+  color: var(--dark-text-muted);
   min-height: 40px;
   display: flex;
   align-items: center;
@@ -157,18 +157,18 @@
   line-height: 1.4;
 }
 .camera-status.success {
-  background-color: rgba(81, 207, 102, 0.08);
-  color: #51cf66;
+  background-color: rgba(22, 163, 74, 0.08);
+  color: var(--success-hover);
   border-color: rgba(81, 207, 102, 0.35);
 }
 .camera-status.error {
   background-color: rgba(255, 107, 107, 0.08);
-  color: #ff6b6b;
+  color: var(--red-border-strong);
   border-color: rgba(255, 107, 107, 0.35);
 }
 .camera-status.info {
   background-color: rgba(102, 126, 234, 0.08);
-  color: #8fa6f8;
+  color: var(--indigo-light);
   border-color: rgba(102, 126, 234, 0.25);
 }
 
@@ -232,10 +232,10 @@
 
 .cropper-view-box,
 .cropper-face {
-  outline-color: #667eea;
+  outline-color: var(--indigo);
 }
 .cropper-point {
-  background-color: #764ba2;
+  background-color: var(--grad-brand-end);
 }
 .cropper-line {
   background-color: rgba(102, 126, 234, 0.5);
@@ -248,7 +248,7 @@
 .aspect-ratio-toolbar {
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  background: #1e1e1e !important;
+  background: var(--dark-surface) !important;
 }
 
 /* ── Controls row ─────────────────────────────────────────── */
@@ -279,8 +279,8 @@
 
 /* Capture */
 .camera-btn.capture {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
+  background: var(--grad-brand);
+  color: var(--dark-text);
 }
 .camera-btn.capture:hover:not(:disabled) {
   transform: translateY(-1px);
@@ -292,8 +292,8 @@
 }
 
 .camera-btn.apply-crop {
-  background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
-  color: #1a1a1a;
+  background: linear-gradient(135deg, var(--amber) 0%, var(--yellow-border-strong) 100%);
+  color: var(--dark-bg);
 }
 .camera-btn.apply-crop:hover {
   transform: translateY(-1px);
@@ -301,27 +301,27 @@
 }
 
 .camera-btn.retake {
-  background-color: #ff6b6b;
-  color: #fff;
+  background-color: var(--red-border-strong);
+  color: var(--dark-text);
 }
 .camera-btn.retake:hover {
-  background-color: #ff5252;
+  background-color: var(--checkout);
   transform: translateY(-1px);
 }
 
 .camera-btn.upload {
-  background-color: #51cf66;
-  color: #fff;
+  background-color: var(--success-hover);
+  color: var(--dark-text);
 }
 .camera-btn.upload:hover {
-  background-color: #40c057;
+  background-color: var(--success-hover);
   transform: translateY(-1px);
   box-shadow: 0 6px 20px rgba(81, 207, 102, 0.35);
 }
 
 .camera-btn.cancel {
-  background-color: #3a3a3a;
-  color: #ccc;
+  background-color: var(--dark-surface-alt);
+  color: var(--placeholder-disabled);
 }
 .camera-btn.cancel:hover {
   background-color: #444;
@@ -340,8 +340,8 @@
 
 .camera-toggle-btn {
   padding: 0;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
+  background: var(--grad-brand);
+  color: var(--dark-text);
   border: none;
   border-radius: 6px;
   cursor: pointer;

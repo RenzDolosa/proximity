@@ -1,7 +1,8 @@
 // resource/js/dtl.js --> datalog table
 
-const EmployeesBackend = "manpower_backend.php";
-const AccessLogBackend = "datalog_backend.php";
+let EmployeesBackend = null;
+let AccessLogBackend = null;
+let UserIdHelper = null;
 
 let currentAction = "add";
 let employees = [];
@@ -897,16 +898,20 @@ async function renderEmployeeTable() {
           </td>
           <td class="emp-img">${
             employee.image
-              ? `<img src="${thumbSrc}" alt="${safeFullname}" class="employee-image"
-                    width="48" height="48"
+              ? `<div class="img-skeleton-wrap">
+                  <div class="img-skel-shimmer"></div>
+                  <img src="${thumbSrc}" alt="${safeFullname}" class="employee-image"
+                    width="45" height="45"
                     loading="${isAboveFold ? "eager" : "lazy"}"
                     decoding="async"
                     title="${tooltipText}"
                     ${isAboveFold ? 'fetchpriority="high"' : ""}
-                    onerror="if(this.src !== '${imageSrc}'){this.src='${imageSrc}';}else{this.onerror=null;this.style.display='none';this.parentElement.querySelector('.employee-ph-fallback').style.display='flex';}">
+                    onload="this.classList.add('loaded');this.previousElementSibling.classList.add('hidden');"
+                    onerror="if(this.src !== '${imageSrc}'){this.src='${imageSrc}';}else{this.onerror=null;this.closest('.img-skeleton-wrap').innerHTML='<div class=\\'ph-cont\\'title=\\'${tooltipText.replace(/'/g,"\\'").replace(/\n/g,' ')}\\'><div class=\\'employee-ph\\'>${escapeHtml(fullnameInitials)}</div></div>';}">
                   <div class="employee-ph-fallback ph-cont" style="display:none;" title="${tooltipText}">
                     <div class="employee-ph">${escapeHtml(fullnameInitials)}</div>
-                  </div>`
+                  </div>
+                </div>`
               : `<div class="ph-cont" title="${tooltipText}"><div class="employee-ph">${escapeHtml(fullnameInitials)}</div></div>`
           }</td>
           <td data-qr="${safeQrCode}" class="emp-proximity" onclick="copyQRCodeFromCell(this)" title="Copy Proximity code" style="cursor:pointer;">
@@ -1071,7 +1076,7 @@ function copyQRCodeFromCell(td) {
 
 async function getCurrentUserId() {
   try {
-    const response = await fetch("../helper/get_user_id.php", {
+    const response = await fetch(`${UserIdHelper}`, {
       headers: {
         "X-Requested-With": "XMLHttpRequest",
         "X-Silent-Request": "true",
@@ -1943,8 +1948,9 @@ async function loadEmployees(
   preservePage = false,
   silent = false,
 ) {
+  setControlButtonsDisabled(true);
   try {
-    if (!silent) showLoading(true);
+    // if (!silent) showLoading(true);
 
     if (Object.keys(filters).length === 0 && hasActiveFilters()) {
       filters = getActiveFilters();
@@ -2028,7 +2034,9 @@ async function loadEmployees(
       "error",
     );
   } finally {
-    if (!silent) showLoading(false);
+    // if (!silent) showLoading(false);
+    setControlButtonsDisabled(false);
+    updateDeleteButtonState();
   }
 }
 
@@ -2346,6 +2354,22 @@ function showLoading(show) {
   }
 }
 
+function setControlButtonsDisabled(disabled) {
+  const selectors = [
+    '.search-btn .btn',
+    '.clear-btn .btn',
+    '.delete-all-btn .btn-danger',
+    '.fRefresh-btn',
+  ];
+  selectors.forEach((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return;
+    el.disabled = disabled;
+    el.style.opacity = disabled ? '0.4' : '';
+    el.style.cursor = disabled ? 'not-allowed' : '';
+  });
+}
+
 // ── Cleanup ───────────────────────────────────────────────────────────────────
 window.addEventListener("beforeunload", function () {
   stopAutoUpdate();
@@ -2364,7 +2388,10 @@ document.addEventListener("keydown", handleUserActivity);
 document.addEventListener("scroll", handleUserActivity);
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", async function () {
+  const ready = await resolveEndpoints();
+  if (!ready) return;
+
   loadEmployees();
   updateDeleteButtonState();
   setupEventListeners();

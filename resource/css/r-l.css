@@ -1,14 +1,8 @@
 /* resource/css/r-l.css --> register & login */
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
 body {
   font-family: "roboto", "arial";
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--grad-brand);
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -17,7 +11,7 @@ body {
 }
 
 .container {
-  background: white;
+  background: var(--surface);
   padding: 2.5rem;
   border-radius: 15px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
@@ -35,7 +29,7 @@ body {
   left: 0;
   right: 0;
   height: 5px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--grad-brand);
 }
 
 .header {
@@ -51,18 +45,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--surface);
   font-size: 24px;
   font-weight: bold;
 }
 
 h2 {
-  color: #333;
+  color: var(--text);
   margin-bottom: 0.5rem;
 }
 
 .subtitle {
-  color: #666;
+  color: var(--text-muted);
   font-size: 0.9rem;
 }
 
@@ -80,7 +74,7 @@ h2 {
 label {
   display: block;
   margin-bottom: 0.1rem;
-  color: #555;
+  color: var(--text-muted);
   font-weight: 600;
   font-size: 0.9rem;
 }
@@ -91,11 +85,11 @@ input[type="password"],
 input[type="tel"] {
   width: 100%;
   padding: 0.875rem;
-  border: 2px solid #e1e5e9;
+  border: 2px solid var(--border);
   border-radius: 8px;
   font-size: 1rem;
   transition: all 0.3s ease;
-  background: #f8f9fa;
+  background: var(--slate-bg);
 }
 
 input[type="text"]:focus,
@@ -103,42 +97,18 @@ input[type="email"]:focus,
 input[type="password"]:focus,
 input[type="tel"]:focus {
   outline: none;
-  border-color: #667eea;
-  background: white;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.btn {
-  width: 100%;
-  padding: 1rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-.btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
-}
-
-.btn:active {
-  transform: translateY(0);
+  border-color: var(--indigo);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--indigo-bg-hover);
 }
 
 .error {
-  background: linear-gradient(135deg, #ff6b6b, #ee5a52);
-  color: white;
+  background: linear-gradient(135deg, var(--red-border-strong) 0%, var(--red-hover) 100%);
+  color: var(--surface);
   padding: 1rem;
   border-radius: 8px;
   margin-bottom: 1.5rem;
-  border-left: 4px solid #ff5252;
+  border-left: 4px solid var(--checkout);
   box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
 }
 
@@ -151,12 +121,12 @@ input[type="tel"]:focus {
 }
 
 .success {
-  background: linear-gradient(135deg, #51cf66, #40c057);
-  color: white;
+  background: linear-gradient(135deg, var(--green-border-strong) 0%, var(--success-hover) 100%);
+  color: var(--surface);
   padding: 1rem;
   border-radius: 8px;
   margin-bottom: 1.5rem;
-  border-left: 4px solid #37b24d;
+  border-left: 4px solid var(--success);
   box-shadow: 0 4px 12px rgba(81, 207, 102, 0.3);
 }
 
@@ -164,18 +134,18 @@ input[type="tel"]:focus {
   text-align: center;
   margin-top: 1rem;
   padding-top: 1.5rem;
-  border-top: 1px solid #e1e5e9;
+  border-top: 1px solid var(--border);
 }
 
 .register-link a {
-  color: #667eea;
+  color: var(--indigo);
   text-decoration: none;
   font-weight: 600;
   transition: color 0.3s ease;
 }
 
 .register-link a:hover {
-  color: #764ba2;
+  color: var(--grad-brand-end);
   text-decoration: underline;
 }
 
@@ -183,47 +153,47 @@ input[type="tel"]:focus {
   text-align: center;
   margin-top: 0.5rem;
   padding-top: 1.5rem;
-  border-top: 1px solid #e1e5e9;
+  border-top: 1px solid var(--border);
 }
 
 .login-link a {
-  color: #667eea;
+  color: var(--indigo);
   text-decoration: none;
   font-weight: 600;
   transition: color 0.3s ease;
 }
 
 .login-link a:hover {
-  color: #764ba2;
+  color: var(--grad-brand-end);
   text-decoration: underline;
 }
 
 .database-info {
-  background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+  background: linear-gradient(135deg, var(--blue-bg-hover) 0%, var(--blue-border) 100%);
   padding: 1rem;
   border-radius: 8px;
   margin-bottom: 1rem;
-  border-left: 4px solid #2196f3;
+  border-left: 4px solid var(--blue-light);
   font-size: 0.9rem;
-  color: #1565c0;
+  color: var(--blue-text);
 }
 
 .database-info strong {
-  color: #0d47a1;
+  color: var(--blue-text);
 }
 
 .database-status {
-  background: linear-gradient(135deg, #e8f5e8, #c8e6c9);
+  background: linear-gradient(135deg, var(--green-bg-hover), var(--green-border));
   padding: 1rem;
   border-radius: 8px;
   margin-bottom: 1.5rem;
-  border-left: 4px solid #4caf50;
+  border-left: 4px solid var(--success-hover);
   font-size: 0.9rem;
-  color: #2e7d32;
+  color: var(--success);
 }
 
 .database-status strong {
-  color: #1b5e20;
+  color: var(--green-text);
 }
 
 .forgot-password {
@@ -243,14 +213,14 @@ input[type="tel"]:focus {
 }
 
 .forgot-password a {
-  color: #666;
+  color: var(--text-muted);
   text-decoration: none;
   font-size: 0.9rem;
   transition: color 0.3s ease;
 }
 
 .forgot-password a:hover {
-  color: #667eea;
+  color: var(--indigo);
 }
 
 @media (max-width: 600px) {
@@ -270,7 +240,7 @@ input[type="tel"]:focus {
   height: 20px;
   border: 2px solid rgba(255, 255, 255, 0.3);
   border-radius: 50%;
-  border-top-color: white;
+  border-top-color: var(--surface);
   animation: spin 1s ease-in-out infinite;
 }
 
@@ -291,7 +261,7 @@ input[type="tel"]:focus {
 .password-field {
   width: 100%;
   padding: 15px;
-  border: 2px solid #e1e5e9;
+  border: 2px solid var(--border);
   border-radius: 10px;
   font-size: 16px;
   margin-bottom: 20px;
@@ -301,29 +271,12 @@ input[type="tel"]:focus {
 
 .password-field:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--indigo);
+  box-shadow: 0 0 0 3px var(--indigo-bg-hover);
 }
 
 .password-input-wrapper {
   position: relative;
-  display: inline-block;
-  width: 100%;
-}
-
-.password-toggle-btn {
-  position: absolute;
-  right: 12px;
-  top: 22%;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #666;
-  font-size: 16px;
-  padding: 4px;
-  z-index: 10;
-}
-
-.password-toggle-btn:hover {
-  color: #333;
+  display: flex;
+  align-items: center;
 }

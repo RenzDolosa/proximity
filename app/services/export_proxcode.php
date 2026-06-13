@@ -1,8 +1,8 @@
 <?php
 // app/services/export_proxcode.php --> proximity table export all
 
-require_once __DIR__ . '/../../config/config.php';
-require_once __DIR__ . '/../../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');

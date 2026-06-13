@@ -1,9 +1,5 @@
 <?php
 // app/services/face-identify.php
-// AJAX endpoint: receive a matched employee qr_code, look up from employees table,
-// write employee_attendance_log exactly like existing QR/manual middleware.
-// POST JSON: { qr_code, check_status, csrf_token }
-// Returns:   { success, result, employee }
 
 ob_start();
 
@@ -17,7 +13,7 @@ ini_set('log_errors', 1);
 
 header('Content-Type: application/json');
 
-require_once __DIR__ . '/../../config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 
 ob_clean();
 
@@ -72,6 +68,17 @@ try {
       'success' => false,
       'result'  => 'not_found',
       'message' => 'Employee not found.'
+    ]);
+    exit;
+  }
+
+  // ── Block inactive employees from being logged ─────────────────────────────
+  if (strtolower($emp['status']) !== 'active') {
+    echo json_encode([
+      'success' => false,
+      'result'  => 'inactive',
+      'message' => 'Employee is inactive.',
+      'employee' => $emp,
     ]);
     exit;
   }

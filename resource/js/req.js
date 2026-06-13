@@ -4,9 +4,12 @@
   "use strict";
 
   var _redirecting = false;
+  var isLoginPage = !!document.getElementById("loginForm");
 
   function getRootUrl() {
-    return window.location.protocol + "//" + window.location.host + "/index.php";
+    return (
+      window.location.protocol + "//" + window.location.host + "/index.php"
+    );
   }
 
   function handleSessionExpired(redirectUrl) {
@@ -21,20 +24,27 @@
       method: "POST",
       credentials: "same-origin",
       headers: { "X-Requested-With": "XMLHttpRequest" },
-    }).catch(function () {
-    }).finally(function () {
-      setTimeout(function () {
-        if (window.top) {
-          window.top.location.href = dest;
-        } else {
-          window.location.href = dest;
-        }
-      }, 1200);
-    });
+    })
+      .catch(function () {})
+      .finally(function () {
+        setTimeout(function () {
+          if (window.top) {
+            window.top.location.href = dest;
+          } else {
+            window.location.href = dest;
+          }
+        }, 1200);
+      });
   }
 
   function isUnauthenticatedResponse(data) {
-    return data && (data.unauthenticated === true || data.success === false && data.message && data.message.toLowerCase().includes("session"));
+    return (
+      data &&
+      (data.unauthenticated === true ||
+        (data.success === false &&
+          data.message &&
+          data.message.toLowerCase().includes("session")))
+    );
   }
 
   // ── Session expired banner ────────────────────────────────────────────────
@@ -122,15 +132,18 @@
     }
 
     return _origFetch(input, init).then(function (response) {
-      if (response.status === 401) {
+      if (!isLoginPage && response.status === 401) {
         var cloned = response.clone();
-        cloned.json().then(function (data) {
-          if (isUnauthenticatedResponse(data)) {
-            handleSessionExpired(data.redirect);
-          }
-        }).catch(function () {
-          handleSessionExpired();
-        });
+        cloned
+          .json()
+          .then(function (data) {
+            if (isUnauthenticatedResponse(data)) {
+              handleSessionExpired(data.redirect);
+            }
+          })
+          .catch(function () {
+            handleSessionExpired();
+          });
       }
       return response;
     });
@@ -139,18 +152,20 @@
   // ── Intercept XMLHttpRequest ──────────────────────────────────────────────
   var _origOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function () {
-    this.addEventListener("load", function () {
-      if (this.status === 401) {
-        try {
-          var data = JSON.parse(this.responseText);
-          if (isUnauthenticatedResponse(data)) {
-            handleSessionExpired(data.redirect);
+    if (!isLoginPage) {
+      this.addEventListener("load", function () {
+        if (this.status === 401) {
+          try {
+            var data = JSON.parse(this.responseText);
+            if (isUnauthenticatedResponse(data)) {
+              handleSessionExpired(data.redirect);
+            }
+          } catch (e) {
+            handleSessionExpired();
           }
-        } catch (e) {
-          handleSessionExpired();
         }
-      }
-    });
+      });
+    }
     return _origOpen.apply(this, arguments);
   };
 
@@ -162,40 +177,43 @@
       method: "GET",
       credentials: "same-origin",
       headers: { "X-Requested-With": "XMLHttpRequest" },
-    }).then(function (res) {
-      if (res.status === 401) {
-        res.json().then(function (data) {
-          handleSessionExpired(data.redirect);
-        }).catch(function () {
-          handleSessionExpired();
-        });
-      }
-    }).catch(function () {
-    });
+    })
+      .then(function (res) {
+        if (res.status === 401) {
+          res
+            .json()
+            .then(function (data) {
+              handleSessionExpired(data.redirect);
+            })
+            .catch(function () {
+              handleSessionExpired();
+            });
+        }
+      })
+      .catch(function () {});
   }
 
   if (!document.getElementById("loginForm")) {
     setInterval(heartbeat, HEARTBEAT_INTERVAL);
   }
-
 })();
 
 // ── Password visibility toggle ────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', function () {
-  var toggleBtn = document.getElementById('togglePassword');
-  var passwordField = document.getElementById('portal_password');
+document.addEventListener("DOMContentLoaded", function () {
+  var toggleBtn = document.getElementById("togglePassword");
+  var passwordField = document.getElementById("portal_password");
 
   if (!toggleBtn || !passwordField) return;
 
-  toggleBtn.addEventListener('click', function () {
-    var isPassword = passwordField.type === 'password';
+  toggleBtn.addEventListener("click", function () {
+    var isPassword = passwordField.type === "password";
 
-    passwordField.type = isPassword ? 'text' : 'password';
+    passwordField.type = isPassword ? "text" : "password";
 
-    var icon = toggleBtn.querySelector('i');
+    var icon = toggleBtn.querySelector("i");
     if (icon) {
-      icon.classList.toggle('fa-eye',      !isPassword);
-      icon.classList.toggle('fa-eye-slash', isPassword);
+      icon.classList.toggle("fa-eye", !isPassword);
+      icon.classList.toggle("fa-eye-slash", isPassword);
     }
 
     passwordField.focus();

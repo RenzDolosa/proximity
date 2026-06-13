@@ -1,8 +1,8 @@
 <?php
 // resource/views/partials/chart.php
 
-require_once __DIR__ . '/../../../config/config.php';
-require_once __DIR__ . '/../../../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
 if (!isset($_SESSION['user_id'])) {
   echo json_encode(['success' => false, 'error' => 'Unauthorized']);

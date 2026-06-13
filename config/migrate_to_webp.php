@@ -11,7 +11,7 @@ if (($_GET['secret'] ?? '') !== MIGRATION_SECRET) {
   die('<h2 style="color:red;">403 Forbidden — provide ?secret=YOUR_SECRET in the URL.</h2>');
 }
 
-require_once 'config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 
 if (!isset($_SESSION['user_id'])) {
   if (($_GET['force'] ?? '') !== '1') {

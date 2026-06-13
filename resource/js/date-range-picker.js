@@ -12,6 +12,73 @@
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const MONTHS = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+
+  // ── Helpers ───────────────────────────────────────────────────────
+  function el(tag, props = {}, ...children) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k === "class") {
+        node.className = v;
+      } else if (k === "style" && typeof v === "object") {
+        Object.assign(node.style, v);
+      } else if (k.startsWith("data-")) {
+        node.dataset[
+          k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase())
+        ] = v;
+      } else {
+        node[k] = v;
+      }
+    }
+    for (const child of children) {
+      if (child == null) continue;
+      node.appendChild(
+        typeof child === "string" ? document.createTextNode(child) : child,
+      );
+    }
+    return node;
+  }
+
+  function toISO(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  }
+
+  function parseInputDate(str) {
+    const [y, m, d] = str.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setHours(0, 0, 0, 0);
+    return dt;
+  }
+
+  function parseCellDate(iso) {
+    return parseInputDate(iso);
+  }
+
+  function formatDisplay(d) {
+    return d.toLocaleDateString("en-PH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  }
+
   // ── Init ─────────────────────────────────────────────────────────
   function initDateRangePicker() {
     leftYear = today.getFullYear();
@@ -26,17 +93,50 @@
     const host = document.getElementById("date_range_pill");
     if (!host) return;
 
-    host.innerHTML = `
-      <i class="fas fa-clock date-range-icon"></i>
-      <span class="drp-display" id="drp_display">
-        <span class="drp-placeholder">Start Date</span>
-        <span class="drp-sep"> - </span>
-        <span class="drp-placeholder">End Date</span>
-      </span>
-      <button type="button" id="date_range_clear" class="date-range-clear" title="Clear dates" style="display:none;">✕</button>
-      <input type="hidden" id="f_from" name="date_from">
-      <input type="hidden" id="f_to"   name="date_to">
-    `;
+    // Clear safely
+    while (host.firstChild) host.removeChild(host.firstChild);
+
+    const icon = el("i", { class: "fas fa-clock date-range-icon" });
+
+    const startPlaceholder = el(
+      "span",
+      { class: "drp-placeholder" },
+      "Start Date",
+    );
+    const sep = el("span", { class: "drp-sep" }, " - ");
+    const endPlaceholder = el("span", { class: "drp-placeholder" }, "End Date");
+    const display = el(
+      "span",
+      { class: "drp-display", id: "drp_display" },
+      startPlaceholder,
+      sep,
+      endPlaceholder,
+    );
+
+    const clearBtn = el(
+      "button",
+      {
+        type: "button",
+        id: "date_range_clear",
+        class: "date-range-clear",
+        title: "Clear dates",
+        style: { display: "none" },
+      },
+      "✕",
+    );
+
+    const fFrom = el("input", {
+      type: "hidden",
+      id: "f_from",
+      name: "date_from",
+    });
+    const fTo = el("input", { type: "hidden", id: "f_to", name: "date_to" });
+
+    host.appendChild(icon);
+    host.appendChild(display);
+    host.appendChild(clearBtn);
+    host.appendChild(fFrom);
+    host.appendChild(fTo);
 
     host.style.cursor = "pointer";
     host.addEventListener("click", function (e) {
@@ -44,12 +144,10 @@
       toggleDropdown();
     });
 
-    document
-      .getElementById("date_range_clear")
-      .addEventListener("click", function (e) {
-        e.stopPropagation();
-        clearDateRange();
-      });
+    clearBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      clearDateRange();
+    });
   }
 
   // ── Dropdown markup ──────────────────────────────────────────────
@@ -57,49 +155,99 @@
     const existing = document.getElementById("drp_dropdown");
     if (existing) existing.remove();
 
-    const dd = document.createElement("div");
-    dd.id = "drp_dropdown";
-    dd.className = "drp-dropdown";
-    dd.style.display = "none";
+    // Presets
+    const presetLastWeek = el(
+      "button",
+      { class: "drp-preset", "data-preset": "last_week" },
+      "Last week",
+    );
+    const presetLastMonth = el(
+      "button",
+      { class: "drp-preset", "data-preset": "last_month" },
+      "Last month",
+    );
+    const presetLast3 = el(
+      "button",
+      { class: "drp-preset", "data-preset": "last_3months" },
+      "Last three months",
+    );
+    const presetsDiv = el(
+      "div",
+      { class: "drp-presets" },
+      presetLastWeek,
+      presetLastMonth,
+      presetLast3,
+    );
 
-    dd.innerHTML = `
-      <div class="drp-inner">
-        <div class="drp-presets">
-          <button class="drp-preset" data-preset="last_week">Last week</button>
-          <button class="drp-preset" data-preset="last_month">Last month</button>
-          <button class="drp-preset" data-preset="last_3months">Last three months</button>
-        </div>
-        <div class="drp-main">
-          <div class="drp-top-inputs">
-            <div class="drp-top-cell">
-              <input type="text" id="drp_start_input" class="drp-top-date"
-                     placeholder="Start Date" maxlength="10" autocomplete="off">
-            </div>
-            <span class="drp-arrow">›</span>
-            <div class="drp-top-cell">
-              <input type="text" id="drp_end_input" class="drp-top-date"
-                     placeholder="End Date" maxlength="10" autocomplete="off">
-            </div>
-          </div>
-          <div class="drp-calendars">
-            <div class="drp-cal" id="drp_cal_left"></div>
-            <div class="drp-cal" id="drp_cal_right"></div>
-          </div>
-          <div class="drp-footer">
-            <button class="drp-btn-clear" id="drp_btn_clear">Clear</button>
-            <button class="drp-btn-ok" id="drp_btn_ok" disabled style="opacity:0.4;cursor:not-allowed;">OK</button>
-          </div>
-        </div>
-      </div>
-    `;
+    // Top inputs
+    const startInput = el("input", {
+      type: "text",
+      id: "drp_start_input",
+      class: "drp-top-date",
+      placeholder: "Start Date",
+      maxLength: 10,
+      autocomplete: "off",
+    });
+    const endInput = el("input", {
+      type: "text",
+      id: "drp_end_input",
+      class: "drp-top-date",
+      placeholder: "End Date",
+      maxLength: 10,
+      autocomplete: "off",
+    });
+    const topInputs = el(
+      "div",
+      { class: "drp-top-inputs" },
+      el("div", { class: "drp-top-cell" }, startInput),
+      el("span", { class: "drp-arrow" }, "›"),
+      el("div", { class: "drp-top-cell" }, endInput),
+    );
+
+    // Calendars
+    const calLeft = el("div", { class: "drp-cal", id: "drp_cal_left" });
+    const calRight = el("div", { class: "drp-cal", id: "drp_cal_right" });
+    const calendars = el("div", { class: "drp-calendars" }, calLeft, calRight);
+
+    // Footer
+    const btnClear = el(
+      "button",
+      { class: "drp-btn-clear", id: "drp_btn_clear" },
+      "Clear",
+    );
+    const btnOk = el(
+      "button",
+      {
+        class: "drp-btn-ok",
+        id: "drp_btn_ok",
+        disabled: true,
+        style: { opacity: "0.4", cursor: "not-allowed" },
+      },
+      "OK",
+    );
+    const footer = el("div", { class: "drp-footer" }, btnClear, btnOk);
+
+    const mainDiv = el(
+      "div",
+      { class: "drp-main" },
+      topInputs,
+      calendars,
+      footer,
+    );
+    const inner = el("div", { class: "drp-inner" }, presetsDiv, mainDiv);
+
+    const dd = el(
+      "div",
+      { id: "drp_dropdown", class: "drp-dropdown", style: { display: "none" } },
+      inner,
+    );
 
     document.body.appendChild(dd);
     renderCalendars();
     wireDropdownEvents();
 
-    const calWrap = dd.querySelector(".drp-calendars");
-
-    calWrap.addEventListener("click", function (e) {
+    // Calendar click / hover
+    calendars.addEventListener("click", function (e) {
       const td = e.target.closest("td.drp-day");
       if (!td) return;
 
@@ -127,7 +275,7 @@
       renderCalendars();
     });
 
-    calWrap.addEventListener("mousemove", function (e) {
+    calendars.addEventListener("mousemove", function (e) {
       if (picking !== "end" || !startDate) return;
       const td = e.target.closest("td.drp-day");
 
@@ -146,7 +294,7 @@
       }
     });
 
-    calWrap.addEventListener("mouseleave", function () {
+    calendars.addEventListener("mouseleave", function () {
       if (picking === "end" && hoverDate) {
         hoverDate = null;
         renderCalendars();
@@ -301,53 +449,78 @@
     syncOkButton();
   }
 
-  const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const MONTHS = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ];
-
   function renderMonth(containerId, year, month, isLeft) {
     const container = document.getElementById(containerId);
     if (!container) return;
+
+    // Clear container safely
+    while (container.firstChild) container.removeChild(container.firstChild);
 
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const daysInPrev = new Date(year, month, 0).getDate();
 
-    const prevHTML = isLeft
-      ? `<button class="drp-nav" id="drp_prev">«</button>
-         <button class="drp-nav" id="drp_prev_m">‹</button>`
-      : `<span style="width:44px;display:inline-block;"></span>`;
+    // ── Header ──
+    const header = el("div", { class: "drp-cal-header" });
 
-    const nextHTML = !isLeft
-      ? `<button class="drp-nav" id="drp_next_m">›</button>
-         <button class="drp-nav" id="drp_next">»</button>`
-      : `<span style="width:44px;display:inline-block;"></span>`;
+    if (isLeft) {
+      const prevYear = el("button", { class: "drp-nav", id: "drp_prev" }, "«");
+      const prevMon = el("button", { class: "drp-nav", id: "drp_prev_m" }, "‹");
+      prevYear.onclick = () => {
+        leftYear--;
+        renderCalendars();
+      };
+      prevMon.onclick = () => {
+        leftMonth--;
+        if (leftMonth < 0) {
+          leftMonth = 11;
+          leftYear--;
+        }
+        renderCalendars();
+      };
+      header.appendChild(prevYear);
+      header.appendChild(prevMon);
+    } else {
+      header.appendChild(
+        el("span", { style: { width: "44px", display: "inline-block" } }),
+      );
+    }
 
-    let html = `
-      <div class="drp-cal-header">
-        ${prevHTML}
-        <span class="drp-cal-title">${year} ${MONTHS[month]}</span>
-        ${nextHTML}
-      </div>
-      <table class="drp-cal-table">
-        <thead><tr>${DAYS.map((d) => `<th>${d}</th>`).join("")}</tr></thead>
-        <tbody>
-    `;
+    header.appendChild(
+      el("span", { class: "drp-cal-title" }, `${year} ${MONTHS[month]}`),
+    );
 
+    if (!isLeft) {
+      const nextMon = el("button", { class: "drp-nav", id: "drp_next_m" }, "›");
+      const nextYear = el("button", { class: "drp-nav", id: "drp_next" }, "»");
+      nextMon.onclick = () => {
+        leftMonth++;
+        if (leftMonth > 11) {
+          leftMonth = 0;
+          leftYear++;
+        }
+        renderCalendars();
+      };
+      nextYear.onclick = () => {
+        leftYear++;
+        renderCalendars();
+      };
+      header.appendChild(nextMon);
+      header.appendChild(nextYear);
+    } else {
+      header.appendChild(
+        el("span", { style: { width: "44px", display: "inline-block" } }),
+      );
+    }
+
+    // ── Table ──
+    const thead = el("thead");
+    const headRow = el("tr");
+    DAYS.forEach((d) => headRow.appendChild(el("th", {}, d)));
+    thead.appendChild(headRow);
+
+    // Build cell data
     const cells = [];
-
     for (let i = firstDay - 1; i >= 0; i--) {
       cells.push({
         day: daysInPrev - i,
@@ -387,7 +560,6 @@
 
     const rangeStartTs =
       endTs !== null ? startTs : isHoverBefore ? hoverTs : startTs;
-
     const rangeEndTs =
       endTs !== null
         ? endTs
@@ -397,8 +569,14 @@
             ? hoverTs
             : null;
 
+    const tbody = el("tbody");
+    let row = null;
+
     for (let i = 0; i < cells.length; i++) {
-      if (i % 7 === 0) html += "<tr>";
+      if (i % 7 === 0) {
+        row = el("tr");
+        tbody.appendChild(row);
+      }
 
       const cell = cells[i];
       const cellDate = new Date(cell.year, cell.month, cell.day);
@@ -431,47 +609,18 @@
         }
       }
 
-      const iso = toISO(cellDate);
-      html += `<td class="${classes.join(" ")}" data-date="${iso}">${cell.day}</td>`;
-      if (i % 7 === 6) html += "</tr>";
+      const td = el(
+        "td",
+        { class: classes.join(" "), "data-date": toISO(cellDate) },
+        String(cell.day),
+      );
+      row.appendChild(td);
     }
 
-    html += "</tbody></table>";
-    container.innerHTML = html;
+    const table = el("table", { class: "drp-cal-table" }, thead, tbody);
 
-    const prevBtn = document.getElementById("drp_prev");
-    const prevMBtn = document.getElementById("drp_prev_m");
-    const nextMBtn = document.getElementById("drp_next_m");
-    const nextBtn = document.getElementById("drp_next");
-
-    if (prevBtn)
-      prevBtn.onclick = () => {
-        leftYear--;
-        renderCalendars();
-      };
-    if (prevMBtn)
-      prevMBtn.onclick = () => {
-        leftMonth--;
-        if (leftMonth < 0) {
-          leftMonth = 11;
-          leftYear--;
-        }
-        renderCalendars();
-      };
-    if (nextMBtn)
-      nextMBtn.onclick = () => {
-        leftMonth++;
-        if (leftMonth > 11) {
-          leftMonth = 0;
-          leftYear++;
-        }
-        renderCalendars();
-      };
-    if (nextBtn)
-      nextBtn.onclick = () => {
-        leftYear++;
-        renderCalendars();
-      };
+    container.appendChild(header);
+    container.appendChild(table);
   }
 
   // ── Presets ───────────────────────────────────────────────────────
@@ -541,18 +690,33 @@
     const display = document.getElementById("drp_display");
     if (!display) return;
 
+    // Clear safely
+    while (display.firstChild) display.removeChild(display.firstChild);
+
+    const sep = el("span", { class: "drp-sep" }, " - ");
+
     if (startDate || endDate) {
-      const s = startDate ? formatDisplay(startDate) : "—";
-      const e = endDate ? formatDisplay(endDate) : "—";
-      display.innerHTML = `
-        <span class="drp-val">${s}</span>
-        <span class="drp-sep"> - </span>
-        <span class="drp-val">${e}</span>`;
+      display.appendChild(
+        el(
+          "span",
+          { class: "drp-val" },
+          startDate ? formatDisplay(startDate) : "—",
+        ),
+      );
+      display.appendChild(sep);
+      display.appendChild(
+        el(
+          "span",
+          { class: "drp-val" },
+          endDate ? formatDisplay(endDate) : "—",
+        ),
+      );
     } else {
-      display.innerHTML = `
-        <span class="drp-placeholder">Start Date</span>
-        <span class="drp-sep"> - </span>
-        <span class="drp-placeholder">End Date</span>`;
+      display.appendChild(
+        el("span", { class: "drp-placeholder" }, "Start Date"),
+      );
+      display.appendChild(sep);
+      display.appendChild(el("span", { class: "drp-placeholder" }, "End Date"));
     }
   }
 
@@ -570,33 +734,6 @@
     const ei = document.getElementById("drp_end_input");
     if (si) si.value = startDate ? toISO(startDate) : "";
     if (ei) ei.value = endDate ? toISO(endDate) : "";
-  }
-
-  // ── Helpers ───────────────────────────────────────────────────────
-  function toISO(d) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${dd}`;
-  }
-
-  function parseInputDate(str) {
-    const [y, m, d] = str.split("-").map(Number);
-    const dt = new Date(y, m - 1, d);
-    dt.setHours(0, 0, 0, 0);
-    return dt;
-  }
-
-  function parseCellDate(iso) {
-    return parseInputDate(iso);
-  }
-
-  function formatDisplay(d) {
-    return d.toLocaleDateString("en-PH", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
   }
 
   // ── Public API ────────────────────────────────────────────────────

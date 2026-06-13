@@ -31,7 +31,6 @@ define('APP_TIMEZONE',    'Asia/Manila');
 define('APP_TIMEZONE_TZ', '+08:00');
 
 date_default_timezone_set(APP_TIMEZONE);
-// ─────────────────────────────────────────────────────────────────────────────
 
 // ── Create main database ──────────────────────────────────────────────────────
 function createDatabase()

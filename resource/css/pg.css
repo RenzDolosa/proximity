@@ -12,7 +12,7 @@
   gap: 6px;
   margin: 0;
   padding: 5.5px 16px;
-  background: white;
+  background: var(--surface);
   /* border-top-left-radius: 8px;
   border-top-right-radius: 8px; */
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.12);
@@ -22,8 +22,8 @@
 /* Prev / Next arrows */
 .page-arrow-btn {
   padding: 6px 12px;
-  border: 1px solid #ddd;
-  background: white;
+  border: 1px solid var(--border);
+  background: var(--surface);
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
@@ -33,9 +33,9 @@
 }
 
 .page-arrow-btn:hover:not(:disabled) {
-  background: #007bff;
-  color: white;
-  border-color: #007bff;
+  background: var(--page-active);
+  color: var(--surface);
+  border-color: var(--page-active);
 }
 
 .page-arrow-btn:disabled {
@@ -48,8 +48,8 @@
   width: 32px;
   height: 32px;
   padding: 0;
-  border: 1px solid #ddd;
-  background: white;
+  border: 1px solid var(--border);
+  background: var(--surface);
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
@@ -60,20 +60,20 @@
 }
 
 .page-num-btn:hover:not(.active) {
-  background: #f0f0f0;
+  background: var(--gray-bg-hover);
 }
 
 .page-num-btn.active {
-  background: #007bff;
-  color: white;
-  border-color: #007bff;
+  background: var(--page-active);
+  color: var(--surface);
+  border-color: var(--page-active);
   cursor: default;
 }
 
 /* Ellipsis */
 .page-ellipsis {
   padding: 0 4px;
-  color: #aaa;
+  color: var(--dark-text-muted);
   line-height: 32px;
   user-select: none;
 }
@@ -82,7 +82,7 @@
 #page-info {
   font-size: 12px;
   font-weight: 500;
-  color: #666;
+  color: var(--text-muted);
   margin-left: 8px;
   white-space: nowrap;
 }

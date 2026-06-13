@@ -1,7 +1,8 @@
 // resource/js/system.js --> system table
 
-const EmployeesBackend = "manpower_backend.php";
-const ProxcodeBackend = "proxcode_backend.php";
+let EmployeesBackend = null;
+let ProxcodeBackend = null;
+let GlobalAudioBackend = null;
 
 let currentAction = "add";
 let employees = [];
@@ -20,8 +21,6 @@ const count = employees.length;
 const label = count > 1 ? "employee's" : "employee";
 
 // ── Global-audio endpoint ─────────────────────────────────────────
-const GLOBAL_AUDIO_ENDPOINT = "global_audio.php";
-
 const AUDIO_TYPE_MAP = {
   success: "successSound",
   checkout: "checkoutSound",
@@ -69,7 +68,7 @@ function hideAllSuggestions(scope) {
 // ─────────────────────────────────────────────────────────────────
 async function loadGlobalAudio() {
   try {
-    const res = await fetch(GLOBAL_AUDIO_ENDPOINT, {
+    const res = await fetch(`${GlobalAudioBackend}`, {
       credentials: "same-origin",
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
@@ -473,7 +472,6 @@ function setupModalSuggestions() {
     });
   }
 
-  // ── Wire up each modal field ──────────────────────────────────
   // ── EMPID — numeric desc, raw values ──────────────────────────
   attachModalSuggestion(
     "employee_id",
@@ -485,7 +483,7 @@ function setupModalSuggestions() {
     { raw: true, requireInput: true },
   );
 
-  // FULLNAME — sorted by last name, proper-cased
+  // FULLNAME — sorted by last name, proper-cased ─────────────────
   attachModalSuggestion(
     "fullname",
     "modal-fullname-suggestions",
@@ -526,7 +524,7 @@ function setupModalSuggestions() {
     { requireInput: false, raw: false },
   );
 
-  // ── SHIFT — fixed set of values, not drawn from employee data ──────────────
+  // ── SHIFT — set of values, not drawn from employee data ──────────────
   const SHIFT_OPTIONS = ["Day Shift", "Night Shift", "Graveyard Shift"];
 
   attachModalSuggestion(
@@ -554,7 +552,7 @@ function setupModalSuggestions() {
     {
       raw: true,
       requireInput: false,
-      icon: "../../resource/assets/icon/nfc-icon.svg",
+      icon: `/config/asset.php?t=gnks2`,
       badge: "Available",
       onFocus: async () => {
         try {
@@ -1066,15 +1064,19 @@ async function renderEmployeeTable() {
             </td>
             <td class="emp-img">${
               employee.image
-                ? `<img src="${thumbSrc}" alt="${safeFullname}" class="employee-image"
-                      width="48" height="48"
+                ? `<div class="img-skeleton-wrap">
+                    <div class="img-skel-shimmer"></div>
+                    <img src="${thumbSrc}" alt="${safeFullname}" class="employee-image"
+                      width="45" height="45"
                       loading="${isAboveFold ? "eager" : "lazy"}"
                       decoding="async"
                       ${isAboveFold ? 'fetchpriority="high"' : ""}
-                      onerror="if(this.src !== '${imageSrc}'){this.src='${imageSrc}';}else{this.onerror=null;this.style.display='none';this.parentElement.querySelector('.employee-ph-fallback').style.display='flex';}">
+                      onload="this.classList.add('loaded');this.previousElementSibling.classList.add('hidden');"
+                      onerror="if(this.src !== '${imageSrc}'){this.src='${imageSrc}';}else{this.onerror=null;this.closest('.img-skeleton-wrap').innerHTML='<div class=\\'ph-cont\\'><div class=\\'employee-ph\\'>${escapeHtml(fullnameInitials)}</div></div>';}">
                     <div class="employee-ph-fallback ph-cont" style="display:none;">
                       <div class="employee-ph">${escapeHtml(fullnameInitials)}</div>
-                    </div>`
+                    </div>
+                  </div>`
                 : `<div class="ph-cont"><div class="employee-ph">${escapeHtml(fullnameInitials)}</div></div>`
             }</td>
             <td data-qr="${safeQrCode}" class="emp-proximity" onclick="copyQRCodeFromCell(this)" title="Copy Proximity code" style="cursor:pointer;">
@@ -2169,19 +2171,19 @@ async function _renderAccessTab(container, employeeId) {
     ? logs
         .map(
           (log, i) => `
-        <tr style="border-bottom:1px solid #f0f0f0;">
-          <td style="padding:9px 12px;color:#aaa;">${i + 1}</td>
-          <td style="padding:9px 12px;">
-            <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
-              background:${log.check_status === "IN" ? "#d1fae5" : "#fee2e2"};
-              color:${log.check_status === "IN" ? "#065f46" : "#991b1b"};">
-              ${escapeHtml(log.check_status)}
-            </span>
-          </td>
-          <td style="padding:9px 12px;">${escapeHtml(log.gate_name || log.user_id || "N/A")}</td>
-          <td style="padding:9px 12px;color:#aaa;font-size:11px;white-space:nowrap;">${escapeHtml(log.access_timestamp)}</td>
-        </tr>`,
-        )
+            <tr style="border-bottom:1px solid #f0f0f0;">
+              <td style="padding:9px 12px;color:#aaa;">${i + 1}</td>
+              <td style="padding:9px 12px;">
+                <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
+                  background:${log.check_status === "IN" ? "#d1fae5" : "#fee2e2"};
+                  color:${log.check_status === "IN" ? "#065f46" : "#991b1b"};">
+                  ${escapeHtml(log.check_status)}
+                </span>
+              </td>
+              <td style="padding:9px 12px;">${escapeHtml(log.gate_name || log.user_id || "N/A")}</td>
+              <td style="padding:9px 12px;color:#aaa;font-size:11px;white-space:nowrap;">${escapeHtml(log.access_timestamp)}</td>
+            </tr>`,
+            )
         .join("")
     : `<tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;">No log records found.</td></tr>`;
 }
@@ -2631,8 +2633,9 @@ async function loadEmployees(
   preservePage = false,
   silent = false,
 ) {
+  setControlButtonsDisabled(true);
   try {
-    if (!silent) showLoading(true);
+    // if (!silent) showLoading(true);
 
     if (Object.keys(filters).length === 0 && hasActiveFilters()) {
       filters = getActiveFilters();
@@ -2720,7 +2723,9 @@ async function loadEmployees(
       "error",
     );
   } finally {
-    if (!silent) showLoading(false);
+    // if (!silent) showLoading(false);
+    setControlButtonsDisabled(false);
+    updateDeleteButtonState();
   }
 }
 
@@ -3303,8 +3308,26 @@ function showLoading(show) {
   }
 }
 
+function setControlButtonsDisabled(disabled) {
+  const selectors = [
+    '.search-btn .btn',
+    '.clear-btn .btn',
+    '.delete-all-btn .btn-danger',
+  ];
+  selectors.forEach((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return;
+    el.disabled = disabled;
+    el.style.opacity = disabled ? '0.4' : '';
+    el.style.cursor = disabled ? 'not-allowed' : '';
+  });
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", async function () {
+  const ready = await resolveEndpoints();
+  if (!ready) return;
+
   loadGlobalAudio();
   loadEmployees();
   updateDeleteButtonState();

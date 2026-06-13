@@ -1,8 +1,8 @@
 <?php
 // app/services/exportAll-system.php --> system table export all
 
-require_once __DIR__ . '/../../config/config.php';
-require_once __DIR__ . '/../../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -141,7 +141,6 @@ try {
       'current_page' => $page,
       'total_pages' => $totalPages,
       'total_records' => $totalRecords,
-      'per_page' => $limit,
       'per_page' => $limit,
       'has_next' => $page < $totalPages,
       'has_prev' => $page > 1

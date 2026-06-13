@@ -1,13 +1,5 @@
 /* resource/css/loading.css --> improved loading screen */
 
-:root {
-  --accent: #2563eb;
-  --accent-light: #eff6ff;
-  --surface: #ffffff;
-  --bg: #f0f2f5;
-  --text: #1e293b;
-}
-
 #loading-screen {
   position: fixed;
   top: 0;
@@ -22,13 +14,19 @@
   visibility: hidden;
   transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
               visibility 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--overlay-light);
   backdrop-filter: blur(4px);
 }
 
 #loading-screen.active {
   opacity: 1;
   visibility: visible;
+}
+
+#loading-screen.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .loading-content {
@@ -159,7 +157,7 @@
 
 .loading-subtext {
   font-size: 13px;
-  color: #64748b;
+  color: var(--text-muted);
   opacity: 0.8;
   line-height: 1.5;
 }
@@ -176,7 +174,7 @@
 
 .loading-progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent), #60a5fa);
+  background: linear-gradient(90deg, var(--accent), var(--blue-border-strong));
   border-radius: 2px;
   animation: progressBar 2.5s ease-in-out infinite;
   box-shadow: 0 0 10px rgba(37, 99, 235, 0.5);
@@ -233,8 +231,8 @@
 }
 
 .loading-content.error {
-  border-color: #fecaca;
-  background: #fff7f7;
+  border-color: var(--red-border);
+  background: var(--surface);
 }
 
 .loading-content.error .spinner {
@@ -254,7 +252,7 @@
 }
 
 .loading-content.error .loading-text {
-  color: #dc2626;
+  color: var(--danger);
 }
 
 /* ── Icon support ── */
@@ -268,7 +266,7 @@
 .loading-content.success .loading-icon {
   animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1),
              bounce-icon 0.6s ease-out;
-  color: #16a34a;
+  color: var(--green);
 }
 
 @keyframes bounce-icon {
@@ -320,23 +318,23 @@
 /* ── Dark mode support ── */
 @media (prefers-color-scheme: dark) {
   .loading-content {
-    background: #1e293b;
+    background: var(--text);
     border-color: rgba(255, 255, 255, 0.1);
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3),
                 0 0 1px rgba(255, 255, 255, 0.1);
   }
 
   .loading-text {
-    color: #f1f5f9;
+    color: var(--slate-bg-hover);
   }
 
   .loading-subtext {
-    color: #cbd5e1;
+    color: var(--slate-text-muted);
   }
 
   .loading-content.error {
-    background: #7f1d1d;
-    border-color: #dc2626;
+    background: var(--red-text);
+    border-color: var(--danger);
   }
 
   #loading-screen {

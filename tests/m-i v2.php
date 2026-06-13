@@ -1,13 +1,12 @@
 <?php
 // tests/m-i v2.php --> test project
 
-require_once '../config/config.php';
-require_once '../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
-requireAccess('m-i v2', '../resource/views/iframe/main.php');
+requireAccess('m-i v2', ROUTE_HOME);
 $access = getMenuAccess();
 
-// FIX: Move ALL function definitions to the top before any calls
 function getDashboardData($userDb)
 {
   $stats = [
@@ -182,10 +181,11 @@ $username   = $username   ?? 'Unknown User';
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - DTL Dashboard</title>
-  <link rel="icon" href="../resource/assets/icon/database-icon.png" type="image/png">
-  <link rel="stylesheet" href="../resource/css/system.css">
-  <link rel="stylesheet" href="../resource/css/ptl.css">
-  <link rel="stylesheet" href="../resource/css/btn.css">
+  <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
+  <link rel="stylesheet" href="/config/asset.php?t=yde24">
+  <link rel="stylesheet" href="/config/asset.php?t=mq4wc.css">
+  <link rel="stylesheet" href="/config/asset.php?t=c24hj.css">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
     .auto-update-controls {

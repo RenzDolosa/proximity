@@ -1,6 +1,6 @@
 // resource/js/violation.js --> violation table
 
-const ViolationBackend = "violation_log_backend.php";
+let ViolationBackend = null;
 
 // ── State ────────────────────────────────────────────────────────────
 let allVio      = [];
@@ -11,6 +11,7 @@ let deleteTargetId = null;
 
 // ── Load ─────────────────────────────────────────────────────────────
 async function loadViolations() {
+  setControlButtonsDisabled(true);
   try {
     const res  = await fetch(`${ViolationBackend}?action=list`, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -26,9 +27,10 @@ async function loadViolations() {
       showNoData();
     }
   } catch (e) {
-    console.error("loadViolations:", e);
     showAlert("Failed to load violations.", "error");
     showNoData();
+  } finally {
+    setControlButtonsDisabled(false);
   }
 }
 
@@ -737,8 +739,25 @@ function showLoading(show) {
   }
 }
 
+function setControlButtonsDisabled(disabled) {
+  const selectors = [
+    '.search-btn .btn',
+    '.clear-btn .btn',
+  ];
+  selectors.forEach((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return;
+    el.disabled = disabled;
+    el.style.opacity = disabled ? '0.4' : '';
+    el.style.cursor = disabled ? 'not-allowed' : '';
+  });
+}
+
 // ── Init ─────────────────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", async function () {
+  const ready = await resolveEndpoints();
+  if (!ready) return;
+
   initDateRangePicker();
   loadViolations();
   setupFilterSuggestions();

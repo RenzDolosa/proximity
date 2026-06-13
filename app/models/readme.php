@@ -1,11 +1,11 @@
 <?php
 // resource/views/iframe/readme.php --> renders Readme.md (built-in parser, no dependencies)
 
-require_once __DIR__ . '/../../config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 
 // Auth guard
 if (!isset($_SESSION['user_id'])) {
-  header('Location: ../../index.php');
+  header('Location:', ROUTE_LOGIN);
   exit;
 }
 
@@ -171,9 +171,9 @@ if (file_exists($readmePath)) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>README</title>
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html {
       scroll-behavior: smooth;
@@ -351,7 +351,7 @@ if (file_exists($readmePath)) {
     <?= $html ?>
   </div>
 
-  <script src="../../resource/js/btn.js"></script>
+  <script src="/config/asset.php?t=m6efw"></script>
 </body>
 
 </html>

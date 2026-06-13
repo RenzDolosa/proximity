@@ -1,8 +1,8 @@
 <?php
 // app/http/controller/manual input.php --> manual employee input in/out
 
-require_once __DIR__ . '/../../../config/config.php';
-require_once __DIR__ . '/../../../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
 $permissions = getUserGroupPermissions();
 if (!canAccess($permissions, 'qr proximity') && !canAccess($permissions, 'manual input') && !canAccess($permissions, 'facial')) {
@@ -16,7 +16,7 @@ if (!canAccess($permissions, 'qr proximity') && !canAccess($permissions, 'manual
   exit;
 }
 
-requireAccess('manual input', 'qr proximity.php');
+requireAccess('manual input', ROUTE_QR_PROX);
 $access = getMenuAccess();
 
 $userId = $_SESSION['user_id'] ?? null;
@@ -47,11 +47,11 @@ try {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($myDatabase); ?> - Manual Search</title>
-  <link rel="preload" href="/../../resource/logo/nfc-logo.svg" as="svg+xml">
-  <link rel="icon" href="/../../resource/logo/nfc-logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/../../resource/css/m-i.css">
-  <link rel="stylesheet" href="/../../resource/css/btn.css">
-  <link rel="stylesheet" href="/../../resource/css/sbar.css">
+  <link rel="icon" href="/config/asset.php?t=cfk4d" type="image/svg+xml">
+  <link rel="stylesheet" href="/config/asset.php?t=k95g3">
+  <link rel="stylesheet" href="/config/asset.php?t=c24hj">
+  <link rel="stylesheet" href="/config/asset.php?t=ht5sf">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
@@ -59,12 +59,12 @@ try {
 
   <div class="side-bar" style="top: 0;">
     <?php if ($access['qr proximity']): ?>
-      <div onclick="window.location.href='qr proximity.php';" class="side-btn">
+      <div data-action-dir="prox-proximity" class="side-btn">
         <div class="s-header">
           <h1>Proximity</h1>
         </div>
         <div class="s-search-section">
-          <img src="../../../resource/assets/icon/nfc-icon.svg" alt="NFC Icon" loading="lazy">
+          <img src="/config/asset.php?t=gnks2" alt="NFC Icon" loading="lazy">
           <div>
             <h3>Live Search</h3>
             <p>Web pass verifier application</p>
@@ -74,12 +74,12 @@ try {
     <?php endif; ?>
 
     <?php if ($access['manual input']): ?>
-      <div onclick="window.location.href='manual input.php';" class="side-btn">
+      <div data-action-dir="prox-manual" class="side-btn">
         <div class="s-header">
           <h1>Manual Entry</h1>
         </div>
         <div class="s-search-section">
-          <img src="../../../resource/assets/logo/manual.svg" alt="Manual Entry" loading="lazy">
+          <img src="/config/asset.php?t=t43us" alt="Manual Entry" loading="lazy">
           <div>
             <h3>Employee Entry</h3>
             <p>This area is served for manual entry</p>
@@ -87,7 +87,8 @@ try {
         </div>
       </div>
     <?php endif; ?>
-    <version_compare style="z-index: 1000;">
+
+    <version_compare>
       <p id="version"></p>
     </version_compare>
   </div>
@@ -141,7 +142,7 @@ try {
         <div class="form-group" style="position: fixed; left: 1%; top: 1%; opacity: 0;">
           <input type="text" id="search_qr" name="qr_code" placeholder="Proximity Code" style="cursor: default;" autocomplete="off">
         </div>
-        <img src="../../../resource/assets/icon/nfc-icon.svg" alt="Proximity" loading="lazy" style="position: absolute; left: 24px; top: 10%; width: 100px; height: 100px; filter: invert(1);">
+        <img src="/config/asset.php?t=gnks2" alt="Proximity" loading="lazy" style="position: absolute; left: 24px; top: 10%; width: 100px; height: 100px; filter: invert(1);">
       </form>
     </div>
 
@@ -152,7 +153,7 @@ try {
 
       <div class="employee-grid" id="resultsTable">
         <div class="no-results" id="defaultState">
-          <div class="no-results-icon"><img src="../../../resource/assets/icon/nfc-icon.svg" alt="Proximity Code" loading="lazy" style="width: 10%; height: 10%;"></div>
+          <div class="no-results-icon"><img src="/config/asset.php?t=gnks2" alt="Proximity Code" loading="lazy" style="width: 10%; height: 10%;"></div>
           <h3>Search for Employees</h3>
           <p>Enter a name or proximity code to find employees</p>
         </div>
@@ -160,24 +161,27 @@ try {
     </div>
   </div>
 
-  <audio id="successSound" data-fallback="../../../resource/assets/sounds/success.mp3" preload="none"></audio>
-  <audio id="checkoutSound" data-fallback="../../../resource/assets/sounds/checkout.mp3" preload="none"></audio>
-  <audio id="noResultSound" data-fallback="../../../resource/assets/sounds/noResultsFound.mp3" preload="none"></audio>
-  <audio id="warningSound" data-fallback="../../../resource/assets/sounds/ohh-ow.mp3" preload="none"></audio>
-  <audio id="inactiveSound" data-fallback="../../../resource/assets/sounds/inactive.mp3" preload="none"></audio>
+  <audio id="successSound" data-fallback="/config/asset.php?t=ero67" preload="none"></audio>
+  <audio id="checkoutSound" data-fallback="/config/asset.php?t=jg5df" preload="none"></audio>
+  <audio id="noResultSound" data-fallback="/config/asset.php?t=sdh3f" preload="none"></audio>
+  <audio id="warningSound" data-fallback="/config/asset.php?t=l45wd" preload="none"></audio>
+  <audio id="inactiveSound" data-fallback="/config/asset.php?t=ert26" preload="none"></audio>
 
-  <script src="../../../resource/js/btn.js"></script>
-  <script src="../../../resource/js/req.js"></script>
-  <script src="../../../resource/js/ver.js"></script>
+  <script src="/config/route-config.php?page=proximity"></script>
+  <script src="/config/route-config.php?page=endpoint"></script>
+  <script src="/config/asset.php?t=p1q2r"></script>
+  <script src="/config/asset.php?t=m6efw"></script>
+  <script src="/config/asset.php?t=j7k8l"></script>
+  <script src="/config/asset.php?t=m9n0o"></script>
   <script>
+    let GlobalAudioBackend = null;
+
     let employees = <?php echo $employeesJson; ?>;
     let hasSearched = false;
 
     let currentAudio = null;
 
     // ── Global-audio endpoint ─────────────────────────────────────────
-    const GLOBAL_AUDIO_ENDPOINT = "../../services/global_audio.php";
-
     const AUDIO_TYPE_MAP = {
       success: "successSound",
       checkout: "checkoutSound",
@@ -191,7 +195,7 @@ try {
     // ─────────────────────────────────────────────────────────────────
     async function loadGlobalAudio() {
       try {
-        const res = await fetch(GLOBAL_AUDIO_ENDPOINT, {
+        const res = await fetch(`${GlobalAudioBackend}`, {
           credentials: "same-origin",
           headers: {
             "X-Requested-With": "XMLHttpRequest"
@@ -233,6 +237,35 @@ try {
         });
       }
     }
+
+    function setupEventListeners() {
+      const searchInputs = document.querySelectorAll('#searchForm input, #searchForm select');
+      searchInputs.forEach((input) => {
+        input.addEventListener("input", debounce(searchEmployees, 300));
+      });
+
+      const codeInput = document.getElementById("search_qr");
+
+      function autoFocus() {
+        const active = document.activeElement;
+
+        const isTyping =
+          active &&
+          (active.tagName === "INPUT" ||
+            active.tagName === "SELECT" ||
+            active.tagName === "TEXTAREA");
+
+        if (!isTyping && codeInput) {
+          codeInput.focus();
+        }
+      }
+
+      autoFocus();
+
+      document.addEventListener("click", autoFocus);
+
+      document.addEventListener("focusin", autoFocus);
+    };
 
     employees = employees.map(employee => {
       return {
@@ -307,7 +340,7 @@ try {
           showAlert("Access denied. Employee is inactive.", "error");
           return;
         }
-        
+
         const logData = {
           employee_id: employee.id,
           fullname: employee.fullname,
@@ -345,7 +378,6 @@ try {
           throw new Error(result.message || "Failed to add employee to log");
         }
       } catch (error) {
-        console.error("Error adding to log:", error);
         showAlert("Error: " + error.message, "error");
       } finally {
         setTimeout(() => {
@@ -368,7 +400,7 @@ try {
       if (!hasSearched) {
         resultsTable.innerHTML = `
       <div class="no-results" id="defaultState">
-        <div class="no-results-icon"><img src="../../../resource/assets/icon/nfc-icon.svg" alt="Proximity Code" loading="lazy" style="width: 10%; height: 10%;"></div>
+        <div class="no-results-icon"><img src="/config/asset.php?t=gnks2" alt="Proximity Code" loading="lazy" style="width: 10%; height: 10%;"></div>
         <h3>Search for Employees</h3>
         <p>Enter a name or proximity code to find employees</p>
       </div>
@@ -499,9 +531,7 @@ try {
           const data = await response.json();
           return data.user_id || "default";
         }
-      } catch (error) {
-        console.error("Error getting user ID:", error);
-      }
+      } catch (error) {}
 
       return "default";
     }
@@ -630,37 +660,14 @@ try {
       }
     }
 
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', async function() {
+      const ready = await resolveEndpoints();
+      if (!ready) return;
+
       loadGlobalAudio();
       updateStats();
+      setupEventListeners();
       renderEmployees();
-
-      const searchInputs = document.querySelectorAll('#searchForm input, #searchForm select');
-      searchInputs.forEach((input) => {
-        input.addEventListener("input", debounce(searchEmployees, 300));
-      });
-
-      const codeInput = document.getElementById("search_qr");
-
-      function autoFocus() {
-        const active = document.activeElement;
-
-        const isTyping =
-          active &&
-          (active.tagName === "INPUT" ||
-            active.tagName === "SELECT" ||
-            active.tagName === "TEXTAREA");
-
-        if (!isTyping && codeInput) {
-          codeInput.focus();
-        }
-      }
-
-      autoFocus();
-
-      document.addEventListener("click", autoFocus);
-
-      document.addEventListener("focusin", autoFocus);
     });
 
     function debounce(func, wait) {

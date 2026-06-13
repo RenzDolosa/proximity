@@ -1,7 +1,7 @@
 <?php
 // app/http/auth/session_logout.php --> logout sessions
 
-require_once '../../../config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 
 header('Content-Type: application/json');
 

@@ -5,14 +5,14 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-require_once __DIR__ . '/../../../config/config.php';
-require_once __DIR__ . '/../../../config/db.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
-requireAccess('scan test', '../../../resource/views/iframe/main.php');
+requireAccess('scan test', ROUTE_HOME);
 $access = getMenuAccess();
 
 if (!isset($_SESSION['user_id'])) {
-  header('Location: ../../../index.php');
+  header('Location:', ROUTE_LOGIN);
   exit();
 }
 
@@ -31,11 +31,10 @@ $email = $_SESSION['email'] ?? '';
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($myDatabase); ?> - Test QR Code</title>
-  <link rel="preload" href="../../../resource/assets/icon/scanTest.png" as="image">
-  <link rel="preload" href="../../../resource/assets/logo/proximitycode.svg" as="image/svg+xml">
-  <link rel="icon" href="../../../resource/assets/icon/scanTest.png" type="image/png">
-  <link rel="stylesheet" href="../../../resource/css/qp.css">
-  <link rel="stylesheet" href="../../../resource/css/btn.css">
+  <link rel="icon" href="/config/asset.php?t=asc4s" type="image/png">
+  <link rel="stylesheet" href="/config/asset.php?t=zdsj4">
+  <link rel="stylesheet" href="/config/asset.php?t=c24hj">
+  <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
@@ -43,7 +42,7 @@ $email = $_SESSION['email'] ?? '';
 
   <background>
     <div class="background-image" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; z-index: 0; pointer-events: none;">
-      <img src="../../../resource/assets/logo/proximity-logo.svg" loading="lazy" alt="Proximity Code" style="width: 50%; height: 100vh; object-fit: contain;">
+      <img src="/config/asset.php?t=aur2d" loading="lazy" alt="Proximity Code" style="width: 50%; height: 100vh; object-fit: contain;">
     </div>
   </background>
 
@@ -64,16 +63,18 @@ $email = $_SESSION['email'] ?? '';
     <div id="message"></div>
   </div>
 
-  <audio id="successSound" data-fallback="../../../resource/assets/sounds/success.mp3" preload="none"></audio>
-  <audio id="checkoutSound" data-fallback="../../../resource/assets/sounds/checkout.mp3" preload="none"></audio>
-  <audio id="noResultSound" data-fallback="../../../resource/assets/sounds/noResultsFound.mp3" preload="none"></audio>
-  <audio id="warningSound" data-fallback="../../../resource/assets/sounds/ohh-ow.mp3" preload="none"></audio>
-  <audio id="inactiveSound" data-fallback="../../../resource/assets/sounds/inactive.mp3" preload="none"></audio>
+  <audio id="successSound" data-fallback="/config/asset.php?t=ero67" preload="none"></audio>
+  <audio id="checkoutSound" data-fallback="/config/asset.php?t=jg5df" preload="none"></audio>
+  <audio id="noResultSound" data-fallback="/config/asset.php?t=sdh3f" preload="none"></audio>
+  <audio id="warningSound" data-fallback="/config/asset.php?t=l45wd" preload="none"></audio>
+  <audio id="inactiveSound" data-fallback="/config/asset.php?t=ert26" preload="none"></audio>
 
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
-  <script src="../../../resource/js/st.js"></script>
-  <script src="../../../resource/js/btn.js"></script>
-  <script src="../../../resource/js/req.js"></script>
+  <script src="/config/route-config.php?page=endpoint"></script>
+  <script src="/config/asset.php?t=p1q2r"></script>
+  <script src="/config/asset.php?t=aw4sa"></script>
+  <script src="/config/asset.php?t=m6efw"></script>
+  <script src="/config/asset.php?t=j7k8l"></script>
 </body>
 
 </html>

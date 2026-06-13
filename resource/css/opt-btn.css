@@ -5,8 +5,8 @@
 }
 
 .add-dropdown {
-  background: linear-gradient(135deg, #6ce29d 0%, #2c9c60 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--green-border-strong) 0%, var(--green-hover) 100%);
+  color: var(--surface);
   display: flex;
   align-items: center;
   gap: 5px;
@@ -31,8 +31,8 @@
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  background: white;
-  border: 1px solid #ddd;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   min-width: 200px;
@@ -58,7 +58,7 @@
   text-align: left;
   cursor: pointer;
   font-size: 14px;
-  color: #333;
+  color: var(--text);
   transition: background-color 0.15s ease;
   border-bottom: 1px solid var(--border);
   z-index: 1001;
@@ -73,7 +73,7 @@
   border-bottom: none;
   border-bottom-left-radius: 6px;
   border-bottom-right-radius: 6px;
-  color: #666;
+  color: var(--text-muted);
 }
 
 .add-options-menu button:hover {
@@ -82,14 +82,14 @@
 
 .add-options-menu button:focus {
   outline: none;
-  background-color: #e3f2fd;
+  background-color: var(--blue-bg-hover);
 }
 
 .actions-panel {
   position: fixed;
   z-index: 99999;
   width: 160px;
-  background: #fff;
+  background: var(--surface);
   border: 1.5px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
@@ -108,9 +108,9 @@
 }
 
 .actions-active {
-  background: #f1f5f9 !important;
-  border-color: #94a3b8 !important;
-  color: #475569 !important;
+  background: var(--slate-bg-hover) !important;
+  border-color: var(--slate) !important;
+  color: var(--slate-strong) !important;
 }
 
 .actions-item {
@@ -121,8 +121,8 @@
   letter-spacing: 1px;
   border: 1.5px solid var(--border);
   border-radius: 10px;
-  background: #fff;
-  color: #1e293b;
+  background: var(--surface);
+  color: var(--text);
   cursor: pointer;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   white-space: nowrap;
@@ -137,7 +137,7 @@
   font-size: 11px;
   font-weight: 700;
   background: linear-gradient(135deg, var(--checkin-light), var(--checkin));
-  color: #fff;
+  color: var(--dark-text);
   border: none;
   border-right: 1px solid var(--border);
   cursor: pointer;
@@ -152,7 +152,7 @@
   font-size: 11px;
   font-weight: 700;
   background: linear-gradient(135deg, var(--checkout-light), var(--checkout));
-  color: #fff;
+  color: var(--dark-text);
   border: none;
   border-left: 1px solid var(--border);
   cursor: pointer;
@@ -182,8 +182,8 @@
   padding: 7px;
   font-size: 12px;
   font-weight: 700;
-  background: #fff;
-  color: #0ea5e9;
+  background: var(--surface);
+  color: var(--info);
   border: none;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
@@ -195,8 +195,8 @@
   padding: 7px;
   font-size: 12px;
   font-weight: 700;
-  background: #fff;
-  color: #6366f1;
+  background: var(--surface);
+  color: var(--purple);
   border: none;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
@@ -208,8 +208,8 @@
   padding: 7px;
   font-size: 12px;
   font-weight: 700;
-  background: #fff;
-  color: #ef4444;
+  background: var(--surface);
+  color: var(--checkout);
   border: none;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
