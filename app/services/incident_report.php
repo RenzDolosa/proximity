@@ -2,6 +2,7 @@
 // app/services/incident_report.php
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
 if (!isLoggedIn()) {
   if (isset($_SERVER['HTTP_X_REQUESTED_WITH'])) {
@@ -64,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Incident Report</title>
+  <title><?= htmlspecialchars($myDatabase ?? 'System', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?> - Incident Report</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
   <link rel="stylesheet" href="/config/asset.php?t=jrsb4">

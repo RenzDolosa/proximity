@@ -38,7 +38,7 @@ if ($page === 'facial-identification' && $canFacial) {
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?php echo htmlspecialchars($myDatabase); ?> - Proximity Pass</title>
+  <title><?= htmlspecialchars($myDatabase ?? 'System', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?> - Proximity pass</title>
   <link rel="icon" href="/config/asset.php?t=cfk4d" type="image/svg+xml">
   <link rel="stylesheet" href="/config/asset.php?t=zdsj4">
   <link rel="stylesheet" href="/config/asset.php?t=mq4wc">

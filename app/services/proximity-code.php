@@ -55,7 +55,7 @@ if ($databaseConnected) {
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?php echo htmlspecialchars($myDatabase); ?> - Proximity Code</title>
+  <title><?= htmlspecialchars($myDatabase ?? 'System', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?> - Proximity code</title>
   <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
   <link rel="stylesheet" href="/config/asset.php?t=yde24">
   <link rel="stylesheet" href="/config/asset.php?t=a5dh7">

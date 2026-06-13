@@ -49,7 +49,7 @@ if ($databaseConnected) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?php echo htmlspecialchars($myDatabase); ?> - Remarks Log</title>
+  <title><?= htmlspecialchars($myDatabase ?? 'System', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?> - Remarks Log</title>
   <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
   <link rel="stylesheet" href="/config/asset.php?t=yde24">
   <link rel="stylesheet" href="/config/asset.php?t=a5dh7">

@@ -19,12 +19,6 @@ if (!canAccess($permissions, 'qr proximity') && !canAccess($permissions, 'manual
 requireAccess('qr proximity', ROUTE_MANUAL);
 $access = getMenuAccess();
 
-$myDatabase = $_SESSION['my_database'] ?? 'My Database';
-$userId = $_SESSION['user_id'] ?? null;
-$userDbName = USER_DB_PREFIX . $userId;
-$username = $_SESSION['username'] ?? 'User';
-$email = $_SESSION['email'] ?? '';
-
 if (!isset($_SESSION['user_id'])) {
   header('Location:', ROUTE_LOGIN);
   exit();
@@ -34,6 +28,7 @@ if (!isset($_SESSION['user_id'])) {
 if (empty($_SESSION['csrf_token'])) {
   $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
+
 $csrfToken = $_SESSION['csrf_token'];
 
 try {
@@ -61,7 +56,7 @@ try {
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?php echo htmlspecialchars($myDatabase); ?> - Proximity Pass</title>
+  <title><?= htmlspecialchars($myDatabase ?? 'System', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?> - Proximity pass</title>
   <meta name="csrf-token" content="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
   <link rel="icon" href="/config/asset.php?t=cfk4d" type="image/svg+xml">
   <link rel="stylesheet" href="/config/asset.php?t=zdsj4">

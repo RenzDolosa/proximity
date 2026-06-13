@@ -178,7 +178,7 @@ try {
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?= htmlspecialchars($myDatabase); ?> - Account Info</title>
+  <title><?= htmlspecialchars($myDatabase ?? 'System', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?> - Account info</title>
   <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
   <!-- <link rel="stylesheet" href="/config/asset.php?t=h46e2"> -->
   <link rel="stylesheet" href="/config/asset.php?t=mq4wc">

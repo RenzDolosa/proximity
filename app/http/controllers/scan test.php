@@ -15,12 +15,6 @@ if (!isset($_SESSION['user_id'])) {
   header('Location:', ROUTE_LOGIN);
   exit();
 }
-
-$myDatabase = $_SESSION['my_database'] ?? 'My Database';
-$userId = $_SESSION['user_id'];
-$userDbName = USER_DB_PREFIX . $userId;
-$username = $_SESSION['username'] ?? 'User';
-$email = $_SESSION['email'] ?? '';
 ?>
 
 <!DOCTYPE html>
@@ -30,7 +24,7 @@ $email = $_SESSION['email'] ?? '';
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?php echo htmlspecialchars($myDatabase); ?> - Test QR Code</title>
+  <title><?= htmlspecialchars($myDatabase ?? 'System', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?> - Test proximity code</title>
   <link rel="icon" href="/config/asset.php?t=asc4s" type="image/png">
   <link rel="stylesheet" href="/config/asset.php?t=zdsj4">
   <link rel="stylesheet" href="/config/asset.php?t=c24hj">

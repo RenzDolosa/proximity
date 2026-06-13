@@ -46,7 +46,7 @@ try {
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?= htmlspecialchars($myDatabase); ?> - Manual Search</title>
+  <title><?= htmlspecialchars($myDatabase ?? 'System', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?> - Manual search</title>
   <link rel="icon" href="/config/asset.php?t=cfk4d" type="image/svg+xml">
   <link rel="stylesheet" href="/config/asset.php?t=k95g3">
   <link rel="stylesheet" href="/config/asset.php?t=c24hj">

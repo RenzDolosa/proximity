@@ -12,9 +12,6 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
 requireAccess('facial', ROUTE_QR_PROX);
 
-$myDb      = htmlspecialchars($_SESSION['my_database'] ?? 'My Database', ENT_QUOTES, 'UTF-8');
-$userId    = (int) ($_SESSION['user_id']  ?? 0);
-$username  = htmlspecialchars($_SESSION['username'] ?? 'User', ENT_QUOTES, 'UTF-8');
 $csrfToken = htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES, 'UTF-8');
 
 $photoCount = 0;
@@ -33,7 +30,7 @@ try {
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
-  <title><?= $myDb ?> — Facial ID</title>
+  <title><?= htmlspecialchars($myDatabase ?? 'System', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?> — Facial ID</title>
   <link rel="icon" href="/config/asset.php?t=g4ld2" type="image/png">
   <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
