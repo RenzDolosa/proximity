@@ -12,7 +12,7 @@ if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') &&
   exit;
 }
 
-requireAccess('table panel', ROUTE_HOME);
+requireAccess('tablePanel', ROUTE_HOME);
 $access = getMenuAccess();
 
 $myDatabase = $_SESSION['my_database'] ?? 'My Database';
@@ -63,37 +63,31 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
       <i class="fas fa-arrow-left"></i>
       <span>Back</span>
     </button>
-
     <?php if ($access['system']): ?>
       <button class="tab-btn <?= $firstTab === 'employees' ? 'active' : '' ?>" tabindex="-1" onclick="switchTab('employees', this)">
         <i class="fas fa-users"></i> Employees
       </button>
     <?php endif; ?>
-
     <?php if ($access['datalog']): ?>
       <button class="tab-btn <?= $firstTab === 'scanned' ? 'active' : '' ?>" tabindex="-1" onclick="switchTab('scanned', this)">
         <i class="fas fa-list-check"></i> Scanned Log
       </button>
     <?php endif; ?>
-
     <?php if ($access['proximity-code']): ?>
       <button class="tab-btn <?= $firstTab === 'proximity' ? 'active' : '' ?>" tabindex="-1" onclick="switchTab('proximity', this)">
         <i class="fas fa-id-card"></i> Proximity Codes
       </button>
     <?php endif; ?>
-
     <?php if ($access['attendance']): ?>
       <button class="tab-btn <?= $firstTab === 'attendance' ? 'active' : '' ?>" tabindex="-1" onclick="switchTab('attendance', this)">
         <i class="fas fa-clock"></i> Attendance
       </button>
     <?php endif; ?>
-
     <?php if ($access['remarks']): ?>
       <button class="tab-btn <?= $firstTab === 'remarks' ? 'active' : '' ?>" tabindex="-1" onclick="switchTab('remarks', this)">
         <i class="fas fa-exclamation-triangle"></i> Incidents
       </button>
     <?php endif; ?>
-
     <button class="tab-btn" tabindex="-1" onclick="reloadActiveTab()">
       <i class="fas fa-sync-alt"></i>
       <span>Refresh</span>
@@ -102,8 +96,8 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
 
   <iframe id="frame-employees" class="tab-frame <?= $firstTab === 'employees' ? 'active' : '' ?>"
     src="<?= $firstTab === 'employees' ? 'system.php' : '' ?>"></iframe>
-  <iframe id="frame-scanned" class="tab-frame <?= $firstTab === 'scanned'   ? 'active' : '' ?>"
-    src="<?= $firstTab === 'scanned'   ? 'datalog.php' : '' ?>"></iframe>
+  <iframe id="frame-scanned" class="tab-frame <?= $firstTab === 'scanned' ? 'active' : '' ?>"
+    src="<?= $firstTab === 'scanned' ? 'datalog.php' : '' ?>"></iframe>
   <iframe id="frame-proximity" class="tab-frame <?= $firstTab === 'proximity' ? 'active' : '' ?>"
     src="<?= $firstTab === 'proximity' ? 'proximity-code.php' : '' ?>"></iframe>
   <iframe id="frame-attendance" class="tab-frame <?= $firstTab === 'attendance' ? 'active' : '' ?>"
@@ -180,13 +174,13 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
       frame.addEventListener('load', function() {
         try {
           const frameUrl = this.contentWindow.location.href;
-          if (frameUrl.includes('../../index.php') || frameUrl.includes('login')) {
+          if (frameUrl.includes(ROUTE_LOGIN) || frameUrl.includes('login')) {
             window.top.location.href = frameUrl;
           } else if (this.classList.contains('active')) {
             focusFrameSearchInput(this);
           }
         } catch (e) {
-          window.top.location.href = '../../index.php';
+          window.top.location.href = ROUTE_LOGIN;
         }
       });
     });

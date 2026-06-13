@@ -252,6 +252,17 @@
   outline-offset: 2px;
 }
 
+.checkbox {
+  width: 12px;
+  height: 12px;
+  min-width: 12px;
+  padding: 0;
+  margin: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--accent, #667eea);
+}
+
 .form-row-btn {
   display: inline-flex;
   gap: 1rem;

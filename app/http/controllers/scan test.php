@@ -8,7 +8,7 @@ error_reporting(E_ALL);
 require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
-requireAccess('scan test', ROUTE_HOME);
+requireAccess('scanTest', ROUTE_HOME);
 $access = getMenuAccess();
 
 if (!isset($_SESSION['user_id'])) {

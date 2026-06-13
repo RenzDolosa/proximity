@@ -131,28 +131,30 @@ htdocs/
 │   │   ├── pg.css                   # Pagination styles
 │   │   ├── sett.css                 # Settings styles
 │   │   ├── acct.css                 # Account styles
-│   │   ├── is.css                   # Incident/summary styles
+│   │   ├── is.css                   # Import employees styles
 │   │   ├── m-i.css                  # Manual input styles
 │   │   ├── opt-btn.css              # Option button styles
 │   │   ├── req.css                  # Requirements/alert styles
 │   │   ├── about.css                # About page styles
+│   │   ├── system.css               # Table styles
 │   │   └── system-camera.css        # Camera system styles
 │   │
 │   ├── js/
 │   │   ├── notifications.js         # Real-time alert polling & topbar rendering
 │   │   ├── ver.js                   # Global version display
 │   │   ├── main.js                  # Main portal JS
-│   │   ├── dtl.js                   # Data log table (filters, pagination, auto-update)
-│   │   ├── ea-dtl.js                # Employee-access detail JS
-│   │   ├── eas.js                   # Employee access summary JS
+│   │   ├── dtl.js                   # Datalog table JS (filters, pagination, auto-update)
+│   │   ├── ea-dtl.js                # Export all datalog JS
+│   │   ├── eas.js                   # Export all employees JS
 │   │   ├── proxcode.js              # Proximity code table JS
 │   │   ├── panel.js                 # Table panel JS
-│   │   ├── system.js                # System JS
+│   │   ├── system.js                # Employees table JS (filters, pagination)
 │   │   ├── system-camera.js         # Camera system JS
 │   │   ├── is.js                    # Incident summary JS
 │   │   ├── ipc.js                   # IPC JS
 │   │   ├── qp.js                    # QR proximity JS
 │   │   ├── btn.js                   # Button/portal button JS
+│   │   ├── clock.js                 # Clock JS
 │   │   ├── acct.js                  # Account JS
 │   │   ├── reg.js                   # Registration JS
 │   │   ├── li.js                    # Login JS

@@ -8,7 +8,7 @@
 
   function getRootUrl() {
     return (
-      window.location.protocol + "//" + window.location.host + "/index.php"
+      window.location.protocol + "//" + window.location.host + ROUTE_LOGIN
     );
   }
 

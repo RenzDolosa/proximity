@@ -1089,6 +1089,103 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     .nd-footer a:hover {
       text-decoration: underline;
     }
+
+    /* ── Topbar page tabs ── */
+    .ptl-tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: 8px;
+      overflow: hidden;
+      max-width: 520px;
+      flex-wrap: nowrap;
+    }
+
+    .ptl-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px 4px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.13s, color 0.13s, border-color 0.13s;
+      max-width: 140px;
+      position: relative;
+      user-select: none;
+    }
+
+    .ptl-tab:hover {
+      background: var(--accent-light);
+      border-color: var(--accent-border);
+      color: var(--accent);
+    }
+
+    .ptl-tab.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 500;
+    }
+
+    .ptl-tab .ptl-tab-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 90px;
+      pointer-events: none;
+    }
+
+    .ptl-tab .ptl-tab-pin {
+      font-size: 10px;
+      opacity: 0.55;
+      flex-shrink: 0;
+      padding: 0 1px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: inherit;
+      line-height: 1;
+      border-radius: 2px;
+      transition: opacity 0.13s;
+    }
+
+    .ptl-tab .ptl-tab-pin:hover  { opacity: 1; }
+    .ptl-tab.pinned .ptl-tab-pin { opacity: 1; }
+    .ptl-tab.active .ptl-tab-pin { opacity: 0.75; }
+    .ptl-tab.active .ptl-tab-pin:hover { opacity: 1; }
+
+    .ptl-tab .ptl-tab-close {
+      font-size: 11px;
+      opacity: 0;
+      flex-shrink: 0;
+      padding: 0 1px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: inherit;
+      line-height: 1;
+      border-radius: 2px;
+      transition: opacity 0.13s;
+    }
+
+    .ptl-tab:hover .ptl-tab-close,
+    .ptl-tab.active .ptl-tab-close,
+    .ptl-tab.pinned .ptl-tab-close { opacity: 0.7; }
+    .ptl-tab .ptl-tab-close:hover  { opacity: 1 !important; }
+
+    /* separator between breadcrumb and tabs */
+    .ptl-tabs-sep {
+      width: 1px;
+      height: 18px;
+      background: var(--border);
+      margin: 0 6px 0 4px;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 
@@ -1126,7 +1223,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
       <?php endif; ?>
 
-      <?php if ($access['admin panel']): ?>
+      <?php if ($access['adminPanel']): ?>
         <div class="nav-item" data-action="portal-adminPanel">
           <i class="fas fa-user-shield"></i> <span class="nav-item-label">Admin Panel</span>
         </div>
@@ -1147,8 +1244,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <header class="topbar">
     <div class="topbar-left">
       <div class="breadcrumb">
-        <strong>Portal</strong> <span>&nbsp;/ Management Panel</span>
+        <strong>Portal</strong> <span id="ptl-bc-sub">&nbsp;/ Management Panel</span>
       </div>
+      <div class="ptl-tabs-sep" id="ptl-tabs-sep" style="display:none;"></div>
+      <div class="ptl-tabs" id="ptl-tabs"></div>
     </div>
 
     <div class="topbar-right">
@@ -1358,6 +1457,199 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
     })();
   </script>
+
+  <!-- <script>
+  // ── Portal topbar tab manager ─────────────────────────────────────────────
+  // Each tab: { id, label, icon, url, pinned, active }
+  (function () {
+    const TAB_ICONS = {
+      'portal-home':       'fas fa-home',
+      'portal-dashboard':  'fas fa-chart-bar',
+      'portal-adminPanel': 'fas fa-user-shield',
+      'portal-settings':   'fas fa-cog',
+      'portal-account':    'fas fa-id-card',
+      'portal-about':      'fas fa-info-circle',
+      'portal-readme':     'fas fa-book-open',
+      'portal-employees':  'fas fa-users',
+      'portal-datalog':    'fas fa-list-alt',
+      'portal-proxcode':   'fas fa-qrcode',
+      'portal-attendance': 'fas fa-calendar-check',
+      'portal-remarks':    'fas fa-exclamation-triangle',
+      'portal-scanTest':   'fas fa-qrcode',
+    };
+
+    const TAB_LABELS = {
+      'portal-home':       'Home',
+      'portal-dashboard':  'Dashboard',
+      'portal-adminPanel': 'Admin Panel',
+      'portal-settings':   'Settings',
+      'portal-account':    'Account',
+      'portal-about':      'About',
+      'portal-readme':     'README',
+      'portal-employees':  'Employees',
+      'portal-datalog':    'Data Log',
+      'portal-proxcode':   'Prox Code',
+      'portal-attendance': 'Attendance',
+      'portal-remarks':    'Remarks',
+      'portal-scanTest':   'Scan Test',
+    };
+
+    // "Home" is always shown implicitly — never added as a chip
+    const HOME_ACTION = 'portal-home';
+
+    const tabsEl  = document.getElementById('ptl-tabs');
+    const sepEl   = document.getElementById('ptl-tabs-sep');
+    const framesEl = document.querySelector('.frames');
+
+    let tabs = [];     // { action, url, pinned, el }
+    let active = null; // action string of current tab
+
+    function getTab(action) { return tabs.find(t => t.action === action); }
+
+    function renderSep() {
+      sepEl.style.display = tabs.length > 0 ? '' : 'none';
+    }
+
+    function buildTabEl(tab) {
+      const el = document.createElement('div');
+      el.className = 'ptl-tab';
+      el.dataset.action = tab.action;
+
+      const iconEl = document.createElement('i');
+      iconEl.className = (TAB_ICONS[tab.action] || 'fas fa-circle') + ' ptl-tab-icon';
+      iconEl.style.fontSize = '10px';
+      iconEl.style.pointerEvents = 'none';
+
+      const labelEl = document.createElement('span');
+      labelEl.className = 'ptl-tab-label';
+      labelEl.textContent = TAB_LABELS[tab.action] || tab.action;
+
+      const pinBtn = document.createElement('button');
+      pinBtn.className = 'ptl-tab-pin';
+      pinBtn.title = tab.pinned ? 'Unpin tab' : 'Pin tab';
+      pinBtn.innerHTML = tab.pinned ? '<i class="fas fa-thumbtack"></i>' : '<i class="fas fa-thumbtack" style="opacity:.45"></i>';
+
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'ptl-tab-close';
+      closeBtn.title = 'Close tab';
+      closeBtn.innerHTML = '<i class="fas fa-times"></i>';
+
+      el.appendChild(iconEl);
+      el.appendChild(labelEl);
+      el.appendChild(pinBtn);
+      el.appendChild(closeBtn);
+
+      // ── Click tab label area → activate ──
+      el.addEventListener('click', function (e) {
+        if (e.target.closest('.ptl-tab-pin') || e.target.closest('.ptl-tab-close')) return;
+        activateTab(tab.action);
+      });
+
+      // ── Pin / unpin ──
+      pinBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        tab.pinned = !tab.pinned;
+        pinBtn.title = tab.pinned ? 'Unpin tab' : 'Pin tab';
+        pinBtn.innerHTML = tab.pinned
+          ? '<i class="fas fa-thumbtack"></i>'
+          : '<i class="fas fa-thumbtack" style="opacity:.45"></i>';
+        el.classList.toggle('pinned', tab.pinned);
+      });
+
+      // ── Close ──
+      closeBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        removeTab(tab.action);
+      });
+
+      return el;
+    }
+
+    function activateTab(action) {
+      // Deactivate all
+      tabs.forEach(t => t.el.classList.remove('active'));
+      active = action;
+      const tab = getTab(action);
+      if (tab) {
+        tab.el.classList.add('active');
+        framesEl.src = tab.url;
+      }
+    }
+
+    function removeTab(action) {
+      const idx = tabs.findIndex(t => t.action === action);
+      if (idx === -1) return;
+      tabs[idx].el.remove();
+      tabs.splice(idx, 1);
+      renderSep();
+
+      // If we just closed the active tab → go home
+      if (active === action) {
+        active = null;
+        navigateHome();
+      }
+    }
+
+    function navigateHome() {
+      active = null;
+      tabs.forEach(t => t.el.classList.remove('active'));
+      // Resolve portal-home token and load it
+      const token = window.__ROUTES?.[HOME_ACTION];
+      if (!token) return;
+      fetch('/config/resolve.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      })
+        .then(r => r.json())
+        .then(data => { if (data?.url) framesEl.src = data.url; });
+    }
+
+    /**
+     * Called by route.js after it resolves the URL.
+     * action = 'portal-settings', url = the real path
+     */
+    window.__ptlOpenTab = function (action, url) {
+      if (action === HOME_ACTION) {
+        // Going home: remove any unpinned active tab
+        if (active && active !== HOME_ACTION) {
+          const t = getTab(active);
+          if (t && !t.pinned) removeTab(active);
+        }
+        active = null;
+        tabs.forEach(t => t.el.classList.remove('active'));
+        return; // let route.js set the src
+      }
+
+      let tab = getTab(action);
+      if (tab) {
+        // Already exists — just activate
+        tab.url = url; // refresh URL in case it changed
+        activateTab(action);
+        return;
+      }
+
+      // Create new tab
+      const el = document.createElement('div'); // placeholder; rebuilt below
+      tab = { action, url, pinned: false, el: null };
+      tab.el = buildTabEl(tab);
+      tab.el.classList.add('active');
+      tabs.push(tab);
+      tabsEl.appendChild(tab.el);
+      renderSep();
+
+      // Deactivate previously active tab
+      tabs.forEach(t => { if (t.action !== action) t.el.classList.remove('active'); });
+      // Remove previous unpinned tab (if any, and it's not the new one)
+      const prevAction = active;
+      active = action;
+      if (prevAction && prevAction !== action && prevAction !== HOME_ACTION) {
+        const prev = getTab(prevAction);
+        if (prev && !prev.pinned) removeTab(prevAction);
+      }
+    };
+  })();
+  </script> -->
 </body>
 
 </html>

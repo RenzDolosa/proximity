@@ -211,7 +211,7 @@
           })
             .then((r) => {
               if (r.status === 403) {
-                window.top.location.href = "/index.php";
+                window.top.location.href = ROUTE_LOGIN;
                 return null;
               }
               return r.json();

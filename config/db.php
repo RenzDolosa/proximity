@@ -2,34 +2,35 @@
 // config/db.php --> database bridge
 
 const PAGE_ICONS = [
-  'main'               => 'fa-home',
-  'admin panel'        => 'fa-user-shield',
-  'users'              => 'fa-users',
-  'groups'             => 'fa-users-cog',
-  'system logs'        => 'fa-clipboard-list',
-  'system'             => 'fa-users-cog',
-  'datalog'            => 'fa-clipboard-list',
-  'remarks'            => 'fa-exclamation-triangle',
-  'attendance'         => 'fa-calendar-check',
-  'settings'           => 'fa-cog',
-  'phpmyadmin'         => 'fa-database',
-  'proximity'          => 'fa-th-large',
-  'proximity-code'     => 'fa-barcode',
-  'qr proximity'       => 'fa-qrcode',
-  'face ID'            => 'fa-th-large',
-  'facial'             => 'fa-face-viewfinder',
-  'manual input'       => 'fa-keyboard',
-  'portal'             => 'fa-th-large',
-  'table panel'        => 'fa-table',
-  'request'            => 'fa-door-open',
-  'account info'       => 'fa-user-circle',
-  'employee dashboard' => 'fa-tachometer-alt',
-  'reg'                => 'fa-user-plus',
-  'scan test'          => 'fa-search',
-  'm-i v2'             => 'fa-keyboard',
-  'test'               => 'fa-flask',
-  'readme'             => 'fa-book-open',
-  'about'              => 'fa-info-circle',
+  'main'                => 'fa-home',
+  'homePanel'           => 'fa-home',
+  'adminPanel'          => 'fa-user-shield',
+  'users'               => 'fa-users',
+  'groups'              => 'fa-users-cog',
+  'system logs'         => 'fa-clipboard-list',
+  'system'              => 'fa-users-cog',
+  'datalog'             => 'fa-clipboard-list',
+  'remarks'             => 'fa-exclamation-triangle',
+  'attendance'          => 'fa-calendar-check',
+  'settings'            => 'fa-cog',
+  'phpmyadmin'          => 'fa-database',
+  'proximity'           => 'fa-th-large',
+  'proximity-code'      => 'fa-barcode',
+  'qr proximity'        => 'fa-qrcode',
+  'face ID'             => 'fa-th-large',
+  'facial'              => 'fa-face-viewfinder',
+  'manual input'        => 'fa-keyboard',
+  'portal'              => 'fa-th-large',
+  'tablePanel'          => 'fa-table',
+  'request'             => 'fa-door-open',
+  'account info'        => 'fa-user-circle',
+  'employee dashboard'  => 'fa-tachometer-alt',
+  'reg'                 => 'fa-user-plus',
+  'scanTest'            => 'fa-search',
+  'm-i v2'              => 'fa-keyboard',
+  'test'                => 'fa-flask',
+  'readme'              => 'fa-book-open',
+  'about'               => 'fa-info-circle',
   
   // Buttons and actions: (not pages)
   'add-system'                  => 'fa-user-plus',
@@ -58,16 +59,17 @@ const PAGE_ICONS = [
 ];
 
 const PAGE_KEY_OVERRIDES = [
-  'account'            => 'account info',
-  'employee dashboard' => 'employee dashboard',
-  'admin panel'        => 'admin panel',
-  'proximity-code'     => 'proximity-code',
-  'facial'             => 'face ID',
-  'scan test'          => 'scan test',
-  'm-i v2'             => 'm-i v2',
-  'manual input'       => 'manual input',
-  'qr proximity'       => 'qr proximity',
-  'table panel'        => 'table panel',
+  'account'             => 'account info',
+  'employee dashboard'  => 'employee dashboard',
+  'admin panel'         => 'adminPanel',
+  'proximity-code'      => 'proximity-code',
+  'facial'              => 'face ID',
+  'scan test'           => 'scanTest',
+  'm-i v2'              => 'm-i v2',
+  'manual input'        => 'manual input',
+  'qr proximity'        => 'qr proximity',
+  'table panel'         => 'tablePanel',
+  'home panel'          => 'homePanel',
 ];
 
 function applyIconHints(array $pages): array
@@ -86,7 +88,7 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 // ── Auth guard FIRST (before anything else) ───────────────────────────────────
 if (!isset($_SESSION['user_id']) || !isLoggedIn()) {
   $rootUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
-    . '://' . $_SERVER['HTTP_HOST'] . '/index.php';
+    . '://' . $_SERVER['HTTP_HOST'] . ROUTE_LOGIN;
 
   $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
     && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
@@ -100,10 +102,10 @@ if (!isset($_SESSION['user_id']) || !isLoggedIn()) {
     header('Content-Type: application/json');
     http_response_code(401);
     echo json_encode([
-      'success'         => false,
-      'unauthenticated' => true,
-      'message'         => 'Session expired. Please log in again.',
-      'redirect'        => $rootUrl,
+      'success'           => false,
+      'unauthenticated'   => true,
+      'message'           => 'Session expired. Please log in again.',
+      'redirect'          => $rootUrl,
     ]);
     exit;
   }
@@ -136,7 +138,7 @@ if (isset($_GET['logout'])) {
   session_destroy();
 
   $rootUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
-    . '://' . $_SERVER['HTTP_HOST'] . '/index.php';
+    . '://' . $_SERVER['HTTP_HOST'] . ROUTE_LOGIN;
 
   $isEmbedded = isset($_SERVER['HTTP_SEC_FETCH_DEST'])
     && $_SERVER['HTTP_SEC_FETCH_DEST'] === 'iframe';
@@ -224,7 +226,7 @@ function canAccess(array $permissions, string $pageKey): bool
  * @param string $pageKey     Matches the 'key' in $MENU_PAGES: 'system', 'datalog', 'proxcode'
  * @param string $redirectUrl Back-link shown on the access-denied page
  */
-function requireAccess(string $pageKey, string $redirectUrl = '../index.php'): void
+function requireAccess(string $pageKey, string $redirectUrl = ROUTE_LOGIN): void
 {
   $permissions = getUserGroupPermissions();
 
@@ -260,23 +262,6 @@ function requireAccess(string $pageKey, string $redirectUrl = '../index.php'): v
     <title>Access Denied</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
-      *,
-      *::before,
-      *::after {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-      }
-
-      body {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        background: #f0f2f5;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 100vh;
-      }
-
       .card {
         background: #fff;
         border-radius: 12px;
@@ -431,6 +416,7 @@ function scanPortalPages(
     // 'ip.php',
 
     'main.php',
+    'home panel.php',
     'table panel.php',
     'datalog.php',
     'datalog_backend.php',
@@ -477,7 +463,7 @@ function scanPortalPages(
       'folder'   => PATH_VIEWS_IFRAME,
       'children' => [
         [
-          'key'      => 'main',
+          'key'      => 'homePanel',
           'label'    => 'Home',
           'icon'     => 'fa-home',
           'children' => [],
@@ -496,7 +482,7 @@ function scanPortalPages(
         ],
       ],
     ],
-    'main' => [
+    'homePanel' => [
       'folder'   => PATH_APP_SERVICES,
       'children' => [
         [
@@ -506,7 +492,7 @@ function scanPortalPages(
           'children' => [],
         ],
         [
-          'key'      => 'table panel',
+          'key'      => 'tablePanel',
           'label'    => 'Employee Manager',
           'icon'     => 'fa-table',
           'children' => [],
@@ -521,7 +507,7 @@ function scanPortalPages(
       'folder'   => PATH_VIEWS,
       'children' => [
         [
-          'key'      => 'admin panel',
+          'key'      => 'adminPanel',
           'label'    => 'Admin Panel',
           'icon'     => 'fa-user-shield',
           'children' => [
@@ -533,7 +519,7 @@ function scanPortalPages(
         ],
       ],
     ],
-    'table panel' => [
+    'tablePanel' => [
       'folder'   => PATH_APP_SERVICES,
       'children' => [
         [

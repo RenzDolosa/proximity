@@ -4,7 +4,7 @@
 require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/config/db.php';
 
-requireAccess('proximity', $_SERVER['DOCUMENT_ROOT'] . '/index.php');
+requireAccess('proximity', $_SERVER['DOCUMENT_ROOT'] . ROUTE_LOGIN);
 $access = getMenuAccess();
 
 $page = $_GET['page'] ?? '';
@@ -27,7 +27,7 @@ if ($page === 'facial-identification' && $canFacial) {
 } elseif ($canFacial) {
   $iframeSrc = 'app/services/facial-identification.php';
 } else {
-  header('Location: index.php');
+  header('Location:', ROUTE_LOGIN);
   exit;
 }
 ?>
@@ -66,11 +66,11 @@ if ($page === 'facial-identification' && $canFacial) {
       mainFrame.addEventListener('load', function() {
         try {
           const frameUrl = this.contentWindow.location.href;
-          if (frameUrl.includes('index.php') || frameUrl.includes('login')) {
+          if (frameUrl.includes(ROUTE_LOGIN) || frameUrl.includes('login')) {
             window.top.location.href = frameUrl;
           }
         } catch (e) {
-          window.top.location.href = 'index.php';
+          window.top.location.href = ROUTE_LOGIN;
         }
       });
     }

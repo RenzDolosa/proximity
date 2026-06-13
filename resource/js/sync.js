@@ -22,7 +22,7 @@
       body: JSON.stringify({ token }),
     });
     if (res.status === 403) {
-      window.top.location.href = "/index.php";
+      window.top.location.href = ROUTE_LOGIN;
       return false;
     }
     const data = await res.json();

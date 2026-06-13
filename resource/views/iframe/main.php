@@ -190,19 +190,19 @@ if ($databaseConnected) {
 
   <!-- Top shortcut nav -->
   <div class="shortcut-bar">
-    <?php if ($access['table panel']): ?>
+    <?php if ($access['tablePanel']): ?>
       <div class="shortcut-item" data-action-app="mainFrame-employees">
         <i class="fas fa-users"></i>
         <span>Employees</span>
       </div>
     <?php endif; ?>
-    <?php if ($access['scan test']): ?>
+    <?php if ($access['scanTest']): ?>
       <div class="shortcut-item" data-action-app="mainFrame-scanTest">
         <i class="fas fa-qrcode"></i>
         <span>Scan Test</span>
       </div>
     <?php endif; ?>
-    <?php if ($access['admin panel']): ?>
+    <?php if ($access['adminPanel']): ?>
       <div class="shortcut-item" data-action-app="mainFrame-adminPanel">
         <i class="fas fa-user-shield"></i>
         <span>Admin Panel</span>
@@ -243,21 +243,18 @@ if ($databaseConnected) {
           </div>
           <div class="card-body">
             <div class="shortcuts-grid">
-
               <?php if ($access['system']): ?>
                 <div class="sc-card" data-action-app="mainFrame-employees">
                   <div class="sc-icon"><i class="fas fa-user-plus"></i></div>
                   <div class="sc-label">Input Employee</div>
                 </div>
               <?php endif; ?>
-
               <?php if ($access['datalog']): ?>
                 <div class="sc-card" data-action-app="mainFrame-datalog">
                   <div class="sc-icon"><i class="fas fa-list-check"></i></div>
                   <div class="sc-label">Scanned Log</div>
                 </div>
               <?php endif; ?>
-
               <?php if ($access['proximity-code']): ?>
                 <div class="sc-card" data-action-app="mainFrame-proximity">
                   <div class="sc-icon">
@@ -267,35 +264,36 @@ if ($databaseConnected) {
                   <div class="sc-label">Proximity Center</div>
                 </div>
               <?php endif; ?>
-
-              <?php if ($access['scan test']): ?>
+              <?php if ($access['attendance']): ?>
+                <div class="sc-card" data-action-app="mainFrame-attendance">
+                  <div class="sc-icon"><i class="fas fa-clock"></i></div>
+                  <div class="sc-label">Attendance Log</div>
+                </div>
+              <?php endif; ?>
+              <?php if ($access['scanTest']): ?>
                 <div class="sc-card" data-action-app="mainFrame-scanTest">
                   <div class="sc-icon"><i class="fas fa-qrcode"></i></div>
                   <div class="sc-label">Test Live Search</div>
                 </div>
               <?php endif; ?>
-
               <?php if ($access['employee dashboard']): ?>
                 <div class="sc-card" data-action-app="mainFrame-dashboard">
                   <div class="sc-icon"><i class="fas fa-chart-line"></i></div>
                   <div class="sc-label">Insights</div>
                 </div>
               <?php endif; ?>
-
               <?php if ($access['account info']): ?>
                 <div class="sc-card" data-action-app="mainFrame-account">
                   <div class="sc-icon"><i class="fas fa-id-card"></i></div>
                   <div class="sc-label">Account Info</div>
                 </div>
               <?php endif; ?>
-
               <?php if ($access['remarks']): ?>
                 <div class="sc-card" data-action-app="mainFrame-remarks">
                   <div class="sc-icon"><i class="fas fa-exclamation-triangle"></i></div>
                   <div class="sc-label">Incidents</div>
                 </div>
               <?php endif; ?>
-
             </div>
           </div>
         </div>
@@ -472,7 +470,7 @@ if ($databaseConnected) {
           <div class="card-body">
             <div class="menu-list">
 
-              <?php if ($access['table panel']): ?>
+              <?php if ($access['tablePanel']): ?>
                 <div class="menu-card" data-action-app="mainFrame-employees">
                   <div class="mc-icon" style="background:#eff6ff; color:#2563eb;">
                     <img src="/config/asset.php?t=dfk34" alt="MySQL" style="width:26px;height:26px;object-fit:contain;">
@@ -485,7 +483,7 @@ if ($databaseConnected) {
                 </div>
               <?php endif; ?>
 
-              <?php if ($access['scan test']): ?>
+              <?php if ($access['scanTest']): ?>
                 <div class="menu-card" data-action-app="mainFrame-scanTest">
                   <div class="mc-icon" style="background:#f0fdf4; color:#16a34a;">
                     <img src="/config/asset.php?t=gnks2" alt="NFC" style="width:26px;height:26px;object-fit:contain;">
@@ -612,11 +610,11 @@ if ($databaseConnected) {
       frame.addEventListener('load', function() {
         try {
           const frameUrl = this.contentWindow.location.href;
-          if (frameUrl.includes('index.php') || frameUrl.includes('login')) {
+          if (frameUrl.includes(ROUTE_LOGIN) || frameUrl.includes('login')) {
             window.top.location.href = frameUrl;
           }
         } catch (e) {
-          window.top.location.href = 'index.php';
+          window.top.location.href = ROUTE_LOGIN;
         }
       });
     }

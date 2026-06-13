@@ -317,6 +317,19 @@
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && isOpen) closeDropdown();
     });
+
+    try {
+      const parentDoc = window.parent.document;
+      if (parentDoc && window.parent !== window) {
+        parentDoc.addEventListener("click", function (e) {
+          if (!isOpen) return;
+          if (e.target.closest(".tab-bar") || e.target.closest(".tab-btn")) {
+            closeDropdown();
+          }
+        });
+      }
+    } catch (e) {
+    }
   }
 
   // ── Open / close ──────────────────────────────────────────────────

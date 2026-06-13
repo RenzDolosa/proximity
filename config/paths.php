@@ -68,7 +68,7 @@ if (!defined('ROUTE_END_NOTIF'))          define('ROUTE_END_NOTIF',         '/ap
 if (!defined('ROUTE_END_USERID'))         define('ROUTE_END_USERID',        '/app/helper/get_user_id.php');
 
 // ── SYNC_ROUTSE ──
-if (!defined('ROUTE_END_SYNC')) define('ROUTE_END_SYNC', '/app/http/middleware/sync_queue.php');
+if (!defined('ROUTE_END_SYNC'))           define('ROUTE_END_SYNC',          '/app/http/middleware/sync_queue.php');
 
 const ROUTE_TOKENS = [
   'x7k2m' => ROUTE_HOME,

@@ -16,7 +16,7 @@ if (!canAccess($permissions, 'users') && !canAccess($permissions, 'groups') && !
   exit;
 }
 
-requireAccess('admin panel', ROUTE_SETTINGS);
+requireAccess('adminPanel', ROUTE_SETTINGS);
 $access = getMenuAccess();
 
 $sessionUserId = (int)($_SESSION['user_id'] ?? 0);

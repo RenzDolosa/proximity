@@ -422,7 +422,7 @@ try {
       exit;
     }
 
-    header('Location: ../../index.php');
+    header('Location:', ROUTE_LOGIN);
     exit;
   }
 

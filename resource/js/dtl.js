@@ -385,7 +385,7 @@ function updateAutoUpdateUI() {
   }
 
   if (status) {
-    const strong = document.createElement("strong");
+    const strong = document.getElementById("toggle");
     strong.textContent = autoUpdateEnabled ? "ON" : "OFF";
     status.replaceChildren(strong);
     status.className = `auto-update-status ${

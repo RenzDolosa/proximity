@@ -31,7 +31,7 @@ async function resolveEndpoints() {
   );
 
   // if (responses.some((r) => r.status === 403)) {
-  //   window.top.location.href = "/index.php";
+  //   window.top.location.href = ROUTE_LOGIN;
   //   return false;
   // }
 
@@ -80,7 +80,8 @@ async function resolveEndpoints() {
 
 document.querySelectorAll("[data-action]").forEach((el) => {
   el.addEventListener("click", () => {
-    const token = window.__ROUTES?.[el.dataset.action];
+    const action = el.dataset.action;
+    const token  = window.__ROUTES?.[action];
     if (!token) return;
     fetch(RESOLVE, {
       method: "POST",
@@ -89,13 +90,18 @@ document.querySelectorAll("[data-action]").forEach((el) => {
     })
       .then((r) => {
         if (r.status === 403) {
-          window.location.href = "/index.php";
+          window.location.href = ROUTE_LOGIN;
           return null;
         }
         return r.json();
       })
       .then((data) => {
-        if (data?.url) document.querySelector(".frames").src = data.url;
+        if (!data?.url) return;
+        // Notify the tab manager (portal.php) if it exists
+        if (typeof window.__ptlOpenTab === "function") {
+          window.__ptlOpenTab(action, data.url);
+        }
+        document.querySelector(".frames").src = data.url;
       });
   });
 });
@@ -112,7 +118,7 @@ document.querySelectorAll("[data-action-dir]").forEach((el) => {
     })
       .then((r) => {
         if (r.status === 403) {
-          window.top.location.href = "/index.php";
+          window.top.location.href = ROUTE_LOGIN;
           return null;
         }
         return r.json();
@@ -135,7 +141,7 @@ document.querySelectorAll("[data-action-root]").forEach((el) => {
     })
       .then((r) => {
         if (r.status === 403) {
-          window.location.href = "/index.php";
+          window.location.href = ROUTE_LOGIN;
           return null;
         }
         return r.json();
@@ -157,7 +163,7 @@ document.querySelectorAll("[data-action-app]").forEach((el) => {
     })
       .then((r) => {
         if (r.status === 403) {
-          window.location.href = "/index.php";
+          window.location.href = ROUTE_LOGIN;
           return null;
         }
         return r.json();

@@ -298,19 +298,19 @@ $audioIconMap = [
       <i class="fas fa-arrow-left"></i>
       <span>Back</span>
     </div>
-    <?php if ($access['table panel']): ?>
+    <?php if ($access['tablePanel']): ?>
       <div class="shortcut-item" data-action-app="mainFrame-employees">
         <i class="fas fa-users"></i>
         <span>Employees</span>
       </div>
     <?php endif; ?>
-    <?php if ($access['scan test']): ?>
+    <?php if ($access['scanTest']): ?>
       <div class="shortcut-item" data-action-app="mainFrame-scanTest">
         <i class="fas fa-qrcode"></i>
         <span>Scan Test</span>
       </div>
     <?php endif; ?>
-    <?php if ($access['admin panel']): ?>
+    <?php if ($access['adminPanel']): ?>
       <div class="shortcut-item" data-action-app="mainFrame-adminPanel">
         <i class="fas fa-user-shield"></i>
         <span>Admin Panel</span>
@@ -388,7 +388,7 @@ $audioIconMap = [
               </div>
             </div>
 
-            <?php if ($access['admin panel']): ?>
+            <?php if ($access['adminPanel']): ?>
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button data-action-app="mainFrame-user" class="btn btn-secondary">
                   <i class="fas fa-users-cog"></i> Users Management
