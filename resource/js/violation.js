@@ -9,6 +9,16 @@ let currentPage = 1;
 const PER_PAGE  = 25;
 let deleteTargetId = null;
 
+// ── Controls CSS helper ───────────────────────────────────────────
+const controls = document.querySelector('.controls');
+const sentinel = document.createElement('div');
+sentinel.style.cssText = 'position:absolute;top:0;height:1px;pointer-events:none';
+controls.before(sentinel);
+
+new IntersectionObserver(([e]) => {
+  controls.classList.toggle('is-stuck', !e.isIntersecting);
+}).observe(sentinel);
+
 // ── Load ─────────────────────────────────────────────────────────────
 async function loadViolations() {
   setControlButtonsDisabled(true);

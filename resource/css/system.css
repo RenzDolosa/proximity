@@ -78,7 +78,7 @@ body {
   position: relative;
   margin: 0 auto;
   padding: 1rem 1rem;
-  padding-bottom: 50px;
+  padding-bottom: 0;
 }
 
 .controls {
@@ -96,6 +96,12 @@ body {
   margin-bottom: 1rem;
   transition: all var(--transition-md);
   isolation: isolate;
+}
+
+.controls.is-stuck {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  transition: all var(--transition);
 }
 
 .search-row {
@@ -126,7 +132,7 @@ body {
   border-radius: var(--radius-md);
   overflow: hidden;
   transition: all var(--transition-md);
-  padding-bottom: 85px;
+  padding-bottom: 70px;
 }
 
 .sn-cell {
@@ -326,7 +332,7 @@ tr {
 }
 
 .row:hover td {
-  background-color: var(--bg);
+  background-color: var(--surface-hover);
   color: var(--accent);
 }
 
@@ -496,8 +502,8 @@ tr {
 }
 
 .employee-image {
-  width: 45px;
-  height: 45px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   object-fit: cover;
 }
@@ -508,6 +514,7 @@ tr {
   transform: scale(5);
   background: var(--surface);
   transition: all var(--transition-md);
+  z-index: 999999;
 }
 
 .no-data {

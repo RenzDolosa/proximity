@@ -13,8 +13,6 @@
   margin: 0;
   padding: 5.5px 16px;
   background: var(--surface);
-  /* border-top-left-radius: 8px;
-  border-top-right-radius: 8px; */
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.12);
   z-index: 999;
 }

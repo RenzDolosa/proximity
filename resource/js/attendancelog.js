@@ -22,6 +22,17 @@ let totalRecords = 0;
 let activeFilters = {};
 let allEmployees = [];
 
+// ── Controls CSS helper ───────────────────────────────────────────
+const controls = document.querySelector('.controls');
+const sentinel = document.createElement('div');
+sentinel.style.cssText = 'position:absolute;top:0;height:1px;pointer-events:none';
+controls.before(sentinel);
+
+new IntersectionObserver(([e]) => {
+  controls.classList.toggle('is-stuck', !e.isIntersecting);
+}).observe(sentinel);
+
+// ─── Suggestion visibility helpers ───────────────────────────────
 function isInputVisible(input) {
   const parentModal = input.closest(".modal, .modal-overlay");
   if (parentModal) {
