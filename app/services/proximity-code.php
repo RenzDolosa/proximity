@@ -192,10 +192,10 @@ if ($databaseConnected) {
               <th class="sn-cell">SN</th>
               <th class="emp-img">Image</th>
               <th class="emp-proximity">Proximity Code</th>
-              <th class="emp-remark">Remarks</th>
-              <th>Status</th>
-              <th>Register</th>
-              <th>Update</th>
+              <th class="emp-remark sortable-th" data-col="remarks">Remarks <span class="sort-icon">⇅</span></th>
+              <th class="sortable-th" data-col="status">Status <span class="sort-icon">⇅</span></th>
+              <th class="sortable-th" data-col="created_at">Register <span class="sort-icon">⇅</span></th>
+              <th class="sortable-th" data-col="updated_at">Update <span class="sort-icon">⇅</span></th>
               <?php if (
                 canAccess($permissions, 'edit-proximity')   ||
                 canAccess($permissions, 'delete-single-proximity')

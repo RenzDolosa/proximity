@@ -193,11 +193,11 @@ if ($databaseConnected) {
           <thead>
             <tr>
               <th class="sn-cell">SN</th>
-              <th>Employee</th>
-              <th>Type</th>
-              <th>Description</th>
-              <th>Creation Date</th>
-              <th>Recorded</th>
+              <th class="sortable-th" data-col="employee_name">Employee <span class="sort-icon">⇅</span></th>
+              <th class="sortable-th" data-col="violation_type">Type <span class="sort-icon">⇅</span></th>
+              <th class="sortable-th" data-col="violation_description">Description <span class="sort-icon">⇅</span></th>
+              <th class="sortable-th" data-col="violation_date">Creatin Date <span class="sort-icon">⇅</span></th>
+              <th class="sortable-th" data-col="created_at">Recorded <span class="sort-icon">⇅</span></th>
               <?php if (canAccess($permissions, 'delete-remarks')) : ?>
                 <th>Actions</th>
               <?php endif; ?>

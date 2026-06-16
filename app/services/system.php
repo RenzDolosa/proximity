@@ -213,17 +213,17 @@ if ($databaseConnected) {
           <thead>
             <tr style="border-bottom: 2px solid #e9ecef;">
               <th class="sn-cell">SN</th>
-              <th>Fullname</th>
-              <th>Brand / Department</th>
+              <th class="sortable-th" data-col="fullname">Fullname <span class="sort-icon">⇅</span></th>
+              <th class="sortable-th" data-col="brand">Brand / Department <span class="sort-icon">⇅</span></th>
               <!-- <th>Gender</th>
               <th>Birth Date</th>
               <th>Hired Date</th> -->
-              <th>Shift</th>
-              <th class="emp-remark">Remarks</th>
+              <th class="sortable-th" data-col="shift">Shift <span class="sort-icon">⇅</span></th>
+              <th class="emp-remark sortable-th" data-col="violation">Remarks <span class="sort-icon">⇅</span></th>
               <th class="emp-img">Image</th>
               <th class="emp-proximity">Proximity Code</th>
-              <th>Register</th>
-              <th>Update</th>
+              <th class="sortable-th" data-col="created_at">Register <span class="sort-icon">⇅</span></th>
+              <th class="sortable-th" data-col="updated_at">Update <span class="sort-icon">⇅</span></th>
               <?php if (
                 canAccess($permissions, 'manual in out-system') ||
                 canAccess($permissions, 'logs-system')          ||

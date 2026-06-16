@@ -17,6 +17,9 @@ let totalRecords = 0;
 
 let activeFilters = {};
 
+let sortCol = null;
+let sortDir = "asc";
+
 const count = employees.length;
 const label = count > 1 ? "code's" : "code";
 
@@ -475,6 +478,37 @@ async function renderEmployeeError(message = "Failed to load employee data.") {
       </td>
     </tr>
   `;
+}
+
+function updateSortHeaders() {
+  document.querySelectorAll(".sortable-th").forEach((th) => {
+    const icon = th.querySelector(".sort-icon");
+    if (!icon) return;
+    if (th.dataset.col === sortCol) {
+      icon.textContent = sortDir === "asc" ? "▲" : "▼";
+      icon.style.color = "var(--accent, #667eea)";
+    } else {
+      icon.textContent = "⇅";
+      icon.style.color = "";
+    }
+  });
+}
+
+function bindSortHeaders() {
+  document.querySelectorAll(".sortable-th").forEach((th) => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      if (sortCol === col) {
+        sortDir = sortDir === "asc" ? "desc" : "asc";
+      } else {
+        sortCol = col;
+        sortDir = "asc";
+      }
+      currentPage = 1;
+      updateSortHeaders();
+      loadEmployees(activeFilters, true, true);
+    });
+  });
 }
 
 async function renderEmployeeTable() {
@@ -1438,6 +1472,11 @@ async function loadEmployees(
 
     const params = new URLSearchParams({ action: "get", ...backendFilters });
 
+    if (sortCol) {
+      params.append("sort_col", sortCol);
+      params.append("sort_dir", sortDir);
+    }
+    
     if (statusFilter) {
       if (statusFilter === "Enabled") params.set("is_active", "1");
       else if (statusFilter === "Disabled") params.set("is_active", "0");
@@ -1456,15 +1495,18 @@ async function loadEmployees(
 
       populateFilter(employees);
 
-      if (remarksFilter) {
+      if (sortCol === 'remarks') {
         const qrImageMap = await buildQRToImageMap();
-        employees = employees.filter((emp) => {
-          const isOccupied = Object.prototype.hasOwnProperty.call(
-            qrImageMap,
-            String(emp.qr_code).trim().toLowerCase(),
-          );
-          const displayRemarks = isOccupied ? "Occupied" : "Available";
-          return displayRemarks.toLowerCase() === remarksFilter.toLowerCase();
+        employees.sort((a, b) => {
+          const getRemarks = (emp) =>
+            Object.prototype.hasOwnProperty.call(
+              qrImageMap,
+              String(emp.qr_code).trim().toLowerCase()
+            ) ? 'Occupied' : 'Available';
+          const ra = getRemarks(a);
+          const rb = getRemarks(b);
+          const cmp = ra.localeCompare(rb);
+          return sortDir === 'asc' ? cmp : -cmp;
         });
       }
 
@@ -1791,4 +1833,5 @@ document.addEventListener("DOMContentLoaded", async function () {
   setupEventListeners();
   syncOrphanStatuses();
   updateTotalAvailable();
+  bindSortHeaders();
 });

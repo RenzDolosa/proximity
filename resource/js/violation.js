@@ -3,27 +3,31 @@
 let ViolationBackend = null;
 
 // ── State ────────────────────────────────────────────────────────────
-let allVio      = [];
+let allVio = [];
 let filteredVio = [];
 let currentPage = 1;
-const PER_PAGE  = 25;
+const PER_PAGE = 25;
 let deleteTargetId = null;
 
+let sortCol = null;
+let sortDir = "asc";
+
 // ── Controls CSS helper ───────────────────────────────────────────
-const controls = document.querySelector('.controls');
-const sentinel = document.createElement('div');
-sentinel.style.cssText = 'position:absolute;top:0;height:1px;pointer-events:none';
+const controls = document.querySelector(".controls");
+const sentinel = document.createElement("div");
+sentinel.style.cssText =
+  "position:absolute;top:0;height:1px;pointer-events:none";
 controls.before(sentinel);
 
 new IntersectionObserver(([e]) => {
-  controls.classList.toggle('is-stuck', !e.isIntersecting);
+  controls.classList.toggle("is-stuck", !e.isIntersecting);
 }).observe(sentinel);
 
 // ── Load ─────────────────────────────────────────────────────────────
 async function loadViolations() {
   setControlButtonsDisabled(true);
   try {
-    const res  = await fetch(`${ViolationBackend}?action=list`, {
+    const res = await fetch(`${ViolationBackend}?action=list`, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     const data = await res.json();
@@ -48,10 +52,12 @@ async function loadViolations() {
 //  FILTER SUGGESTIONS  (mirrors system.js setupFieldSuggestions)
 // ─────────────────────────────────────────────────────────────────────
 function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
-  const input  = document.getElementById(inputId);
+  const input = document.getElementById(inputId);
   if (!input) return;
 
-  const hidden = options.hiddenId ? document.getElementById(options.hiddenId) : null;
+  const hidden = options.hiddenId
+    ? document.getElementById(options.hiddenId)
+    : null;
 
   // Remove any stale list from a previous call
   document.getElementById(listId)?.remove();
@@ -59,7 +65,7 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
   const list = document.createElement("ul");
   list.id = listId;
   list.dataset.suggestionList = "1";
-  list.dataset.ownerInput     = inputId;
+  list.dataset.ownerInput = inputId;
   list.style.cssText = `
     display:none;position:fixed;z-index:99999;
     background:#fff;border:1px solid #cbd5e1;
@@ -73,18 +79,18 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
 
   // ── helpers ──────────────────────────────────────────────────────
   function positionList() {
-    const rect       = input.getBoundingClientRect();
-    list.style.top   = rect.bottom + 4 + "px";
-    list.style.left  = rect.left   + "px";
+    const rect = input.getBoundingClientRect();
+    list.style.top = rect.bottom + 4 + "px";
+    list.style.left = rect.left + "px";
     list.style.width = Math.max(rect.width, 200) + "px";
   }
 
   function selectItem(displayValue, rawValue) {
     if (rawValue === "") {
-      input.value  = "";
+      input.value = "";
       if (hidden) hidden.value = "";
     } else {
-      input.value  = displayValue;
+      input.value = displayValue;
       if (hidden) hidden.value = rawValue;
     }
     list.style.display = "none";
@@ -94,7 +100,7 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
 
   function show(q) {
     const lower = q.trim().toLowerCase();
-    const raw   = getValues();
+    const raw = getValues();
 
     // Build item list: header options first, then real values
     const items = [];
@@ -102,59 +108,67 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     items.push({ display: "Default: ALL", raw: "", special: "all" });
 
     if (options.noneLabel) {
-      items.push({ display: options.noneLabel, raw: "__none__", special: "none" });
+      items.push({
+        display: options.noneLabel,
+        raw: "__none__",
+        special: "none",
+      });
       items.push({ display: "──────────", raw: null, special: "divider" });
     }
 
     const seen = new Map();
     raw
-      .map(v => (v || "").trim())
-      .filter(v => v && v.toLowerCase() !== "none")
-      .filter(v => !lower || v.toLowerCase().includes(lower))
-      .forEach(v => {
+      .map((v) => (v || "").trim())
+      .filter((v) => v && v.toLowerCase() !== "none")
+      .filter((v) => !lower || v.toLowerCase().includes(lower))
+      .forEach((v) => {
         const key = v.toLowerCase();
         if (!seen.has(key)) seen.set(key, v);
       });
 
-    [...seen.values()].forEach(v => {
+    [...seen.values()].forEach((v) => {
       items.push({ display: toProperCase(v), raw: v });
     });
 
     // When user is typing, drop the header specials — show matches only
-    const visibleItems = lower ? items.filter(i => !i.special) : items;
+    const visibleItems = lower ? items.filter((i) => !i.special) : items;
 
-    const hasRealItems = visibleItems.some(i => !i.special);
+    const hasRealItems = visibleItems.some((i) => !i.special);
     if (!visibleItems.length || (lower && !hasRealItems)) {
       list.style.display = "none";
       idx = -1;
       return;
     }
 
-    list.innerHTML = visibleItems.map((item, i) => {
-      if (item.special === "divider") {
-        return `<li data-raw="" data-display=""
+    list.innerHTML = visibleItems
+      .map((item, i) => {
+        if (item.special === "divider") {
+          return `<li data-raw="" data-display=""
           style="padding:4px 12px;font-size:11px;color:#94a3b8;
                  pointer-events:none;user-select:none;border-bottom:1px solid #f1f5f9;">
           ──────────
         </li>`;
-      }
+        }
 
-      const safeDisplay = escapeHtml(item.display);
-      let hl = safeDisplay;
-      if (lower && !item.special) {
-        const re = new RegExp(
-          `(${lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
-          "gi"
-        );
-        hl = safeDisplay.replace(re, '<mark style="background:#fef08a;border-radius:2px;">$1</mark>');
-      }
+        const safeDisplay = escapeHtml(item.display);
+        let hl = safeDisplay;
+        if (lower && !item.special) {
+          const re = new RegExp(
+            `(${lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+            "gi",
+          );
+          hl = safeDisplay.replace(
+            re,
+            '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
+          );
+        }
 
-      const isSpecial    = item.special === "all" || item.special === "none";
-      const specialStyle = isSpecial
-        ? "font-weight:600;color:#1e40af;background:#f0f9ff;"
-        : "";
+        const isSpecial = item.special === "all" || item.special === "none";
+        const specialStyle = isSpecial
+          ? "font-weight:600;color:#1e40af;background:#f0f9ff;"
+          : "";
 
-      return `<li
+        return `<li
         data-raw="${escapeHtml(item.raw ?? "")}"
         data-display="${safeDisplay}"
         data-index="${i}"
@@ -163,18 +177,19 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
                display:flex;align-items:center;${specialStyle}">
         ${hl}
       </li>`;
-    }).join("");
+      })
+      .join("");
 
-    list.querySelectorAll("li[data-raw]").forEach(li => {
+    list.querySelectorAll("li[data-raw]").forEach((li) => {
       if (li.style.pointerEvents === "none") return;
-      li.addEventListener("mousedown", e => {
+      li.addEventListener("mousedown", (e) => {
         e.preventDefault();
         selectItem(li.dataset.display, li.dataset.raw);
       });
       li.addEventListener("mouseover", () => {
-        list.querySelectorAll("li").forEach(l =>
-          (l.style.background = l === li ? "#f0f9ff" : "")
-        );
+        list
+          .querySelectorAll("li")
+          .forEach((l) => (l.style.background = l === li ? "#f0f9ff" : ""));
         idx = [...list.querySelectorAll("li")].indexOf(li);
       });
     });
@@ -199,17 +214,21 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
 
   input.addEventListener("input", () => show(input.value));
 
-  window.addEventListener("scroll", () => {
-    if (list.style.display !== "none") positionList();
-  }, true);
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (list.style.display !== "none") positionList();
+    },
+    true,
+  );
 
   window.addEventListener("resize", () => {
     if (list.style.display !== "none") positionList();
   });
 
-  input.addEventListener("keydown", e => {
+  input.addEventListener("keydown", (e) => {
     const liItems = [...list.querySelectorAll("li")].filter(
-      l => l.style.pointerEvents !== "none"
+      (l) => l.style.pointerEvents !== "none",
     );
 
     if (e.key === "Tab") {
@@ -222,11 +241,15 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
       idx = Math.min(idx + 1, liItems.length - 1);
-      liItems.forEach((l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""));
+      liItems.forEach(
+        (l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""),
+      );
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       idx = Math.max(idx - 1, 0);
-      liItems.forEach((l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""));
+      liItems.forEach(
+        (l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""),
+      );
     } else if (e.key === "Enter" && idx >= 0) {
       e.preventDefault();
       selectItem(liItems[idx].dataset.display, liItems[idx].dataset.raw);
@@ -240,7 +263,7 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
   if (input._vioOutsideClick) {
     document.removeEventListener("click", input._vioOutsideClick);
   }
-  input._vioOutsideClick = e => {
+  input._vioOutsideClick = (e) => {
     if (!input.contains(e.target) && !list.contains(e.target)) {
       list.style.display = "none";
       idx = -1;
@@ -255,22 +278,28 @@ function setupFilterSuggestions() {
   setupFieldSuggestions(
     "f_name",
     "vio-name-suggestions",
-    () => [...new Map(
-      allVio.map(v => [(v.employee_name || "").toLowerCase(), v.employee_name])
-    ).values()].filter(Boolean),
-    { onSelect: () => applyFilters() }
+    () =>
+      [
+        ...new Map(
+          allVio.map((v) => [
+            (v.employee_name || "").toLowerCase(),
+            v.employee_name,
+          ]),
+        ).values(),
+      ].filter(Boolean),
+    { onSelect: () => applyFilters() },
   );
 
   // Type — readonly display + hidden value (exact mirror of system.php fields)
   setupFieldSuggestions(
     "f_type_display",
     "vio-type-suggestions",
-    () => allVio.map(v => v.violation_type),
+    () => allVio.map((v) => v.violation_type),
     {
-      hiddenId : "f_type_val",
+      hiddenId: "f_type_val",
       noneLabel: "No Type",
-      onSelect : () => applyFilters(),
-    }
+      onSelect: () => applyFilters(),
+    },
   );
 }
 
@@ -280,14 +309,15 @@ function buildTypeSuggestions() {
 
 // ── Apply / clear ─────────────────────────────────────────────────
 function applyFilters() {
-  const name    = document.getElementById("f_name").value.trim().toLowerCase();
+  const name = document.getElementById("f_name").value.trim().toLowerCase();
   const typeRaw = document.getElementById("f_type_val").value;
 
   const from = (document.getElementById("f_from")?.value || "").trim();
-  const to   = (document.getElementById("f_to")?.value   || "").trim();
+  const to = (document.getElementById("f_to")?.value || "").trim();
 
-  filteredVio = allVio.filter(v => {
-    if (name && !(v.employee_name || "").toLowerCase().includes(name)) return false;
+  filteredVio = allVio.filter((v) => {
+    if (name && !(v.employee_name || "").toLowerCase().includes(name))
+      return false;
 
     if (typeRaw) {
       if (typeRaw === "__none__") {
@@ -298,7 +328,7 @@ function applyFilters() {
     }
 
     if (from && (v.violation_date || "") < from) return false;
-    if (to   && (v.violation_date || "") > to)   return false;
+    if (to && (v.violation_date || "") > to) return false;
 
     return true;
   });
@@ -309,16 +339,17 @@ function applyFilters() {
 }
 
 function clearFilters() {
-  document.getElementById("f_name").value         = "";
+  document.getElementById("f_name").value = "";
   document.getElementById("f_type_display").value = "";
-  document.getElementById("f_type_val").value     = "";
+  document.getElementById("f_type_val").value = "";
 
   if (typeof clearDateRange === "function") {
     clearDateRange();
   }
 
-  document.querySelectorAll("ul[data-suggestion-list]")
-    .forEach(ul => ul.style.display = "none");
+  document
+    .querySelectorAll("ul[data-suggestion-list]")
+    .forEach((ul) => (ul.style.display = "none"));
 
   const filterStatus = document.getElementById("filter-status");
   if (filterStatus) filterStatus.innerHTML = "";
@@ -328,23 +359,23 @@ function clearFilters() {
 
 function getActiveFilters() {
   const filters = {};
-  const name    = document.getElementById("f_name").value.trim();
+  const name = document.getElementById("f_name").value.trim();
   const typeVal = document.getElementById("f_type_val").value;
-  const from    = document.getElementById("f_from")?.value || "";
-  const to      = document.getElementById("f_to")?.value   || "";
-  if (name)    filters["Employee"]   = name;
-  if (typeVal) filters["Type"]       = typeVal === "__none__" ? "No Type" : typeVal;
-  if (from)    filters["Date from"]  = from;
-  if (to)      filters["Date to"]    = to;
+  const from = document.getElementById("f_from")?.value || "";
+  const to = document.getElementById("f_to")?.value || "";
+  if (name) filters["Employee"] = name;
+  if (typeVal) filters["Type"] = typeVal === "__none__" ? "No Type" : typeVal;
+  if (from) filters["Date from"] = from;
+  if (to) filters["Date to"] = to;
   return filters;
 }
 
 function updateFilterStatus() {
-  const el      = document.getElementById("filter-status");
+  const el = document.getElementById("filter-status");
   if (!el) return;
 
   const filters = getActiveFilters();
-  const active  = Object.keys(filters).length > 0;
+  const active = Object.keys(filters).length > 0;
 
   if (!active) {
     el.innerHTML = "";
@@ -384,39 +415,91 @@ function updateFilterStatus() {
   el.appendChild(filterInfo);
 }
 
+function updateSortHeaders() {
+  document.querySelectorAll(".sortable-th").forEach((th) => {
+    const icon = th.querySelector(".sort-icon");
+    if (!icon) return;
+    if (th.dataset.col === sortCol) {
+      icon.textContent = sortDir === "asc" ? "▲" : "▼";
+      icon.style.color = "var(--accent, #667eea)";
+    } else {
+      icon.textContent = "⇅";
+      icon.style.color = "";
+    }
+  });
+}
+
+function bindSortHeaders() {
+  document.querySelectorAll(".sortable-th").forEach((th) => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      if (sortCol === col) {
+        sortDir = sortDir === "asc" ? "desc" : "asc";
+      } else {
+        sortCol = col;
+        sortDir = "asc";
+      }
+      currentPage = 1;
+      updateSortHeaders();
+      renderTable();
+    });
+  });
+}
+
 // ── Render table ──────────────────────────────────────────────────
 function renderTable() {
-  const tbody        = document.getElementById("violationTableBody");
+  const tbody = document.getElementById("violationTableBody");
   const paginationDiv = document.getElementById("pagination");
-  const noDataDiv    = document.getElementById("no-data");
+  const noDataDiv = document.getElementById("no-data");
 
   if (!filteredVio || filteredVio.length === 0) {
     tbody.innerHTML = "";
     if (paginationDiv) paginationDiv.style.display = "none";
-    if (noDataDiv)     noDataDiv.style.display = "block";
+    if (noDataDiv) noDataDiv.style.display = "block";
     return;
   }
 
   if (noDataDiv) noDataDiv.style.display = "none";
+  
+  if (sortCol) {
+    filteredVio.sort((a, b) => {
+      let va = a[sortCol] ?? "";
+      let vb = b[sortCol] ?? "";
+
+      // Dates: compare as strings (ISO format sorts correctly)
+      // Strings: locale-aware, case-insensitive
+      const cmp =
+        typeof va === "string" && typeof vb === "string"
+          ? va.localeCompare(vb, undefined, { sensitivity: "base" })
+          : va > vb
+            ? 1
+            : va < vb
+              ? -1
+              : 0;
+
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }
 
   const totalPages = Math.ceil(filteredVio.length / PER_PAGE);
   if (currentPage > totalPages) currentPage = totalPages;
-  if (currentPage < 1)          currentPage = 1;
+  if (currentPage < 1) currentPage = 1;
 
   const startIndex = (currentPage - 1) * PER_PAGE;
-  const slice      = filteredVio.slice(startIndex, startIndex + PER_PAGE);
+  const slice = filteredVio.slice(startIndex, startIndex + PER_PAGE);
 
-  tbody.innerHTML = slice.map((v, index) => {
-    const safeFullname    = escapeHtml(toProperCase(v.employee_name));
-    const safeViolation   = escapeHtml(v.violation_type);
-    const safeDescription = escapeHtml(v.violation_description);
-    const safeId          = escapeHtml(String(v.id));
-    const safeEmpId       = escapeHtml(String(v.employee_id));
-    const badge           = getBadgeClass(v.violation_type);
-    const safeDate        = formatDate(v.violation_date);
-    const safeCreatedAt   = formatDate(v.created_at, true);
+  tbody.innerHTML = slice
+    .map((v, index) => {
+      const safeFullname = escapeHtml(toProperCase(v.employee_name));
+      const safeViolation = escapeHtml(v.violation_type);
+      const safeDescription = escapeHtml(v.violation_description);
+      const safeId = escapeHtml(String(v.id));
+      const safeEmpId = escapeHtml(String(v.employee_id));
+      const badge = getBadgeClass(v.violation_type);
+      const safeDate = formatDate(v.violation_date);
+      const safeCreatedAt = formatDate(v.created_at, true);
 
-    return `
+      return `
       <tr class="row">
         <td class="sn-cell">${startIndex + index + 1}</td>
         <td>
@@ -428,7 +511,9 @@ function renderTable() {
         <td><small>${safeDate}</small></td>
         <td class="emp-createdAt"><small>${safeCreatedAt}</small></td>
 
-        ${window.PERMISSIONS.delete ? `
+        ${
+          window.PERMISSIONS.delete
+            ? `
         <td style="position:relative;width:160px;overflow:visible;">
           <button
             data-emp-id="${safeId}"
@@ -452,10 +537,13 @@ function renderTable() {
             </button>
           </div>
         </td>
-        ` : ""}
+        `
+            : ""
+        }
       </tr>
     `;
-  }).join("");
+    })
+    .join("");
 
   renderPagination(totalPages);
 }
@@ -463,34 +551,32 @@ function renderTable() {
 // ── Actions panel (identical to system.js) ────────────────────────
 function toggleActionsPanel(btn) {
   const allPanels = document.querySelectorAll(".actions-panel");
-  const allBtns   = document.querySelectorAll(".actions-toggle-btn");
-  const panel     = btn.parentElement.querySelector(".actions-panel");
-  const isOpen    = panel.classList.contains("actions-open");
+  const allBtns = document.querySelectorAll(".actions-toggle-btn");
+  const panel = btn.parentElement.querySelector(".actions-panel");
+  const isOpen = panel.classList.contains("actions-open");
 
-  allPanels.forEach(p => {
+  allPanels.forEach((p) => {
     p.classList.remove("actions-open");
     p.style.display = "none";
     if (p._originalParent && p.parentElement === document.body) {
       p._originalParent.appendChild(p);
     }
   });
-  allBtns.forEach(b => b.classList.remove("actions-active"));
+  allBtns.forEach((b) => b.classList.remove("actions-active"));
 
   if (isOpen) return;
 
   panel._originalParent = btn.parentElement;
   document.body.appendChild(panel);
 
-  const rect   = btn.getBoundingClientRect();
+  const rect = btn.getBoundingClientRect();
   const panelW = 160;
   const panelH = panel.scrollHeight || 180;
 
   let left = rect.right - panelW;
   left = Math.max(8, Math.min(left, window.innerWidth - panelW - 8));
 
-  const top = rect.top >= panelH + 8
-    ? rect.top - panelH - 4
-    : rect.bottom + 4;
+  const top = rect.top >= panelH + 8 ? rect.top - panelH - 4 : rect.bottom + 4;
 
   panel.style.cssText += `
     position:fixed;
@@ -507,31 +593,34 @@ function toggleActionsPanel(btn) {
 }
 
 document.addEventListener("click", function (e) {
-  if (!e.target.closest(".actions-toggle-btn") && !e.target.closest(".actions-panel")) {
-    document.querySelectorAll(".actions-panel").forEach(p => {
+  if (
+    !e.target.closest(".actions-toggle-btn") &&
+    !e.target.closest(".actions-panel")
+  ) {
+    document.querySelectorAll(".actions-panel").forEach((p) => {
       p.classList.remove("actions-open");
       p.style.display = "none";
       if (p._originalParent && p.parentElement === document.body) {
         p._originalParent.appendChild(p);
       }
     });
-    document.querySelectorAll(".actions-toggle-btn").forEach(b =>
-      b.classList.remove("actions-active")
-    );
+    document
+      .querySelectorAll(".actions-toggle-btn")
+      .forEach((b) => b.classList.remove("actions-active"));
   }
 });
 
 function closeAllActionsPanels() {
-  document.querySelectorAll(".actions-panel").forEach(p => {
+  document.querySelectorAll(".actions-panel").forEach((p) => {
     p.classList.remove("actions-open");
     p.style.display = "none";
     if (p._originalParent && p.parentElement === document.body) {
       p._originalParent.appendChild(p);
     }
   });
-  document.querySelectorAll(".actions-toggle-btn").forEach(b =>
-    b.classList.remove("actions-active")
-  );
+  document
+    .querySelectorAll(".actions-toggle-btn")
+    .forEach((b) => b.classList.remove("actions-active"));
 }
 
 function openDeleteFromBtn(btn) {
@@ -542,11 +631,31 @@ function openDeleteFromBtn(btn) {
 function getBadgeClass(type) {
   if (!type) return "badge-blue";
   const t = type.toLowerCase();
-  if (t.includes("cleared"))    return "badge-green";
-  if (["misconduct","insubordination","harassment","violence","theft","fraud"]
-        .some(k => t.includes(k))) return "badge-red";
-  if (["tardiness","absenteeism","absence","late","negligence","policy","updated","initial"]
-        .some(k => t.includes(k))) return "badge-warn";
+  if (t.includes("cleared")) return "badge-green";
+  if (
+    [
+      "misconduct",
+      "insubordination",
+      "harassment",
+      "violence",
+      "theft",
+      "fraud",
+    ].some((k) => t.includes(k))
+  )
+    return "badge-red";
+  if (
+    [
+      "tardiness",
+      "absenteeism",
+      "absence",
+      "late",
+      "negligence",
+      "policy",
+      "updated",
+      "initial",
+    ].some((k) => t.includes(k))
+  )
+    return "badge-warn";
   return "badge-blue";
 }
 
@@ -562,8 +671,8 @@ function renderPagination(totalPages) {
 
   pg.style.display = "flex";
 
-  const delta  = 2;
-  const range  = new Set([1, totalPages]);
+  const delta = 2;
+  const range = new Set([1, totalPages]);
   for (
     let p = Math.max(2, currentPage - delta);
     p <= Math.min(totalPages - 1, currentPage + delta);
@@ -573,7 +682,8 @@ function renderPagination(totalPages) {
   }
 
   const sorted = [...range].sort((a, b) => a - b);
-  let prev = null, html = "";
+  let prev = null,
+    html = "";
 
   html += `<button class="page-arrow-btn" tabindex="-1" onclick="goTo(${currentPage - 1})"
              ${currentPage <= 1 ? "disabled" : ""}>
@@ -607,30 +717,36 @@ function goTo(p) {
 }
 
 function previousPage() {
-  if (currentPage > 1) { currentPage--; renderTable(); }
+  if (currentPage > 1) {
+    currentPage--;
+    renderTable();
+  }
 }
 
 function nextPage() {
   const totalPages = Math.ceil(filteredVio.length / PER_PAGE);
-  if (currentPage < totalPages) { currentPage++; renderTable(); }
+  if (currentPage < totalPages) {
+    currentPage++;
+    renderTable();
+  }
 }
 
 function showNoData() {
   document.getElementById("violationTableBody").innerHTML = "";
-  document.getElementById("no-data").style.display       = "block";
-  document.getElementById("pagination").style.display    = "none";
+  document.getElementById("no-data").style.display = "block";
+  document.getElementById("pagination").style.display = "none";
 }
 
 function refreshStats() {
   const now = new Date();
-  const y   = now.getFullYear();
-  const m   = now.getMonth() + 1;
+  const y = now.getFullYear();
+  const m = now.getMonth() + 1;
 
-  document.getElementById("statTotal").textContent    = allVio.length;
+  document.getElementById("statTotal").textContent = allVio.length;
   document.getElementById("statAffected").textContent = new Set(
-    allVio.map(v => v.employee_id)
+    allVio.map((v) => v.employee_id),
   ).size;
-  document.getElementById("statMonth").textContent = allVio.filter(v => {
+  document.getElementById("statMonth").textContent = allVio.filter((v) => {
     if (!v.violation_date) return false;
     const [vy, vm] = v.violation_date.split("-").map(Number);
     return vy === y && vm === m;
@@ -661,9 +777,9 @@ async function executeDelete() {
   fd.append("id", deleteTargetId);
 
   try {
-    const res  = await fetch(`${ViolationBackend}`, {
-      method : "POST",
-      body   : fd,
+    const res = await fetch(`${ViolationBackend}`, {
+      method: "POST",
+      body: fd,
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     const data = await res.json();
@@ -706,10 +822,16 @@ function toProperCase(str) {
 function formatDate(str, withTime = false) {
   if (!str) return "—";
   try {
-    const d    = new Date(withTime ? str : str + "T00:00:00");
+    const d = new Date(withTime ? str : str + "T00:00:00");
     const opts = withTime
-      ? { year:"numeric", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" }
-      : { year:"numeric", month:"short", day:"numeric" };
+      ? {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }
+      : { year: "numeric", month: "short", day: "numeric" };
     return d.toLocaleDateString("en-PH", opts);
   } catch {
     return str;
@@ -717,7 +839,7 @@ function formatDate(str, withTime = false) {
 }
 
 function showAlert(message, type = "info") {
-  document.querySelectorAll(".alert").forEach(a => a.remove());
+  document.querySelectorAll(".alert").forEach((a) => a.remove());
 
   const alert = document.createElement("div");
   alert.className = `alert alert-${type}`;
@@ -750,16 +872,13 @@ function showLoading(show) {
 }
 
 function setControlButtonsDisabled(disabled) {
-  const selectors = [
-    '.search-btn .btn',
-    '.clear-btn .btn',
-  ];
+  const selectors = [".search-btn .btn", ".clear-btn .btn"];
   selectors.forEach((sel) => {
     const el = document.querySelector(sel);
     if (!el) return;
     el.disabled = disabled;
-    el.style.opacity = disabled ? '0.4' : '';
-    el.style.cursor = disabled ? 'not-allowed' : '';
+    el.style.opacity = disabled ? "0.4" : "";
+    el.style.cursor = disabled ? "not-allowed" : "";
   });
 }
 
@@ -771,6 +890,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   initDateRangePicker();
   loadViolations();
   setupFilterSuggestions();
+  bindSortHeaders();
 
   window.onDateRangeChange = function () {
     applyFilters();

@@ -241,14 +241,14 @@ if ($databaseConnected) {
           <thead>
             <tr style="border-bottom: 2px solid #e9ecef;">
               <th class="sn-cell">SN</th>
-              <th>Fullname</th>
-              <th>Brand / Department</th>
-              <th>Shift</th>
-              <th class="emp-remark">Remarks</th>
+              <th class="sortable-th" data-col="fullname">Fullname <span class="sort-icon">⇅</span></th>
+              <th class="sortable-th" data-col="brand">Brand / Department <span class="sort-icon">⇅</span></th>
+              <th class="sortable-th" data-col="shift">Shift <span class="sort-icon">⇅</span></th>
+              <th class="emp-remark sortable-th" data-col="violation">Remarks <span class="sort-icon">⇅</span></th>
               <th class="emp-img">Image</th>
               <th class="emp-proximity">Proximity Code</th>
-              <th>Timestamp</th>
-              <th>Gate / Operator</th>
+              <th class="sortable-th" data-col="access_timestamp">Timestamp <span class="sort-icon">⇅</span></th>
+              <th class="sortable-th" data-col="gate_name">Gate / Operator <span class="sort-icon">⇅</span></th>
               <?php if (canAccess($permissions, 'delete-single-attendance')) : ?>
                 <th>Actions</th>
               <?php endif; ?>

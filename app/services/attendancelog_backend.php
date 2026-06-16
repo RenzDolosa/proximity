@@ -197,6 +197,33 @@ class AccessLogManager
       $params[':date_to'] = $filters['date_to'];
     }
 
+    // ── Build ORDER BY ────────────────────────────────────────────────
+    $allowed_sort_cols = ['fullname', 'brand', 'shift', 'violation', 'access_timestamp', 'gate_name'];
+    $sort_col = (isset($filters['sort_col']) && in_array($filters['sort_col'], $allowed_sort_cols, true))
+      ? $filters['sort_col'] : 'access_timestamp';
+    $sort_dir = (isset($filters['sort_dir']) && strtolower($filters['sort_dir']) === 'asc')
+      ? 'ASC' : 'DESC';
+    $order = "ORDER BY e.{$sort_col} {$sort_dir}";
+
+    $order = $sort_col === 'gate_name'
+      ? "ORDER BY (SELECT first_name FROM " . DB_NAME . ".users WHERE id = l.user_id LIMIT 1) {$sort_dir}"
+      : "ORDER BY l.{$sort_col} {$sort_dir}";
+      
+    if ($page === null) {
+      $order_no_alias = $sort_col === 'gate_name'
+        ? "ORDER BY (SELECT first_name FROM " . DB_NAME . ".users WHERE id = user_id LIMIT 1) {$sort_dir}"
+        : "ORDER BY {$sort_col} {$sort_dir}";
+
+      $stmt = $this->conn->prepare(
+        "SELECT * FROM {$this->logTable} $where $order_no_alias"
+      );
+      foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+      }
+      $stmt->execute();
+      return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     $countStmt = $this->conn->prepare("SELECT COUNT(*) FROM {$this->logTable} l $where");
     foreach ($params as $key => $value) {
       $countStmt->bindValue($key, $value);
@@ -206,7 +233,10 @@ class AccessLogManager
 
     $offset = ($page - 1) * $limit;
     $dataStmt = $this->conn->prepare(
-      "SELECT * FROM {$this->logTable} l $where ORDER BY id DESC LIMIT :limit OFFSET :offset"
+      "SELECT * FROM {$this->logTable} l
+      $where
+      $order
+      LIMIT :limit OFFSET :offset"
     );
     foreach ($params as $key => $value) {
       $dataStmt->bindValue($key, $value);
@@ -216,8 +246,8 @@ class AccessLogManager
     $dataStmt->execute();
     $logs = $dataStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $userIds     = array_unique(array_filter(array_column($logs, 'user_id')));
-    $userNameMap = [];
+    $userIds      = array_unique(array_filter(array_column($logs, 'user_id')));
+    $userNameMap  = [];
     if (!empty($userIds)) {
       try {
         $mainConn = getMainDBConnection();
@@ -619,6 +649,8 @@ try {
           $d = $_GET['date_to'];
           if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_to'] = $d;
         }
+        if (!empty($_GET['sort_col'])) $filters['sort_col'] = $_GET['sort_col'];
+        if (!empty($_GET['sort_dir'])) $filters['sort_dir'] = $_GET['sort_dir'];
 
         $page  = max(1, (int)($_GET['page']  ?? 1));
         $limit = max(1, (int)($_GET['limit'] ?? 25));

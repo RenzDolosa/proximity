@@ -175,7 +175,21 @@ class EmployeeManager
       $params[':updated_at'] = '%' . $filters['updated_at'] . '%';
     }
 
-    $where .= " ORDER BY id DESC";
+    // ── Build ORDER BY ────────────────────────────────────────────────
+    $client_only_cols   = ['remarks'];
+    $allowed_sort_cols  = ['status', 'created_at', 'updated_at'];
+
+    $raw_sort = $filters['sort_col'] ?? '';
+    $sort_col = in_array($raw_sort, $client_only_cols, true)
+      ? 'created_at'
+      : (in_array($raw_sort, $allowed_sort_cols, true) ? $raw_sort : 'created_at');;
+
+    $sort_dir = (isset($filters['sort_dir']) && strtolower($filters['sort_dir']) === 'asc')
+      ? 'ASC' : 'DESC';
+
+    $sql_col = $sort_col === 'status' ? 'is_active' : $sort_col;
+
+    $where .= " ORDER BY {$sql_col} {$sort_dir}";
 
     $stmt = $this->conn->prepare($where);
     foreach ($params as $key => $value) {
@@ -928,7 +942,9 @@ try {
         unset($filters['remarks']);
 
         if (!empty($_GET['qr_code'])) $filters['qr_code'] = sanitizeInput($_GET['qr_code']);
-        if (isset($_GET['is_active']) && $_GET['is_active'] !== '') {$filters['is_active'] = (int)$_GET['is_active'];}
+        if (isset($_GET['is_active']) && $_GET['is_active'] !== '') {
+          $filters['is_active'] = (int)$_GET['is_active'];
+        }
         if (!empty($_GET['created_at'])) {
           $d = $_GET['created_at'];
           if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['created_at'] = $d;
@@ -942,11 +958,11 @@ try {
           if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_to'] = $d;
         }
         if (!empty($_GET['updated_at'])) {
-          $filters['updated_at'] = $_GET['updated_at'];
-        } elseif (!empty($_GET['updated_from']) && !empty($_GET['updated_to'])) {
-          $filters['updated_from'] = $_GET['updated_from'];
-          $filters['updated_to']   = $_GET['updated_to'];
+          $d = $_GET['updated_at'];
+          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['updated_at'] = $d;
         }
+        if (!empty($_GET['sort_col'])) $filters['sort_col'] = $_GET['sort_col'];
+        if (!empty($_GET['sort_dir'])) $filters['sort_dir'] = $_GET['sort_dir'];
 
         try {
           $employees           = $employeeManager->getEmployees($filters);

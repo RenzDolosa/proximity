@@ -211,6 +211,35 @@ body {
   align-items: center;
 }
 
+/* ── Sortable column headers ── */
+.sortable-th {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  position: relative;
+  padding-right: 22px; /* reserve space for the icon */
+}
+
+.sort-icon {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  opacity: 0.45;
+  transition: opacity var(--transition);
+  pointer-events: none;
+  line-height: 1;
+}
+
+.sortable-th:hover .sort-icon {
+  opacity: 0.75;
+}
+
+.sortable-th .sort-icon[style*="color"] {
+  opacity: 1;
+}
+
 .table-header {
   display: flex;
   height: 45px;

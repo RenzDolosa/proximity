@@ -17,6 +17,9 @@ let currentAudio = null;
 let activeFilters = {};
 let allEmployeesUnfiltered = [];
 
+let sortCol = null;
+let sortDir = "asc";
+
 const count = employees.length;
 const label = count > 1 ? "employee's" : "employee";
 
@@ -30,13 +33,14 @@ const AUDIO_TYPE_MAP = {
 };
 
 // ── Controls CSS helper ───────────────────────────────────────────
-const controls = document.querySelector('.controls');
-const sentinel = document.createElement('div');
-sentinel.style.cssText = 'position:absolute;top:0;height:1px;pointer-events:none';
+const controls = document.querySelector(".controls");
+const sentinel = document.createElement("div");
+sentinel.style.cssText =
+  "position:absolute;top:0;height:1px;pointer-events:none";
 controls.before(sentinel);
 
 new IntersectionObserver(([e]) => {
-  controls.classList.toggle('is-stuck', !e.isIntersecting);
+  controls.classList.toggle("is-stuck", !e.isIntersecting);
 }).observe(sentinel);
 
 // ─── Suggestion visibility helpers ───────────────────────────────
@@ -974,6 +978,37 @@ async function renderEmployeeError(message = "Failed to load employee data.") {
       </td>
     </tr>
   `;
+}
+
+function updateSortHeaders() {
+  document.querySelectorAll(".sortable-th").forEach((th) => {
+    const icon = th.querySelector(".sort-icon");
+    if (!icon) return;
+    if (th.dataset.col === sortCol) {
+      icon.textContent = sortDir === "asc" ? "▲" : "▼";
+      icon.style.color = "var(--accent, #667eea)";
+    } else {
+      icon.textContent = "⇅";
+      icon.style.color = "";
+    }
+  });
+}
+
+function bindSortHeaders() {
+  document.querySelectorAll(".sortable-th").forEach((th) => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      if (sortCol === col) {
+        sortDir = sortDir === "asc" ? "desc" : "asc";
+      } else {
+        sortCol = col;
+        sortDir = "asc";
+      }
+      currentPage = 1;
+      updateSortHeaders();
+      loadEmployees(activeFilters, true, true);
+    });
+  });
 }
 
 async function renderEmployeeTable() {
@@ -2193,7 +2228,7 @@ async function _renderAccessTab(container, employeeId) {
               <td style="padding:9px 12px;">${escapeHtml(log.gate_name || log.user_id || "N/A")}</td>
               <td style="padding:9px 12px;color:#aaa;font-size:11px;white-space:nowrap;">${escapeHtml(log.access_timestamp)}</td>
             </tr>`,
-            )
+        )
         .join("")
     : `<tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;">No log records found.</td></tr>`;
 }
@@ -2657,6 +2692,11 @@ async function loadEmployees(
 
     params.append("page", currentPage);
     params.append("limit", itemsPerPage);
+
+    if (sortCol) {
+      params.append("sort_col", sortCol);
+      params.append("sort_dir", sortDir);
+    }
 
     for (const [key, value] of Object.entries(filters)) {
       if (key === "position" && value === "__none__") {
@@ -3320,16 +3360,16 @@ function showLoading(show) {
 
 function setControlButtonsDisabled(disabled) {
   const selectors = [
-    '.search-btn .btn',
-    '.clear-btn .btn',
-    '.delete-all-btn .btn-danger',
+    ".search-btn .btn",
+    ".clear-btn .btn",
+    ".delete-all-btn .btn-danger",
   ];
   selectors.forEach((sel) => {
     const el = document.querySelector(sel);
     if (!el) return;
     el.disabled = disabled;
-    el.style.opacity = disabled ? '0.4' : '';
-    el.style.cursor = disabled ? 'not-allowed' : '';
+    el.style.opacity = disabled ? "0.4" : "";
+    el.style.cursor = disabled ? "not-allowed" : "";
   });
 }
 
@@ -3343,4 +3383,5 @@ document.addEventListener("DOMContentLoaded", async function () {
   updateDeleteButtonState();
   setupEventListeners();
   syncOrphanStatuses();
+  bindSortHeaders();
 });

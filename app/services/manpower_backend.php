@@ -320,12 +320,19 @@ class EmployeeManager
       $params[':updated_at'] = $filters['updated_at'];
     }
 
+    // ── Build ORDER BY ────────────────────────────────────────────────
+    $allowed_sort_cols = ['fullname', 'brand', 'shift', 'violation', 'created_at', 'updated_at'];
+    $sort_col = (isset($filters['sort_col']) && in_array($filters['sort_col'], $allowed_sort_cols, true))
+      ? $filters['sort_col'] : 'created_at';
+    $sort_dir = (isset($filters['sort_dir']) && strtolower($filters['sort_dir']) === 'asc')
+      ? 'ASC' : 'DESC';
+    $order = "ORDER BY e.{$sort_col} {$sort_dir}";
+
     if ($page === null) {
       $stmt = $this->conn->prepare(
         "SELECT e.*,
                 (SELECT COUNT(*) FROM violations v WHERE v.employee_id = e.id) AS violation_count
-             FROM {$this->table} e $where
-             ORDER BY created_at DESC"
+            FROM {$this->table} e $where $order"
       );
       foreach ($params as $key => $value) {
         $stmt->bindValue($key, $value);
@@ -347,10 +354,10 @@ class EmployeeManager
     $dataStmt = $this->conn->prepare(
       "SELECT e.*,
             (SELECT COUNT(*) FROM violations v WHERE v.employee_id = e.id) AS violation_count
-         FROM {$this->table} e
-         $where
-         ORDER BY created_at DESC
-         LIMIT :limit OFFSET :offset"
+        FROM {$this->table} e
+        $where
+        $order
+        LIMIT :limit OFFSET :offset"
     );
     foreach ($params as $key => $value) {
       $dataStmt->bindValue($key, $value);
@@ -1446,6 +1453,8 @@ try {
           $d = $_GET['updated_at'];
           if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['updated_at'] = $d;
         }
+        if (!empty($_GET['sort_col'])) $filters['sort_col'] = $_GET['sort_col'];
+        if (!empty($_GET['sort_dir'])) $filters['sort_dir'] = $_GET['sort_dir'];
 
         $page  = max(1, (int)($_GET['page']  ?? 1));
         $limit = max(1, (int)($_GET['limit'] ?? 25));

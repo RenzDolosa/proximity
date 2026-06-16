@@ -22,6 +22,9 @@ let totalRecords = 0;
 let activeFilters = {};
 let allEmployees = [];
 
+let sortCol = null;
+let sortDir = "asc";
+
 // ── Controls CSS helper ───────────────────────────────────────────
 const controls = document.querySelector('.controls');
 const sentinel = document.createElement('div');
@@ -389,8 +392,14 @@ async function loadEmployeesAuto() {
           : {};
 
     const params = buildFilterParams(filtersToUse);
+
     params.append("page", currentPage);
     params.append("limit", itemsPerPage);
+
+    if (sortCol) {
+      params.append("sort_col", sortCol);
+      params.append("sort_dir", sortDir);
+    }
 
     const response = await fetch(`${AttendanceBackend}?${params.toString()}`, {
       headers: {
@@ -621,6 +630,37 @@ async function renderEmployeeError(message = "Failed to load data.") {
       </td>
     </tr>
   `;
+}
+
+function updateSortHeaders() {
+  document.querySelectorAll(".sortable-th").forEach((th) => {
+    const icon = th.querySelector(".sort-icon");
+    if (!icon) return;
+    if (th.dataset.col === sortCol) {
+      icon.textContent = sortDir === "asc" ? "▲" : "▼";
+      icon.style.color = "var(--accent, #667eea)";
+    } else {
+      icon.textContent = "⇅";
+      icon.style.color = "";
+    }
+  });
+}
+
+function bindSortHeaders() {
+  document.querySelectorAll(".sortable-th").forEach((th) => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      if (sortCol === col) {
+        sortDir = sortDir === "asc" ? "desc" : "asc";
+      } else {
+        sortCol = col;
+        sortDir = "asc";
+      }
+      currentPage = 1;
+      updateSortHeaders();
+      loadEmployees(activeFilters, true, true);
+    });
+  });
 }
 
 async function renderEmployeeTable() {
@@ -1033,8 +1073,14 @@ async function loadEmployees(
     activeFilters = filters;
 
     const params = buildFilterParams(filters);
+    
     params.append("page", currentPage);
     params.append("limit", itemsPerPage);
+    
+    if (sortCol) {
+      params.append("sort_col", sortCol);
+      params.append("sort_dir", sortDir);
+    }
 
     const response = await fetch(`${AttendanceBackend}?${params.toString()}`, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -1840,6 +1886,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   loadEmployees();
   updateDeleteButtonState();
   setupEventListeners();
+  bindSortHeaders();
 
   setTimeout(() => {
     initializeAutoUpdate();

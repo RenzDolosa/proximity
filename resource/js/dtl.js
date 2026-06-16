@@ -22,6 +22,9 @@ let totalRecords = 0;
 
 let activeFilters = {};
 
+let sortCol = null;
+let sortDir = 'asc';
+
 const count = employees.length;
 const label = count > 1 ? "employee's" : "employee";
 
@@ -479,6 +482,11 @@ async function loadEmployeesAuto(filters = {}) {
     params.append("page", currentPage);
     params.append("limit", itemsPerPage);
 
+    if (sortCol) {
+      params.append("sort_col", sortCol);
+      params.append("sort_dir", sortDir);
+    }
+
     for (const [key, value] of Object.entries(filtersToUse)) {
       if (key === "position" && value === "__none__") {
         params.append("position_none", "1");
@@ -807,6 +815,37 @@ async function renderEmployeeError(message = "Failed to load employee data.") {
       </td>
     </tr>
   `;
+}
+
+function updateSortHeaders() {
+  document.querySelectorAll(".sortable-th").forEach((th) => {
+    const icon = th.querySelector(".sort-icon");
+    if (!icon) return;
+    if (th.dataset.col === sortCol) {
+      icon.textContent = sortDir === "asc" ? "▲" : "▼";
+      icon.style.color = "var(--accent, #667eea)";
+    } else {
+      icon.textContent = "⇅";
+      icon.style.color = "";
+    }
+  });
+}
+
+function bindSortHeaders() {
+  document.querySelectorAll(".sortable-th").forEach((th) => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      if (sortCol === col) {
+        sortDir = sortDir === "asc" ? "desc" : "asc";
+      } else {
+        sortCol = col;
+        sortDir = "asc";
+      }
+      currentPage = 1;
+      updateSortHeaders();
+      loadEmployees(activeFilters, true, true);
+    });
+  });
 }
 
 async function renderEmployeeTable() {
@@ -1974,6 +2013,11 @@ async function loadEmployees(
     params.append("page", currentPage);
     params.append("limit", itemsPerPage);
 
+    if (sortCol) {
+      params.append("sort_col", sortCol);
+      params.append("sort_dir", sortDir);
+    }
+
     for (const [key, value] of Object.entries(filters)) {
       if (key === "position" && value === "__none__") {
         params.append("position_none", "1");
@@ -2406,6 +2450,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   loadEmployees();
   updateDeleteButtonState();
   setupEventListeners();
+  bindSortHeaders();
 
   setTimeout(() => {
     initializeAutoUpdate();
