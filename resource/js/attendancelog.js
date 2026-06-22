@@ -2,6 +2,7 @@
 
 let EmployeesBackend = null;
 let AttendanceBackend = null;
+let UserIdHelper = null;
 
 let currentAction = "add";
 let employees = [];
@@ -26,13 +27,14 @@ let sortCol = null;
 let sortDir = "asc";
 
 // ── Controls CSS helper ───────────────────────────────────────────
-const controls = document.querySelector('.controls');
-const sentinel = document.createElement('div');
-sentinel.style.cssText = 'position:absolute;top:0;height:1px;pointer-events:none';
+const controls = document.querySelector(".controls");
+const sentinel = document.createElement("div");
+sentinel.style.cssText =
+  "position:absolute;top:0;height:1px;pointer-events:none";
 controls.before(sentinel);
 
 new IntersectionObserver(([e]) => {
-  controls.classList.toggle('is-stuck', !e.isIntersecting);
+  controls.classList.toggle("is-stuck", !e.isIntersecting);
 }).observe(sentinel);
 
 // ─── Suggestion visibility helpers ───────────────────────────────
@@ -47,6 +49,23 @@ function isInputVisible(input) {
     document.getElementById("deleteModal")?.style.display === "flex";
 
   return !anyModalOpen;
+}
+
+function isAnySuggestionOpen() {
+  return [...document.querySelectorAll("ul[data-suggestion-list]")].some(
+    (el) => el.style.display === "block",
+  );
+}
+
+function hideAllSuggestions(scope) {
+  document.querySelectorAll("ul[data-suggestion-list]").forEach((ul) => {
+    if (!scope) {
+      ul.style.display = "none";
+      return;
+    }
+    const owner = document.getElementById(ul.dataset.ownerInput);
+    if (owner && scope.contains(owner)) ul.style.display = "none";
+  });
 }
 
 // ── Event listeners setup ─────────────────────────────────────────────────────
@@ -67,6 +86,7 @@ function setupEventListeners() {
   const searchInputs = document.querySelectorAll(
     "#searchForm input, #searchForm select",
   );
+
   searchInputs.forEach((input) => {
     input.addEventListener("input", debounce(searchEmployees, 300));
   });
@@ -77,18 +97,10 @@ function setupEventListeners() {
   function autoFocusProximity() {
     const modalOpen =
       document.getElementById("deleteModal")?.style.display === "block";
+
     if (modalOpen) return;
 
-    const anySuggestionOpen = [
-      "fullname-suggestions",
-      "search-position-suggestions",
-      "search-brand-suggestions",
-      "search-status-suggestions",
-      "search-shift-suggestions",
-      "search-violation-suggestions",
-      "search-userid-suggestions",
-    ].some((id) => document.getElementById(id)?.style.display === "block");
-    if (anySuggestionOpen) return;
+    if (isAnySuggestionOpen()) return;
 
     const active = document.activeElement;
     const isTyping =
@@ -109,7 +121,7 @@ function setupEventListeners() {
     "search_fullname",
     "fullname-suggestions",
     () =>
-      [...employees]
+      [...allEmployees]
         .sort((a, b) => {
           const lastName = (name) => {
             const parts = (name || "").trim().split(/\s+/);
@@ -225,6 +237,40 @@ function setupEventListeners() {
       },
     },
   );
+
+  (function () {
+    const controlsEl = document.querySelector(".controls");
+    const tableHeaderEl = document.querySelector(".table-header");
+
+    function sync() {
+      if (controlsEl) {
+        document.documentElement.style.setProperty(
+          "--controls-h",
+          controlsEl.offsetHeight + "px",
+        );
+      }
+      if (tableHeaderEl) {
+        document.documentElement.style.setProperty(
+          "--table-header-h",
+          tableHeaderEl.offsetHeight + "px",
+        );
+      }
+    }
+
+    sync();
+
+    if (controlsEl) new ResizeObserver(sync).observe(controlsEl);
+    if (tableHeaderEl) new ResizeObserver(sync).observe(tableHeaderEl);
+  })();
+
+  const theadWrap = document.querySelector(".thead-sticky-wrap");
+  const tbodyWrap = document.querySelector(".table-scroll-wrap");
+
+  if (theadWrap && tbodyWrap) {
+    tbodyWrap.addEventListener("scroll", () => {
+      theadWrap.scrollLeft = tbodyWrap.scrollLeft;
+    });
+  }
 }
 
 // ── Auto-update interval options ──────────────────────────────────────────────
@@ -241,28 +287,34 @@ function initializeAutoUpdate() {
   const intervalSelector = document.getElementById("updateInterval");
 
   if (!toggle || !intervalSelector) {
+    console.warn("Auto-update elements not found, skipping initialization");
     return;
   }
 
   autoUpdateEnabled = toggle.checked || false;
-  if (autoUpdateEnabled)
-    startAutoUpdate(parseInt(intervalSelector.value) || 30000);
+  const defaultInterval = parseInt(intervalSelector.value) || 30000;
+
+  if (autoUpdateEnabled) {
+    startAutoUpdate(defaultInterval);
+  }
 
   updateAutoUpdateUI();
   setupUserActivityTracking();
 }
 
 function setupUserActivityTracking() {
-  [
+  const activityEvents = [
     "mousedown",
     "keydown",
     "scroll",
     "click",
     "mousemove",
     "touchstart",
-  ].forEach((event) =>
-    document.addEventListener(event, handleUserActivity, { passive: true }),
-  );
+  ];
+
+  activityEvents.forEach((event) => {
+    document.addEventListener(event, handleUserActivity, { passive: true });
+  });
 }
 
 function toggleAutoUpdate() {
@@ -275,16 +327,30 @@ function toggleAutoUpdate() {
     showAlert(`Auto-update enabled (${formatInterval(interval)})`, "success");
   } else {
     stopAutoUpdate();
-    showAlert("Auto-update disabled", "info");
+    showAlert("Auto-update disabled", "error");
   }
 
   updateAutoUpdateUI();
 }
 
+function updateAutoUpdateInterval() {
+  if (autoUpdateEnabled) {
+    const interval = getSelectedInterval();
+    startAutoUpdate(interval);
+    showAlert(
+      `Auto-update interval changed to ${formatInterval(interval)}`,
+      "info",
+    );
+  }
+}
+
 function formatInterval(intervalMs) {
-  return intervalMs < 60000
-    ? `${intervalMs / 1000}s`
-    : `${Math.floor(intervalMs / 60000)}min`;
+  if (intervalMs < 60000) {
+    return `${intervalMs / 1000}s`;
+  } else {
+    const minutes = Math.floor(intervalMs / 60000);
+    return `${minutes}min`;
+  }
 }
 
 function getSelectedInterval() {
@@ -294,17 +360,26 @@ function getSelectedInterval() {
 
 function startAutoUpdate(intervalMs) {
   stopAutoUpdate();
+
   autoUpdateInterval = setInterval(() => {
     if (autoUpdateEnabled && !isUserActive) {
+      console.log("Performing auto-update...");
       loadEmployeesAuto();
+    } else if (isUserActive) {
+      console.log("Skipping auto-update - user is active");
     }
   }, intervalMs);
+
+  console.log(
+    `Auto-update started with ${formatInterval(intervalMs)} interval`,
+  );
 }
 
 function stopAutoUpdate() {
   if (autoUpdateInterval) {
     clearInterval(autoUpdateInterval);
     autoUpdateInterval = null;
+    console.log("Auto-update stopped");
   }
 }
 
@@ -312,6 +387,7 @@ function checkForChanges(newData) {
   if (!employees || employees.length !== newData.length) return true;
 
   const oldMap = new Map(employees.map((emp) => [emp.id, JSON.stringify(emp)]));
+
   for (const newEmp of newData) {
     const oldJson = oldMap.get(newEmp.id);
     if (!oldJson || oldJson !== JSON.stringify(newEmp)) return true;
@@ -324,6 +400,7 @@ function updateAutoUpdateUI() {
   const status = document.getElementById("autoUpdateStatus");
   const lastUpdate = document.getElementById("lastUpdateTime");
   const intervalDisplay = document.getElementById("updateInterval");
+  const intervalHidden = document.getElementById("updateInterval_val");
 
   if (toggle) toggle.checked = autoUpdateEnabled;
 
@@ -356,6 +433,7 @@ function handleUserActivity() {
   clearTimeout(userActivityTimer);
   userActivityTimer = setTimeout(() => {
     isUserActive = false;
+    console.log("User activity paused, resuming auto-update");
   }, 1000);
 }
 
@@ -366,9 +444,15 @@ function showAutoUpdateNotification() {
   const timeString = new Date().toLocaleTimeString();
   notification.textContent = `Data updated at ${timeString}`;
   notification.style.cssText = `
-    display:block;opacity:1;background-color:#e8f5e8;color:#2d5a2d;
-    padding:2px 4px;border-radius:4px;font-size:11px;
-    border:1px solid #b8e6b8;transition:opacity 0.3s ease;
+    display: block;
+    opacity: 1;
+    background-color: #e8f5e8;
+    color: #2d5a2d;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 11px;
+    border: 1px solid #b8e6b8;
+    transition: opacity 0.3s ease;
   `;
 
   setTimeout(() => {
@@ -382,7 +466,9 @@ function showAutoUpdateNotification() {
 }
 
 // ── Auto-update fetch ─────────────────────────────────────────────────────────
-async function loadEmployeesAuto() {
+async function loadEmployeesAuto(filters = {}) {
+  if (!AttendanceBackend) return;
+
   try {
     const filtersToUse =
       Object.keys(activeFilters).length > 0
@@ -414,26 +500,38 @@ async function loadEmployeesAuto() {
     const data = await response.json();
 
     if (data.success && Array.isArray(data.data)) {
-      if (checkForChanges(data.data)) {
+      const hasChanges = checkForChanges(data.data);
+
+      if (hasChanges) {
         employees = data.data;
         employeeDataCache = null;
         qrImageMapCache = null;
         await renderEmployeeTable();
         showAutoUpdateNotification();
+        console.log(`Auto-update: ${employees.length} records refreshed`);
+      } else {
+        console.log("Auto-update: No changes detected");
       }
 
       lastUpdateTimestamp = Date.now();
       updateAutoUpdateUI();
       resetNetworkErrorCount();
+    } else {
+      console.warn(
+        "Auto-update failed:",
+        data.message || "Invalid data format",
+      );
     }
   } catch (error) {
     if (error.name === "TimeoutError") {
-      error.message.includes("Auto-update timeout")
+      error.message.includes("Auto-update timeout");
     } else if (
       error.message.includes("Failed to fetch") ||
       error.message.includes("NetworkError")
     ) {
       handleNetworkError();
+    } else if (error.name === "AbortError") {
+      console.warn("Auto-update request was aborted");
     }
   }
 }
@@ -442,6 +540,7 @@ let networkErrorCount = 0;
 
 function handleNetworkError() {
   networkErrorCount++;
+
   if (networkErrorCount >= 3) {
     stopAutoUpdate();
     autoUpdateEnabled = false;
@@ -456,6 +555,7 @@ function handleNetworkError() {
 
 function resetNetworkErrorCount() {
   if (networkErrorCount > 0) networkErrorCount = 0;
+  console.log("Network connection restored");
 }
 
 // ── Filter helpers ────────────────────────────────────────────────────────────
@@ -502,7 +602,7 @@ function getActiveFilters() {
   if (from) filters["date_from"] = from;
   if (to) filters["date_to"] = to;
 
-  delete filters["created_at"];
+  delete filters["access_timestamp"];
 
   return filters;
 }
@@ -545,7 +645,7 @@ function displayFilterStatus() {
       .join(" ");
     strong.textContent = `${properKey}:`;
     textSpan.appendChild(strong);
-    textSpan.appendChild(document.createTextNode(` ${value}`));
+    textSpan.appendChild(document.createTextNode(` ${toProperCase(value)}`));
   });
 
   label.appendChild(textSpan);
@@ -559,13 +659,18 @@ function displayFilterStatus() {
 async function getManpowerEmployeeData() {
   if (employeeDataCache) return employeeDataCache;
 
+  if (!EmployeesBackend) return [];
+
   try {
-    const response = await fetch(`${EmployeesBackend}?action=get`, {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-        "X-Silent-Request": "true",
+    const response = await fetch(
+      `${EmployeesBackend}?action=get&page=1&limit=1`,
+      {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "X-Silent-Request": "true",
+        },
       },
-    });
+    );
 
     if (response.ok) {
       const data = await response.json();
@@ -604,6 +709,38 @@ async function buildQRToImageMap() {
 
   qrImageMapCache = qrImageMap;
   return qrImageMap;
+}
+
+async function updateStatsPanel() {
+  if (!AttendanceBackend) return;
+
+  try {
+    const response = await fetch(`${AttendanceBackend}?action=stats`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
+      },
+    });
+
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+    const data = await response.json();
+    if (!data.success || !data.data) return;
+
+    const stats = data.data;
+
+    const totalEl = document.getElementById("total_scanned");
+    const activeEl = document.getElementById("active_employees");
+    const inactiveEl = document.getElementById("inactive_employees");
+    const todayEl = document.getElementById("today_attendance");
+
+    if (totalEl) totalEl.textContent = stats.total ?? 0;
+    if (activeEl) activeEl.textContent = stats.active ?? 0;
+    if (inactiveEl) inactiveEl.textContent = stats.inactive ?? 0;
+    if (todayEl) todayEl.textContent = stats.today ?? 0;
+  } catch (error) {
+    console.error("Error updating employee counts", error);
+  }
 }
 
 // ── Render table ──────────────────────────────────────────────────────────────
@@ -679,10 +816,12 @@ async function renderEmployeeTable() {
 
   if (noDataDiv) noDataDiv.style.display = "none";
 
+  const currentEmployees = employees;
   const startIndex = (currentPage - 1) * itemsPerPage;
+  const currentUserId = await getCurrentUserId();
   const qrImageMap = await buildQRToImageMap();
 
-  tbody.innerHTML = employees
+  tbody.innerHTML = currentEmployees
     .map((employee, index) => {
       let imageUrl = null;
       let displayName = employee.fullname || "N/A";
@@ -700,13 +839,17 @@ async function renderEmployeeTable() {
       const safeImage = escapeHtml(employee.image);
       const safeId = escapeHtml(String(employee.id));
       const safeEmpId = escapeHtml(String(employee.employee_id));
+      const safeGate = escapeHtml(
+        employee.gate_name || employee.user_id || "N/A",
+      );
+      const safeTimestamp = escapeHtml(employee.access_timestamp);
 
       if (matchedEmployeeData && matchedEmployeeData.image) {
-        imageUrl = `${window.location.origin}/../public/uploads/user/${matchedEmployeeData.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${matchedEmployeeData.image}`;
+        imageUrl = `${window.location.origin}/public/uploads/user/${matchedEmployeeData.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${matchedEmployeeData.image}`;
         displayName = matchedEmployeeData.fullname || safeFullname;
         tooltipText = `${toProperCase(matchedEmployeeData.fullname)}\n${toProperCase(matchedEmployeeData.position)}\n${toProperCase(matchedEmployeeData.brand)}`;
       } else if (employee.image) {
-        imageUrl = `${window.location.origin}/../public/uploads/user/${employee.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${employee.image}`;
+        imageUrl = `${window.location.origin}/public/uploads/user/${employee.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${employee.image}`;
         tooltipText = `${safeFullname}\n${safePosition}\n${safeBrand}`;
       }
 
@@ -719,8 +862,8 @@ async function renderEmployeeTable() {
 
       const isAboveFold = index < 5;
 
-      const thumbSrc = `${window.location.origin}/../public/uploads/user/thumb_${safeImage}`;
-      const imageSrc = `${window.location.origin}/../public/uploads/user/${safeImage}`;
+      const thumbSrc = `${window.location.origin}/public/uploads/user/${safeImage}`;
+      const imageSrc = `${window.location.origin}/public/uploads/user/${safeImage}`;
 
       return `
         <tr class="row">
@@ -766,7 +909,7 @@ async function renderEmployeeTable() {
                     title="${tooltipText}"
                     ${isAboveFold ? 'fetchpriority="high"' : ""}
                     onload="this.classList.add('loaded');this.previousElementSibling.classList.add('hidden');"
-                    onerror="if(this.src !== '${imageSrc}'){this.src='${imageSrc}';}else{this.onerror=null;this.closest('.img-skeleton-wrap').innerHTML='<div class=\\'ph-cont\\'title=\\'${tooltipText.replace(/'/g,"\\'").replace(/\n/g,' ')}\\'><div class=\\'employee-ph\\'>${escapeHtml(fullnameInitials)}</div></div>';}">
+                    onerror="if(this.src !== '${imageSrc}'){this.src='${imageSrc}';}else{this.onerror=null;this.closest('.img-skeleton-wrap').innerHTML='<div class=\\'ph-cont\\'title=\\'${tooltipText.replace(/'/g, "\\'").replace(/\n/g, " ")}\\'><div class=\\'employee-ph\\'>${escapeHtml(fullnameInitials)}</div></div>';}">
                   <div class="employee-ph-fallback ph-cont" style="display:none;" title="${tooltipText}">
                     <div class="employee-ph">${escapeHtml(fullnameInitials)}</div>
                   </div>
@@ -780,12 +923,12 @@ async function renderEmployeeTable() {
               <path d="M0 0 C7.7953733 6.55087912 11.53280265 15.42090184 15.76171875 24.48046875 C16.21248779 25.42623779 16.21248779 25.42623779 16.67236328 26.39111328 C32.79347085 60.37055554 41.01469222 99.12019718 43.76171875 136.48046875 C43.84784424 137.63232666 43.93396973 138.78418457 44.02270508 139.97094727 C44.70961576 149.9186128 44.96372734 159.82288009 44.94921875 169.79296875 C44.9486145 170.57115967 44.94801025 171.34935059 44.9473877 172.15112305 C44.86205494 213.03175637 39.27908005 253.78261823 25.76171875 292.48046875 C25.54225586 293.12983398 25.32279297 293.77919922 25.09667969 294.44824219 C22.06669035 303.37564745 18.30612776 311.93862076 14.32421875 320.48046875 C13.66063354 321.93211426 13.66063354 321.93211426 12.98364258 323.41308594 C8.16614773 333.51922856 2.51180624 340.64351445 -8.23828125 344.48046875 C-15.51757393 346.36861293 -22.88142079 345.56051826 -29.66015625 342.32421875 C-36.6807156 338.08361243 -40.72768524 332.46294914 -43.61328125 324.85546875 C-44.82485584 318.31296596 -44.11503764 313.00984918 -41.92578125 306.79296875 C-41.66651855 306.03169678 -41.40725586 305.2704248 -41.14013672 304.48608398 C-39.03740869 298.44503522 -36.674312 292.51824245 -34.28662109 286.58520508 C-25.49835099 264.71401966 -18.71381467 242.82167184 -15.23828125 219.48046875 C-15.12790527 218.75907715 -15.0175293 218.03768555 -14.90380859 217.29443359 C-12.61763113 202.16245899 -11.99860109 187.1316376 -11.98828125 171.85546875 C-11.98760651 170.9523999 -11.98693176 170.04933105 -11.98623657 169.11889648 C-12.004413 153.72566925 -12.76618222 138.70236989 -15.23828125 123.48046875 C-15.40457031 122.45179688 -15.57085937 121.423125 -15.7421875 120.36328125 C-20.15914921 94.12325688 -28.74989237 69.44819755 -38.22216797 44.68334961 C-38.54515366 43.83860077 -38.86813934 42.99385193 -39.20091248 42.12350464 C-39.81211422 40.52893154 -40.42580218 38.93530844 -41.04237366 37.34280396 C-44.73911997 27.728458 -45.20499335 20.16167797 -41.23828125 10.48046875 C-37.39094926 2.85330181 -31.0596262 -0.57634285 -23.23828125 -3.51953125 C-15.04641976 -5.32005608 -6.94554092 -5.02952963 0 0 Z " transform="translate(358.23828125,85.51953125)"/>
             </svg>
           </td>
-          <td class="emp-timestamp"><small>${employee.access_timestamp || "N/A"}</small></td>
-          <td><small>${escapeHtml(employee.gate_name || employee.user_id || "N/A")}</small></td>
+          <td class="emp-timestamp"><small>${safeTimestamp}</small></td>
+          <td><small>${safeGate}</small></td>
           ${
             window.PERMISSIONS.delete
               ? `
-          <td style="position: relative; width: 160px; overflow: visible;">
+          <td class="emp-actions">
 
             <!-- ACTIONS TOGGLE -->
             <button
@@ -826,6 +969,7 @@ async function renderEmployeeTable() {
     .join("");
 
   updatePaginationControls();
+  await updateStatsPanel();
 }
 
 // ── Actions panel ─────────────────────────────────────────────────────────────
@@ -925,6 +1069,56 @@ function openViolationPopupFromBtn(btn) {
   );
 }
 
+async function getCurrentUserId() {
+  if (!UserIdHelper) return "default";
+
+  try {
+    const response = await fetch(`${UserIdHelper}`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data.user_id || "default";
+    } else {
+      console.warn("Failed to get user ID, using default");
+    }
+  } catch (error) {
+    console.error("Error getting user ID:", error);
+  }
+
+  return "default";
+}
+
+// ── QR copy ───────────────────────────────────────────────────────────────────
+function copyQRCode(code) {
+  const tempTextArea = document.createElement("textarea");
+  tempTextArea.value = code;
+  document.body.appendChild(tempTextArea);
+
+  tempTextArea.select();
+  tempTextArea.setSelectionRange(0, 99999);
+
+  try {
+    document.execCommand("copy");
+    showAlert("Proximity code copied to clipboard!");
+  } catch (err) {
+    if (navigator.clipboard) {
+      navigator.clipboard
+        .writeText(code)
+        .then(() => showAlert("Proximity code copied to clipboard!"))
+        .catch(() => showAlert("Failed to copy Proximity code"));
+    } else {
+      showAlert("Failed to copy Proximity code");
+    }
+  }
+
+  document.body.removeChild(tempTextArea);
+}
+
 function copyQRCodeFromCell(td) {
   copyQRCode(td.dataset.qr);
 }
@@ -943,12 +1137,15 @@ function updatePaginationControls() {
 
   const delta = 2;
   const range = new Set([1, totalPages]);
+  range.add(1);
+  range.add(totalPages);
   for (
     let i = Math.max(2, currentPage - delta);
     i <= Math.min(totalPages - 1, currentPage + delta);
     i++
-  )
+  ) {
     range.add(i);
+  }
 
   const sorted = [...range].sort((a, b) => a - b);
   let prev = null;
@@ -1062,6 +1259,10 @@ async function loadEmployees(
   preservePage = false,
   silent = false,
 ) {
+  if (!EmployeesBackend && !AttendanceBackend) {
+    return;
+  }
+
   setControlButtonsDisabled(true);
   try {
     // if (!silent) showLoading(true);
@@ -1073,10 +1274,10 @@ async function loadEmployees(
     activeFilters = filters;
 
     const params = buildFilterParams(filters);
-    
+
     params.append("page", currentPage);
     params.append("limit", itemsPerPage);
-    
+
     if (sortCol) {
       params.append("sort_col", sortCol);
       params.append("sort_dir", sortDir);
@@ -1098,6 +1299,23 @@ async function loadEmployees(
       if (Array.isArray(data.filter_options))
         allEmployees = data.filter_options;
 
+      if (Object.keys(filters).length === 0) {
+        allEmployees = data.filter_options ?? data.data ?? [];
+      } else if (allEmployees.length === 0) {
+        fetch(`${AttendanceBackend}?action=get&page=1&limit=99999`, {
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "X-Silent-Request": "true",
+          },
+        })
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.success && Array.isArray(d.filter_options))
+              allEmployees = d.filter_options;
+          })
+          .catch(() => {});
+      }
+
       if (!preservePage && Object.keys(filters).length === 0) currentPage = 1;
 
       employeeDataCache = null;
@@ -1110,11 +1328,13 @@ async function loadEmployees(
       updateDeleteButtonState();
 
       if (Object.keys(filters).length > 0) displayFilterStatus();
+      console.log(`Loaded ${data.total || employees.length} employees`);
     } else {
       await renderEmployeeError("Network error. Please try again.");
       showAlert(data.message || "Error loading records", "error");
     }
   } catch (error) {
+    console.error("Error loading employees:", error);
     await renderEmployeeError("Network error. Please try again.");
     showAlert("Failed to load records. Please check your connection.", "error");
   } finally {
@@ -1137,8 +1357,6 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
   const modalMessage = document.getElementById("deleteModalMessage");
 
   const hasFilters = hasActiveFilters();
-  const count = employees.length;
-  const label = count > 1 ? "record's" : "record";
 
   confirmBtn.dataset.employeeId = employeeId;
   confirmBtn.dataset.requireConfirmation = requireConfirmation;
@@ -1148,17 +1366,19 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
     if (hasFilters) {
       modalTitle.textContent = "⚠️ Delete Filtered Records";
 
+      const label = totalRecords > 1 ? "record's" : "record";
       const msgDiv = document.createElement("div");
       const p1 = document.createElement("p");
       p1.style.marginBottom = "15px";
       const strong = document.createElement("strong");
-      strong.textContent = `This will delete ${count} ${label} matching your filters:`;
+      strong.textContent = `This will delete ${totalRecords} ${label} matching your filters:`;
       p1.appendChild(strong);
       msgDiv.appendChild(p1);
 
       const filterBox = document.createElement("div");
       filterBox.style.cssText =
         "background:#fff3cd;border:1px solid #ffeaa7;padding:12px;border-radius:4px;margin-bottom:15px;";
+
       Object.entries(getActiveFilters()).forEach(([key, value]) => {
         const row = document.createElement("div");
         row.style.margin = "5px 0";
@@ -1184,15 +1404,16 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
     } else {
       modalTitle.textContent = "⚠️ Delete All Records";
 
+      const label = totalRecords > 1 ? "record's" : "record";
       const msgDiv = document.createElement("div");
       const p1 = document.createElement("p");
       p1.style.marginBottom = "15px";
       const strong = document.createElement("strong");
-      strong.textContent = `This will permanently delete ALL ${count} ${label}.`;
+      strong.textContent = `This will permanently delete ALL ${totalRecords} ${label}.`;
       p1.appendChild(strong);
       msgDiv.appendChild(p1);
       const p2 = document.createElement("p");
-      p2.style.cssText = "color:#d63031;font-weight:bold;";
+      p2.style.cssText = "color: #d63031; font-weight: bold;";
       p2.textContent = "This action cannot be undone.";
       msgDiv.appendChild(p2);
       modalMessage.innerHTML = "";
@@ -1268,11 +1489,10 @@ function updateDeleteButtonState() {
   const deleteBtn = document.querySelector(".delete-all-btn .btn-danger");
   if (!deleteBtn) return;
 
+  const label = totalRecords > 1 ? "record's" : "record";
   const hasFilters = hasActiveFilters();
   const hasData = employees && employees.length > 0;
   const canDelete = hasFilters && hasData;
-  const count = employees.length;
-  const label = count > 1 ? "record's" : "record";
 
   deleteBtn.disabled = !canDelete;
   deleteBtn.style.opacity = canDelete ? "1" : "0.4";
@@ -1280,7 +1500,7 @@ function updateDeleteButtonState() {
 
   if (!hasFilters) deleteBtn.title = "Apply filters first to enable deletion";
   else if (!hasData) deleteBtn.title = "No matching records to delete";
-  else deleteBtn.title = `Delete ${count} filtered ${label}`;
+  else deleteBtn.title = `Delete ${totalRecords} filtered ${label}`;
 }
 
 async function deleteFilteredEmployees() {
@@ -1308,10 +1528,10 @@ async function deleteFilteredEmployees() {
       return;
     }
 
-    const logIds = allData.data.map((emp) => emp.id);
+    const employeeIds = allData.data.map((emp) => emp.id);
     const formData = new FormData();
     formData.append("action", "delete_filtered");
-    formData.append("employee_ids", JSON.stringify(logIds));
+    formData.append("employee_ids", JSON.stringify(employeeIds));
     formData.append("filters", JSON.stringify(activeFilters));
 
     const response = await fetch(`${AttendanceBackend}`, {
@@ -1323,17 +1543,16 @@ async function deleteFilteredEmployees() {
     const data = await response.json();
 
     if (data.success) {
-      const deletedCount = data.deleted_count || logIds.length;
-      const deletedLabel = deletedCount > 1 ? "record's" : "record";
+      const label = totalRecords > 1 ? "record's" : "record";
       showAlert(
-        `Successfully deleted ${escapeHtml(String(deletedCount))} ${deletedLabel}.`,
+        `Successfully deleted ${totalRecords} ${label} matching your filters.`,
         "success",
       );
       currentPage = 1;
       clearSearch();
     } else {
       showAlert(
-        escapeHtml(data.message) || "Failed to delete filtered records",
+        escapeHtml(data.message) || "Failed to delete filtered employees",
         "error",
       );
     }
@@ -1347,6 +1566,7 @@ async function deleteFilteredEmployees() {
 // ── Violation popup ───────────────────────────────────────────────────────────
 function openViolationPopup(fullname, violation, employeeId) {
   closeAllActionsPanels();
+
   const existing = document.getElementById("violationPopupOverlay");
   if (existing) existing.remove();
 
@@ -1366,26 +1586,57 @@ function openViolationPopup(fullname, violation, employeeId) {
 
   const overlay = document.createElement("div");
   overlay.id = "violationPopupOverlay";
-  overlay.style.cssText =
-    "position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:9999;";
+  overlay.style.cssText = `
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.35);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:9999;`;
 
   const reportUrl = "incident_report.php?" + params.toString();
 
   const card = document.createElement("div");
-  card.style.cssText =
-    "background:#fff;border:0.5px solid #e2e8f0;border-radius:12px;padding:1.25rem;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.12);";
+  card.style.cssText = `
+    background:#fff;
+    border:0.5px solid #e2e8f0;
+    border-radius:12px;
+    padding:1.25rem;
+    max-width:360px;
+    width:90%;
+    box-shadow:0 4px 20px rgba(0,0,0,0.12);`;
 
   const header = document.createElement("div");
-  header.style.cssText =
-    "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;";
+  header.style.cssText = `
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:12px;`;
 
   const headerLabel = document.createElement("span");
-  headerLabel.style.cssText = "font-size:13px;font-weight:500;color:#64748b;";
-  headerLabel.textContent = `${fullname} — Remarks`;
+  headerLabel.style.cssText = `
+    font-size:13px;
+    font-weight:500;
+    color:#64748b;`;
+  headerLabel.textContent = `${toProperCase(fullname)} — Remarks`;
+
+  const footer = document.createElement("div");
+  footer.style.cssText = `
+    display:flex;
+    justify-content:end;
+    align-items:center;
+    margin-top:12px;`;
 
   const closeBtn = document.createElement("button");
-  closeBtn.style.cssText =
-    "background:none;border:none;font-size:16px;cursor:pointer;color:#94a3b8;line-height:1;padding:0;";
+  closeBtn.style.cssText = `
+    background:none;
+    border:none;
+    font-size:16px;
+    cursor:pointer;
+    color:#94a3b8;
+    line-height:1;
+    padding:0;`;
   closeBtn.textContent = "✕";
   closeBtn.onclick = () => overlay.remove();
 
@@ -1393,21 +1644,39 @@ function openViolationPopup(fullname, violation, employeeId) {
   header.appendChild(closeBtn);
 
   const body = document.createElement("div");
-  body.style.cssText =
-    "display:flex;align-items:flex-start;justify-content:space-between;gap:12px;";
+  body.style.cssText = `
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;`;
 
   const violationText = document.createElement("div");
-  violationText.style.cssText =
-    "font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;flex:1;max-height:200px;overflow-y:auto;word-break:break-word;";
+  violationText.style.cssText = `
+    font-size:13px;
+    color:#1e293b;
+    line-height:1.6;
+    white-space:pre-wrap;
+    flex:1;
+    max-height:200px;
+    overflow-y:auto;
+    word-break:break-word;`;
   violationText.textContent = violation;
 
-  const footer = document.createElement("div");
-  footer.style.cssText =
-    "display:flex;justify-content:end;align-items:center;margin-top:12px;";
-
   const attachBtn = document.createElement("button");
-  attachBtn.style.cssText =
-    "display:inline-flex;align-items:center;gap:5px;padding:5px 12px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;border:0.5px solid #cbd5e1;border-radius:6px;background:#f8fafc;color:#1e293b;";
+  attachBtn.style.cssText = `
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    padding:5px 12px;
+    font-size:12px;
+    font-weight:500;
+    cursor:pointer;
+    white-space:nowrap;
+    flex-shrink:0;
+    border:0.5px solid #cbd5e1;
+    border-radius:6px;
+    background:#f8fafc;
+    color:#1e293b;`;
   attachBtn.textContent = "📎 View Attachment";
   attachBtn.onclick = () => window.open(reportUrl, "_blank");
 
@@ -1422,38 +1691,20 @@ function openViolationPopup(fullname, violation, employeeId) {
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) overlay.remove();
   });
+
   document.body.appendChild(overlay);
-}
-
-// ── QR copy ───────────────────────────────────────────────────────────────────
-function copyQRCode(code) {
-  const tempArea = document.createElement("textarea");
-  tempArea.value = code;
-  document.body.appendChild(tempArea);
-  tempArea.select();
-  tempArea.setSelectionRange(0, 99999);
-
-  try {
-    document.execCommand("copy");
-    showAlert("Proximity code copied to clipboard!");
-  } catch (err) {
-    if (navigator.clipboard) {
-      navigator.clipboard
-        .writeText(code)
-        .then(() => showAlert("Proximity code copied to clipboard!"))
-        .catch(() => showAlert("Failed to copy Proximity code"));
-    } else {
-      showAlert("Failed to copy Proximity code");
-    }
-  }
-
-  document.body.removeChild(tempArea);
 }
 
 // ── Close modal ───────────────────────────────────────────────────────────────
 function closeModal() {
   const deleteModal = document.getElementById("deleteModal");
-  if (deleteModal) deleteModal.style.display = "none";
+  if (!deleteModal) return;
+
+  deleteModal.style.display = "none";
+}
+
+async function handleFormSubmit(e) {
+  e.preventDefault();
 }
 
 // ── Delete single record ──────────────────────────────────────────────────────
@@ -1489,12 +1740,13 @@ async function deleteEmployee(employeeId) {
 }
 
 // ── Delete all records ────────────────────────────────────────────────────────
-async function deleteAllEmployees() {
+async function deleteAllEmployees(employeeId) {
   try {
     showLoading(true);
 
     const formData = new FormData();
     formData.append("action", "delete_all");
+    formData.append("id", employeeId);
 
     const response = await fetch(`${AttendanceBackend}`, {
       method: "POST",
@@ -1516,7 +1768,18 @@ async function deleteAllEmployees() {
       showAlert(data.message, "error");
     }
   } catch (error) {
-    showAlert("Failed to delete all records", "error");
+    console.error("Success:", error);
+
+    currentPage = 1;
+    clearSearch();
+
+    if (error instanceof TypeError) {
+      showAlert("Network error: Failed to connect to server", "error");
+    } else if (error.message.includes("JSON")) {
+      showAlert("Server returned invalid response", "error");
+    } else {
+      showAlert("Delete all employee data", "success");
+    }
   } finally {
     showLoading(false);
   }
@@ -1527,44 +1790,77 @@ function setupFileUploadHandler() {
   const imageInput = document.getElementById("image");
   if (!imageInput) return;
 
-  imageInput.addEventListener("change", function (e) {
+  imageInput.addEventListener("change", async function (e) {
     const label = document.querySelector(".file-upload-label");
     if (!label) return;
 
-    if (e.target.files.length > 0) {
-      const file = e.target.files[0];
-      const maxSize = 5 * 1024 * 1024;
+    if (e.target.files.length === 0) {
+      label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
+      return;
+    }
 
-      if (file.size > maxSize) {
-        showAlert("File size must be less than 5MB", "error");
-        e.target.value = "";
-        label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
-        return;
-      }
+    const file = imageInput.files[0];
+    const maxSize = 5 * 1024 * 1024;
 
-      const allowedTypes = [
-        "image/jpeg",
-        "image/jpg",
-        "image/png",
-        "image/gif",
-      ];
-      if (!allowedTypes.includes(file.type)) {
-        showAlert("Only image files are allowed", "error");
-        e.target.value = "";
-        label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
-        return;
-      }
+    if (file.size > maxSize) {
+      showAlert("File size must be less than 5MB", "error");
+      e.target.value = "";
+      label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
+      return;
+    }
 
-      label.innerHTML = `<i class="fas fa-image"></i> ${file.name}`;
-    } else {
+    const allowedTypes = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+    ];
+    if (!allowedTypes.includes(file.type)) {
+      showAlert(
+        "Only image files are allowed (JPEG, JPG, PNG, GIF, WebP)",
+        "error",
+      );
+      e.target.value = "";
+      label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
+      return;
+    }
+
+    label.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+        <i class="fas fa-spinner fa-spin" style="font-size:24px;color:#2196F3;"></i>
+        <small style="color:#2196F3;">Converting to WebP…</small>
+      </div>`;
+
+    try {
+      const webpFile = await convertImageToWebP(file);
+
+      const dt = new DataTransfer();
+      dt.items.add(webpFile);
+      imageInput.files = dt.files;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const isConverted =
+          webpFile.type === "image/webp" && file.type !== "image/webp";
+        label.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+            <img id="imagePreview" src="${event.target.result}" alt="New image preview" loading="lazy"
+              style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;
+                     box-shadow:0 2px 8px rgba(0,0,0,0.15),0 0 0 2px #4CAF50;">
+            <small style="color:#4CAF50;font-size:12px;font-weight:500;">
+              ✓ ${isConverted ? "Converted to WebP" : "WebP ready"} · ${(webpFile.size / 1024).toFixed(0)} KB
+            </small>
+          </div>`;
+      };
+      reader.readAsDataURL(webpFile);
+    } catch (err) {
+      console.error("WebP conversion error:", err);
+      showAlert("Error converting image. Please try again.", "error");
+      e.target.value = "";
       label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
     }
   });
-}
-
-async function handleFormSubmit(e) {
-  e.preventDefault();
-  // Form submit handler — extend as needed for add/edit if required
 }
 
 // ── Generic field autocomplete ────────────────────────────────────────────────
@@ -1623,8 +1919,10 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     const raw = getValues();
     const items = [];
 
-    if (!options.noDefaultAll)
+    if (!options.noDefaultAll) {
       items.push({ display: "Default: ALL", raw: "", special: "all" });
+    }
+
     if (options.noneLabel)
       items.push({
         display: options.noneLabel,
@@ -1652,8 +1950,8 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
 
     const visibleItems =
       lower && !options.showAll ? items.filter((i) => !i.special) : items;
-    const hasRealItems = visibleItems.some((i) => !i.special);
 
+    const hasRealItems = visibleItems.some((i) => !i.special);
     if (!visibleItems.length || (lower && !hasRealItems)) {
       list.style.display = "none";
       idx = -1;
@@ -1663,7 +1961,13 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     list.innerHTML = visibleItems
       .map((item, i) => {
         if (item.special === "divider") {
-          return `<li data-raw="" data-display="" style="padding:4px 12px;font-size:11px;color:#94a3b8;pointer-events:none;user-select:none;border-bottom:1px solid #f1f5f9;">──────────</li>`;
+          return `
+            <li data-raw="" data-display=""
+              style="padding:4px 12px;font-size:11px;color:#94a3b8;
+                     pointer-events:none;user-select:none;border-bottom:1px solid #f1f5f9;">
+                      ──────────
+            </li>
+          `;
         }
 
         const safeDisplay = escapeHtml(item.display);
@@ -1684,13 +1988,16 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
           ? "font-weight:600;color:#1e40af;background:#f0f9ff;"
           : "";
 
-        return `<li
-          data-raw="${escapeHtml(item.raw ?? "")}"
-          data-display="${safeDisplay}"
-          data-index="${i}"
-          style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;${specialStyle}">
-          ${hl}
-        </li>`;
+        return `
+          <li data-raw="${escapeHtml(item.raw ?? "")}"
+            data-display="${safeDisplay}"
+            data-index="${i}"
+            style="padding:8px 12px;cursor:pointer;font-size:13px;
+                  border-bottom:1px solid #f1f5f9;
+                  display:flex;align-items:center;${specialStyle}">
+            ${hl}
+          </li>
+        `;
       })
       .join("");
 
@@ -1713,9 +2020,15 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     idx = -1;
   }
 
-  input.addEventListener("focus", () => {
-    if (!options.requireInput || input.value.trim()) show(input.value);
+  input.addEventListener("focus", async () => {
+    if (options.requireInput && !input.value.trim()) return;
+    show(input.value);
+    if (options.onFocus) {
+      await options.onFocus();
+      show(input.value);
+    }
   });
+
   input.addEventListener("blur", () => {
     setTimeout(() => {
       if (!list.contains(document.activeElement)) {
@@ -1724,9 +2037,11 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
       }
     }, 150);
   });
+
   input.addEventListener("click", () => {
     if (options.showAll) show(input.value);
   });
+
   input.addEventListener("input", () => show(input.value));
 
   window.addEventListener(
@@ -1771,8 +2086,10 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     }
   });
 
-  if (input._outsideClickHandler)
+  if (input._outsideClickHandler) {
     document.removeEventListener("click", input._outsideClickHandler);
+  }
+
   input._outsideClickHandler = (e) => {
     if (!input.contains(e.target) && !list.contains(e.target)) {
       list.style.display = "none";
@@ -1847,22 +2164,22 @@ function showLoading(show) {
 
 function setControlButtonsDisabled(disabled) {
   const selectors = [
-    '.search-btn .btn',
-    '.clear-btn .btn',
-    '.delete-all-btn .btn-danger',
-    '.fRefresh-btn',
+    ".search-btn .btn",
+    ".clear-btn .btn",
+    ".delete-all-btn .btn-danger",
+    ".fRefresh-btn",
   ];
   selectors.forEach((sel) => {
     const el = document.querySelector(sel);
     if (!el) return;
     el.disabled = disabled;
-    el.style.opacity = disabled ? '0.4' : '';
-    el.style.cursor = disabled ? 'not-allowed' : '';
+    el.style.opacity = disabled ? "0.4" : "";
+    el.style.cursor = disabled ? "not-allowed" : "";
   });
 }
 
 // ── Cleanup ───────────────────────────────────────────────────────────────────
-window.addEventListener("beforeunload", () => {
+window.addEventListener("beforeunload", function () {
   stopAutoUpdate();
   clearTimeout(userActivityTimer);
 });
@@ -1886,6 +2203,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   loadEmployees();
   updateDeleteButtonState();
   setupEventListeners();
+  updateStatsPanel();
   bindSortHeaders();
 
   setTimeout(() => {

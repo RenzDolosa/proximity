@@ -6,25 +6,6 @@ const CONFIG = {
   TIMEOUT: 30000,
 };
 
-// ===== HELPER FUNCTIONS =====
-function escapeHtml(text) {
-  if (typeof text !== "string") text = String(text);
-  const map = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;",
-  };
-  return text.replace(/[&<>"']/g, (m) => map[m]);
-}
-
-function safeGetElement(id) {
-  const el = document.getElementById(id);
-  if (!el) console.warn(`Element with id "${id}" not found`);
-  return el;
-}
-
 // ===== WIRE IMPORT BUTTON =====
 function _wireImportButton() {
   const importBtn = document.querySelector(".btn-import");
@@ -45,9 +26,9 @@ function _wireImportButton() {
       if (!lbl) return;
       if (e.target.files.length > 0) {
         const name = e.target.files[0].name;
-        const ext = name.split(".").pop().toLowerCase();
+        const fileExtension = name.split(".").pop().toLowerCase();
         const icon =
-          ext === "csv"
+          fileExtension === "csv"
             ? `<i class="fas fa-file-alt"></i>`
             : `<i class="fas fa-file-excel"></i>`;
         lbl.innerHTML = `${icon} ${escapeHtml(name)}`;
@@ -104,15 +85,16 @@ async function previewFile() {
     return;
   }
 
-  const ext = file.name.split(".").pop().toLowerCase();
-  if (!["csv", "xlsx", "xls"].includes(ext)) {
+  const fileExtension = file.name.split(".").pop().toLowerCase();
+
+  if (!["csv", "xlsx", "xls"].includes(fileExtension)) {
     showAlert("Please select a valid file format (.csv, .xlsx, .xls)", "error");
     return;
   }
 
   try {
     const data =
-      ext === "csv"
+      fileExtension === "csv"
         ? await _parseCSVPreview(file)
         : await _parseExcelPreview(file);
 
@@ -120,22 +102,21 @@ async function previewFile() {
       showAlert("No data found in file", "error");
       return;
     }
+
     _displayPreview(data);
-  } catch (err) {
-    console.error("Preview error:", err);
-    showAlert("Error reading file: " + err.message, "error");
+  } catch (error) {
+    showAlert("Error reading file: " + error.message, "error");
   }
 }
 
-async function _parseCSVPreview(file) {
+async function _parseCSVFile(file) {
   const text = await file.text();
-  const lines = text.split("\n").filter((l) => l.trim());
-  if (!lines.length) throw new Error("CSV file is empty");
-  const skip = safeGetElement("skipHeader")?.checked ?? true;
-  const start = skip ? 1 : 0;
-  return lines
-    .slice(start, Math.min(start + 5, lines.length))
-    .map(_parseCSVLine);
+  const lines = text.split("\n").filter((line) => line.trim());
+  const skipHeader = safeGetElement("skipHeader")?.checked ?? true;
+  const startIndex = skipHeader ? 1 : 0;
+  const previewLines = lines.slice(startIndex, startIndex + 10);
+
+  return previewLines.map((line) => _parseCSVLine(line));
 }
 
 async function _parseExcelPreview(file) {
@@ -144,31 +125,29 @@ async function _parseExcelPreview(file) {
       reject(new Error("XLSX library not loaded"));
       return;
     }
+
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const wb = XLSX.read(new Uint8Array(e.target.result), {
-          type: "array",
-        });
-        if (!wb.SheetNames.length) {
-          reject(new Error("No sheets found"));
-          return;
-        }
-        const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {
-          header: 1,
-        });
-        if (!json.length) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: "array" });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        if (!jsonData.length) {
           reject(new Error("Sheet is empty"));
           return;
         }
-        const skip = safeGetElement("skipHeader")?.checked ?? true;
-        const start = skip ? 1 : 0;
-        resolve(json.slice(start, Math.min(start + 5, json.length)));
-      } catch (err) {
-        reject(new Error("Failed to parse Excel: " + err.message));
+        const skipHeader = safeGetElement("skipHeader")?.checked ?? true;
+        const startIndex = skipHeader ? 1 : 0;
+        const previewData = jsonData.slice(startIndex, startIndex + 10);
+
+        resolve(previewData);
+      } catch (error) {
+        reject(error);
       }
     };
-    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.onerror = () => reject(new Error("Failed to read Excel file"));
     reader.readAsArrayBuffer(file);
   });
 }
@@ -183,19 +162,24 @@ function _displayPreview(data) {
     return;
   }
 
-  let html =
-    '<h4>Preview (First 5 rows):</h4><table class="preview-table"><thead><tr><th>SN</th><th>Proximity Code</th></tr></thead><tbody>';
-  data.forEach((row, i) => {
+  let previewHTML =
+    '<h4>Preview (First 10 rows):</h4><table class="preview-table"><thead><tr>';
+  previewHTML += `<th>SN</th>
+    <th>Proximity Code</th>`;
+  previewHTML += "</tr></thead><tbody>";
+
+  data.forEach((col, i) => {
     let qr = "";
-    if (Array.isArray(row)) qr = (row[0] || "").toString().trim();
-    else if (row && typeof row === "object")
-      qr = (row.qr_code || row["Proximity Code"] || "").toString().trim();
-    html += `<tr><td><span class="badge badge-info">${i + 1}</span></td><td>${
+    if (Array.isArray(col)) qr = (col[0] || "").toString().trim();
+    else if (col && typeof col === "object")
+      qr = (col.qr_code || col["Proximity Code"] || "").toString().trim();
+    previewHTML += `<tr><td><span class="badge badge-info">${i + 1}</span></td><td>${
       qr ? escapeHtml(qr) : '<em style="color:#6c757d;">Empty / Skipped</em>'
     }</td></tr>`;
   });
-  html += "</tbody></table>";
-  container.innerHTML = html;
+
+  previewHTML += "</tbody></table>";
+  container.innerHTML = previewHTML;
   container.style.display = "block";
 }
 
@@ -204,71 +188,24 @@ function _parseCSVLine(line) {
   const result = [];
   let current = "",
     inQuotes = false;
+
   for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (c === '"') {
+    const char = line[i];
+
+    if (char === '"') {
       if (i + 1 < line.length && line[i + 1] === '"') {
         current += '"';
         i++;
       } else inQuotes = !inQuotes;
-    } else if (c === "," && !inQuotes) {
+    } else if (char === "," && !inQuotes) {
       result.push(current.trim());
       current = "";
     } else {
-      current += c;
+      current += char;
     }
   }
   result.push(current.trim());
   return result;
-}
-
-// ===== FULL FILE PROCESSORS =====
-async function _processCSVFull(file) {
-  const text = await file.text();
-  const lines = text.split("\n").filter((l) => l.trim());
-  if (!lines.length) throw new Error("CSV file is empty");
-  const skip = safeGetElement("skipHeader")?.checked ?? true;
-  return (skip ? lines.slice(1) : lines).map(_parseCSVLine);
-}
-
-async function _processExcelFull(file) {
-  return new Promise((resolve, reject) => {
-    if (typeof XLSX === "undefined") {
-      reject(new Error("XLSX library not loaded"));
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const wb = XLSX.read(new Uint8Array(e.target.result), {
-          type: "array",
-        });
-        if (!wb.SheetNames.length) {
-          reject(new Error("No sheets found"));
-          return;
-        }
-        const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {
-          header: 1,
-        });
-        const skip = safeGetElement("skipHeader")?.checked ?? true;
-        const rows = (skip ? json.slice(1) : json).filter(
-          (r) =>
-            r &&
-            Array.isArray(r) &&
-            r.some((c) => c !== null && c !== undefined && c !== ""),
-        );
-        if (!rows.length) {
-          reject(new Error("No data rows found"));
-          return;
-        }
-        resolve(rows);
-      } catch (err) {
-        reject(new Error("Failed to process Excel: " + err.message));
-      }
-    };
-    reader.onerror = () => reject(new Error("Failed to read file"));
-    reader.readAsArrayBuffer(file);
-  });
 }
 
 // ===== POST-IMPORT REFRESH =====
@@ -299,12 +236,14 @@ async function handleImportSubmit(e) {
   if (e) e.preventDefault();
 
   const fileInput = safeGetElement("dataFile");
+
   if (!fileInput) {
     showAlert("File input element not found", "error");
     return;
   }
 
   const file = fileInput.files[0];
+
   if (!file) {
     showAlert("Please select a file", "error");
     return;
@@ -318,8 +257,9 @@ async function handleImportSubmit(e) {
     return;
   }
 
-  const ext = file.name.split(".").pop().toLowerCase();
-  if (!["csv", "xlsx", "xls"].includes(ext)) {
+  const fileExtension = file.name.split(".").pop().toLowerCase();
+
+  if (!["csv", "xlsx", "xls"].includes(fileExtension)) {
     showAlert("Please select a valid file format (.csv, .xlsx, .xls)", "error");
     return;
   }
@@ -327,10 +267,9 @@ async function handleImportSubmit(e) {
   try {
     showImportProgress(true);
     updateImportStatus("Reading file...");
-    updateProgress(10);
 
     let dataRows;
-    if (ext === "csv") {
+    if (fileExtension === "csv") {
       dataRows = await _processCSVFull(file);
     } else {
       if (typeof XLSX === "undefined") {
@@ -341,22 +280,26 @@ async function handleImportSubmit(e) {
       dataRows = await _processExcelFull(file);
     }
 
-    if (!dataRows || !dataRows.length) {
+    updateProgress(10);
+
+    if (dataRows.length === 0) {
       showAlert("No data found in file", "error");
       showImportProgress(false);
       return;
     }
 
     updateProgress(20);
-    updateImportStatus(`Processing ${dataRows.length} row(s)...`);
+    updateImportStatus(`Processing ${dataRows.length} rows...`);
 
     const proximityCodes = [];
     const errors = [];
-    const skip = safeGetElement("skipHeader")?.checked ?? true;
+    const skipHeader = safeGetElement("skipHeader")?.checked ?? true;
 
     dataRows.forEach((row, index) => {
-      const rowNumber = skip ? index + 2 : index + 1;
+      const rowNumber = skipHeader ? index + 2 : index + 1;
+
       let qrCode = "";
+
       if (Array.isArray(row)) {
         qrCode = (row[0] || "").toString().trim();
       } else if (row && typeof row === "object") {
@@ -372,7 +315,9 @@ async function handleImportSubmit(e) {
 
     if (proximityCodes.length === 0) {
       showAlert(
-        `No valid proximity codes found.\n${errors.slice(0, 5).join("\n")}${errors.length > 5 ? "\n...and more" : ""}`,
+        `No valid proximity codes found.\n${errors.slice(0, 5).join("\n")}${
+          errors.length > 5 ? "\n...and more" : ""
+        }`,
         "error",
       );
       showImportProgress(false);
@@ -381,8 +326,8 @@ async function handleImportSubmit(e) {
 
     if (errors.length > 0) {
       const proceed = confirm(
-        `Found ${errors.length} empty row(s) that will be skipped.\n` +
-          `Continue importing ${proximityCodes.length} valid code(s)?\n\n` +
+        `Found ${errors.length} empty rows that will be skipped.\n` +
+          `Continue importing ${proximityCodes.length} valid codes?\n\n` +
           `${errors.slice(0, 3).join("\n")}${errors.length > 3 ? "\n...and more" : ""}`,
       );
       if (!proceed) {
@@ -400,9 +345,6 @@ async function handleImportSubmit(e) {
 
     updateProgress(60);
     updateImportStatus("Uploading to database...");
-    console.log(
-      `[ipc] Sending ${proximityCodes.length} record(s) to ${CONFIG.BACKEND_URL}`,
-    );
 
     const response = await fetch(CONFIG.BACKEND_URL, {
       method: "POST",
@@ -414,8 +356,8 @@ async function handleImportSubmit(e) {
       throw new Error(`HTTP ${response.status} ${response.statusText}`);
 
     updateProgress(80);
+
     const data = await response.json();
-    console.log("[ipc] Response:", data);
 
     if (data.success) {
       updateProgress(100);
@@ -423,36 +365,80 @@ async function handleImportSubmit(e) {
       const imported = data.imported_count || proximityCodes.length;
       const duplicates = data.duplicates_count || 0;
 
-      let statusMsg = `Successfully imported ${imported} code(s)!`;
-      let alertMsg = `Import completed!\n${imported} code(s) imported.`;
+      let statusMessage = `Successfully imported ${imported} codes!`;
+      let alertMessage = `Import completed! ${imported} codes imported successfully.`;
+
       if (duplicates > 0) {
-        statusMsg += ` (${duplicates} duplicate(s) skipped)`;
-        alertMsg += `\n${duplicates} duplicate(s) skipped.`;
-      }
-      if (data.warnings?.length) {
-        alertMsg += `\n\nWarnings:\n${data.warnings.slice(0, 3).join("\n")}`;
+        statusMessage += `\n(${duplicates} duplicates skipped)`;
+        alertMessage += `\n${duplicates} duplicates skipped.`;
       }
 
-      updateImportStatus(statusMsg);
-      showAlert(alertMsg, "success");
+      if (data.errors && data.errors.length > 0) {
+        alertMessage += `\n\nNote: ${data.errors.slice(0, 3).join("\n")}`;
+      }
+
+      updateImportStatus(statusMessage);
+      showAlert(alertMessage, "success");
 
       setTimeout(async () => {
         closeModal();
         await _refreshAfterImport();
       }, 2000);
     } else {
-      showAlert(data.message || "Import failed. Please try again.", "error");
-      console.error("[ipc] Backend error:", data);
+      showAlert(data.message, "error");
     }
-  } catch (err) {
-    console.error("[ipc] Import error:", err);
-    showAlert("Import failed: " + err.message, "error");
+  } catch (error) {
+    showAlert("Import failed: " + error.message, "error");
   } finally {
-    setTimeout(() => showImportProgress(false), 1000);
+    setTimeout(() => {
+      showImportProgress(false);
+    }, 3000);
   }
 }
 
-// ===== PROGRESS HELPERS =====
+// ===== FULL FILE PROCESSORS =====
+async function _processCSVFile(file) {
+  const text = await file.text();
+  const lines = text.split("\n").filter((line) => line.trim());
+  const skipHeader = safeGetElement("skipHeader")?.checked ?? true;
+  const dataLines = skipHeader ? lines.slice(1) : lines;
+
+  return dataLines.map((line) => _parseCSVLine(line));
+}
+
+async function _processExcelFull(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: "array" });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        const skipHeader = safeGetElement("skipHeader")?.checked ?? true;
+        const dataRows = skipHeader ? jsonData.slice(1) : jsonData;
+
+        const filteredRows = dataRows.filter(
+          (row) =>
+            row &&
+            row.some(
+              (cell) => cell !== null && cell !== undefined && cell !== "",
+            ),
+        );
+
+        resolve(filteredRows);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    reader.onerror = () => reject(new Error("Failed to read Excel file"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ── PROGRESS HELPERS ──────────────────────────────────────────────────────
 function showImportProgress(show) {
   const el = safeGetElement("importProgress");
   if (el) {
@@ -469,19 +455,39 @@ function updateProgress(percent) {
   }
 }
 
-function updateImportStatus(msg) {
+function updateImportStatus(message) {
   const el = safeGetElement("importStatus");
-  if (el) el.textContent = msg;
+  if (el) el.textContent = message;
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────
+function escapeHtml(text) {
+  if (typeof text !== "string") text = String(text);
+  const map = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
+  };
+  return text.replace(/[&<>"']/g, (m) => map[m]);
+}
+
+function safeGetElement(id) {
+  const el = document.getElementById(id);
+  if (!el) console.warn(`Element with id "${id}" not found`);
+  return el;
 }
 
 // ===== MODAL CLICK-OUTSIDE =====
-(function () {
-  const prev = window.onclick;
-  window.onclick = function (event) {
-    if (typeof prev === "function") prev(event);
-    const importModal = safeGetElement("importModal");
-    if (importModal && event.target === importModal) {
-      if (typeof closeModal === "function") closeModal();
-    }
-  };
-})();
+window.onclick = function (event) {
+  const employeeModal = document.getElementById("employeeModal");
+  const importModal = document.getElementById("importModal");
+
+  if (event.target === employeeModal) {
+    closeModal();
+  }
+  if (event.target === importModal) {
+    closeModal();
+  }
+};

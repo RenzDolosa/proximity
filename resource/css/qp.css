@@ -56,7 +56,9 @@ h2 {
   border: transparent;
   border-radius: 1vmin;
   outline: none;
-  cursor: none;
+  /* width: 200px;
+  position: fixed;
+  top: 0; */
 }
 
 input[type="text"] {

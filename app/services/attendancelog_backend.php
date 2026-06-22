@@ -224,7 +224,9 @@ class AccessLogManager
       return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    $countStmt = $this->conn->prepare("SELECT COUNT(*) FROM {$this->logTable} l $where");
+    $countStmt = $this->conn->prepare(
+      "SELECT COUNT(*) FROM {$this->logTable} l $where"
+    );
     foreach ($params as $key => $value) {
       $countStmt->bindValue($key, $value);
     }
@@ -252,7 +254,9 @@ class AccessLogManager
       try {
         $mainConn = getMainDBConnection();
         $ph       = implode(',', array_fill(0, count($userIds), '?'));
-        $uStmt    = $mainConn->prepare("SELECT id, first_name FROM users WHERE id IN ($ph)");
+        $uStmt    = $mainConn->prepare(
+          "SELECT id, first_name FROM users WHERE id IN ($ph)"
+        );
         $uStmt->execute(array_values($userIds));
         foreach ($uStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
           $userNameMap[(int)$row['id']] = $row['first_name'];
@@ -263,7 +267,7 @@ class AccessLogManager
     }
 
     foreach ($logs as &$log) {
-      $uid             = (int)($log['user_id'] ?? 0);
+      $uid = (int)($log['user_id'] ?? 0);
       $log['gate_name'] = $uid && isset($userNameMap[$uid]) ? $userNameMap[$uid] : null;
     }
     unset($log);
@@ -298,9 +302,23 @@ class AccessLogManager
   {
     $log = $this->getLog($id);
 
-    $stmt = $this->conn->prepare("DELETE FROM {$this->logTable} WHERE id = :id");
+    $stmt = $this->conn->prepare(
+      "DELETE FROM {$this->logTable} WHERE id = :id"
+    );
     $stmt->bindParam(':id', $id);
     $result = $stmt->execute();
+
+    if ($result && $log) {
+      $checkStmt = $this->conn->prepare(
+        "DELETE FROM {$this->checkTable}
+       WHERE employee_id = :employee_id
+          OR qr_code     = :qr_code"
+      );
+      $checkStmt->execute([
+        ':employee_id' => $log['employee_id'] ?? null,
+        ':qr_code'     => $log['qr_code']     ?? null,
+      ]);
+    }
 
     if ($result && $this->userId && $log) {
       logSystemAction(
@@ -320,7 +338,9 @@ class AccessLogManager
 
     $placeholders = implode(',', array_fill(0, count($logIds), '?'));
 
-    $stmt = $this->conn->prepare("DELETE FROM {$this->logTable} WHERE id IN ({$placeholders})");
+    $stmt = $this->conn->prepare(
+      "DELETE FROM {$this->logTable} WHERE id IN ({$placeholders})"
+    );
     $stmt->execute($logIds);
     $deleted = $stmt->rowCount();
 
@@ -357,31 +377,37 @@ class AccessLogManager
   {
     $stats = [];
 
-    $stmt = $this->conn->prepare("SELECT COUNT(*) AS total FROM {$this->logTable}");
+    $stmt = $this->conn->prepare(
+      "SELECT COUNT(*) as total FROM {$this->logTable}"
+    );
     $stmt->execute();
     $stats['total'] = (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-    $stmt = $this->conn->prepare("SELECT COUNT(*) AS active FROM {$this->logTable} WHERE status = 'Active'");
+    $stmt = $this->conn->prepare(
+      "SELECT COUNT(*) as active FROM {$this->logTable} WHERE status = 'Active'"
+    );
     $stmt->execute();
     $stats['active']   = (int) $stmt->fetch(PDO::FETCH_ASSOC)['active'];
     $stats['inactive'] = $stats['total'] - $stats['active'];
 
     $stmt = $this->conn->prepare(
-      "SELECT shift, COUNT(*) AS count FROM {$this->logTable} GROUP BY shift"
+      "SELECT shift, COUNT(*) as count FROM {$this->logTable} GROUP BY shift"
     );
     $stmt->execute();
+    $shiftData = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stats['by_shift'] = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-      $stats['by_shift'][$row['shift']] = $row['count'];
+    foreach ($shiftData as $shift) {
+      $stats['by_shift'][$shift['shift']] = $shift['count'];
     }
 
     $stmt = $this->conn->prepare(
       "SELECT access_type, COUNT(*) AS count FROM {$this->logTable} GROUP BY access_type"
     );
     $stmt->execute();
+    $accessData = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stats['by_access_type'] = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-      $stats['by_access_type'][$row['access_type']] = $row['count'];
+    foreach ($accessData as $access) {
+      $stats['by_access_type'][$access['access_type']] = $access['count'];
     }
 
     $stmt = $this->conn->prepare(
@@ -410,7 +436,7 @@ class FileUploader
 
   public function __construct($userId = null)
   {
-    $this->upload_dir = '../../public/uploads/user/';
+    $this->upload_dir = '/public/uploads/user/';
 
     if (!is_dir($this->upload_dir)) {
       if (!mkdir($this->upload_dir, 0755, true)) {
@@ -468,7 +494,6 @@ try {
 
     switch ($action) {
 
-      // ── Delete single log entry ──────────────────────────────────────────
       case 'delete':
         $log_id = $_POST['id'] ?? 0;
 
@@ -491,7 +516,7 @@ try {
 
       // ── Delete filtered log entries ──────────────────────────────────────
       case 'delete_filtered':
-        $log_ids_json = $_POST['employee_ids'] ?? '[]'; // key kept for JS compatibility
+        $log_ids_json = $_POST['employee_ids'] ?? '[]';
         $filters_json = $_POST['filters']      ?? '{}';
 
         $log_ids = json_decode($log_ids_json, true) ?: [];
@@ -536,7 +561,6 @@ try {
         }
         break;
 
-      // ── Delete all log entries ───────────────────────────────────────────
       case 'delete_all':
         try {
           $result    = $logManager->getLogs([], 1, 1);
@@ -571,7 +595,6 @@ try {
         }
         break;
 
-      // ── Stats ────────────────────────────────────────────────────────────
       case 'get_stats':
         try {
           $response['success'] = true;
@@ -581,7 +604,6 @@ try {
         }
         break;
 
-      // ── Search by QR ─────────────────────────────────────────────────────
       case 'search_qr':
         $qr_code = $_POST['qr_code'] ?? '';
 
@@ -610,13 +632,12 @@ try {
         break;
     }
 
-    // ── GET actions ────────────────────────────────────────────────────────────
+  // ── GET actions ────────────────────────────────────────────────────────────
   } elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $action = $_GET['action'] ?? '';
 
     switch ($action) {
 
-      // ── List / get logs ─────────────────────────────────────────────────
       case 'get':
       case 'list':
         $filters = [];
@@ -659,19 +680,21 @@ try {
           $result = $logManager->getLogs($filters, $page, $limit);
 
           $db     = $database->getUserConnection();
-          $optStmt = $db->query(
-            "SELECT DISTINCT position, brand, status, shift, violation, user_id
-             FROM employee_attendance_log"
-          );
+          $optStmt = $db->query("
+            SELECT DISTINCT fullname, position, brand, status, shift,
+                            violation, user_id
+            FROM employee_attendance_log
+          ");
           $allRows = $optStmt->fetchAll(PDO::FETCH_ASSOC);
 
-          // Resolve gate names for filter options
           $distinctUserIds = array_unique(array_filter(array_column($allRows, 'user_id')));
           $gateNameMap     = [];
           if (!empty($distinctUserIds)) {
             $mainConn = getMainDBConnection();
             $ph       = implode(',', array_fill(0, count($distinctUserIds), '?'));
-            $gStmt    = $mainConn->prepare("SELECT id, first_name FROM users WHERE id IN ($ph)");
+            $gStmt    = $mainConn->prepare(
+              "SELECT id, first_name FROM users WHERE id IN ($ph)"
+            );
             $gStmt->execute(array_values($distinctUserIds));
             foreach ($gStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
               $gateNameMap[(int)$row['id']] = $row['first_name'];
@@ -679,8 +702,10 @@ try {
           }
 
           foreach ($allRows as &$row) {
-            $uid              = (int)($row['user_id'] ?? 0);
-            $row['gate_name'] = $uid && isset($gateNameMap[$uid]) ? $gateNameMap[$uid] : null;
+            $uid = (int)($row['user_id'] ?? 0);
+            $row['gate_name'] = $uid && isset($gateNameMap[$uid]) 
+              ? $gateNameMap[$uid] 
+              : null;
           }
           unset($row);
 
@@ -695,7 +720,6 @@ try {
         }
         break;
 
-      // ── Single log entry ────────────────────────────────────────────────
       case 'get_single':
         $log_id = $_GET['id'] ?? 0;
 
@@ -718,7 +742,6 @@ try {
         }
         break;
 
-      // ── Stats ────────────────────────────────────────────────────────────
       case 'stats':
         try {
           $response['success'] = true;
@@ -728,7 +751,6 @@ try {
         }
         break;
 
-      // ── Check QR ─────────────────────────────────────────────────────────
       case 'check_qr':
         $qr_code = $_GET['qr_code'] ?? '';
 
@@ -749,7 +771,6 @@ try {
         }
         break;
 
-      // ── Current user info ─────────────────────────────────────────────────
       case 'user_info':
         $response['success'] = true;
         $response['data']    = [
@@ -761,7 +782,6 @@ try {
         ];
         break;
 
-      // ── Health check ──────────────────────────────────────────────────────
       case 'health_check':
         $health = [
           'status'             => 'OK',

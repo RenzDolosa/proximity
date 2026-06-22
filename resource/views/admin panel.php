@@ -1754,12 +1754,20 @@ function renderBindRows(array $pages, int $depth = 0): void
   <div class="container tab-panel active" id="panelUsers">
     <div class="controls">
       <div class="search-row">
-        <button class="btn btn-primary" tabindex="-1" onclick="loadUsers()"><i class="fas fa-search"></i> Search</button>
-        <button class="btn btn-secondary" tabindex="-1" onclick="clearUsersSearch()"><i class="fas fa-times"></i> Clear</button>
-        <input id="searchUser" type="text" placeholder="Username" oninput="debounceUsers()" style="width:180px;" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
-        <input id="searchEmail" type="text" placeholder="Email" oninput="debounceUsers()" style="width:200px;" autocomplete="off">
+        <div class="search-btn">
+          <button class="btn btn-primary" tabindex="-1" onclick="loadUsers()"><i class="fas fa-search"></i> Search</button>
+        </div>
+        <div class="clear-btn">
+          <button class="btn btn-secondary" tabindex="-1" onclick="clearUsersSearch()"><i class="fas fa-times"></i> Clear</button>
+        </div>
+        <div class="search-group" style="align-content:center;">
+          <input type="text" id="searchUser" placeholder="Username" oninput="debounceUsers()" style="padding:6px 12px;border:1px solid #ccc;border-radius:5px;font-size:13px;width:180px;" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
+          <input type="text" id="searchEmail" placeholder="Email" oninput="debounceUsers()" style="padding:6px 12px;border:1px solid #ccc;border-radius:5px;font-size:13px;width:200px;" autocomplete="off">
+        </div>
         <?php if ($access['users']): ?>
-          <button class="btn btn-add" tabindex="-1" onclick="openAddUser()"><i class="fas fa-user-plus"></i> Add User</button>
+          <div style="margin-left:auto;">
+            <button class="btn btn-add" tabindex="-1" onclick="openAddUser()"><i class="fas fa-user-plus"></i> Add User</button>
+          </div>
         <?php endif; ?>
       </div>
     </div>
@@ -1821,11 +1829,19 @@ function renderBindRows(array $pages, int $depth = 0): void
   <div class="container tab-panel" id="panelGroup">
     <div class="controls">
       <div class="search-row">
-        <button class="btn btn-primary" tabindex="-1" onclick="loadGroups()"><i class="fas fa-search"></i> Search</button>
-        <button class="btn btn-secondary" tabindex="-1" onclick="clearGroupsSearch()"><i class="fas fa-times"></i> Clear</button>
-        <input id="groupSearchInput" type="text" placeholder="Usergroup" oninput="debounceGroups()" style="width:220px;" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
+        <div class="search-btn">
+          <button class="btn btn-primary" tabindex="-1" onclick="loadGroups()"><i class="fas fa-search"></i> Search</button>
+        </div>
+        <div class="clear-btn">
+          <button class="btn btn-secondary" tabindex="-1" onclick="clearGroupsSearch()"><i class="fas fa-times"></i> Clear</button>
+        </div>
+        <div class="search-group" style="align-content:center;">
+          <input type="text" id="groupSearchInput" placeholder="Usergroup" oninput="debounceGroups()" style="padding:6px 12px;border:1px solid #ccc;border-radius:5px;font-size:13px;width:220px;" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
+        </div>
         <?php if ($access['groups']): ?>
-          <button class="btn btn-add" tabindex="-1" onclick="openAddGroup()"><i class="fas fa-plus"></i> Add Group</button>
+          <div style="margin-left:auto;">
+            <button class="btn btn-add" tabindex="-1" onclick="openAddGroup()"><i class="fas fa-plus"></i> Add Group</button>
+          </div>
         <?php endif; ?>
       </div>
     </div>
@@ -1877,14 +1893,22 @@ function renderBindRows(array $pages, int $depth = 0): void
   <div class="container tab-panel" id="panelLogs">
     <div class="controls">
       <div class="search-row">
-        <button class="btn btn-primary" tabindex="-1" onclick="loadLogs()"><i class="fas fa-search"></i> Search</button>
-        <button class="btn btn-secondary" tabindex="-1" onclick="clearLogsSearch()"><i class="fas fa-times"></i> Clear</button>
-        <input id="logSearchInput" type="text" placeholder="Search action, user, IP, details…" oninput="debounceLogs()" style="padding:6px 12px;border:1px solid #ccc;border-radius:5px;font-size:13px;width:220px;">
-        <select id="logActionFilter" onchange="loadLogs()" style="padding:6px 10px;border:1px solid #ccc;border-radius:5px;font-size:13px;">
-          <option value="">All Actions</option>
-        </select>
+        <div class="search-btn">
+          <button class="btn btn-primary" tabindex="-1" onclick="loadLogs()"><i class="fas fa-search"></i> Search</button>
+        </div>
+        <div class="clear-btn">
+          <button class="btn btn-secondary" tabindex="-1" onclick="clearLogsSearch()"><i class="fas fa-times"></i> Clear</button>
+        </div>
+        <div class="search-group" style="align-content:center;">
+          <input type="text" id="logSearchInput" placeholder="Search action, user, IP, details…" style="padding:6px 12px;border:1px solid #ccc;border-radius:5px;font-size:13px;width:220px;" oninput="debounceLogs()">
+          <select id="logActionFilter" onchange="loadLogs()" style="padding:6px 10px;border:1px solid #ccc;border-radius:5px;font-size:13px;">
+            <option value="">All Actions</option>
+          </select>
+        </div>
         <?php if ($access['system logs']): ?>
-          <button class="btn btn-danger" tabindex="-1" onclick="confirmDeleteAllLogs()"><i class="fas fa-trash"></i> Delete All Data</button>
+          <div style="margin-left:auto;">
+            <button class="btn btn-danger" tabindex="-1" onclick="confirmDeleteAllLogs()"><i class="fas fa-trash"></i> Delete All Data</button>
+          </div>
         <?php endif; ?>
       </div>
     </div>

@@ -15,6 +15,10 @@ if (!canAccess($permissions, 'system') && !canAccess($permissions, 'datalog') &&
 requireAccess('datalog', ROUTE_APP_PROXIMITY);
 $access = getMenuAccess();
 
+$hasActionsColumn = (
+  canAccess($permissions, 'delete-single-datalog')
+);
+
 $stats = [
   'total_scanned' => 0,
   'active_employees' => 0,
@@ -197,7 +201,7 @@ if ($databaseConnected) {
           <?php endif; ?>
           <!-- Auto-update controls -->
           <div class="auto-update-controls" style="user-select: none;">
-            <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; margin: 0; user-select:none;">
+            <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; margin:0; user-select:none;">
               <input type="checkbox" class="checkbox" id="autoUpdateToggle">
               <small>Auto-update</small>
             </label>
@@ -257,8 +261,8 @@ if ($databaseConnected) {
           </div>
         </div>
       </div>
-      <div class="table-scroll-wrap">
-        <table>
+      <div class="thead-sticky-wrap">
+        <table class="thead-table">
           <thead>
             <tr style="border-bottom: 2px solid #e9ecef;">
               <th class="sn-cell">SN</th>
@@ -271,17 +275,19 @@ if ($databaseConnected) {
               <th class="sortable-th" data-col="access_timestamp">Timestamp <span class="sort-icon">⇅</span></th>
               <th class="sortable-th" data-col="check_status">Check Status <span class="sort-icon">⇅</span></th>
               <th class="sortable-th" data-col="gate_name">Gate / Operator <span class="sort-icon">⇅</span></th>
-              <?php if (canAccess($permissions, 'delete-single-datalog')) : ?>
-                <th>Actions</th>
+              <?php if ($hasActionsColumn) : ?>
+                <th class="emp-actions">Actions</th>
               <?php endif; ?>
             </tr>
           </thead>
+        </table>
+      </div>
+      <div class="table-scroll-wrap">
+        <table class="thead-table">
           <tbody id="employeeTableBody">
             <script>
               (function() {
-                const hasActions = <?= json_encode(
-                                      canAccess($permissions, 'delete-single-datalog')
-                                    ) ?>;
+                const hasActions = <?= json_encode($hasActionsColumn) ?>;
                 const pulse = (w, h = '12px', r = '6px') =>
                   `<div style="width:${w};height:${h};border-radius:${r};background:linear-gradient(90deg,#e2e8f0 25%,#f1f5f9 50%,#e2e8f0 75%);background-size:600px 100%;animation:skel-shimmer 1.4s ease-in-out infinite;display:inline-block;vertical-align:middle;"></div>`;
                 const rows = Array.from({
@@ -298,16 +304,25 @@ if ($databaseConnected) {
                     <td style="padding:10px 8px;vertical-align:middle;">
                       <div style="display:flex;flex-direction:column;gap:5px;">${pulse('55%')}${pulse('60%','10px')}</div>
                     </td>
-                    <td style="padding:10px 8px;height:52px;text-align:center;vertical-align:middle;">${pulse('50px','22px','11px')}</td>
-                    <td style="padding:10px 8px;height:52px;text-align:center;vertical-align:middle;">${pulse('44px','44px','50%')}</td>
-                    <td style="padding:10px 8px;height:52px;text-align:center;vertical-align:middle;">${pulse('28px','28px','50%')}</td>
+                    <td class="emp-remark" style="padding:10px 8px;height:52px;text-align:center;vertical-align:middle;">${pulse('50px','22px','11px')}</td>
+                    <td class="emp-img" style="padding:10px 8px;height:52px;text-align:center;vertical-align:middle;">${pulse('44px','44px','50%')}</td>
+                    <td class="emp-proximity" style="padding:10px 8px;height:52px;text-align:center;vertical-align:middle;">${pulse('28px','28px','50%')}</td>
                     <td style="padding:10px 8px;vertical-align:middle;">${pulse('80px','10px')}</td>
+                    <td style="padding:10px 8px;height:52px;vertical-align:middle;">${pulse('60px','44px','50%')}</td>
                     <td style="padding:10px 8px;vertical-align:middle;">${pulse('80px','10px')}</td>
-                    <td style="padding:10px 8px;vertical-align:middle;">${pulse('80px','10px')}</td>
-                    ${hasActions ? `<td style="padding:10px 8px;vertical-align:middle;">${pulse('72px','26px','6px')}</td>` : ''}
+                    ${hasActions ? `<td class="emp-actions" style="padding:10px 8px;vertical-align:middle;">${pulse('72px','26px','6px')}</td>` : ''}
                   </tr>`
                 ).join('');
+
                 document.currentScript.insertAdjacentHTML('beforebegin', rows);
+
+                const ls = document.getElementById('loading-screen');
+                if (ls) {
+                  ls.classList.add('hidden');
+                  setTimeout(() => {
+                    ls.style.display = 'none';
+                  }, 250);
+                }
               })();
             </script>
           </tbody>
@@ -322,11 +337,7 @@ if ($databaseConnected) {
     </div>
   </div>
 
-  <div class="pagination" id="pagination" style="display: none;">
-    <button onclick="previousPage()" id="prev-btn"><i class="fas fa-arrow-left"></i> Previous</button>
-    <span id="page-info">Page 1 of 1</span>
-    <button onclick="nextPage()" id="next-btn">Next <i class="fas fa-arrow-right"></i></button>
-  </div>
+  <div class="pagination" id="pagination" style="display: none;"></div>
 
   <!-- Delete Modal -->
   <div id="deleteModal" class="modal-overlay" style="display: none;">
@@ -335,18 +346,23 @@ if ($databaseConnected) {
       <div class="modal-header">
         <h2 id="deleteModalTitle">Delete Employee</h2>
       </div>
-
       <div class="modal-body">
         <p id="deleteModalMessage">Are you sure you want to delete this employee?</p>
-
         <div id="confirmationContainer" style="display: none; margin-top: 20px;">
           <label for="confirmationInput" style="display: block; margin-bottom: 10px; font-weight: bold;">Type "DELETE ALL" to confirm:</label>
           <input type="text" id="confirmationInput" placeholder="Type DELETE ALL" style="margin-bottom: 10px;" />
         </div>
       </div>
-
-      <button id="confirmDeleteBtn" class="btn btn-danger">Delete</button>
-      <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
+      <div class="form-row-btn">
+        <div class="form-row">
+          <div>
+            <button id="confirmDeleteBtn" class="btn btn-danger">Delete</button>
+          </div>
+          <div>
+            <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

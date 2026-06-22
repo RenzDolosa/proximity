@@ -727,7 +727,6 @@ if ($databaseConnected) {
           minute: '2-digit'
         });
       }).catch(function(err) {
-        console.warn('Attendance chart: fetch failed, showing zeros.', err);
         renderChart(currentChartTab);
       });
     }

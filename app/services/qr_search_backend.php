@@ -61,11 +61,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 }
 
-$rateBucket = 'search_rate_' . date('YmdHi');
-$_SESSION[$rateBucket] = ($_SESSION[$rateBucket] ?? 0) + 1;
-if ($_SESSION[$rateBucket] > 120) {
+$rateBucketMinute = 'search_rate_min_' . date('YmdHi');
+$rateBucketSecond = 'search_rate_sec_' . date('YmdHis');
+
+$_SESSION[$rateBucketMinute] = ($_SESSION[$rateBucketMinute] ?? 0) + 1;
+$_SESSION[$rateBucketSecond] = ($_SESSION[$rateBucketSecond] ?? 0) + 1;
+
+if ($_SESSION[$rateBucketMinute] > 120) {
   http_response_code(429);
   echo json_encode(['success' => false, 'message' => 'Too many requests. Please slow down.', 'data' => []]);
+  exit();
+}
+
+if ($_SESSION[$rateBucketSecond] > 5) {
+  http_response_code(429);
+  echo json_encode(['success' => false, 'message' => 'Scanning too fast. Please wait a moment.', 'data' => []]);
   exit();
 }
 

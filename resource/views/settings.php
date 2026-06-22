@@ -390,18 +390,26 @@ $audioIconMap = [
 
             <?php if ($access['adminPanel']): ?>
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <button data-action-app="mainFrame-user" class="btn btn-secondary">
-                  <i class="fas fa-users-cog"></i> Users Management
-                </button>
-                <button data-action-app="mainFrame-group" class="btn btn-secondary">
-                  <i class="fas fa-layer-group"></i> Users Group
-                </button>
+                <div>
+                  <button data-action-app="mainFrame-user" class="btn btn-secondary">
+                    <i class="fas fa-users-cog"></i> Users Management
+                  </button>
+                </div>
+                <div>
+                  <button data-action-app="mainFrame-group" class="btn btn-secondary">
+                    <i class="fas fa-layer-group"></i> Users Group
+                  </button>
+                </div>
+                <div>
                 <button data-action-app="mainFrame-logs" class="btn btn-secondary">
                   <i class="fas fa-history"></i> System Logs
                 </button>
+                </div>
+                <div>
                 <button data-action-app="mainFrame-myAdmin" class="btn btn-secondary">
                   <i class="fas fa-database"></i> PHP MyAdmin
                 </button>
+                </div>
               </div>
             <?php endif; ?>
 

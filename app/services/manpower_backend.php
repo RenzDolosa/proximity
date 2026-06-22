@@ -53,6 +53,7 @@ const ALLOWED_GET_ACTIONS = [
   'user_info',
   'get_violations',
   'get_status_history',
+  'get_statuses',
 ];
 
 const ALLOWED_STATUSES   = ['Active', 'Inactive'];
@@ -134,8 +135,8 @@ function syncStatusByQR($conn, $employeeId, $qrCode, $changedBy = 'System')
         ':new'    => $newStatus,
         ':by'     => $changedBy,
         ':reason' => $newStatus === 'Active'
-          ? 'Auto-set Active: QR code is registered and enabled'
-          : 'Auto-set Inactive: QR code is missing or disabled',
+          ? 'Auto-enabled: QR code is registered and enabled'
+          : 'Auto-disabled: QR code is missing or disabled',
         ':ts'     => $now,
       ]);
     } catch (Exception $e) {
@@ -144,6 +145,21 @@ function syncStatusByQR($conn, $employeeId, $qrCode, $changedBy = 'System')
   }
 
   return $newStatus;
+}
+
+function clearCodeReservation($conn, $qrCode)
+{
+  $qrCode = trim((string)$qrCode);
+  if ($qrCode === '') return;
+
+  try {
+    $stmt = $conn->prepare(
+      "UPDATE code SET reserved_by = NULL, reserved_at = NULL WHERE qr_code = :qr"
+    );
+    $stmt->execute([':qr' => $qrCode]);
+  } catch (Exception $e) {
+    error_log("clearCodeReservation failed: " . $e->getMessage());
+  }
 }
 
 if (isset($_GET['serve_file'])) {
@@ -582,20 +598,24 @@ class EmployeeManager
   {
     $stats = [];
 
-    $stmt = $this->conn->prepare("SELECT COUNT(*) as total FROM " . $this->table);
+    $stmt = $this->conn->prepare(
+      "SELECT COUNT(*) as total FROM " . $this->table
+    );
     $stmt->execute();
     $stats['total'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-    $stmt = $this->conn->prepare("SELECT COUNT(*) as active FROM " . $this->table . " WHERE status = 'Active'");
+    $stmt = $this->conn->prepare(
+      "SELECT COUNT(*) as active FROM " . $this->table . " WHERE status = 'Active'"
+    );
     $stmt->execute();
     $stats['active'] = $stmt->fetch(PDO::FETCH_ASSOC)['active'];
-
     $stats['inactive'] = $stats['total'] - $stats['active'];
 
-    $stmt = $this->conn->prepare("SELECT shift, COUNT(*) as count FROM " . $this->table . " GROUP BY shift");
+    $stmt = $this->conn->prepare(
+      "SELECT shift, COUNT(*) as count FROM " . $this->table . " GROUP BY shift"
+    );
     $stmt->execute();
     $shiftData = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
     $stats['by_shift'] = [];
     foreach ($shiftData as $shift) {
       $stats['by_shift'][$shift['shift']] = $shift['count'];
@@ -1471,7 +1491,6 @@ try {
           $response['filter_options'] = $allRows;
         } catch (Exception $e) {
           $response['message'] = 'Error retrieving employees.';
-          error_log('getEmployees error: ' . $e->getMessage());
         }
         break;
 
@@ -1569,6 +1588,19 @@ try {
         } catch (Exception $e) {
           $response['message'] = 'Error fetching status history: ' . $e->getMessage();
           error_log("get_status_history error: " . $e->getMessage());
+        }
+        break;
+
+      case 'get_statuses':
+        try {
+          $conn = $database->getUserConnection();
+          $stmt = $conn->prepare("SELECT id, status FROM employees");
+          $stmt->execute();
+
+          $response['success']  = true;
+          $response['statuses'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+          $response['message'] = 'Error retrieving statuses: ' . $e->getMessage();
         }
         break;
 

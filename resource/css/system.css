@@ -130,20 +130,19 @@ body {
 .data-table {
   background: transparent;
   border-radius: var(--radius-md);
-  overflow: hidden;
+  overflow: visible;
   transition: all var(--transition-md);
   padding-bottom: 70px;
 }
 
 .sn-cell {
+  width: 44px;
   color: var(--text-faint);
   font-size: 12px;
   text-align: center;
-  width: 44px;
 }
 
 .desc-cell {
-  max-width: 260px;
   word-break: break-word;
   line-height: 1.5;
   color: var(--text-muted);
@@ -165,19 +164,19 @@ body {
 }
 
 .emp-remark {
-  max-width: 150px;
+  width: 200px;
+  max-width: 300px;
   text-align: center;
 }
 
 .emp-img {
+  width: 70px;
   text-align: center;
   justify-items: center;
 }
 
 .emp-proximity {
-  width: 50px;
   text-align: center;
-  cursor: pointer;
 }
 
 .emp-proximity svg {
@@ -185,10 +184,6 @@ body {
   transition: fill var(--transition);
   width: 20px;
   height: 20px;
-}
-
-.emp-proximity:hover svg {
-  fill: var(--accent);
 }
 
 .emp-createdAt,
@@ -209,6 +204,12 @@ body {
   display: flex;
   gap: 6px;
   align-items: center;
+}
+
+.emp-actions {
+  position: relative;
+  width: 160px;
+  overflow: visible;
 }
 
 /* ── Sortable column headers ── */
@@ -263,6 +264,42 @@ body {
   letter-spacing: 0.3px;
   margin-right: 10px;
 }
+
+.table-header {
+  position: sticky;
+  top: var(--controls-h);
+  border-top-left-radius: var(--radius-md);
+  border-top-right-radius: var(--radius-md);
+  z-index: 100;
+}
+
+.thead-sticky-wrap {
+  position: sticky;
+  top: calc(var(--controls-h) + var(--table-header-h, 45px));
+  background: var(--surface);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  z-index: 99;
+}
+
+.thead-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* .col-sn          { width: 44px; } */
+/* .col-fullname    { width: 200px; } */
+/* .col-brand       { width: 150px; } */
+/* .col-shift       { width: 150px; } */
+/* .col-remark      { width: 150px; } */
+/* .col-img         { width: 50px; } */
+/* .col-proximity   { width: 50px; } */
+/* .col-register    { width: 150px; } */
+/* .col-update      { width: 150px; } */
+/* .col-actions     { width: 100px; } */
 
 .stat-item {
   display: flex;

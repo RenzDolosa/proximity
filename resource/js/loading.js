@@ -69,7 +69,7 @@ const LoadingManager = {
 
     if (elements.text) elements.text.textContent = text + "...";
     if (elements.subtext) elements.subtext.textContent = subtext;
-    if (elements.spinner) {
+    if (elements.spinner && elements.spinner.isConnected) {
       elements.spinner.className = "spinner";
       if (type === "dots") {
         elements.spinner.classList.add("dots");
@@ -130,6 +130,7 @@ const LoadingManager = {
     if (show) {
       if (!progressBar) {
         const content = document.querySelector(".loading-content");
+        if (!content) return;
         if (content) {
           const progress = document.createElement("div");
           progress.className = "loading-progress";
@@ -179,9 +180,7 @@ const SKELETON_PAGES = [
 ];
 
 function navigateWithLoading(url) {
-  const isSkeletonDest = SKELETON_PAGES.some((page) =>
-    url.includes(page)
-  );
+  const isSkeletonDest = SKELETON_PAGES.some((page) => url.includes(page));
 
   if (isSkeletonDest) {
     LoadingManager.show({

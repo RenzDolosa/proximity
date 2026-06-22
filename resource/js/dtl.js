@@ -21,21 +21,20 @@ let totalPages = 1;
 let totalRecords = 0;
 
 let activeFilters = {};
+let allEmployees = [];
 
 let sortCol = null;
-let sortDir = 'asc';
-
-const count = employees.length;
-const label = count > 1 ? "employee's" : "employee";
+let sortDir = "asc";
 
 // ── Controls CSS helper ───────────────────────────────────────────
-const controls = document.querySelector('.controls');
-const sentinel = document.createElement('div');
-sentinel.style.cssText = 'position:absolute;top:0;height:1px;pointer-events:none';
+const controls = document.querySelector(".controls");
+const sentinel = document.createElement("div");
+sentinel.style.cssText =
+  "position:absolute;top:0;height:1px;pointer-events:none";
 controls.before(sentinel);
 
 new IntersectionObserver(([e]) => {
-  controls.classList.toggle('is-stuck', !e.isIntersecting);
+  controls.classList.toggle("is-stuck", !e.isIntersecting);
 }).observe(sentinel);
 
 // ─── Suggestion visibility helpers ───────────────────────────────
@@ -52,6 +51,13 @@ function isInputVisible(input) {
   return !anyModalOpen;
 }
 
+function isAnySuggestionOpen() {
+  return [...document.querySelectorAll("ul[data-suggestion-list]")].some(
+    (el) => el.style.display === "block",
+  );
+}
+
+// ── Event listeners setup ─────────────────────────────────────────────────────
 function setupEventListeners() {
   // ── Date range picker ──────────────────────────────────────────
   initDateRangePicker();
@@ -74,6 +80,7 @@ function setupEventListeners() {
     input.addEventListener("input", debounce(searchEmployees, 300));
   });
 
+  // ── Auto-focus hidden proximity input ─────────────────────────────────
   const proximityInput = document.getElementById("search_qr");
 
   function autoFocusProximity() {
@@ -82,18 +89,7 @@ function setupEventListeners() {
 
     if (modalOpen) return;
 
-    const anySuggestionOpen = [
-      "fullname-suggestions",
-      "search-position-suggestions",
-      "search-brand-suggestions",
-      "search-status-suggestions",
-      "search-shift-suggestions",
-      "search-violation-suggestions",
-      "search-inout-suggestions",
-      "search-inout-suggestions",
-    ].some((id) => document.getElementById(id)?.style.display === "block");
-
-    if (anySuggestionOpen) return;
+    if (isAnySuggestionOpen()) return;
 
     const active = document.activeElement;
     const isTyping =
@@ -102,20 +98,19 @@ function setupEventListeners() {
         active.tagName === "SELECT" ||
         active.tagName === "TEXTAREA");
 
-    if (!isTyping && proximityInput) {
-      proximityInput.focus();
-    }
+    if (!isTyping && proximityInput) proximityInput.focus();
   }
 
   autoFocusProximity();
   document.addEventListener("click", autoFocusProximity);
   document.addEventListener("focusin", autoFocusProximity);
 
+  // ── Field suggestion dropdowns ─────────────────────────────────────────
   setupFieldSuggestions(
     "search_fullname",
     "fullname-suggestions",
     () =>
-      [...employees]
+      [...allEmployees]
         .sort((a, b) => {
           const lastName = (name) => {
             const parts = (name || "").trim().split(/\s+/);
@@ -194,7 +189,7 @@ function setupEventListeners() {
   setupFieldSuggestions(
     "search_in-out",
     "search-inout-suggestions",
-    () => [...employees].map((e) => e.check_status),
+    () => [...allEmployees].map((e) => e.check_status),
     {
       hiddenId: "search_in-out_val",
       noneLabel: "No In/Out Status",
@@ -205,7 +200,7 @@ function setupEventListeners() {
   setupFieldSuggestions(
     "search_user_id",
     "search-userid-suggestions",
-    () => [...employees].map((e) => e.gate_name || e.user_id),
+    () => [...allEmployees].map((e) => e.gate_name || e.user_id),
     {
       hiddenId: "search_user_id_val",
       noneLabel: "No Operator",
@@ -213,6 +208,7 @@ function setupEventListeners() {
     },
   );
 
+  // ── Auto-update toggle ─────────────────────────────────────────────────
   const autoUpdateToggle = document.getElementById("autoUpdateToggle");
   if (autoUpdateToggle) {
     autoUpdateToggle.addEventListener("change", toggleAutoUpdate);
@@ -246,6 +242,40 @@ function setupEventListeners() {
       },
     },
   );
+
+  (function () {
+    const controlsEl = document.querySelector(".controls");
+    const tableHeaderEl = document.querySelector(".table-header");
+
+    function sync() {
+      if (controlsEl) {
+        document.documentElement.style.setProperty(
+          "--controls-h",
+          controlsEl.offsetHeight + "px",
+        );
+      }
+      if (tableHeaderEl) {
+        document.documentElement.style.setProperty(
+          "--table-header-h",
+          tableHeaderEl.offsetHeight + "px",
+        );
+      }
+    }
+
+    sync();
+
+    if (controlsEl) new ResizeObserver(sync).observe(controlsEl);
+    if (tableHeaderEl) new ResizeObserver(sync).observe(tableHeaderEl);
+  })();
+
+  const theadWrap = document.querySelector(".thead-sticky-wrap");
+  const tbodyWrap = document.querySelector(".table-scroll-wrap");
+
+  if (theadWrap && tbodyWrap) {
+    tbodyWrap.addEventListener("scroll", () => {
+      theadWrap.scrollLeft = tbodyWrap.scrollLeft;
+    });
+  }
 }
 
 const UPDATE_INTERVAL_OPTIONS = [
@@ -301,7 +331,7 @@ function toggleAutoUpdate() {
     showAlert(`Auto-update enabled (${formatInterval(interval)})`, "success");
   } else {
     stopAutoUpdate();
-    showAlert("Auto-update disabled", "info");
+    showAlert("Auto-update disabled", "error");
   }
 
   updateAutoUpdateUI();
@@ -358,33 +388,15 @@ function stopAutoUpdate() {
 }
 
 function checkForChanges(newData) {
-  if (!employees || employees.length !== newData.length) {
-    return true;
-  }
+  if (!employees || employees.length !== newData.length) return true;
 
-  const oldEmployeeMap = new Map(
-    employees.map((emp) => [emp.id, JSON.stringify(emp)]),
-  );
+  const oldMap = new Map(employees.map((emp) => [emp.id, JSON.stringify(emp)]));
 
   for (const newEmp of newData) {
-    const oldEmpJson = oldEmployeeMap.get(newEmp.id);
-    const newEmpJson = JSON.stringify(newEmp);
-
-    if (!oldEmpJson || oldEmpJson !== newEmpJson) {
-      return true;
-    }
+    const oldJson = oldMap.get(newEmp.id);
+    if (!oldJson || oldJson !== JSON.stringify(newEmp)) return true;
   }
-
   return false;
-}
-
-function updateStatistic(elementId, newValue) {
-  const element = document.getElementById(elementId);
-  if (element && element.textContent !== newValue.toLocaleString()) {
-    element.classList.add("fade-in");
-    element.textContent = newValue.toLocaleString();
-    setTimeout(() => element.classList.remove("fade-in"), 500);
-  }
 }
 
 function updateAutoUpdateUI() {
@@ -394,27 +406,19 @@ function updateAutoUpdateUI() {
   const intervalDisplay = document.getElementById("updateInterval");
   const intervalHidden = document.getElementById("updateInterval_val");
 
-  if (toggle) {
-    toggle.checked = autoUpdateEnabled;
-  }
+  if (toggle) toggle.checked = autoUpdateEnabled;
 
   if (status) {
     const strong = document.getElementById("toggle");
     strong.textContent = autoUpdateEnabled ? "ON" : "OFF";
     status.replaceChildren(strong);
-    status.className = `auto-update-status ${
-      autoUpdateEnabled ? "active" : "inactive"
-    }`;
+    status.className = `auto-update-status ${autoUpdateEnabled ? "active" : "inactive"}`;
   }
 
   if (lastUpdate && lastUpdateTimestamp) {
     const timeString = new Date(lastUpdateTimestamp).toLocaleTimeString();
     lastUpdate.textContent = `Last updated: ${timeString}`;
-    lastUpdate.style.cssText = `
-      display: block;
-      color: #000000;
-      font-size: 12px;
-    `;
+    lastUpdate.style.cssText = "display:block;color:#000;font-size:12px;";
   } else if (lastUpdate) {
     lastUpdate.style.display = "none";
   }
@@ -431,7 +435,6 @@ function updateAutoUpdateUI() {
 function handleUserActivity() {
   isUserActive = true;
   clearTimeout(userActivityTimer);
-
   userActivityTimer = setTimeout(() => {
     isUserActive = false;
     console.log("User activity paused, resuming auto-update");
@@ -440,35 +443,36 @@ function handleUserActivity() {
 
 function showAutoUpdateNotification() {
   const notification = document.getElementById("autoUpdateNotification");
-  if (notification) {
-    const timeString = new Date().toLocaleTimeString();
-    notification.textContent = `Data updated at ${timeString}`;
-    notification.style.cssText = `
-      display: block;
-      opacity: 1;
-      background-color: #e8f5e8;
-      color: #2d5a2d;
-      padding: 2px 4px;
-      border-radius: 4px;
-      font-size: 11px;
-      border: 1px solid #b8e6b8;
-      transition: opacity 0.3s ease;
-    `;
+  if (!notification) return;
 
-    setTimeout(() => {
-      if (notification) {
-        notification.style.opacity = "0";
-        setTimeout(() => {
-          if (notification) {
-            notification.style.display = "none";
-          }
-        }, 300);
-      }
-    }, 3000);
-  }
+  const timeString = new Date().toLocaleTimeString();
+  notification.textContent = `Data updated at ${timeString}`;
+  notification.style.cssText = `
+    display: block;
+    opacity: 1;
+    background-color: #e8f5e8;
+    color: #2d5a2d;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 11px;
+    border: 1px solid #b8e6b8;
+    transition: opacity 0.3s ease;
+  `;
+
+  setTimeout(() => {
+    if (notification) {
+      notification.style.opacity = "0";
+      setTimeout(() => {
+        if (notification) notification.style.display = "none";
+      }, 300);
+    }
+  }, 3000);
 }
 
+// ── Auto-update fetch ─────────────────────────────────────────────────────────
 async function loadEmployeesAuto(filters = {}) {
+  if (!AccessLogBackend) return;
+
   try {
     const filtersToUse =
       Object.keys(activeFilters).length > 0
@@ -477,7 +481,7 @@ async function loadEmployeesAuto(filters = {}) {
           ? getActiveFilters()
           : {};
 
-    const params = new URLSearchParams({ action: "get" });
+    const params = buildFilterParams(filtersToUse);
 
     params.append("page", currentPage);
     params.append("limit", itemsPerPage);
@@ -485,26 +489,6 @@ async function loadEmployeesAuto(filters = {}) {
     if (sortCol) {
       params.append("sort_col", sortCol);
       params.append("sort_dir", sortDir);
-    }
-
-    for (const [key, value] of Object.entries(filtersToUse)) {
-      if (key === "position" && value === "__none__") {
-        params.append("position_none", "1");
-      } else if (key === "brand" && value === "__none__") {
-        params.append("brand_none", "1");
-      } else if (key === "status" && value === "__none__") {
-        params.append("status_none", "1");
-      } else if (key === "shift" && value === "__none__") {
-        params.append("shift_none", "1");
-      } else if (key === "violation" && value === "__none__") {
-        params.append("violation_none", "1");
-      } else if (key === "user_id" && value === "__none__") {
-        params.append("user_id_none", "1");
-      } else if (key === "user_id") {
-        params.append("gate_name", value);
-      } else {
-        params.append(key, value);
-      }
     }
 
     const response = await fetch(`${AccessLogBackend}?${params.toString()}`, {
@@ -559,6 +543,7 @@ async function loadEmployeesAuto(filters = {}) {
 }
 
 let networkErrorCount = 0;
+
 function handleNetworkError() {
   networkErrorCount++;
 
@@ -575,22 +560,35 @@ function handleNetworkError() {
 }
 
 function resetNetworkErrorCount() {
-  if (networkErrorCount > 0) {
-    networkErrorCount = 0;
-    console.log("Network connection restored");
-  }
+  if (networkErrorCount > 0) networkErrorCount = 0;
+  console.log("Network connection restored");
 }
 
-function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
+// ── Filter helpers ────────────────────────────────────────────────────────────
+function buildFilterParams(filters) {
+  const params = new URLSearchParams({ action: "get" });
+
+  for (const [key, value] of Object.entries(filters)) {
+    if (key === "position" && value === "__none__") {
+      params.append("position_none", "1");
+    } else if (key === "brand" && value === "__none__") {
+      params.append("brand_none", "1");
+    } else if (key === "status" && value === "__none__") {
+      params.append("status_none", "1");
+    } else if (key === "shift" && value === "__none__") {
+      params.append("shift_none", "1");
+    } else if (key === "violation" && value === "__none__") {
+      params.append("violation_none", "1");
+    } else if (key === "user_id" && value === "__none__") {
+      params.append("user_id_none", "1");
+    } else if (key === "user_id") {
+      params.append("gate_name", value);
+    } else {
+      params.append(key, value);
+    }
+  }
+
+  return params;
 }
 
 function getActiveFilters() {
@@ -616,87 +614,73 @@ function getActiveFilters() {
 }
 
 function hasActiveFilters() {
-  const filters = getActiveFilters();
-  return Object.keys(filters).length > 0;
+  return Object.keys(getActiveFilters()).length > 0;
 }
 
 function displayFilterStatus() {
+  const existing = document.getElementById("filter-status");
+  if (existing) existing.remove();
+
   const filters = getActiveFilters();
+  if (!Object.keys(filters).length) return;
+
   const filterInfo = document.createElement("div");
+  filterInfo.id = "filter-status";
+  filterInfo.style.cssText = `
+    background:#e3f2fd;border-left:4px solid #2196F3;padding:12px 16px;
+    margin-left:16px;border-radius:4px;font-size:14px;color:#1565c0;
+    display:inline-flex;justify-content:space-between;align-items:center;
+  `;
 
-  const existingStatus = document.getElementById("filter-status");
-  if (existingStatus) {
-    existingStatus.remove();
-  }
+  const label = document.createElement("span");
+  label.style.cssText = "display:inline-flex;align-items:center;gap:8px;";
 
-  if (Object.keys(filters).length > 0) {
-    filterInfo.id = "filter-status";
-    filterInfo.style.cssText = `
-      background: #e3f2fd;
-      border-left: 4px solid #2196F3;
-      padding: 12px 16px;
-      margin-left: 16px;
-      border-radius: 4px;
-      font-size: 14px;
-      color: #1565c0;
-      display: inline-flex;
-      justify-content: space-between;
-      align-items: center;
-    `;
+  const icon = document.createElement("i");
+  icon.className = "fas fa-filter";
+  label.appendChild(icon);
 
-    const filterLabel = document.createElement("span");
-    filterLabel.style.display = "inline-flex";
-    filterLabel.style.alignItems = "center";
-    filterLabel.style.gap = "8px";
+  const textSpan = document.createElement("span");
+  textSpan.appendChild(document.createTextNode("Active Filters: "));
 
-    const icon = document.createElement("i");
-    icon.className = "fas fa-filter";
-    filterLabel.appendChild(icon);
+  Object.entries(filters).forEach(([key, value], index) => {
+    if (index > 0) textSpan.appendChild(document.createTextNode(" | "));
+    const strong = document.createElement("strong");
+    const properKey = key
+      .split(/(?=[A-Z])/)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
+    strong.textContent = `${properKey}:`;
+    textSpan.appendChild(strong);
+    textSpan.appendChild(document.createTextNode(` ${toProperCase(value)}`));
+  });
 
-    const textSpan = document.createElement("span");
-    textSpan.appendChild(document.createTextNode("Active Filters: "));
+  label.appendChild(textSpan);
+  filterInfo.appendChild(label);
 
-    const filterEntries = Object.entries(filters);
-    filterEntries.forEach(([key, value], index) => {
-      if (index > 0) {
-        textSpan.appendChild(document.createTextNode(" | "));
-      }
-
-      const strong = document.createElement("strong");
-      const properKey = key
-        .split(/(?=[A-Z])/)
-        .map(
-          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
-        )
-        .join(" ");
-      strong.textContent = `${properKey}:`;
-      textSpan.appendChild(strong);
-
-      textSpan.appendChild(document.createTextNode(` ${value}`));
-    });
-
-    filterLabel.appendChild(textSpan);
-    filterInfo.appendChild(filterLabel);
-
-    const controlsDiv = document.querySelector(".controls");
-    if (controlsDiv) {
-      controlsDiv.appendChild(filterInfo);
-    }
-  }
+  const controlsDiv = document.querySelector(".controls");
+  if (controlsDiv) controlsDiv.appendChild(filterInfo);
 }
 
+// ── Manpower image lookup ─────────────────────────────────────────────────────
 async function getManpowerEmployeeData() {
+  if (employeeDataCache) return employeeDataCache;
+
+  if (!EmployeesBackend) return [];
+
   try {
     if (employeeDataCache) {
       return employeeDataCache;
     }
 
-    const response = await fetch(`${EmployeesBackend}?action=get`, {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-        "X-Silent-Request": "true",
+    const response = await fetch(
+      `${EmployeesBackend}?action=get&page=1&limit=1`,
+      {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "X-Silent-Request": "true",
+        },
       },
-    });
+    );
 
     if (response.ok) {
       const data = await response.json();
@@ -717,6 +701,7 @@ async function buildQRToImageMap() {
 
   const manpowerEmployees = await getManpowerEmployeeData();
   const qrImageMap = {};
+
   manpowerEmployees.forEach((emp) => {
     if (emp.qr_code) {
       qrImageMap[emp.qr_code.trim().toLowerCase()] = {
@@ -731,73 +716,54 @@ async function buildQRToImageMap() {
       };
     }
   });
+
   qrImageMapCache = qrImageMap;
   return qrImageMap;
 }
 
-async function loadEmployeeData(employeeId) {
+async function updateStatsPanel() {
+  if (!AccessLogBackend) return;
+
   try {
-    const response = await fetch(
-      `${AccessLogBackend}?action=get_single&id=${encodeURIComponent(employeeId)}`,
-      {
-        headers: {
-          "X-Requested-With": "XMLHttpRequest",
-          "X-Silent-Request": "true",
-        },
+    const response = await fetch(`${AccessLogBackend}?action=stats`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
       },
-    );
+    });
+
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();
+    if (!data.success || !data.data) return;
 
-    if (data.success && data.data) {
-      const employee = data.data;
+    const stats = data.data;
 
-      const fields = {
-        employee_id: employee.id,
-        fullname: employee.fullname || "",
-        position: employee.position || "",
-        brand: employee.brand || "",
-        status: employee.status || "Active",
-        shift: employee.shift || "",
-        violation: employee.violation || "",
-        check_status: employee.check_status || "",
-        user_id: employee.user_id || "",
-        access_timestamp: employee.access_timestamp || "",
-      };
+    const totalEl = document.getElementById("total_scanned");
+    const activeEl = document.getElementById("active_employees");
+    const inactiveEl = document.getElementById("inactive_employees");
+    const todayEl = document.getElementById("today_attendance");
+    const todayInEl = document.getElementById("today_in");
+    const todayOutEl = document.getElementById("today_out");
 
-      Object.entries(fields).forEach(([fieldId, value]) => {
-        const field = document.getElementById(fieldId);
-        if (field) {
-          field.value = value;
-        }
-      });
-
-      const fileLabel = document.querySelector(".file-upload-label");
-      if (fileLabel) {
-        if (employee.image) {
-          fileLabel.innerHTML = `<i class="fas fa-image"></i> Current: ${employee.image}`;
-        } else {
-          fileLabel.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 1MB)`;
-        }
-      }
-    } else {
-      showAlert("Failed to load employee data", "error");
-    }
+    if (totalEl) totalEl.textContent = stats.total ?? 0;
+    if (activeEl) activeEl.textContent = stats.active ?? 0;
+    if (inactiveEl) inactiveEl.textContent = stats.inactive ?? 0;
+    if (todayEl) todayEl.textContent = stats.today ?? 0;
+    if (todayInEl) todayInEl.textContent = `IN : ${stats.today_in ?? 0}`;
+    if (todayOutEl) todayOutEl.textContent = `OUT : ${stats.today_out ?? 0}`;
   } catch (error) {
-    console.error("Error loading employee data:", error);
-    showAlert("Failed to load employee data", "error");
+    console.error("Error updating employee counts", error);
   }
 }
 
+// ── Render table ──────────────────────────────────────────────────────────────
 async function renderEmployeeError(message = "Failed to load employee data.") {
   const tbody = document.getElementById("employeeTableBody");
   const paginationDiv = document.getElementById("pagination");
   const noDataDiv = document.getElementById("no-data");
 
-  if (!tbody) {
-    console.error("Employee table body not found");
-    return;
-  }
+  if (!tbody) return;
 
   if (!employees || employees.length === 0) {
     tbody.innerHTML = "";
@@ -853,10 +819,7 @@ async function renderEmployeeTable() {
   const paginationDiv = document.getElementById("pagination");
   const noDataDiv = document.getElementById("no-data");
 
-  if (!tbody) {
-    console.error("Employee table body not found");
-    return;
-  }
+  if (!tbody) return;
 
   if (!employees || employees.length === 0) {
     tbody.innerHTML = "";
@@ -869,7 +832,6 @@ async function renderEmployeeTable() {
 
   const currentEmployees = employees;
   const startIndex = (currentPage - 1) * itemsPerPage;
-
   const currentUserId = await getCurrentUserId();
   const qrImageMap = await buildQRToImageMap();
 
@@ -891,13 +853,18 @@ async function renderEmployeeTable() {
       const safeImage = escapeHtml(employee.image);
       const safeId = escapeHtml(String(employee.id));
       const safeEmpId = escapeHtml(String(employee.employee_id));
+      const safeCheck = escapeHtml(employee.check_status);
+      const safeGate = escapeHtml(
+        employee.gate_name || employee.user_id || "N/A",
+      );
+      const safeTimestamp = escapeHtml(employee.access_timestamp);
 
       if (matchedEmployeeData && matchedEmployeeData.image) {
-        imageUrl = `${window.location.origin}/../public/uploads/user/${matchedEmployeeData.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${matchedEmployeeData.image}`;
+        imageUrl = `${window.location.origin}/public/uploads/user/${matchedEmployeeData.image}`;
         displayName = matchedEmployeeData.fullname || safeFullname;
         tooltipText = `${toProperCase(matchedEmployeeData.fullname)}\n${toProperCase(matchedEmployeeData.position)}\n${toProperCase(matchedEmployeeData.brand)}`;
       } else if (employee.image) {
-        imageUrl = `${window.location.origin}/../public/uploads/user/${employee.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${employee.image}`;
+        imageUrl = `${window.location.origin}/public/uploads/user/${employee.image}`;
         tooltipText = `${safeFullname}\n${safePosition}\n${safeBrand}`;
       }
 
@@ -910,8 +877,8 @@ async function renderEmployeeTable() {
 
       const isAboveFold = index < 5;
 
-      const thumbSrc = `${window.location.origin}/../public/uploads/user/thumb_${safeImage}`;
-      const imageSrc = `${window.location.origin}/../public/uploads/user/${safeImage}`;
+      const thumbSrc = `${window.location.origin}/public/uploads/user/${safeImage}`;
+      const imageSrc = `${window.location.origin}/public/uploads/user/${safeImage}`;
 
       return `
         <tr class="row">
@@ -939,7 +906,7 @@ async function renderEmployeeTable() {
                     class="remarks-item"
                     tabindex="-1"
                     onclick="openViolationPopupFromBtn(this)"
-                    title="${escapeHtml(safeViolation)}">
+                    title="${safeViolation}">
                     <i class="fas fa-exclamation-triangle" style="font-size:10px;"></i>
                   </button>`
                   : `<span style="color:#aaa;font-size:11px;font-style:italic;">None</span>`
@@ -957,7 +924,7 @@ async function renderEmployeeTable() {
                     title="${tooltipText}"
                     ${isAboveFold ? 'fetchpriority="high"' : ""}
                     onload="this.classList.add('loaded');this.previousElementSibling.classList.add('hidden');"
-                    onerror="if(this.src !== '${imageSrc}'){this.src='${imageSrc}';}else{this.onerror=null;this.closest('.img-skeleton-wrap').innerHTML='<div class=\\'ph-cont\\'title=\\'${tooltipText.replace(/'/g,"\\'").replace(/\n/g,' ')}\\'><div class=\\'employee-ph\\'>${escapeHtml(fullnameInitials)}</div></div>';}">
+                    onerror="if(this.src !== '${imageSrc}'){this.src='${imageSrc}';}else{this.onerror=null;this.closest('.img-skeleton-wrap').innerHTML='<div class=\\'ph-cont\\'title=\\'${tooltipText.replace(/'/g, "\\'").replace(/\n/g, " ")}\\'><div class=\\'employee-ph\\'>${escapeHtml(fullnameInitials)}</div></div>';}">
                   <div class="employee-ph-fallback ph-cont" style="display:none;" title="${tooltipText}">
                     <div class="employee-ph">${escapeHtml(fullnameInitials)}</div>
                   </div>
@@ -971,16 +938,14 @@ async function renderEmployeeTable() {
               <path d="M0 0 C7.7953733 6.55087912 11.53280265 15.42090184 15.76171875 24.48046875 C16.21248779 25.42623779 16.21248779 25.42623779 16.67236328 26.39111328 C32.79347085 60.37055554 41.01469222 99.12019718 43.76171875 136.48046875 C43.84784424 137.63232666 43.93396973 138.78418457 44.02270508 139.97094727 C44.70961576 149.9186128 44.96372734 159.82288009 44.94921875 169.79296875 C44.9486145 170.57115967 44.94801025 171.34935059 44.9473877 172.15112305 C44.86205494 213.03175637 39.27908005 253.78261823 25.76171875 292.48046875 C25.54225586 293.12983398 25.32279297 293.77919922 25.09667969 294.44824219 C22.06669035 303.37564745 18.30612776 311.93862076 14.32421875 320.48046875 C13.66063354 321.93211426 13.66063354 321.93211426 12.98364258 323.41308594 C8.16614773 333.51922856 2.51180624 340.64351445 -8.23828125 344.48046875 C-15.51757393 346.36861293 -22.88142079 345.56051826 -29.66015625 342.32421875 C-36.6807156 338.08361243 -40.72768524 332.46294914 -43.61328125 324.85546875 C-44.82485584 318.31296596 -44.11503764 313.00984918 -41.92578125 306.79296875 C-41.66651855 306.03169678 -41.40725586 305.2704248 -41.14013672 304.48608398 C-39.03740869 298.44503522 -36.674312 292.51824245 -34.28662109 286.58520508 C-25.49835099 264.71401966 -18.71381467 242.82167184 -15.23828125 219.48046875 C-15.12790527 218.75907715 -15.0175293 218.03768555 -14.90380859 217.29443359 C-12.61763113 202.16245899 -11.99860109 187.1316376 -11.98828125 171.85546875 C-11.98760651 170.9523999 -11.98693176 170.04933105 -11.98623657 169.11889648 C-12.004413 153.72566925 -12.76618222 138.70236989 -15.23828125 123.48046875 C-15.40457031 122.45179688 -15.57085937 121.423125 -15.7421875 120.36328125 C-20.15914921 94.12325688 -28.74989237 69.44819755 -38.22216797 44.68334961 C-38.54515366 43.83860077 -38.86813934 42.99385193 -39.20091248 42.12350464 C-39.81211422 40.52893154 -40.42580218 38.93530844 -41.04237366 37.34280396 C-44.73911997 27.728458 -45.20499335 20.16167797 -41.23828125 10.48046875 C-37.39094926 2.85330181 -31.0596262 -0.57634285 -23.23828125 -3.51953125 C-15.04641976 -5.32005608 -6.94554092 -5.02952963 0 0 Z " transform="translate(358.23828125,85.51953125)"/>
             </svg>
           </td>
-          <td class="emp-timestamp"><small>${employee.access_timestamp || "N/A"}</small></td>
-          <td><div class="check-status-${(employee.check_status || "").toLowerCase()}"><div class="employee-ph">${escapeHtml(
-            employee.check_status || "N/A",
-          )}</div></div></td>
-          <td><small>${escapeHtml(employee.gate_name || employee.user_id || "N/A")}</small></td>
+          <td class="emp-timestamp"><small>${safeTimestamp}</small></td>
+          <td><div class="check-status-${safeCheck.toLowerCase()}"><div class="employee-ph">${safeCheck}</div></div></td>
+          <td><small>${safeGate}</small></td>
 
           ${
             window.PERMISSIONS.delete
               ? `
-          <td style="position: relative; width: 160px; overflow: visible;">
+          <td class="emp-actions">
 
             <!-- ACTIONS TOGGLE -->
             <button
@@ -1021,6 +986,7 @@ async function renderEmployeeTable() {
     .join("");
 
   updatePaginationControls();
+  await updateStatsPanel();
 }
 
 // ── Actions panel ─────────────────────────────────────────────────────────────
@@ -1120,11 +1086,9 @@ function openViolationPopupFromBtn(btn) {
   );
 }
 
-function copyQRCodeFromCell(td) {
-  copyQRCode(td.dataset.qr);
-}
-
 async function getCurrentUserId() {
+  if (!UserIdHelper) return "default";
+
   try {
     const response = await fetch(`${UserIdHelper}`, {
       headers: {
@@ -1146,6 +1110,7 @@ async function getCurrentUserId() {
   return "default";
 }
 
+// ── QR copy ───────────────────────────────────────────────────────────────────
 function copyQRCode(code) {
   const tempTextArea = document.createElement("textarea");
   tempTextArea.value = code;
@@ -1161,12 +1126,8 @@ function copyQRCode(code) {
     if (navigator.clipboard) {
       navigator.clipboard
         .writeText(code)
-        .then(() => {
-          showAlert("Proximity code copied to clipboard!");
-        })
-        .catch(() => {
-          showAlert("Failed to copy Proximity code");
-        });
+        .then(() => showAlert("Proximity code copied to clipboard!"))
+        .catch(() => showAlert("Failed to copy Proximity code"));
     } else {
       showAlert("Failed to copy Proximity code");
     }
@@ -1175,6 +1136,11 @@ function copyQRCode(code) {
   document.body.removeChild(tempTextArea);
 }
 
+function copyQRCodeFromCell(td) {
+  copyQRCode(td.dataset.qr);
+}
+
+// ── Pagination ────────────────────────────────────────────────────────────────
 function updatePaginationControls() {
   const paginationDiv = document.getElementById("pagination");
   if (!paginationDiv) return;
@@ -1243,6 +1209,7 @@ function goToPage(page) {
   }
 }
 
+// ── Search / clear ────────────────────────────────────────────────────────────
 function searchEmployees() {
   const searchForm = document.getElementById("searchForm");
   const searchQuery = document.getElementById("search_qr").value.trim();
@@ -1252,9 +1219,7 @@ function searchEmployees() {
   const filters = getActiveFilters();
   loadEmployees(filters, true, true);
 
-  if (searchQuery) {
-    document.getElementById("search_qr").value = "";
-  }
+  if (searchQuery) document.getElementById("search_qr").value = "";
 
   displayFilterStatus();
   updateDeleteButtonState();
@@ -1297,20 +1262,630 @@ function forceRefresh() {
 
   loadEmployees()
     .then(() => {
-      showAlert("Employee data refreshed manually", "success");
+      showAlert("Data refreshed", "success");
       resetNetworkErrorCount();
-
       setTimeout(() => {
         isUserActive = false;
       }, 2000);
     })
-    .catch((error) => {
-      console.error("Force refresh failed:", error);
-      showAlert("Failed to refresh employee data", "error");
-    })
-    .finally(() => {
-      showLoading(false);
+    .catch(() => showAlert("Failed to refresh data", "error"))
+    .finally(() => showLoading(false));
+}
+
+// ── Load employees from backend ───────────────────────────────────────────────
+async function loadEmployees(
+  filters = {},
+  preservePage = false,
+  silent = false,
+) {
+  if (!EmployeesBackend && !AccessLogBackend) {
+    return;
+  }
+
+  setControlButtonsDisabled(true);
+  try {
+    // if (!silent) showLoading(true);
+
+    if (Object.keys(filters).length === 0 && hasActiveFilters()) {
+      filters = getActiveFilters();
+    }
+
+    activeFilters = filters;
+
+    const params = buildFilterParams(filters);
+
+    params.append("page", currentPage);
+    params.append("limit", itemsPerPage);
+
+    if (sortCol) {
+      params.append("sort_col", sortCol);
+      params.append("sort_dir", sortDir);
+    }
+
+    const response = await fetch(`${AccessLogBackend}?${params.toString()}`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+      },
     });
+
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+    const data = await response.json();
+
+    if (data.success && Array.isArray(data.data)) {
+      employees = data.data;
+      totalPages = data.pages;
+      totalRecords = data.total;
+
+      if (Array.isArray(data.filter_options)) {
+        allEmployees = data.filter_options;
+      }
+
+      if (Object.keys(filters).length === 0) {
+        allEmployees = data.filter_options ?? data.data ?? [];
+      } else if (allEmployees.length === 0) {
+        fetch(`${AccessLogBackend}?action=get&page=1&limit=99999`, {
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "X-Silent-Request": "true",
+          },
+        })
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.success && Array.isArray(d.filter_options))
+              allEmployees = d.filter_options;
+          })
+          .catch(() => {});
+      }
+
+      if (!preservePage && Object.keys(filters).length === 0) currentPage = 1;
+
+      employeeDataCache = null;
+      qrImageMapCache = null;
+
+      await renderEmployeeTable();
+      lastUpdateTimestamp = Date.now();
+      updateAutoUpdateUI();
+      resetNetworkErrorCount();
+      updateDeleteButtonState();
+
+      if (Object.keys(filters).length > 0) displayFilterStatus();
+      console.log(`Loaded ${data.total || employees.length} employees`);
+    } else {
+      await renderEmployeeError("Network error. Please try again.");
+      showAlert(data.message || "Error loading employees", "error");
+    }
+  } catch (error) {
+    console.error("Error loading employees:", error);
+    await renderEmployeeError("Network error. Please try again.");
+    showAlert("Failed to load records. Please check your connection.", "error");
+  } finally {
+    // if (!silent) showLoading(false);
+    setControlButtonsDisabled(false);
+    updateDeleteButtonState();
+  }
+}
+
+// ── Delete modal ──────────────────────────────────────────────────────────────
+function openDeleteModal(employeeId = null, requireConfirmation = false) {
+  closeAllActionsPanels();
+
+  const modal = document.getElementById("deleteModal");
+  const confirmBtn = document.getElementById("confirmDeleteBtn");
+  const confirmationInput = document.getElementById("confirmationInput");
+  const confirmationContainer = document.getElementById(
+    "confirmationContainer",
+  );
+  const modalTitle = document.getElementById("deleteModalTitle");
+  const modalMessage = document.getElementById("deleteModalMessage");
+
+  const hasFilters = hasActiveFilters();
+
+  confirmBtn.dataset.employeeId = employeeId;
+  confirmBtn.dataset.requireConfirmation = requireConfirmation;
+  confirmBtn.dataset.hasFilters = hasFilters;
+
+  if (requireConfirmation) {
+    if (hasFilters) {
+      modalTitle.textContent = "⚠️ Delete Filtered Employees";
+
+      const label = totalRecords > 1 ? "employee's" : "employee";
+      const msgDiv = document.createElement("div");
+      const p1 = document.createElement("p");
+      p1.style.marginBottom = "15px";
+      const strong = document.createElement("strong");
+      strong.textContent = `This will delete ${totalRecords} ${label} matching your filters:`;
+      p1.appendChild(strong);
+      msgDiv.appendChild(p1);
+
+      const filterBox = document.createElement("div");
+      filterBox.style.cssText =
+        "background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 4px; margin-bottom: 15px;";
+
+      Object.entries(getActiveFilters()).forEach(([key, value]) => {
+        const row = document.createElement("div");
+        row.style.margin = "5px 0";
+        const keyStrong = document.createElement("strong");
+        const properKey = key
+          .split(/(?=[A-Z])/)
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(" ");
+        keyStrong.textContent = properKey + ":";
+        row.appendChild(keyStrong);
+        row.appendChild(document.createTextNode(" " + value));
+        filterBox.appendChild(row);
+      });
+      msgDiv.appendChild(filterBox);
+
+      const p2 = document.createElement("p");
+      p2.style.cssText = "color: #d63031; font-weight: bold;";
+      p2.textContent = "This action cannot be undone.";
+      msgDiv.appendChild(p2);
+
+      modalMessage.innerHTML = "";
+      modalMessage.appendChild(msgDiv);
+    } else {
+      modalTitle.textContent = "⚠️ Delete All Employees";
+
+      const label = totalRecords > 1 ? "employee's" : "employee";
+      const msgDiv = document.createElement("div");
+      const p1 = document.createElement("p");
+      p1.style.marginBottom = "15px";
+      const strong = document.createElement("strong");
+      strong.textContent = `This will permanently delete ALL ${totalRecords} ${label}.`;
+      p1.appendChild(strong);
+      msgDiv.appendChild(p1);
+      const p2 = document.createElement("p");
+      p2.style.cssText = "color: #d63031; font-weight: bold;";
+      p2.textContent = "This action cannot be undone.";
+      msgDiv.appendChild(p2);
+      modalMessage.innerHTML = "";
+      modalMessage.appendChild(msgDiv);
+    }
+
+    confirmationContainer.style.display = "block";
+    confirmBtn.disabled = true;
+    confirmBtn.style.opacity = "0.5";
+    confirmBtn.style.cursor = "not-allowed";
+  } else {
+    modalTitle.textContent = "Delete Record";
+    modalMessage.textContent = "Are you sure you want to delete this record?";
+    confirmationContainer.style.display = "none";
+    confirmBtn.disabled = false;
+    confirmBtn.style.opacity = "1";
+    confirmBtn.style.cursor = "pointer";
+  }
+
+  if (confirmationInput) confirmationInput.value = "";
+  modal.style.display = "flex";
+
+  const newConfirmBtn = confirmBtn.cloneNode(true);
+  confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+  if (requireConfirmation && confirmationInput) {
+    const newConfirmationInput = confirmationInput.cloneNode(true);
+    confirmationInput.parentNode.replaceChild(
+      newConfirmationInput,
+      confirmationInput,
+    );
+    newConfirmationInput.focus();
+
+    newConfirmationInput.addEventListener("input", () => {
+      newConfirmBtn.disabled = newConfirmationInput.value !== "DELETE ALL";
+      newConfirmBtn.style.opacity = newConfirmBtn.disabled ? "0.5" : "1";
+      newConfirmBtn.style.cursor = newConfirmBtn.disabled
+        ? "not-allowed"
+        : "pointer";
+    });
+  }
+
+  const handleConfirm = () => {
+    const id = newConfirmBtn.dataset.employeeId;
+    const requiresConfirm =
+      newConfirmBtn.dataset.requireConfirmation === "true";
+    const hasFiltersFlag = newConfirmBtn.dataset.hasFilters === "true";
+
+    if (requiresConfirm) {
+      if (hasFiltersFlag) deleteFilteredEmployees();
+      else showAlert("Cannot be Deleted! Try changing filters.", "error");
+    } else {
+      deleteEmployee(id);
+    }
+    modal.style.display = "none";
+  };
+
+  newConfirmBtn.addEventListener("click", handleConfirm);
+
+  document.addEventListener("keydown", function onEnterKey(e) {
+    if (e.key === "Enter" && modal.style.display === "flex") {
+      if (!newConfirmBtn.disabled) handleConfirm();
+      document.removeEventListener("keydown", onEnterKey);
+    }
+  });
+
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) modal.style.display = "none";
+  });
+}
+
+function updateDeleteButtonState() {
+  const deleteBtn = document.querySelector(".delete-all-btn .btn-danger");
+  if (!deleteBtn) return;
+
+  const label = totalRecords > 1 ? "employee's" : "employee";
+  const hasFilters = hasActiveFilters();
+  const hasData = employees && employees.length > 0;
+  const canDelete = hasFilters && hasData;
+
+  deleteBtn.disabled = !canDelete;
+  deleteBtn.style.opacity = canDelete ? "1" : "0.4";
+  deleteBtn.style.cursor = canDelete ? "pointer" : "not-allowed";
+
+  if (!hasFilters) deleteBtn.title = "Apply filters first to enable deletion";
+  else if (!hasData) deleteBtn.title = "No matching records to delete";
+  else deleteBtn.title = `Delete ${totalRecords} filtered ${label}`;
+}
+
+async function deleteFilteredEmployees() {
+  try {
+    showLoading(true);
+
+    const params = buildFilterParams(activeFilters);
+    params.append("page", 1);
+    params.append("limit", 99999);
+
+    const allRes = await fetch(`${AccessLogBackend}?${params.toString()}`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
+      },
+    });
+    const allData = await allRes.json();
+
+    if (
+      !allData.success ||
+      !Array.isArray(allData.data) ||
+      allData.data.length === 0
+    ) {
+      showAlert("No log entries to delete", "warning");
+      return;
+    }
+
+    const employeeIds = allData.data.map((emp) => emp.id);
+    const formData = new FormData();
+    formData.append("action", "delete_filtered");
+    formData.append("employee_ids", JSON.stringify(employeeIds));
+    formData.append("filters", JSON.stringify(activeFilters));
+
+    const response = await fetch(`${AccessLogBackend}`, {
+      method: "POST",
+      body: formData,
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
+
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+    const data = await response.json();
+
+    if (data.success) {
+      const label = totalRecords > 1 ? "employee's" : "employee";
+      showAlert(
+        `Successfully deleted ${totalRecords} ${label} matching your filters.`,
+        "success",
+      );
+      currentPage = 1;
+      clearSearch();
+    } else {
+      showAlert(
+        data.message || "Failed to delete filtered employees",
+        "error",
+      );
+    }
+  } catch (error) {
+    showAlert("Failed to delete filtered employees", "error");
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ── Violation popup ───────────────────────────────────────────────────────────
+function openViolationPopup(fullname, violation, employeeId) {
+  closeAllActionsPanels();
+
+  const existing = document.getElementById("violationPopupOverlay");
+  if (existing) existing.remove();
+
+  const employee =
+    employees.find((emp) => String(emp.id) === String(employeeId)) || {};
+
+  const params = new URLSearchParams({
+    emp: employeeId,
+    fullname: fullname,
+    brand: employee?.brand || "",
+    position: employee?.position || "",
+    shift: employee?.shift || "",
+    status: employee?.status || "",
+    violation: violation,
+    ts: new Date().toISOString(),
+  });
+
+  const overlay = document.createElement("div");
+  overlay.id = "violationPopupOverlay";
+  overlay.style.cssText = `
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.35);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:9999;`;
+
+  const reportUrl = "incident_report.php?" + params.toString();
+
+  const card = document.createElement("div");
+  card.style.cssText = `
+    background:#fff;
+    border:0.5px solid #e2e8f0;
+    border-radius:12px;
+    padding:1.25rem;
+    max-width:360px;
+    width:90%;
+    box-shadow:0 4px 20px rgba(0,0,0,0.12);`;
+
+  const header = document.createElement("div");
+  header.style.cssText = `
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:12px;`;
+
+  const headerLabel = document.createElement("span");
+  headerLabel.style.cssText = `
+    font-size:13px;
+    font-weight:500;
+    color:#64748b;`;
+  headerLabel.textContent = `${toProperCase(fullname)} — Remarks`;
+
+  const footer = document.createElement("div");
+  footer.style.cssText = `
+    display:flex;
+    justify-content:end;
+    align-items:center;
+    margin-top:12px;`;
+
+  const closeBtn = document.createElement("button");
+  closeBtn.style.cssText = `
+    background:none;
+    border:none;
+    font-size:16px;
+    cursor:pointer;
+    color:#94a3b8;
+    line-height:1;
+    padding:0;`;
+  closeBtn.textContent = "✕";
+  closeBtn.onclick = () => overlay.remove();
+
+  header.appendChild(headerLabel);
+  header.appendChild(closeBtn);
+
+  const body = document.createElement("div");
+  body.style.cssText = `
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;`;
+
+  const violationText = document.createElement("div");
+  violationText.style.cssText = `
+    font-size:13px;
+    color:#1e293b;
+    line-height:1.6;
+    white-space:pre-wrap;
+    flex:1;
+    max-height:200px;
+    overflow-y:auto;
+    word-break:break-word;`;
+  violationText.textContent = violation;
+
+  const attachBtn = document.createElement("button");
+  attachBtn.style.cssText = `
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    padding:5px 12px;
+    font-size:12px;
+    font-weight:500;
+    cursor:pointer;
+    white-space:nowrap;
+    flex-shrink:0;
+    border:0.5px solid #cbd5e1;
+    border-radius:6px;
+    background:#f8fafc;
+    color:#1e293b;`;
+  attachBtn.textContent = "📎 View Attachment";
+  attachBtn.onclick = () => window.open(reportUrl, "_blank");
+
+  body.appendChild(violationText);
+  footer.appendChild(attachBtn);
+
+  card.appendChild(header);
+  card.appendChild(body);
+  card.appendChild(footer);
+  overlay.appendChild(card);
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  document.body.appendChild(overlay);
+}
+
+// ── Close modal ───────────────────────────────────────────────────────────────
+function closeModal() {
+  const deleteModal = document.getElementById("deleteModal");
+  if (!deleteModal) return;
+
+  deleteModal.style.display = "none";
+}
+
+async function handleFormSubmit(e) {
+  e.preventDefault();
+}
+
+// ── Delete single record ──────────────────────────────────────────────────────
+async function deleteEmployee(employeeId) {
+  try {
+    showLoading(true);
+
+    const formData = new FormData();
+    formData.append("action", "delete");
+    formData.append("id", employeeId);
+
+    const response = await fetch(`${AccessLogBackend}`, {
+      method: "POST",
+      body: formData,
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      showAlert(data.message, "success");
+      employeeDataCache = null;
+      qrImageMapCache = null;
+      await loadEmployees(activeFilters, true, true);
+    } else {
+      showAlert(data.message, "error");
+    }
+  } catch (error) {
+    showAlert("Failed to delete employee", "error");
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ── Delete all records ────────────────────────────────────────────────────────
+async function deleteAllEmployees(employeeId) {
+  try {
+    showLoading(true);
+
+    const formData = new FormData();
+    formData.append("action", "delete_all");
+    formData.append("id", employeeId);
+
+    const response = await fetch(`${AccessLogBackend}`, {
+      method: "POST",
+      body: formData,
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
+
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+    const data = await response.json();
+
+    if (data.success) {
+      showAlert(data.message, "success");
+      employeeDataCache = null;
+      qrImageMapCache = null;
+      currentPage = 1;
+      clearSearch();
+    } else {
+      showAlert(data.message, "error");
+    }
+  } catch (error) {
+    console.error("Success:", error);
+
+    currentPage = 1;
+    clearSearch();
+
+    if (error instanceof TypeError) {
+      showAlert("Network error: Failed to connect to server", "error");
+    } else if (error.message.includes("JSON")) {
+      showAlert("Server returned invalid response", "error");
+    } else {
+      showAlert("Delete all employee data", "success");
+    }
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ── File upload handler ───────────────────────────────────────────────────────
+function setupFileUploadHandler() {
+  const imageInput = document.getElementById("image");
+  if (!imageInput) return;
+
+  imageInput.addEventListener("change", async function (e) {
+    const label = document.querySelector(".file-upload-label");
+    if (!label) return;
+
+    if (e.target.files.length === 0) {
+      label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
+      return;
+    }
+
+    const file = imageInput.files[0];
+    const maxSize = 5 * 1024 * 1024;
+
+    if (file.size > maxSize) {
+      showAlert("File size must be less than 5MB", "error");
+      e.target.value = "";
+      label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
+      return;
+    }
+
+    const allowedTypes = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+    ];
+    if (!allowedTypes.includes(file.type)) {
+      showAlert(
+        "Only image files are allowed (JPEG, JPG, PNG, GIF, WebP)",
+        "error",
+      );
+      e.target.value = "";
+      label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
+      return;
+    }
+
+    label.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+        <i class="fas fa-spinner fa-spin" style="font-size:24px;color:#2196F3;"></i>
+        <small style="color:#2196F3;">Converting to WebP…</small>
+      </div>`;
+
+    try {
+      const webpFile = await convertImageToWebP(file);
+
+      const dt = new DataTransfer();
+      dt.items.add(webpFile);
+      imageInput.files = dt.files;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const isConverted =
+          webpFile.type === "image/webp" && file.type !== "image/webp";
+        label.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+            <img id="imagePreview" src="${event.target.result}" alt="New image preview" loading="lazy"
+              style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;
+                     box-shadow:0 2px 8px rgba(0,0,0,0.15),0 0 0 2px #4CAF50;">
+            <small style="color:#4CAF50;font-size:12px;font-weight:500;">
+              ✓ ${isConverted ? "Converted to WebP" : "WebP ready"} · ${(webpFile.size / 1024).toFixed(0)} KB
+            </small>
+          </div>`;
+      };
+      reader.readAsDataURL(webpFile);
+    } catch (err) {
+      console.error("WebP conversion error:", err);
+      showAlert("Error converting image. Please try again.", "error");
+      e.target.value = "";
+      label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
+    }
+  });
 }
 
 // ── Generic field autocomplete (ported from system.js) ───────────────────────
@@ -1367,8 +1942,6 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
 
     const lower = q.trim().toLowerCase();
     const raw = getValues();
-
-    // ── Build item list ──────────────────────────────────────────
     const items = [];
 
     if (!options.noDefaultAll) {
@@ -1413,11 +1986,13 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     list.innerHTML = visibleItems
       .map((item, i) => {
         if (item.special === "divider") {
-          return `<li data-raw="" data-display=""
-            style="padding:4px 12px;font-size:11px;color:#94a3b8;
-                   pointer-events:none;user-select:none;border-bottom:1px solid #f1f5f9;">
-            ──────────
-          </li>`;
+          return `
+            <li data-raw="" data-display=""
+              style="padding:4px 12px;font-size:11px;color:#94a3b8;
+                pointer-events:none;user-select:none;border-bottom:1px solid #f1f5f9;">
+                  ──────────
+            </li>
+          `;
         }
 
         const safeDisplay = escapeHtml(item.display);
@@ -1438,20 +2013,21 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
           ? "font-weight:600;color:#1e40af;background:#f0f9ff;"
           : "";
 
-        return `<li
-          data-raw="${escapeHtml(item.raw ?? "")}"
-          data-display="${safeDisplay}"
-          data-index="${i}"
-          style="padding:8px 12px;cursor:pointer;font-size:13px;
-                 border-bottom:1px solid #f1f5f9;
-                 display:flex;align-items:center;${specialStyle}">
-          ${hl}
-        </li>`;
+        return `
+          <li data-raw="${escapeHtml(item.raw ?? "")}"
+            data-display="${safeDisplay}"
+            data-index="${i}"
+            style="padding:8px 12px;cursor:pointer;font-size:13px;
+                  border-bottom:1px solid #f1f5f9;
+                  display:flex;align-items:center;${specialStyle}">
+            ${hl}
+          </li>
+        `;
       })
       .join("");
 
     list.querySelectorAll("li[data-raw]").forEach((li) => {
-      if (li.style.pointerEvents === "none") return; // divider
+      if (li.style.pointerEvents === "none") return;
       li.addEventListener("mousedown", (e) => {
         e.preventDefault();
         selectItem(li.dataset.display, li.dataset.raw);
@@ -1459,11 +2035,7 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
       li.addEventListener("mouseover", () => {
         list
           .querySelectorAll("li")
-          .forEach(
-            (l) =>
-              (l.style.background =
-                l === li ? "#f0f9ff" : l.dataset.raw === undefined ? "" : ""),
-          );
+          .forEach((l) => (l.style.background = l === li ? "#f0f9ff" : ""));
         idx = [...list.querySelectorAll("li")].indexOf(li);
       });
     });
@@ -1495,9 +2067,7 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
     if (options.showAll) show(input.value);
   });
 
-  input.addEventListener("input", () => {
-    show(input.value);
-  });
+  input.addEventListener("input", () => show(input.value));
 
   window.addEventListener(
     "scroll",
@@ -1544,816 +2114,14 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
   if (input._outsideClickHandler) {
     document.removeEventListener("click", input._outsideClickHandler);
   }
+
   input._outsideClickHandler = (e) => {
     if (!input.contains(e.target) && !list.contains(e.target)) {
       list.style.display = "none";
       idx = -1;
     }
   };
-  document.removeEventListener("click", input._outsideClickHandler);
   document.addEventListener("click", input._outsideClickHandler);
-}
-
-function openDeleteModal(employeeId = null, requireConfirmation = false) {
-  closeAllActionsPanels();
-  const modal = document.getElementById("deleteModal");
-  const confirmBtn = document.getElementById("confirmDeleteBtn");
-  const confirmationInput = document.getElementById("confirmationInput");
-  const confirmationContainer = document.getElementById(
-    "confirmationContainer",
-  );
-  const modalTitle = document.getElementById("deleteModalTitle");
-  const modalMessage = document.getElementById("deleteModalMessage");
-
-  const hasFilters = hasActiveFilters();
-
-  confirmBtn.dataset.employeeId = employeeId;
-  confirmBtn.dataset.requireConfirmation = requireConfirmation;
-  confirmBtn.dataset.hasFilters = hasFilters;
-
-  if (requireConfirmation) {
-    if (hasFilters) {
-      modalTitle.textContent = "⚠️ Delete Filtered Employees";
-
-      const msgDiv = document.createElement("div");
-      const p1 = document.createElement("p");
-      p1.style.marginBottom = "15px";
-      const strong = document.createElement("strong");
-      strong.textContent = `This will delete ${count} ${label} matching your filters:`;
-      p1.appendChild(strong);
-      msgDiv.appendChild(p1);
-
-      const filterBox = document.createElement("div");
-      filterBox.style.cssText =
-        "background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 4px; margin-bottom: 15px;";
-
-      Object.entries(getActiveFilters()).forEach(([key, value]) => {
-        const row = document.createElement("div");
-        row.style.margin = "5px 0";
-        const keyStrong = document.createElement("strong");
-        const properKey = key
-          .split(/(?=[A-Z])/)
-          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-          .join(" ");
-        keyStrong.textContent = properKey + ":";
-        row.appendChild(keyStrong);
-        row.appendChild(document.createTextNode(" " + value));
-        filterBox.appendChild(row);
-      });
-
-      msgDiv.appendChild(filterBox);
-
-      const p2 = document.createElement("p");
-      p2.style.cssText = "color: #d63031; font-weight: bold;";
-      p2.textContent = "This action cannot be undone.";
-      msgDiv.appendChild(p2);
-
-      modalMessage.innerHTML = "";
-      modalMessage.appendChild(msgDiv);
-    } else {
-      modalTitle.textContent = "⚠️ Delete All Employees";
-
-      const msgDiv = document.createElement("div");
-      const p1 = document.createElement("p");
-      p1.style.marginBottom = "15px";
-      const strong = document.createElement("strong");
-      strong.textContent = `This will permanently delete ALL ${count} ${label}.`;
-      p1.appendChild(strong);
-      msgDiv.appendChild(p1);
-      const p2 = document.createElement("p");
-      p2.style.cssText = "color: #d63031; font-weight: bold;";
-      p2.textContent = "This action cannot be undone.";
-      msgDiv.appendChild(p2);
-      modalMessage.innerHTML = "";
-      modalMessage.appendChild(msgDiv);
-    }
-
-    confirmationContainer.style.display = "block";
-    confirmBtn.disabled = true;
-    confirmBtn.style.opacity = "0.5";
-    confirmBtn.style.cursor = "not-allowed";
-  } else {
-    modalTitle.textContent = "Delete Employee";
-    modalMessage.textContent = "Are you sure you want to delete this employee?";
-    confirmationContainer.style.display = "none";
-    confirmBtn.disabled = false;
-    confirmBtn.style.opacity = "1";
-    confirmBtn.style.cursor = "pointer";
-  }
-
-  if (confirmationInput) confirmationInput.value = "";
-
-  modal.style.display = "flex";
-
-  const newConfirmBtn = confirmBtn.cloneNode(true);
-  confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
-
-  if (requireConfirmation && confirmationInput) {
-    const newConfirmationInput = confirmationInput.cloneNode(true);
-    confirmationInput.parentNode.replaceChild(
-      newConfirmationInput,
-      confirmationInput,
-    );
-
-    newConfirmationInput.focus();
-
-    newConfirmationInput.addEventListener("input", () => {
-      newConfirmBtn.disabled = newConfirmationInput.value !== "DELETE ALL";
-      newConfirmBtn.style.opacity = newConfirmBtn.disabled ? "0.5" : "1";
-      newConfirmBtn.style.cursor = newConfirmBtn.disabled
-        ? "not-allowed"
-        : "pointer";
-    });
-  }
-
-  const handleConfirm = () => {
-    const id = newConfirmBtn.dataset.employeeId;
-    const requiresConfirm =
-      newConfirmBtn.dataset.requireConfirmation === "true";
-    const hasFiltersFlag = newConfirmBtn.dataset.hasFilters === "true";
-
-    if (requiresConfirm) {
-      if (hasFiltersFlag) {
-        deleteFilteredEmployees();
-      } else {
-        showAlert("Cannot be Deleted! Try changing filters.", "error");
-      }
-    } else {
-      deleteEmployee(id);
-    }
-    modal.style.display = "none";
-  };
-
-  newConfirmBtn.addEventListener("click", handleConfirm);
-
-  document.addEventListener("keydown", function onEnterKey(e) {
-    if (e.key === "Enter" && modal.style.display === "flex") {
-      if (!newConfirmBtn.disabled) handleConfirm();
-      document.removeEventListener("keydown", onEnterKey);
-    }
-  });
-
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal) modal.style.display = "none";
-  });
-}
-
-function updateDeleteButtonState() {
-  const deleteBtn = document.querySelector(".delete-all-btn .btn-danger");
-  if (!deleteBtn) return;
-
-  const hasFilters = hasActiveFilters();
-  const hasData = employees && employees.length > 0;
-  const canDelete = hasFilters && hasData;
-
-  deleteBtn.disabled = !canDelete;
-  deleteBtn.style.opacity = canDelete ? "1" : "0.4";
-  deleteBtn.style.cursor = canDelete ? "pointer" : "not-allowed";
-
-  if (!hasFilters) {
-    deleteBtn.title = "Apply filters first to enable deletion";
-  } else if (!hasData) {
-    deleteBtn.title = "No matching records to delete";
-  } else {
-    deleteBtn.title = `Delete ${count} filtered ${label}`;
-  }
-}
-
-async function deleteFilteredEmployees() {
-  try {
-    showLoading(true);
-
-    const params = new URLSearchParams({
-      action: "get",
-      page: 1,
-      limit: 99999,
-    });
-
-    for (const [key, value] of Object.entries(activeFilters)) {
-      if (key === "position" && value === "__none__") {
-        params.append("position_none", "1");
-      } else if (key === "brand" && value === "__none__") {
-        params.append("brand_none", "1");
-      } else if (key === "status" && value === "__none__") {
-        params.append("status_none", "1");
-      } else if (key === "shift" && value === "__none__") {
-        params.append("shift_none", "1");
-      } else if (key === "violation" && value === "__none__") {
-        params.append("violation_none", "1");
-      } else if (key === "user_id" && value === "__none__") {
-        params.append("user_id_none", "1");
-      } else if (key === "user_id") {
-        params.append("gate_name", value);
-      } else {
-        params.append(key, value);
-      }
-    }
-
-    const allRes = await fetch(`${AccessLogBackend}?${params.toString()}`, {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-        "X-Silent-Request": "true",
-      },
-    });
-    const allData = await allRes.json();
-
-    if (
-      !allData.success ||
-      !Array.isArray(allData.data) ||
-      allData.data.length === 0
-    ) {
-      showAlert("No log entries to delete", "warning");
-      return;
-    }
-
-    const employeeIds = allData.data.map((emp) => emp.id);
-
-    const formData = new FormData();
-    formData.append("action", "delete_filtered");
-    formData.append("employee_ids", JSON.stringify(employeeIds));
-    formData.append("filters", JSON.stringify(activeFilters));
-
-    const response = await fetch(`${AccessLogBackend}`, {
-      method: "POST",
-      body: formData,
-      headers: { "X-Requested-With": "XMLHttpRequest" },
-    });
-
-    const data = await response.json();
-
-    if (data.success) {
-      const deletedCount = data.deleted_count || employeeIds.length;
-      const deletedLabel = deletedCount > 1 ? "employee's" : "employee";
-      showAlert(
-        `Successfully deleted ${escapeHtml(String(deletedCount))} ${deletedLabel} matching your filters.`,
-        "success",
-      );
-      currentPage = 1;
-      clearSearch();
-    } else {
-      showAlert(
-        escapeHtml(data.message) || "Failed to delete filtered employees",
-        "error",
-      );
-    }
-  } catch (error) {
-    console.error("Error:", error);
-    showAlert("Failed to delete filtered employees", "error");
-  } finally {
-    showLoading(false);
-  }
-}
-
-function openViolationPopup(fullname, violation, employeeId) {
-  closeAllActionsPanels();
-  const existing = document.getElementById("violationPopupOverlay");
-  if (existing) existing.remove();
-
-  const employee =
-    employees.find((emp) => String(emp.id) === String(employeeId)) || {};
-
-  const params = new URLSearchParams({
-    emp: employeeId,
-    fullname: fullname,
-    brand: employee?.brand || "",
-    position: employee?.position || "",
-    shift: employee?.shift || "",
-    status: employee?.status || "",
-    violation: violation,
-    ts: new Date().toISOString(),
-  });
-
-  const overlay = document.createElement("div");
-  overlay.id = "violationPopupOverlay";
-  overlay.style.cssText = `
-    position:fixed;inset:0;background:rgba(0,0,0,0.35);
-    display:flex;align-items:center;justify-content:center;z-index:9999;
-  `;
-
-  const reportUrl = "incident_report.php?" + params.toString();
-
-  const card = document.createElement("div");
-  card.style.cssText = `background:#fff;border:0.5px solid #e2e8f0;border-radius:12px;
-    padding:1.25rem;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.12);`;
-
-  const header = document.createElement("div");
-  header.style.cssText =
-    "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;";
-
-  const headerLabel = document.createElement("span");
-  headerLabel.style.cssText = "font-size:13px;font-weight:500;color:#64748b;";
-  headerLabel.textContent = `${fullname} — Remarks`;
-
-  const footer = document.createElement("div");
-  footer.style.cssText =
-    "display:flex;justify-content:end;align-items:center;margin-top:12px;";
-
-  const closeBtn = document.createElement("button");
-  closeBtn.style.cssText =
-    "background:none;border:none;font-size:16px;cursor:pointer;color:#94a3b8;line-height:1;padding:0;";
-  closeBtn.textContent = "✕";
-  closeBtn.onclick = () => overlay.remove();
-
-  header.appendChild(headerLabel);
-  header.appendChild(closeBtn);
-
-  const body = document.createElement("div");
-  body.style.cssText =
-    "display:flex;align-items:flex-start;justify-content:space-between;gap:12px;";
-
-  const violationText = document.createElement("div");
-  violationText.style.cssText =
-    "font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;flex:1;max-height:200px;overflow-y:auto;word-break:break-word;";
-  violationText.textContent = violation;
-
-  const attachBtn = document.createElement("button");
-  attachBtn.style.cssText = `display:inline-flex;align-items:center;gap:5px;padding:5px 12px;
-    font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;
-    border:0.5px solid #cbd5e1;border-radius:6px;background:#f8fafc;color:#1e293b;`;
-  attachBtn.textContent = "📎 View Attachment";
-  attachBtn.onclick = () => window.open(reportUrl, "_blank");
-
-  body.appendChild(violationText);
-  footer.appendChild(attachBtn);
-
-  card.appendChild(header);
-  card.appendChild(body);
-  card.appendChild(footer);
-  overlay.appendChild(card);
-
-  overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) overlay.remove();
-  });
-
-  document.body.appendChild(overlay);
-}
-
-function updateSelectColor(select) {
-  if (!select) return;
-  const isPlaceholder = select.selectedIndex === 0;
-  select.style.color = isPlaceholder ? "#999" : "#000";
-  [...select.options].forEach((opt) => {
-    opt.style.color = "#000";
-  });
-}
-
-function updateColor() {
-  const selects = [
-    document.getElementById("search_position"),
-    document.getElementById("search_brand"),
-    document.getElementById("search_status"),
-    document.getElementById("search_shift"),
-    document.getElementById("search_violation"),
-    document.getElementById("search_in-out"),
-    document.getElementById("search_user_id"),
-  ];
-
-  selects.forEach(updateSelectColor);
-}
-
-function populateFilter(employeeList) {
-  const position = document.getElementById("search_position");
-  const brand = document.getElementById("search_brand");
-  const status = document.getElementById("search_status");
-  const shift = document.getElementById("search_shift");
-  const violation = document.getElementById("search_violation");
-  const inOut = document.getElementById("search_in-out");
-  const userId = document.getElementById("search_user_id");
-  if (
-    !position ||
-    !brand ||
-    !status ||
-    !shift ||
-    !violation ||
-    !inOut ||
-    !userId
-  )
-    return;
-
-  function buildSelect(select, placeholder, noneLabel, valuesMap) {
-    const current = select.value;
-
-    select.innerHTML =
-      `<option value="" disabled selected hidden>${placeholder}</option>` +
-      `<option value="">Default: ALL</option>` +
-      `<option value="__none__">${noneLabel}</option>`;
-
-    if (valuesMap.size > 0) {
-      select.innerHTML += `<option disabled>──────────</option>`;
-
-      [...valuesMap.values()]
-        .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
-        .forEach((v) => {
-          const opt = document.createElement("option");
-          opt.value = v;
-          opt.textContent = toProperCase(v);
-          select.appendChild(opt);
-        });
-    }
-
-    if (current && [...select.options].some((o) => o.value === current)) {
-      select.value = current;
-    }
-  }
-
-  const positionMap = new Map();
-  const brandMap = new Map();
-  const statusMap = new Map();
-  const shiftMap = new Map();
-  const violationMap = new Map();
-  const inOutMap = new Map();
-  const userIdMap = new Map();
-
-  for (const emp of employeeList) {
-    const add = (map, raw) => {
-      const v = (raw || "").trim();
-      if (v && v.toLowerCase() !== "none") {
-        const key = v.toLowerCase();
-        if (!map.has(key)) map.set(key, v);
-      }
-    };
-
-    add(positionMap, emp.position);
-    add(brandMap, emp.brand);
-    add(statusMap, emp.status);
-    add(shiftMap, emp.shift);
-    add(violationMap, emp.violation);
-    add(inOutMap, emp.check_status);
-    add(userIdMap, emp.gate_name || emp.user_id);
-  }
-
-  buildSelect(position, "Position", "No Position", positionMap);
-  buildSelect(brand, "Brand", "No Brand", brandMap);
-  buildSelect(status, "Status", "No Status", statusMap);
-  buildSelect(shift, "Shift", "No Shift", shiftMap);
-  buildSelect(violation, "Violation", "No Violation", violationMap);
-  buildSelect(inOut, "In/Out Status", "No In/Out Status", inOutMap);
-  buildSelect(userId, "Operator", "No Operator", userIdMap);
-
-  updateColor();
-}
-
-async function loadEmployees(
-  filters = {},
-  preservePage = false,
-  silent = false,
-) {
-  setControlButtonsDisabled(true);
-  try {
-    // if (!silent) showLoading(true);
-
-    if (Object.keys(filters).length === 0 && hasActiveFilters()) {
-      filters = getActiveFilters();
-    }
-
-    activeFilters = filters;
-
-    const params = new URLSearchParams({ action: "get" });
-
-    params.append("page", currentPage);
-    params.append("limit", itemsPerPage);
-
-    if (sortCol) {
-      params.append("sort_col", sortCol);
-      params.append("sort_dir", sortDir);
-    }
-
-    for (const [key, value] of Object.entries(filters)) {
-      if (key === "position" && value === "__none__") {
-        params.append("position_none", "1");
-      } else if (key === "brand" && value === "__none__") {
-        params.append("brand_none", "1");
-      } else if (key === "status" && value === "__none__") {
-        params.append("status_none", "1");
-      } else if (key === "shift" && value === "__none__") {
-        params.append("shift_none", "1");
-      } else if (key === "violation" && value === "__none__") {
-        params.append("violation_none", "1");
-      } else if (key === "user_id" && value === "__none__") {
-        params.append("user_id_none", "1");
-      } else if (key === "user_id") {
-        params.append("gate_name", value);
-      } else {
-        params.append(key, value);
-      }
-    }
-
-    const response = await fetch(`${AccessLogBackend}?${params.toString()}`, {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (data.success && Array.isArray(data.data)) {
-      employees = data.data;
-      totalPages = data.pages;
-      totalRecords = data.total;
-
-      if (Array.isArray(data.filter_options)) {
-        allEmployees = data.filter_options;
-      }
-
-      if (!preservePage && Object.keys(filters).length === 0) {
-        currentPage = 1;
-      }
-
-      employeeDataCache = null;
-      qrImageMapCache = null;
-
-      await renderEmployeeTable();
-      lastUpdateTimestamp = Date.now();
-      updateAutoUpdateUI();
-      resetNetworkErrorCount();
-      updateDeleteButtonState();
-
-      if (Object.keys(filters).length > 0) {
-        displayFilterStatus();
-      }
-
-      console.log(`Loaded ${data.total || employees.length} employees`);
-    } else {
-      await renderEmployeeError("Network error. Please try again.");
-      showAlert(data.message || "Error loading employees", "error");
-    }
-  } catch (error) {
-    console.error("Error loading employees:", error);
-    await renderEmployeeError("Network error. Please try again.");
-    showAlert(
-      "Failed to load employees. Please check your connection.",
-      "error",
-    );
-  } finally {
-    // if (!silent) showLoading(false);
-    setControlButtonsDisabled(false);
-    updateDeleteButtonState();
-  }
-}
-
-function closeModal() {
-  const deleteModal = document.getElementById("deleteModal");
-  if (!deleteModal) return;
-
-  deleteModal.style.display = "none";
-}
-
-async function handleFormSubmit(e) {
-  e.preventDefault();
-
-  try {
-    const empid = document.getElementById("employee_id").value.trim();
-    const fullname = document.getElementById("fullname").value.trim();
-    const position = document.getElementById("position").value.trim();
-    const brand = document.getElementById("brand").value.trim();
-    const shift = document.getElementById("shift").value;
-    const originalId = document.getElementById("original_id").value.trim();
-
-    if (!empid) {
-      showAlert("EMPID is required", "error");
-      return;
-    }
-    if (!fullname) {
-      showAlert("Fullname is required", "error");
-      return;
-    }
-    if (!position) {
-      showAlert("Position is required", "error");
-      return;
-    }
-    if (!brand) {
-      showAlert("Brand is required", "error");
-      return;
-    }
-    if (!shift) {
-      showAlert("Shift is required", "error");
-      return;
-    }
-
-    if (currentAction === "edit" && empid !== originalId) {
-      const idTaken = employees.some((emp) => String(emp.id) === String(empid));
-      if (idTaken) {
-        showAlert(
-          `Employee ID "${escapeHtml(empid)}" is already in use`,
-          "error",
-        );
-        return;
-      }
-    }
-
-    const isDuplicate = employees.some((emp) => {
-      if (
-        currentAction === "edit" &&
-        originalId &&
-        String(emp.id) === String(originalId)
-      ) {
-        return false;
-      }
-      return (
-        emp.fullname.toLowerCase().trim() === fullname.toLowerCase().trim()
-      );
-    });
-
-    if (isDuplicate) {
-      showAlert(
-        `Employee with name "${escapeHtml(fullname)}" already exists!`,
-        "error",
-      );
-      return;
-    }
-
-    const imageInput = document.getElementById("image");
-    if (imageInput.files.length > 0) {
-      const file = imageInput.files[0];
-      if (file.size > 5 * 1024 * 1024) {
-        showAlert("Image file size must be less than 5MB", "error");
-        return;
-      }
-      const allowedTypes = [
-        "image/jpeg",
-        "image/jpg",
-        "image/png",
-        "image/gif",
-        "image/webp",
-      ];
-      if (!allowedTypes.includes(file.type)) {
-        showAlert(
-          "Only image files (JPEG, JPG, PNG, GIF, WebP) are allowed",
-          "error",
-        );
-        return;
-      }
-    }
-
-    showLoading(true);
-
-    const formData = new FormData(e.target);
-    formData.append("action", currentAction);
-    formData.set("id", empid);
-
-    if (currentAction === "edit") {
-      formData.set("original_id", originalId);
-    }
-
-    const response = await fetch(`${AccessLogBackend}`, {
-      method: "POST",
-      body: formData,
-      headers: { "X-Requested-With": "XMLHttpRequest" },
-    });
-
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-    const data = await response.json();
-
-    if (data.success) {
-      showAlert(
-        data.message ||
-          (currentAction === "add"
-            ? "Employee added successfully!"
-            : "Employee updated successfully!"),
-        "success",
-      );
-      closeModal();
-
-      employeeDataCache = null;
-      qrImageMapCache = null;
-      const preservePage = currentAction === "edit";
-      const filtersToUse = hasActiveFilters() ? getActiveFilters() : {};
-      await loadEmployees(filtersToUse, preservePage, true);
-    } else {
-      showAlert(data.message || "Failed to save employee", "error");
-    }
-  } catch (error) {
-    console.error("Error:", error);
-    showAlert(
-      "Failed to save employee. Please check your connection.",
-      "error",
-    );
-  } finally {
-    showLoading(false);
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// FILE UPLOAD HANDLER
-// ─────────────────────────────────────────────────────────────
-function setupFileUploadHandler() {
-  const imageInput = document.getElementById("image");
-  if (!imageInput) return;
-
-  imageInput.addEventListener("change", function (e) {
-    const label = document.querySelector(".file-upload-label");
-    if (!label) return;
-
-    if (e.target.files.length > 0) {
-      const file = e.target.files[0];
-      const maxSize = 5 * 1024 * 1024; // 5MB
-
-      if (file.size > maxSize) {
-        showAlert("File size must be less than 5MB", "error");
-        e.target.value = "";
-        label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
-        return;
-      }
-
-      const allowedTypes = [
-        "image/jpeg",
-        "image/jpg",
-        "image/png",
-        "image/gif",
-      ];
-      if (!allowedTypes.includes(file.type)) {
-        showAlert("Only image files are allowed", "error");
-        e.target.value = "";
-        label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
-        return;
-      }
-
-      label.innerHTML = `<i class="fas fa-image"></i> ${file.name}`;
-    } else {
-      label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
-    }
-  });
-}
-
-async function deleteEmployee(employeeId) {
-  try {
-    showLoading(true);
-
-    const formData = new FormData();
-    formData.append("action", "delete");
-    formData.append("id", employeeId);
-
-    const response = await fetch(`${AccessLogBackend}`, {
-      method: "POST",
-      body: formData,
-      headers: { "X-Requested-With": "XMLHttpRequest" },
-    });
-
-    const data = await response.json();
-
-    if (data.success) {
-      showAlert(data.message, "success");
-      employeeDataCache = null;
-      qrImageMapCache = null;
-      await loadEmployees(activeFilters, true, true);
-    } else {
-      showAlert(data.message, "error");
-    }
-  } catch (error) {
-    console.error("Error:", error);
-    showAlert("Failed to delete employee", "error");
-  } finally {
-    showLoading(false);
-  }
-}
-
-async function deleteAllEmployees(employeeId) {
-  try {
-    showLoading(true);
-
-    const formData = new FormData();
-    formData.append("action", "delete_all");
-    formData.append("id", employeeId);
-
-    const response = await fetch(`${AccessLogBackend}`, {
-      method: "POST",
-      body: formData,
-      headers: { "X-Requested-With": "XMLHttpRequest" },
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (data.success) {
-      showAlert(data.message, "success");
-      employeeDataCache = null;
-      qrImageMapCache = null;
-      currentPage = 1;
-      clearSearch();
-    } else {
-      showAlert(data.message, "error");
-    }
-  } catch (error) {
-    console.error("Success:", error);
-
-    if (error instanceof TypeError) {
-      showAlert("Network error: Failed to connect to server", "error");
-    } else if (error.message.includes("JSON")) {
-      showAlert("Server returned invalid response", "error");
-    } else {
-      showAlert("Delete all employee data", "success");
-    }
-  } finally {
-    showLoading(false);
-  }
 }
 
 // ── Utils ─────────────────────────────────────────────────────────────
@@ -2372,6 +2140,18 @@ function toProperCase(str) {
   return String(str).replace(/[^\s,\-]+/g, function (txt) {
     return txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase();
   });
+}
+
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
 }
 
 function showAlert(message, type = "info") {
@@ -2411,17 +2191,17 @@ function showLoading(show) {
 
 function setControlButtonsDisabled(disabled) {
   const selectors = [
-    '.search-btn .btn',
-    '.clear-btn .btn',
-    '.delete-all-btn .btn-danger',
-    '.fRefresh-btn',
+    ".search-btn .btn",
+    ".clear-btn .btn",
+    ".delete-all-btn .btn-danger",
+    ".fRefresh-btn",
   ];
   selectors.forEach((sel) => {
     const el = document.querySelector(sel);
     if (!el) return;
     el.disabled = disabled;
-    el.style.opacity = disabled ? '0.4' : '';
-    el.style.cursor = disabled ? 'not-allowed' : '';
+    el.style.opacity = disabled ? "0.4" : "";
+    el.style.cursor = disabled ? "not-allowed" : "";
   });
 }
 
@@ -2450,6 +2230,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   loadEmployees();
   updateDeleteButtonState();
   setupEventListeners();
+  updateStatsPanel();
   bindSortHeaders();
 
   setTimeout(() => {

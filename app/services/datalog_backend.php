@@ -50,6 +50,9 @@ if (isset($_GET['serve_file'])) {
   }
 }
 
+// ============================================================================
+// Database — connection manager
+// ============================================================================
 class Database
 {
   private $mainConn;
@@ -82,7 +85,6 @@ class Database
         }
       }
       $this->userConn = getUserDBConnection($this->currentUserId);
-
       $this->userConn->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
     }
     return $this->userConn;
@@ -99,6 +101,9 @@ class Database
   }
 }
 
+// ============================================================================
+// AccessLogManager — CRUD for employee_access_log only
+// ============================================================================
 class AccessLogManager
 {
   private $conn;
@@ -117,7 +122,7 @@ class AccessLogManager
     }
   }
 
-  // ── Access log entries with optional filters ──────────────────────────
+  // ── List logs with optional filters & pagination ───────────────────────
   public function getLogs($filters = [], $page = 1, $limit = 25)
   {
     $where  = "WHERE 1=1";
@@ -255,7 +260,9 @@ class AccessLogManager
       try {
         $mainConn = getMainDBConnection();
         $ph       = implode(',', array_fill(0, count($userIds), '?'));
-        $uStmt    = $mainConn->prepare("SELECT id, first_name FROM users WHERE id IN ($ph)");
+        $uStmt    = $mainConn->prepare(
+          "SELECT id, first_name FROM users WHERE id IN ($ph)"
+        );
         $uStmt->execute(array_values($userIds));
         foreach ($uStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
           $userNameMap[(int)$row['id']] = $row['first_name'];
@@ -331,7 +338,7 @@ class AccessLogManager
     }
 
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    return $row ? $row['check_type'] : 'OUT'; // default OUT = never checked in
+    return $row ? $row['check_type'] : 'OUT';
   }
 
   // ── DELETE: single log entry ───────────────────────────────────────────
@@ -444,7 +451,9 @@ class AccessLogManager
   {
     $stats = [];
 
-    $stmt = $this->conn->prepare("SELECT COUNT(*) as total FROM {$this->logTable}");
+    $stmt = $this->conn->prepare(
+      "SELECT COUNT(*) as total FROM {$this->logTable}"
+    );
     $stmt->execute();
     $stats['total'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
@@ -453,35 +462,55 @@ class AccessLogManager
     );
     $stmt->execute();
     $stats['active'] = $stmt->fetch(PDO::FETCH_ASSOC)['active'];
-
     $stats['inactive'] = $stats['total'] - $stats['active'];
 
     $stmt = $this->conn->prepare(
       "SELECT check_type, COUNT(*) as cnt FROM {$this->checkTable} GROUP BY check_type"
     );
     $stmt->execute();
+    $checkData = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stats['check_counts'] = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-      $stats['check_counts'][$row['check_type']] = $row['cnt'];
+    foreach ($checkData as $check) {
+      $stats['check_counts'][$check['check_type']] = $check['cnt'];
     }
 
     $stmt = $this->conn->prepare(
       "SELECT shift, COUNT(*) as count FROM {$this->logTable} GROUP BY shift"
     );
     $stmt->execute();
+    $shiftData = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stats['by_shift'] = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-      $stats['by_shift'][$row['shift']] = $row['count'];
+    foreach ($shiftData as $shift) {
+      $stats['by_shift'][$shift['shift']] = $shift['count'];
     }
 
     $stmt = $this->conn->prepare(
       "SELECT access_type, COUNT(*) as count FROM {$this->logTable} GROUP BY access_type"
     );
     $stmt->execute();
+    $accessData = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stats['by_access_type'] = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-      $stats['by_access_type'][$row['access_type']] = $row['count'];
+    foreach ($accessData as $access) {
+      $stats['by_access_type'][$access['access_type']] = $access['count'];
     }
+
+    $stmt = $this->conn->prepare(
+      "SELECT COUNT(*) AS today FROM {$this->logTable} WHERE DATE(access_timestamp) = CURDATE()"
+    );
+    $stmt->execute();
+    $stats['today'] = (int) $stmt->fetch(PDO::FETCH_ASSOC)['today'];
+
+    $stmt = $this->conn->prepare(
+      "SELECT COUNT(*) AS today_in FROM {$this->logTable} WHERE check_status = 'IN' AND DATE(access_timestamp) = CURDATE()"
+    );
+    $stmt->execute();
+    $stats['today_in'] = (int) $stmt->fetch(PDO::FETCH_ASSOC)['today_in'];
+
+    $stmt = $this->conn->prepare(
+      "SELECT COUNT(*) AS today_out FROM {$this->logTable} WHERE check_status = 'OUT' AND DATE(access_timestamp) = CURDATE()"
+    );
+    $stmt->execute();
+    $stats['today_out'] = (int) $stmt->fetch(PDO::FETCH_ASSOC)['today_out'];
 
     return $stats;
   }
@@ -503,7 +532,7 @@ class FileUploader
 
   public function __construct($userId = null)
   {
-    $this->upload_dir = '../../public/uploads/user/';
+    $this->upload_dir = '/public/uploads/user/';
 
     if (!is_dir($this->upload_dir)) {
       if (!mkdir($this->upload_dir, 0755, true)) {
@@ -584,7 +613,7 @@ try {
         break;
 
       case 'delete_filtered':
-        $log_ids_json = $_POST['employee_ids'] ?? '[]'; // key kept for JS compatibility
+        $log_ids_json = $_POST['employee_ids'] ?? '[]';
         $filters_json = $_POST['filters']      ?? '{}';
 
         $log_ids = json_decode($log_ids_json, true) ?: [];
@@ -614,7 +643,11 @@ try {
             $response['message']       = "Deleted $deleted_count log entry/entries matching filters: $filterStr";
             $response['deleted_count'] = $deleted_count;
 
-            logSystemAction($database->getCurrentUserId(), 'FILTERED_LOGS_DELETED', "Deleted $deleted_count log entries — filters: $filterStr");
+            logSystemAction(
+              $database->getCurrentUserId(), 
+              'FILTERED_LOGS_DELETED', 
+              "Deleted $deleted_count log entries — filters: $filterStr"
+            );
           } else {
             $db->rollBack();
             $response['message'] = 'Failed to delete log entries';
@@ -744,7 +777,7 @@ try {
         break;
     }
 
-    // ── GET actions ───────────────────────────────────────────────────────────────
+  // ── GET actions ───────────────────────────────────────────────────────────────
   } elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $action = $_GET['action'] ?? '';
 
@@ -793,12 +826,11 @@ try {
           $result = $logManager->getLogs($filters, $page, $limit);
 
           $db = $database->getUserConnection();
-
           $optStmt = $db->query("
-            SELECT DISTINCT position, brand, status, shift,
+            SELECT DISTINCT fullname, position, brand, status, shift,
                             violation, check_status, user_id
             FROM employee_access_log
-        ");
+          ");
           $allRows = $optStmt->fetchAll(PDO::FETCH_ASSOC);
 
           $distinctUserIds = array_unique(array_filter(array_column($allRows, 'user_id')));
@@ -823,11 +855,11 @@ try {
           }
           unset($row);
 
-          $response['success']      = true;
-          $response['data']         = $result['data'];
-          $response['total']        = $result['total'];
-          $response['page']         = $page;
-          $response['pages']        = ceil($result['total'] / $limit);
+          $response['success']        = true;
+          $response['data']           = $result['data'];
+          $response['total']          = $result['total'];
+          $response['page']           = $page;
+          $response['pages']          = ceil($result['total'] / $limit);
           $response['filter_options'] = $allRows;
         } catch (Exception $e) {
           $response['message'] = 'Error retrieving logs: ' . $e->getMessage();
@@ -913,6 +945,28 @@ try {
           'last_name'  => $_SESSION['last_name']   ?? '',
         ];
         break;
+      
+      case 'health_check':
+        $health = [
+          'status'             => 'OK',
+          'timestamp'          => date('Y-m-d H:i:s'),
+          'timezone'           => date_default_timezone_get(),
+          'user_authenticated' => isset($_SESSION['user_id']),
+          'user_id'            => $_SESSION['user_id'] ?? null,
+        ];
+
+        try {
+          $database->getMainConnection();
+          $database->getUserConnection();
+          $health['user_database'] = 'OK';
+        } catch (Exception $e) {
+          $health['status']        = 'ERROR';
+          $health['user_database'] = 'ERROR: ' . $e->getMessage();
+        }
+
+        header('Content-Type: application/json');
+        echo json_encode($health, JSON_PRETTY_PRINT);
+        exit;
 
       default:
         $response['message'] = 'Invalid GET action: ' . $action;
@@ -1005,28 +1059,4 @@ if (isset($_GET['serve_file'])) {
   $filepath     = $fileUploader->getImagePath($filename);
 
   serveFile($filepath, $filename);
-}
-
-if (isset($_GET['health_check'])) {
-  $health = [
-    'status'             => 'OK',
-    'timestamp'          => date('Y-m-d H:i:s'),
-    'timezone'           => date_default_timezone_get(),
-    'user_authenticated' => isset($_SESSION['user_id']),
-    'user_id'            => $_SESSION['user_id'] ?? null,
-  ];
-
-  try {
-    $database = new Database();
-    $database->getMainConnection();
-    $database->getUserConnection();
-    $health['user_database'] = 'OK';
-  } catch (Exception $e) {
-    $health['status']        = 'ERROR';
-    $health['user_database'] = 'ERROR: ' . $e->getMessage();
-  }
-
-  header('Content-Type: application/json');
-  echo json_encode($health, JSON_PRETTY_PRINT);
-  exit;
 }

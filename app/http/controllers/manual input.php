@@ -142,7 +142,7 @@ try {
         <div class="form-group" style="position: fixed; left: 1%; top: 1%; opacity: 0;">
           <input type="text" id="search_qr" name="qr_code" placeholder="Proximity Code" style="cursor: default;" autocomplete="off">
         </div>
-        <img src="/config/asset.php?t=gnks2" alt="Proximity" loading="lazy" style="position: absolute; left: 24px; top: 10%; width: 100px; height: 100px; filter: invert(1);">
+        <img src="/config/asset.php?t=gnks2" alt="Proximity" loading="lazy" style="position: absolute; left: 24px; top: 5%; width: 100px; height: 100px; filter: invert(1);">
       </form>
     </div>
 

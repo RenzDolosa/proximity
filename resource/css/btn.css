@@ -1,16 +1,6 @@
 /* resource/css/btn.css --> buttons */
 
-.btn {
-  height: 44px;
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: all 0.3s ease;
-}
-
+.btn,
 .btn-sub {
   position: relative;
   width: 100%;
@@ -25,6 +15,7 @@
   transition: all 0.3s ease;
 }
 
+.btn:disabled,
 .btn-sub:disabled {
   opacity: 0.6;
   cursor: not-allowed;
@@ -266,7 +257,6 @@
 .form-row-btn {
   display: inline-flex;
   gap: 1rem;
-  /* padding-bottom: 1rem; */
   flex-wrap: wrap;
 }
 

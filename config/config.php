@@ -156,7 +156,10 @@ function createDatabase()
       "ALTER TABLE employees
           ADD COLUMN IF NOT EXISTS gender ENUM('Male','Female') DEFAULT NULL AFTER brand,
           ADD COLUMN IF NOT EXISTS birth  DATE DEFAULT NULL AFTER gender,
-          ADD COLUMN IF NOT EXISTS hired  DATE DEFAULT NULL AFTER birth;"
+          ADD COLUMN IF NOT EXISTS hired  DATE DEFAULT NULL AFTER birth;",
+      "ALTER TABLE code
+          ADD COLUMN reserved_by VARCHAR(64)  NULL DEFAULT NULL,
+          ADD COLUMN reserved_at DATETIME     NULL DEFAULT NULL;"
     ];
 
     foreach ($alterStatements as $sql) {

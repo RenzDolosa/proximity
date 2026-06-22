@@ -2,6 +2,7 @@
 
 let EmployeesBackend = null;
 let ProxcodeBackend = null;
+let UserIdHelper = null;
 let GlobalAudioBackend = null;
 
 let currentAction = "add";
@@ -15,13 +16,23 @@ let totalRecords = 0;
 let currentAudio = null;
 
 let activeFilters = {};
-let allEmployeesUnfiltered = [];
+let allEmployees = [];
 
 let sortCol = null;
 let sortDir = "asc";
 
-const count = employees.length;
-const label = count > 1 ? "employee's" : "employee";
+let _orphanSyncInterval = null;
+const ORPHAN_SYNC_POLL_MS = 2000;
+
+let _currentReservedCode = null;
+let _myReservationKey = null;
+let _reservationHeartbeat = null;
+const RESERVATION_HEARTBEAT_MS = 90000;
+
+const LIVE_SYNC_POLL_MS = 2000;
+let _liveSyncInterval = null;
+let _lastSeenFingerprint = null;
+let _liveSyncInFlight = false;
 
 // ── Global-audio endpoint ─────────────────────────────────────────
 const AUDIO_TYPE_MAP = {
@@ -51,18 +62,22 @@ function isInputVisible(input) {
     return d === "block" || d === "flex";
   }
 
-  const anyModalOpen =
-    document.getElementById("employeeModal")?.style.display === "block" ||
-    document.getElementById("deleteModal")?.style.display === "flex" ||
-    document.getElementById("importModal")?.style.display === "block" ||
-    document.getElementById("logsModal")?.style.display === "block" ||
-    document.getElementById("violationsModal")?.style.display === "block";
-  return !anyModalOpen;
+  return !isAnyModalOpen();
 }
 
 function isAnySuggestionOpen() {
   return [...document.querySelectorAll("ul[data-suggestion-list]")].some(
     (el) => el.style.display === "block",
+  );
+}
+
+function isAnyModalOpen() {
+  return (
+    document.getElementById("employeeModal")?.style.display === "block" ||
+    document.getElementById("deleteModal")?.style.display === "flex" ||
+    document.getElementById("importModal")?.style.display === "block" ||
+    document.getElementById("logsModal")?.style.display === "block" ||
+    document.getElementById("violationsModal")?.style.display === "block"
   );
 }
 
@@ -77,10 +92,85 @@ function hideAllSuggestions(scope) {
   });
 }
 
+function _fingerprintsDiffer(a, b) {
+  if (!a || !b) return true;
+  return (
+    a.total !== b.total ||
+    a.last_employee_change !== b.last_employee_change ||
+    a.last_code_change !== b.last_code_change
+  );
+}
+
+async function pollForRemoteEmployeeChanges() {
+  if (_liveSyncInFlight) return;
+  if (!EmployeesBackend) return;
+
+  if (isAnyModalOpen() || isAnySuggestionOpen()) return;
+  if (document.hidden) return;
+
+  _liveSyncInFlight = true;
+  try {
+    const response = await fetch(`${EmployeesBackend}?action=last_change`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
+      },
+    });
+
+    if (!response.ok) return;
+
+    const json = await response.json();
+    if (!json.success || !json.data) return;
+
+    const fingerprint = json.data;
+
+    if (_lastSeenFingerprint === null) {
+      _lastSeenFingerprint = fingerprint;
+      return;
+    }
+
+    if (_fingerprintsDiffer(_lastSeenFingerprint, fingerprint)) {
+      _lastSeenFingerprint = fingerprint;
+
+      await searchEmployees();
+    }
+  } catch (error) {
+    console.warn("[system] pollForRemoteEmployeeChanges failed:", error);
+  } finally {
+    _liveSyncInFlight = false;
+  }
+}
+
+function startLiveSyncPolling() {
+  stopLiveSyncPolling();
+  _liveSyncInterval = setInterval(
+    pollForRemoteEmployeeChanges,
+    LIVE_SYNC_POLL_MS,
+  );
+}
+
+function stopLiveSyncPolling() {
+  if (_liveSyncInterval) {
+    clearInterval(_liveSyncInterval);
+    _liveSyncInterval = null;
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    stopLiveSyncPolling();
+  } else {
+    pollForRemoteEmployeeChanges();
+    startLiveSyncPolling();
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────
 //  Load global audio from DB; fall back to bundled files if absent
 // ─────────────────────────────────────────────────────────────────
 async function loadGlobalAudio() {
+  if (!GlobalAudioBackend) return;
+
   try {
     const res = await fetch(`${GlobalAudioBackend}`, {
       credentials: "same-origin",
@@ -122,6 +212,7 @@ async function loadGlobalAudio() {
   }
 }
 
+// ── Event listeners setup ─────────────────────────────────────────────────────
 function setupEventListeners() {
   // ── Date range picker ──────────────────────────────────────────
   initDateRangePicker();
@@ -144,17 +235,11 @@ function setupEventListeners() {
     input.addEventListener("input", debounce(searchEmployees, 300));
   });
 
+  // ── Auto-focus hidden proximity input ─────────────────────────────────
   const proximityInput = document.getElementById("search_qr");
 
   function autoFocusProximity() {
-    const modalOpen =
-      document.getElementById("employeeModal")?.style.display === "block" ||
-      document.getElementById("deleteModal")?.style.display === "flex" ||
-      document.getElementById("importModal")?.style.display === "block" ||
-      document.getElementById("logsModal")?.style.display === "block" ||
-      document.getElementById("violationsModal")?.style.display === "block";
-
-    if (modalOpen) return;
+    if (isAnyModalOpen()) return;
 
     if (isAnySuggestionOpen()) return;
 
@@ -165,14 +250,32 @@ function setupEventListeners() {
         active.tagName === "SELECT" ||
         active.tagName === "TEXTAREA");
 
-    if (!isTyping && proximityInput) {
-      proximityInput.focus();
-    }
+    if (!isTyping && proximityInput) proximityInput.focus();
   }
 
   autoFocusProximity();
   document.addEventListener("click", autoFocusProximity);
   document.addEventListener("focusin", autoFocusProximity);
+
+  // ── Field suggestion dropdowns ─────────────────────────────────────────
+  setupFieldSuggestions(
+    "search_fullname",
+    "fullname-suggestions",
+    () =>
+      [...allEmployees]
+        .sort((a, b) => {
+          const lastName = (name) => {
+            const parts = (name || "").trim().split(/\s+/);
+            return parts[parts.length - 1].toLowerCase();
+          };
+          return lastName(a.fullname).localeCompare(lastName(b.fullname));
+        })
+        .map((e) => e.fullname),
+    {
+      requireInput: false,
+      onSelect: () => searchEmployees(),
+    },
+  );
 
   setupFieldSuggestions(
     "search_position",
@@ -235,26 +338,43 @@ function setupEventListeners() {
     },
   );
 
-  setupFieldSuggestions(
-    "search_fullname",
-    "fullname-suggestions",
-    () =>
-      [...allEmployees]
-        .sort((a, b) => {
-          const lastName = (name) => {
-            const parts = (name || "").trim().split(/\s+/);
-            return parts[parts.length - 1].toLowerCase();
-          };
-          return lastName(a.fullname).localeCompare(lastName(b.fullname));
-        })
-        .map((e) => e.fullname),
-    {
-      requireInput: false,
-      onSelect: () => searchEmployees(),
-    },
-  );
+  (function () {
+    const controlsEl = document.querySelector(".controls");
+    const tableHeaderEl = document.querySelector(".table-header");
+
+    function sync() {
+      if (controlsEl) {
+        document.documentElement.style.setProperty(
+          "--controls-h",
+          controlsEl.offsetHeight + "px",
+        );
+      }
+      if (tableHeaderEl) {
+        document.documentElement.style.setProperty(
+          "--table-header-h",
+          tableHeaderEl.offsetHeight + "px",
+        );
+      }
+    }
+
+    sync();
+
+    if (controlsEl) new ResizeObserver(sync).observe(controlsEl);
+    if (tableHeaderEl) new ResizeObserver(sync).observe(tableHeaderEl);
+  })();
+
+  const theadWrap = document.querySelector(".thead-sticky-wrap");
+  const tbodyWrap = document.querySelector(".table-scroll-wrap");
+
+  if (theadWrap && tbodyWrap) {
+    tbodyWrap.addEventListener("scroll", () => {
+      theadWrap.scrollLeft = tbodyWrap.scrollLeft;
+    });
+  }
 
   setupModalSuggestions();
+  pollForRemoteEmployeeChanges();
+  startLiveSyncPolling();
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -265,7 +385,6 @@ const _modalSuggestionTeardowns = [];
 function setupModalSuggestions() {
   _teardownModalSuggestions();
 
-  // ── helper ────────────────────────────────────────────────────
   function attachModalSuggestion(inputId, listId, getValues, opts = {}) {
     const input = document.getElementById(inputId);
     if (!input) return;
@@ -287,7 +406,6 @@ function setupModalSuggestions() {
 
     let idx = -1;
 
-    // ── only show while employeeModal is open ──────────────────────────────────
     function isModalOpen() {
       const m = document.getElementById("employeeModal");
       return m && (m.style.display === "block" || m.style.display === "flex");
@@ -367,14 +485,15 @@ function setupModalSuggestions() {
                 background:#d1fae5;color:#065f46;font-weight:600;">${escapeHtml(opts.badge)}</span>`
             : "";
 
-          return `<li
-            data-value="${escapeHtml(v)}"
-            data-index="${i}"
-            style="padding:8px 12px;cursor:pointer;font-size:13px;
-                   border-bottom:1px solid #f1f5f9;
-                   display:flex;align-items:center;">
-            ${iconHtml}${hl}${badgeHtml}
-          </li>`;
+          return `
+            <li data-value="${escapeHtml(v)}"
+              data-index="${i}"
+              style="padding:8px 12px;cursor:pointer;font-size:13px;
+                    border-bottom:1px solid #f1f5f9;
+                    display:flex;align-items:center;">
+              ${iconHtml}${hl}${badgeHtml}
+            </li>
+          `;
         })
         .join("");
 
@@ -395,7 +514,6 @@ function setupModalSuggestions() {
       idx = -1;
     }
 
-    // ── event handlers ───────────────────────────────────────────
     const onFocus = async () => {
       if (opts.requireInput && !input.value.trim()) return;
       setTimeout(() => show(input.value), 0);
@@ -486,23 +604,21 @@ function setupModalSuggestions() {
     });
   }
 
-  // ── EMPID — numeric desc, raw values ──────────────────────────
   attachModalSuggestion(
     "employee_id",
     "modal-empid-suggestions",
     () =>
-      [...allEmployeesUnfiltered]
+      [...allEmployees]
         .sort((a, b) => Number(b.id) - Number(a.id))
         .map((e) => String(e.id)),
     { raw: true, requireInput: true },
   );
 
-  // FULLNAME — sorted by last name, proper-cased ─────────────────
   attachModalSuggestion(
     "fullname",
     "modal-fullname-suggestions",
     () =>
-      [...allEmployeesUnfiltered]
+      [...allEmployees]
         .sort((a, b) => {
           const lastName = (name) => {
             const parts = (name || "").trim().split(/\s+/);
@@ -514,31 +630,28 @@ function setupModalSuggestions() {
     { requireInput: true, raw: false },
   );
 
-  // ── POSITION — sorted alphabetically, proper-cased ──────────────
   attachModalSuggestion(
     "position",
     "modal-position-suggestions",
     () =>
-      [...allEmployeesUnfiltered]
+      [...allEmployees]
         .sort((a, b) => (a.position || "").localeCompare(b.position || ""))
         .map((e) => e.position)
         .filter(Boolean),
     { requireInput: false, raw: false },
   );
 
-  // ── BRAND — sorted alphabetically, proper-cased ──────────────────
   attachModalSuggestion(
     "brand",
     "modal-brand-suggestions",
     () =>
-      [...allEmployeesUnfiltered]
+      [...allEmployees]
         .sort((a, b) => (a.brand || "").localeCompare(b.brand || ""))
         .map((e) => e.brand)
         .filter(Boolean),
     { requireInput: false, raw: false },
   );
 
-  // ── SHIFT — set of values, not drawn from employee data ──────────────
   const SHIFT_OPTIONS = ["Day Shift", "Night Shift", "Graveyard Shift"];
 
   attachModalSuggestion(
@@ -556,7 +669,6 @@ function setupModalSuggestions() {
     },
   );
 
-  // ── QR / PROXIMITY CODE — fetched on focus, shows available codes ────────
   let _availableModalCodes = [];
 
   attachModalSuggestion(
@@ -568,10 +680,22 @@ function setupModalSuggestions() {
       requireInput: false,
       icon: `/config/asset.php?t=gnks2`,
       badge: "Available",
+      onSelect: (val) => {
+        _availableModalCodes = _availableModalCodes.filter(
+          (c) => c.trim().toLowerCase() !== val.trim().toLowerCase(),
+        );
+
+        if (_currentReservedCode && _currentReservedCode !== val) {
+          releaseReservedCode(_currentReservedCode);
+        }
+        _currentReservedCode = val;
+        reserveCode(val);
+        startReservationHeartbeat();
+      },
       onFocus: async () => {
         try {
           const [proxRes, allEmpRes] = await Promise.all([
-            fetch(`${ProxcodeBackend}?action=get`, {
+            fetch(`${ProxcodeBackend}?action=get&page=1&limit=1`, {
               headers: { "X-Requested-With": "XMLHttpRequest" },
             }),
             fetch(`${EmployeesBackend}?action=get&page=1&limit=1`, {
@@ -585,7 +709,10 @@ function setupModalSuggestions() {
           const proxJson = await proxRes.json();
           const allEmpJson = await allEmpRes.json();
 
-          if (!proxJson.success || !Array.isArray(proxJson.data)) return;
+          if (!proxJson.success || !Array.isArray(proxJson.filter_options))
+            return;
+
+          _myReservationKey = proxJson.reservation_key || _myReservationKey;
 
           const currentCode =
             document.getElementById("qr_code")?.value.trim().toLowerCase() ||
@@ -602,12 +729,17 @@ function setupModalSuggestions() {
               .filter(Boolean),
           );
 
-          _availableModalCodes = proxJson.data
+          _availableModalCodes = proxJson.filter_options
             .filter((c) => {
               const cLower = (c.qr_code || "").trim().toLowerCase();
+              const isCurrentValue = cLower === currentCode;
+              const reservedByOther =
+                c.reserved_by && c.reserved_by !== _myReservationKey;
+
               return (
                 c.is_active == 1 &&
-                (!assignedSet.has(cLower) || cLower === currentCode)
+                (isCurrentValue || !assignedSet.has(cLower)) &&
+                (isCurrentValue || !reservedByOther)
               );
             })
             .map((c) => c.qr_code)
@@ -626,7 +758,6 @@ function setupModalSuggestions() {
     },
   );
 
-  // ── VIOLATION / REMARKS — drawn from existing employee remarks ────────────
   attachModalSuggestion(
     "violation",
     "modal-violation-suggestions",
@@ -642,16 +773,27 @@ function _teardownModalSuggestions() {
   }
 }
 
-function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
+// ── Filter helpers ────────────────────────────────────────────────────────────
+function buildFilterParams(filters) {
+  const params = new URLSearchParams({ action: "get" });
+
+  for (const [key, value] of Object.entries(filters)) {
+    if (key === "position" && value === "__none__") {
+      params.append("position_none", "1");
+    } else if (key === "brand" && value === "__none__") {
+      params.append("brand_none", "1");
+    } else if (key === "status" && value === "__none__") {
+      params.append("status_none", "1");
+    } else if (key === "shift" && value === "__none__") {
+      params.append("shift_none", "1");
+    } else if (key === "violation" && value === "__none__") {
+      params.append("violation_none", "1");
+    } else {
+      params.append(key, value);
+    }
+  }
+
+  return params;
 }
 
 function getActiveFilters() {
@@ -677,73 +819,51 @@ function getActiveFilters() {
 }
 
 function hasActiveFilters() {
-  const filters = getActiveFilters();
-  return Object.keys(filters).length > 0;
+  return Object.keys(getActiveFilters()).length > 0;
 }
 
 function displayFilterStatus() {
+  const existing = document.getElementById("filter-status");
+  if (existing) existing.remove();
+
   const filters = getActiveFilters();
+  if (!Object.keys(filters).length) return;
 
-  const existingStatus = document.getElementById("filter-status");
-  if (existingStatus) {
-    existingStatus.remove();
-  }
+  const filterInfo = document.createElement("div");
+  filterInfo.id = "filter-status";
+  filterInfo.style.cssText = `
+    background:#e3f2fd;border-left:4px solid #2196F3;padding:12px 16px;
+    margin-left:16px;border-radius:4px;font-size:14px;color:#1565c0;
+    display:inline-flex;justify-content:space-between;align-items:center;
+  `;
 
-  if (Object.keys(filters).length > 0) {
-    const filterInfo = document.createElement("div");
-    filterInfo.id = "filter-status";
-    filterInfo.style.cssText = `
-      background: #e3f2fd;
-      border-left: 4px solid #2196F3;
-      padding: 12px 16px;
-      margin-left: 16px;
-      border-radius: 4px;
-      font-size: 14px;
-      color: #1565c0;
-      display: inline-flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: center;
-    `;
+  const label = document.createElement("span");
+  label.style.cssText = "display:inline-flex;align-items:center;gap:8px;";
 
-    const filterLabel = document.createElement("span");
-    filterLabel.style.display = "inline-flex";
-    filterLabel.style.alignItems = "center";
-    filterLabel.style.gap = "8px";
+  const icon = document.createElement("i");
+  icon.className = "fas fa-filter";
+  label.appendChild(icon);
 
-    const icon = document.createElement("i");
-    icon.className = "fas fa-filter";
-    filterLabel.appendChild(icon);
+  const textSpan = document.createElement("span");
+  textSpan.appendChild(document.createTextNode("Active Filters: "));
 
-    const textSpan = document.createElement("span");
-    textSpan.appendChild(document.createTextNode("Active Filters: "));
+  Object.entries(filters).forEach(([key, value], index) => {
+    if (index > 0) textSpan.appendChild(document.createTextNode(" | "));
+    const strong = document.createElement("strong");
+    const properKey = key
+      .split(/(?=[A-Z])/)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
+    strong.textContent = `${properKey}:`;
+    textSpan.appendChild(strong);
+    textSpan.appendChild(document.createTextNode(` ${toProperCase(value)}`));
+  });
 
-    const filterEntries = Object.entries(filters);
-    filterEntries.forEach(([key, value], index) => {
-      if (index > 0) {
-        textSpan.appendChild(document.createTextNode(" | "));
-      }
+  label.appendChild(textSpan);
+  filterInfo.appendChild(label);
 
-      const strong = document.createElement("strong");
-      const properKey = key
-        .split(/(?=[A-Z])/)
-        .map(
-          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
-        )
-        .join(" ");
-      strong.textContent = `${properKey}:`;
-      textSpan.appendChild(strong);
-      textSpan.appendChild(document.createTextNode(` ${value}`));
-    });
-
-    filterLabel.appendChild(textSpan);
-    filterInfo.appendChild(filterLabel);
-
-    const controlsDiv = document.querySelector(".controls");
-    if (controlsDiv) {
-      controlsDiv.appendChild(filterInfo);
-    }
-  }
+  const controlsDiv = document.querySelector(".controls");
+  if (controlsDiv) controlsDiv.appendChild(filterInfo);
 }
 
 function stopCurrentAudio() {
@@ -770,6 +890,8 @@ const playNoResultSound = () => playSound("noResultSound");
 const playWarningSound = () => playSound("warningSound");
 
 async function syncOrphanStatuses() {
+  if (!ProxcodeBackend) return;
+
   try {
     const response = await fetch(`${ProxcodeBackend}?action=sync_orphans`, {
       headers: {
@@ -785,14 +907,88 @@ async function syncOrphanStatuses() {
         true,
         true,
       );
-      await updateActiveEmployees();
     }
   } catch (error) {
     console.warn("[system] syncOrphanStatuses failed:", error);
   }
 }
 
+function startOrphanSyncPolling() {
+  stopOrphanSyncPolling();
+  _orphanSyncInterval = setInterval(() => {
+    if (document.visibilityState === "visible" && !isAnyModalOpen()) {
+      syncOrphanStatuses();
+      pollEmployeeStatuses();
+    }
+  }, ORPHAN_SYNC_POLL_MS);
+}
+
+async function pollEmployeeStatuses() {
+  if (!EmployeesBackend) return;
+
+  try {
+    const res = await fetch(`${EmployeesBackend}?action=get_statuses`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
+      },
+    });
+    if (!res.ok) return;
+
+    const data = await res.json();
+    if (!data.success || !Array.isArray(data.statuses)) return;
+
+    const statusMap = new Map(
+      data.statuses.map((r) => [String(r.id), r.status]),
+    );
+
+    let changed = false;
+
+    employees.forEach((emp) => {
+      const newStatus = statusMap.get(String(emp.id));
+      if (newStatus && newStatus !== emp.status) {
+        emp.status = newStatus;
+        changed = true;
+        updateEmployeeStatusInDOM(emp.id, newStatus);
+      }
+    });
+
+    allEmployees.forEach((emp) => {
+      const newStatus = statusMap.get(String(emp.id));
+      if (newStatus) emp.status = newStatus;
+    });
+
+    if (changed) {
+      await updateStatsPanel();
+    }
+  } catch (e) {
+    console.warn("[system] pollEmployeeStatuses failed:", e);
+  }
+}
+
+function updateEmployeeStatusInDOM(employeeId, newStatus) {
+  const row = document.querySelector(
+    `tr.row[data-emp-id="${String(employeeId)}"]`,
+  );
+  if (!row) return;
+
+  const statusSpan = row.querySelector(".emp-status span");
+  if (statusSpan) {
+    statusSpan.textContent = newStatus;
+    statusSpan.className = `status-${newStatus.toLowerCase()}`;
+  }
+}
+
+function stopOrphanSyncPolling() {
+  if (_orphanSyncInterval) {
+    clearInterval(_orphanSyncInterval);
+    _orphanSyncInterval = null;
+  }
+}
+
 async function loadEmployeeData(employeeId) {
+  if (!EmployeesBackend) return;
+
   try {
     const response = await fetch(
       `${EmployeesBackend}?action=get_single&id=${encodeURIComponent(employeeId)}`,
@@ -803,6 +999,8 @@ async function loadEmployeeData(employeeId) {
         },
       },
     );
+
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();
 
@@ -822,7 +1020,7 @@ async function loadEmployeeData(employeeId) {
 
       const fileLabel = document.querySelector(".file-upload-label");
       if (employee.image) {
-        const imagePath = `${window.location.origin}/../public/uploads/user/${escapeHtml(employee.image)}`;
+        const imagePath = `${window.location.origin}/public/uploads/user/${escapeHtml(employee.image)}`;
         const altText = escapeHtml(employee.fullname);
 
         fileLabel.innerHTML = `
@@ -848,25 +1046,33 @@ async function loadEmployeeData(employeeId) {
   }
 }
 
-async function updateTotalEmployees() {
-  const el = document.getElementById("total_employees");
-  if (el) el.textContent = totalRecords;
-}
+async function updateStatsPanel() {
+  if (!EmployeesBackend) return;
 
-async function updateActiveEmployees() {
   try {
-    const res = await fetch(`${EmployeesBackend}?action=stats`, {
-      headers: { "X-Requested-With": "XMLHttpRequest" },
+    const response = await fetch(`${EmployeesBackend}?action=stats`, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
+      },
     });
-    const data = await res.json();
-    if (data.success) {
-      const el1 = document.getElementById("active_employees");
-      const el2 = document.getElementById("inactive_employees");
-      if (el1) el1.textContent = data.data.active;
-      if (el2) el2.textContent = data.data.inactive;
+
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+    const data = await response.json();
+    if (data.success && data.data) {
+      const stats = data.data;
+
+      const totalEl = document.getElementById("total_employees");
+      const activeEl = document.getElementById("active_employees");
+      const inactiveEl = document.getElementById("inactive_employees");
+
+      if (totalEl) totalEl.textContent = stats.total ?? 0;
+      if (activeEl) activeEl.textContent = stats.active ?? 0;
+      if (inactiveEl) inactiveEl.textContent = stats.inactive ?? 0;
     }
-  } catch (e) {
-    console.error("Error updating employee counts", e);
+  } catch (error) {
+    console.error("Error updating employee counts", error);
   }
 }
 
@@ -952,15 +1158,13 @@ async function addToLog(employeeId, checkStatus = "IN", triggerElement = null) {
   }
 }
 
+// ── Render table ──────────────────────────────────────────────────────────────
 async function renderEmployeeError(message = "Failed to load employee data.") {
   const tbody = document.getElementById("employeeTableBody");
   const paginationDiv = document.getElementById("pagination");
   const noDataDiv = document.getElementById("no-data");
 
-  if (!tbody) {
-    console.error("Employee table body not found");
-    return;
-  }
+  if (!tbody) return;
 
   if (!employees || employees.length === 0) {
     tbody.innerHTML = "";
@@ -1056,13 +1260,13 @@ async function renderEmployeeTable() {
 
       const isAboveFold = index < 5;
 
-      const thumbSrc = `${window.location.origin}/../public/uploads/user/thumb_${safeImage}`;
+      const thumbSrc = `${window.location.origin}/../public/uploads/user/${safeImage}`;
       const imageSrc = `${window.location.origin}/../public/uploads/user/${safeImage}`;
 
       const numericId = parseInt(employee.id, 10);
 
       return `
-          <tr class="row">
+          <tr class="row" data-emp-id="${safeId}">
             <td class="sn-cell">${startIndex + index + 1}</td>
             <td>
               <div class="emp-name"><strong>${safeFullname}</strong></div>
@@ -1087,7 +1291,7 @@ async function renderEmployeeTable() {
                       class="remarks-item"
                       tabindex="-1"
                       onclick="openViolationPopupFromBtn(this)"
-                      title="${escapeHtml(safeViolation)}">
+                      title="${safeViolation}">
                       <i class="fas fa-exclamation-triangle" style="font-size:10px;"></i>
                     </button>`
                     : ""
@@ -1140,7 +1344,7 @@ async function renderEmployeeTable() {
               window.PERMISSIONS.edit ||
               window.PERMISSIONS.delete
                 ? `
-            <td style="position: relative; width: 160px; overflow: visible;">
+            <td class="emp-actions">
 
               <!-- ACTIONS TOGGLE -->
               <button
@@ -1240,6 +1444,7 @@ async function renderEmployeeTable() {
     .join("");
 
   updatePaginationControls();
+  await updateStatsPanel();
 }
 
 // ── Actions panel ─────────────────────────────────────────────────────────────
@@ -1352,13 +1557,11 @@ function openViolationPopupFromBtn(btn) {
   openViolationPopup(employee.fullname, employee.violation, employee.id);
 }
 
-function copyQRCodeFromCell(td) {
-  copyQRCode(td.dataset.qr);
-}
-
 async function getCurrentUserId() {
+  if (!UserIdHelper) return "default";
+
   try {
-    const response = await fetch("../helper/get_user_id.php", {
+    const response = await fetch(`${UserIdHelper}`, {
       headers: {
         "X-Requested-With": "XMLHttpRequest",
         "X-Silent-Request": "true",
@@ -1378,10 +1581,12 @@ async function getCurrentUserId() {
   return "default";
 }
 
+// ── QR copy ───────────────────────────────────────────────────────────────────
 function copyQRCode(code) {
   const tempTextArea = document.createElement("textarea");
   tempTextArea.value = code;
   document.body.appendChild(tempTextArea);
+
   tempTextArea.select();
   tempTextArea.setSelectionRange(0, 99999);
 
@@ -1402,6 +1607,11 @@ function copyQRCode(code) {
   document.body.removeChild(tempTextArea);
 }
 
+function copyQRCodeFromCell(td) {
+  copyQRCode(td.dataset.qr);
+}
+
+// ── Pagination ────────────────────────────────────────────────────────────────
 function updatePaginationControls() {
   const paginationDiv = document.getElementById("pagination");
   if (!paginationDiv) return;
@@ -1470,6 +1680,7 @@ function goToPage(page) {
   }
 }
 
+// ── Search / clear ────────────────────────────────────────────────────────────
 function searchEmployees() {
   const searchForm = document.getElementById("searchForm");
   const searchQuery = document.getElementById("search_qr").value.trim();
@@ -1479,9 +1690,7 @@ function searchEmployees() {
   const filters = getActiveFilters();
   loadEmployees(filters, true, true);
 
-  if (searchQuery) {
-    document.getElementById("search_qr").value = "";
-  }
+  if (searchQuery) document.getElementById("search_qr").value = "";
 
   displayFilterStatus();
   updateDeleteButtonState();
@@ -1516,239 +1725,6 @@ function clearSearch() {
   loadEmployees({}, false, true);
 }
 
-// ── Generic field autocomplete (filter bar only) ──────────────────
-function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
-  const input = document.getElementById(inputId);
-  if (!input) return;
-
-  const hidden = options.hiddenId
-    ? document.getElementById(options.hiddenId)
-    : null;
-
-  const stale = document.getElementById(listId);
-  if (stale) stale.remove();
-
-  const list = document.createElement("ul");
-  list.id = listId;
-  list.dataset.suggestionList = "1";
-  list.dataset.ownerInput = inputId;
-  list.style.cssText = `
-    display:none;position:fixed;z-index:99999;
-    background:#fff;border:1px solid #cbd5e1;
-    border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.15);
-    list-style:none;margin:0;padding:0;
-    max-height:260px;overflow:hidden;overflow-y:auto;min-width:160px;
-  `;
-  document.body.appendChild(list);
-
-  let idx = -1;
-
-  function selectItem(displayValue, rawValue) {
-    if (rawValue === "") {
-      input.value = "";
-      if (hidden) hidden.value = "";
-    } else {
-      input.value = displayValue;
-      if (hidden) hidden.value = rawValue;
-    }
-    list.style.display = "none";
-    idx = -1;
-    if (options.onSelect) options.onSelect(rawValue);
-  }
-
-  function positionList() {
-    const rect = input.getBoundingClientRect();
-    list.style.top = rect.bottom + 4 + "px";
-    list.style.left = rect.left + "px";
-    list.style.width = Math.max(rect.width, 200) + "px";
-  }
-
-  function show(q) {
-    if (!isInputVisible(input)) {
-      list.style.display = "none";
-      idx = -1;
-      return;
-    }
-
-    const lower = q.trim().toLowerCase();
-    const raw = getValues();
-
-    const items = [];
-
-    items.push({ display: "Default: ALL", raw: "", special: "all" });
-
-    if (options.noneLabel) {
-      items.push({
-        display: options.noneLabel,
-        raw: "__none__",
-        special: "none",
-      });
-      items.push({ display: "──────────", raw: null, special: "divider" });
-    }
-
-    const seen = new Map();
-    raw
-      .map((v) => (v || "").trim())
-      .filter((v) => v && v.toLowerCase() !== "none")
-      .filter((v) => !lower || v.toLowerCase().includes(lower))
-      .forEach((v) => {
-        const key = v.toLowerCase();
-        if (!seen.has(key)) seen.set(key, v);
-      });
-
-    [...seen.values()].forEach((v) => {
-      items.push({ display: options.raw ? v : toProperCase(v), raw: v });
-    });
-
-    const visibleItems = lower ? items.filter((i) => !i.special) : items;
-
-    const hasRealItems = visibleItems.some((i) => !i.special);
-    if (!visibleItems.length || (lower && !hasRealItems)) {
-      list.style.display = "none";
-      idx = -1;
-      return;
-    }
-
-    list.innerHTML = visibleItems
-      .map((item, i) => {
-        if (item.special === "divider") {
-          return `<li data-raw="" data-display=""
-            style="padding:4px 12px;font-size:11px;color:#94a3b8;
-                   pointer-events:none;user-select:none;border-bottom:1px solid #f1f5f9;">
-            ──────────
-          </li>`;
-        }
-
-        const safeDisplay = escapeHtml(item.display);
-        let hl = safeDisplay;
-        if (lower && !item.special) {
-          const regex = new RegExp(
-            `(${lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
-            "gi",
-          );
-          hl = safeDisplay.replace(
-            regex,
-            '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
-          );
-        }
-
-        const isSpecial = item.special === "all" || item.special === "none";
-        const specialStyle = isSpecial
-          ? "font-weight:600;color:#1e40af;background:#f0f9ff;"
-          : "";
-
-        return `<li
-          data-raw="${escapeHtml(item.raw ?? "")}"
-          data-display="${safeDisplay}"
-          data-index="${i}"
-          style="padding:8px 12px;cursor:pointer;font-size:13px;
-                 border-bottom:1px solid #f1f5f9;
-                 display:flex;align-items:center;${specialStyle}">
-          ${hl}
-        </li>`;
-      })
-      .join("");
-
-    list.querySelectorAll("li[data-raw]").forEach((li) => {
-      if (li.style.pointerEvents === "none") return;
-      li.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        selectItem(li.dataset.display, li.dataset.raw);
-      });
-      li.addEventListener("mouseover", () => {
-        list
-          .querySelectorAll("li")
-          .forEach(
-            (l) =>
-              (l.style.background =
-                l === li ? "#f0f9ff" : l.dataset.raw === undefined ? "" : ""),
-          );
-        idx = [...list.querySelectorAll("li")].indexOf(li);
-      });
-    });
-
-    positionList();
-    list.style.display = "block";
-    idx = -1;
-  }
-
-  input.addEventListener("focus", async () => {
-    if (options.requireInput && !input.value.trim()) return;
-    show(input.value);
-    if (options.onFocus) {
-      await options.onFocus();
-      show(input.value);
-    }
-  });
-
-  input.addEventListener("blur", () => {
-    setTimeout(() => {
-      if (!list.contains(document.activeElement)) {
-        list.style.display = "none";
-        idx = -1;
-      }
-    }, 150);
-  });
-
-  input.addEventListener("input", () => {
-    show(input.value);
-  });
-
-  window.addEventListener(
-    "scroll",
-    () => {
-      if (list.style.display !== "none") positionList();
-    },
-    true,
-  );
-  window.addEventListener("resize", () => {
-    if (list.style.display !== "none") positionList();
-  });
-
-  input.addEventListener("keydown", (e) => {
-    const liItems = [...list.querySelectorAll("li")].filter(
-      (l) => l.style.pointerEvents !== "none",
-    );
-    if (e.key === "Tab") {
-      list.style.display = "none";
-      idx = -1;
-      return;
-    }
-    if (!liItems.length || list.style.display === "none") return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      idx = Math.min(idx + 1, liItems.length - 1);
-      liItems.forEach(
-        (l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""),
-      );
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      idx = Math.max(idx - 1, 0);
-      liItems.forEach(
-        (l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""),
-      );
-    } else if (e.key === "Enter" && idx >= 0) {
-      e.preventDefault();
-      selectItem(liItems[idx].dataset.display, liItems[idx].dataset.raw);
-    } else if (e.key === "Escape") {
-      list.style.display = "none";
-      idx = -1;
-    }
-  });
-
-  if (input._outsideClickHandler) {
-    document.removeEventListener("click", input._outsideClickHandler);
-  }
-  input._outsideClickHandler = (e) => {
-    if (!input.contains(e.target) && !list.contains(e.target)) {
-      list.style.display = "none";
-      idx = -1;
-    }
-  };
-  document.removeEventListener("click", input._outsideClickHandler);
-  document.addEventListener("click", input._outsideClickHandler);
-}
-
 const violation = document.getElementById("violation");
 
 function updateViolationPadding() {
@@ -1779,9 +1755,96 @@ setInterval(function () {
   }
 }, 100);
 
+async function loadEmployees(
+  filters = {},
+  preservePage = false,
+  silent = false,
+) {
+  if (!EmployeesBackend && !ProxcodeBackend) {
+    return;
+  }
+
+  setControlButtonsDisabled(true);
+  try {
+    // if (!silent) showLoading(true);
+
+    if (Object.keys(filters).length === 0 && hasActiveFilters()) {
+      filters = getActiveFilters();
+    }
+
+    activeFilters = filters;
+
+    const params = buildFilterParams(filters);
+
+    params.append("page", currentPage);
+    params.append("limit", itemsPerPage);
+
+    if (sortCol) {
+      params.append("sort_col", sortCol);
+      params.append("sort_dir", sortDir);
+    }
+
+    const response = await fetch(`${EmployeesBackend}?${params.toString()}`, {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
+
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+    const data = await response.json();
+
+    if (data.success && Array.isArray(data.data)) {
+      employees = data.data;
+      totalPages = data.pages;
+      totalRecords = data.total;
+
+      if (Array.isArray(data.filter_options)) {
+        allEmployees = data.filter_options;
+      }
+
+      if (Object.keys(filters).length === 0) {
+        allEmployees = data.filter_options ?? data.data ?? [];
+      } else if (allEmployees.length === 0) {
+        fetch(`${EmployeesBackend}?action=get&page=1&limit=99999`, {
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "X-Silent-Request": "true",
+          },
+        })
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.success && Array.isArray(d.filter_options))
+              allEmployees = d.filter_options;
+          })
+          .catch(() => {});
+      }
+
+      if (!preservePage && Object.keys(filters).length === 0) currentPage = 1;
+
+      await renderEmployeeTable();
+      await updateDeleteButtonState();
+      await syncOrphanStatuses();
+
+      if (Object.keys(filters).length > 0) displayFilterStatus();
+      console.log(`Loaded ${data.total || employees.length} employees`);
+    } else {
+      await renderEmployeeError("Network error. Please try again.");
+      showAlert(data.message || "Error loading employees", "error");
+    }
+  } catch (error) {
+    console.error("Error loading employees:", error);
+    await renderEmployeeError("Network error. Please try again.");
+    showAlert("Failed to load records. Please check your connection.", "error");
+  } finally {
+    // if (!silent) showLoading(false);
+    setControlButtonsDisabled(false);
+    updateDeleteButtonState();
+  }
+}
+
 // ── Open modal ──────────────────────────────────────────────────────
 async function openModal(action, employeeId = null) {
   closeAllActionsPanels();
+
   currentAction = action;
   const modal = document.getElementById("employeeModal");
   const modalTitle = document.getElementById("modalTitle");
@@ -1824,8 +1887,75 @@ async function openModal(action, employeeId = null) {
   }
 }
 
+async function reserveCode(qr_code) {
+  if (!ProxcodeBackend || !qr_code) return;
+  try {
+    const res = await fetch(`${ProxcodeBackend}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
+      },
+      body: new URLSearchParams({ action: "reserve_code", qr_code }),
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      showAlert(
+        data.message ||
+          "That code was just taken by another user — pick another one.",
+        "error",
+      );
+      const input = document.getElementById("qr_code");
+      if (
+        input &&
+        input.value.trim().toLowerCase() === qr_code.trim().toLowerCase()
+      ) {
+        input.value = "";
+      }
+      stopReservationHeartbeat();
+      _currentReservedCode = null;
+    }
+  } catch (e) {
+    console.warn("reserveCode failed:", e);
+  }
+}
+
+async function releaseReservedCode(qr_code) {
+  if (!ProxcodeBackend || !qr_code) return;
+  try {
+    await fetch(`${ProxcodeBackend}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Silent-Request": "true",
+      },
+      body: new URLSearchParams({ action: "release_code", qr_code }),
+    });
+  } catch (e) {
+    console.warn("releaseReservedCode failed:", e);
+  }
+}
+
+function startReservationHeartbeat() {
+  stopReservationHeartbeat();
+  _reservationHeartbeat = setInterval(() => {
+    if (_currentReservedCode) reserveCode(_currentReservedCode);
+  }, RESERVATION_HEARTBEAT_MS);
+}
+
+function stopReservationHeartbeat() {
+  if (_reservationHeartbeat) {
+    clearInterval(_reservationHeartbeat);
+    _reservationHeartbeat = null;
+  }
+}
+
 function openDeleteModal(employeeId = null, requireConfirmation = false) {
   closeAllActionsPanels();
+
   const modal = document.getElementById("deleteModal");
   const confirmBtn = document.getElementById("confirmDeleteBtn");
   const confirmationInput = document.getElementById("confirmationInput");
@@ -1845,11 +1975,12 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
     if (hasFilters) {
       modalTitle.textContent = "⚠️ Delete Filtered Employees";
 
+      const label = totalRecords > 1 ? "employee's" : "employee";
       const msgDiv = document.createElement("div");
       const p1 = document.createElement("p");
       p1.style.marginBottom = "15px";
       const strong = document.createElement("strong");
-      strong.textContent = `This will delete ${count} ${label} matching your filters:`;
+      strong.textContent = `This will delete ${totalRecords} ${label} matching your filters:`;
       p1.appendChild(strong);
       msgDiv.appendChild(p1);
 
@@ -1870,7 +2001,6 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
         row.appendChild(document.createTextNode(" " + value));
         filterBox.appendChild(row);
       });
-
       msgDiv.appendChild(filterBox);
 
       const p2 = document.createElement("p");
@@ -1883,11 +2013,12 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
     } else {
       modalTitle.textContent = "⚠️ Delete All Employees";
 
+      const label = totalRecords > 1 ? "employee's" : "employee";
       const msgDiv = document.createElement("div");
       const p1 = document.createElement("p");
       p1.style.marginBottom = "15px";
       const strong = document.createElement("strong");
-      strong.textContent = `This will permanently delete ALL ${count} ${label}.`;
+      strong.textContent = `This will permanently delete ALL ${totalRecords} ${label}.`;
       p1.appendChild(strong);
       msgDiv.appendChild(p1);
       const p2 = document.createElement("p");
@@ -1912,7 +2043,6 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
   }
 
   if (confirmationInput) confirmationInput.value = "";
-
   modal.style.display = "flex";
 
   const newConfirmBtn = confirmBtn.cloneNode(true);
@@ -1924,7 +2054,6 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
       newConfirmationInput,
       confirmationInput,
     );
-
     newConfirmationInput.focus();
 
     newConfirmationInput.addEventListener("input", () => {
@@ -1943,11 +2072,8 @@ function openDeleteModal(employeeId = null, requireConfirmation = false) {
     const hasFiltersFlag = newConfirmBtn.dataset.hasFilters === "true";
 
     if (requiresConfirm) {
-      if (hasFiltersFlag) {
-        deleteFilteredEmployees();
-      } else {
-        showAlert("Cannot be Deleted! Try changing filters.", "error");
-      }
+      if (hasFiltersFlag) deleteFilteredEmployees();
+      else showAlert("Cannot be Deleted! Try changing filters.", "error");
     } else {
       deleteEmployee(id);
     }
@@ -1972,6 +2098,7 @@ function updateDeleteButtonState() {
   const deleteBtn = document.querySelector(".delete-all-btn .btn-danger");
   if (!deleteBtn) return;
 
+  const label = totalRecords > 1 ? "employee's" : "employee";
   const hasFilters = hasActiveFilters();
   const hasData = employees && employees.length > 0;
   const canDelete = hasFilters && hasData;
@@ -1980,40 +2107,18 @@ function updateDeleteButtonState() {
   deleteBtn.style.opacity = canDelete ? "1" : "0.4";
   deleteBtn.style.cursor = canDelete ? "pointer" : "not-allowed";
 
-  if (!hasFilters) {
-    deleteBtn.title = "Apply filters first to enable deletion";
-  } else if (!hasData) {
-    deleteBtn.title = "No matching records to delete";
-  } else {
-    deleteBtn.title = `Delete ${count} filtered ${label}`;
-  }
+  if (!hasFilters) deleteBtn.title = "Apply filters first to enable deletion";
+  else if (!hasData) deleteBtn.title = "No matching records to delete";
+  else deleteBtn.title = `Delete ${totalRecords} filtered ${label}`;
 }
 
 async function deleteFilteredEmployees() {
   try {
     showLoading(true);
 
-    const params = new URLSearchParams({
-      action: "get",
-      page: 1,
-      limit: 99999,
-    });
-
-    for (const [key, value] of Object.entries(activeFilters)) {
-      if (key === "position" && value === "__none__") {
-        params.append("position_none", "1");
-      } else if (key === "brand" && value === "__none__") {
-        params.append("brand_none", "1");
-      } else if (key === "status" && value === "__none__") {
-        params.append("status_none", "1");
-      } else if (key === "shift" && value === "__none__") {
-        params.append("shift_none", "1");
-      } else if (key === "violation" && value === "__none__") {
-        params.append("violation_none", "1");
-      } else {
-        params.append(key, value);
-      }
-    }
+    const params = buildFilterParams(activeFilters);
+    params.append("page", 1);
+    params.append("limit", 99999);
 
     const allRes = await fetch(`${EmployeesBackend}?${params.toString()}`, {
       headers: {
@@ -2033,7 +2138,6 @@ async function deleteFilteredEmployees() {
     }
 
     const employeeIds = allData.data.map((emp) => emp.id);
-
     const formData = new FormData();
     formData.append("action", "delete_filtered");
     formData.append("employee_ids", JSON.stringify(employeeIds));
@@ -2048,10 +2152,9 @@ async function deleteFilteredEmployees() {
     const data = await response.json();
 
     if (data.success) {
-      const deletedCount = data.deleted_count || employeeIds.length;
-      const deletedLabel = deletedCount > 1 ? "employee's" : "employee";
+      const label = totalRecords > 1 ? "employee's" : "employee";
       showAlert(
-        `Successfully deleted ${escapeHtml(String(deletedCount))} ${deletedLabel} matching your filters.`,
+        `Successfully deleted ${totalRecords} ${label} matching your filters.`,
         "success",
       );
       currentPage = 1;
@@ -2063,7 +2166,6 @@ async function deleteFilteredEmployees() {
       );
     }
   } catch (error) {
-    console.error("Error:", error);
     showAlert("Failed to delete filtered employees", "error");
   } finally {
     showLoading(false);
@@ -2072,6 +2174,7 @@ async function deleteFilteredEmployees() {
 
 async function openLogsModal(employeeId, fullname) {
   closeAllActionsPanels();
+
   const modal = document.getElementById("logsModal");
   const title = document.getElementById("logsModalTitle");
 
@@ -2094,17 +2197,17 @@ function _renderLogsModal(modal, employeeId) {
 
   tab.innerHTML = `
     <div style="display:flex;gap:0;border-bottom:1px solid var(--color-border-tertiary);">
-      <button id="logsTabAccess" tabindex="-1" onclick="_switchLogsTab('access','${employeeId}')"
+      <button id="logsTabAccess" class="tab-btn" tabindex="-1" onclick="_switchLogsTab('access','${employeeId}')"
         style="padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid #3b82f6;
                background:none;color:#3b82f6;cursor:pointer;">
         <i class="fas fa-history"></i> Access Log
       </button>
-      <button id="logsTabStatus" tabindex="-1" onclick="_switchLogsTab('status','${employeeId}')"
+      <button id="logsTabStatus" class="tab-btn" tabindex="-1" onclick="_switchLogsTab('status','${employeeId}')"
         style="padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid transparent;
                background:none;color:#94a3b8;cursor:pointer;">
         <i class="fas fa-exchange-alt"></i> Status Log
       </button>
-      <button id="logsTabRemarks" tabindex="-1" onclick="_switchLogsTab('remarks','${employeeId}')"
+      <button id="logsTabRemarks" class="tab-btn" tabindex="-1" onclick="_switchLogsTab('remarks','${employeeId}')"
         style="padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid transparent;
               background:none;color:#94a3b8;cursor:pointer;">
         <i class="fas fa-exclamation-triangle"></i> Remarks Log
@@ -2122,19 +2225,22 @@ let _statusHistoryCache = {};
 let _remarksCache = {};
 
 async function _switchLogsTab(tab, employeeId) {
-  const accessBtn = document.getElementById("logsTabAccess");
-  const statusBtn = document.getElementById("logsTabStatus");
+  const accessBtn  = document.getElementById("logsTabAccess");
+  const statusBtn  = document.getElementById("logsTabStatus");
   const remarksBtn = document.getElementById("logsTabRemarks");
-  const content = document.getElementById("logsTabContent");
+  const content    = document.getElementById("logsTabContent");
 
-  const active =
-    "padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid #3b82f6;background:none;color:#3b82f6;cursor:pointer;";
-  const inactive =
-    "padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid transparent;background:none;color:#94a3b8;cursor:pointer;";
+  const active   = "padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid #3b82f6;background:none;color:#3b82f6;cursor:pointer;";
+  const inactive = "padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid transparent;background:none;color:#94a3b8;cursor:pointer;";
 
-  accessBtn.style.cssText = inactive;
-  statusBtn.style.cssText = inactive;
+  accessBtn.style.cssText  = inactive;
+  statusBtn.style.cssText  = inactive;
   remarksBtn.style.cssText = inactive;
+
+  // Reset page only when switching tabs (not when re-rendering same tab via pagination)
+  const switching = !content.dataset.activeTab || content.dataset.activeTab !== tab;
+  if (switching) _tabPagination[tab].page = 1;
+  content.dataset.activeTab = tab;
 
   if (tab === "access") {
     accessBtn.style.cssText = active;
@@ -2148,7 +2254,104 @@ async function _switchLogsTab(tab, employeeId) {
   }
 }
 
+// ── Per-tab pagination state ──────────────────────────────────────────────────
+const _tabPagination = {
+  access:  { page: 1, limit: 25 },
+  status:  { page: 1, limit: 25 },
+  remarks: { page: 1, limit: 25 },
+};
+
+// ── Shared pagination renderer ────────────────────────────────────────────────
+function _renderTabPagination(containerId, tab, employeeId, total, page, limit) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const totalPages = Math.ceil(total / limit);
+
+  if (totalPages <= 1) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const delta = 2;
+  const range = new Set([1, totalPages]);
+  for (let i = Math.max(2, page - delta); i <= Math.min(totalPages - 1, page + delta); i++) {
+    range.add(i);
+  }
+
+  const sorted = [...range].sort((a, b) => a - b);
+  let prev = null;
+  let buttonsHTML = "";
+
+  for (const p of sorted) {
+    if (prev !== null && p - prev > 1) {
+      buttonsHTML += `<span style="padding:0 4px;color:#94a3b8;align-self:center;">…</span>`;
+    }
+    buttonsHTML += `
+      <button
+        tabindex="-1"
+        onclick="_goToTabPage('${tab}','${employeeId}',${p})"
+        style="min-width:30px;height:30px;border-radius:6px;border:1px solid ${p === page ? "#3b82f6" : "#e2e8f0"};
+               background:${p === page ? "#3b82f6" : "#fff"};color:${p === page ? "#fff" : "#374151"};
+               font-size:12px;font-weight:600;cursor:${p === page ? "default" : "pointer"};padding:0 6px;">
+        ${p}
+      </button>`;
+    prev = p;
+  }
+
+  container.innerHTML = `
+    <div style="display:flex;align-items:center;gap:6px;justify-content:center;padding:12px 0 4px;flex-wrap:wrap;">
+      <button
+        tabindex="-1"
+        onclick="_goToTabPage('${tab}','${employeeId}',${page - 1})"
+        ${page <= 1 ? "disabled" : ""}
+        style="min-width:30px;height:30px;border-radius:6px;border:1px solid #e2e8f0;
+               background:#fff;color:#374151;font-size:12px;cursor:${page <= 1 ? "not-allowed" : "pointer"};
+               opacity:${page <= 1 ? "0.4" : "1"};padding:0 8px;">
+        ‹
+      </button>
+      ${buttonsHTML}
+      <button
+        tabindex="-1"
+        onclick="_goToTabPage('${tab}','${employeeId}',${page + 1})"
+        ${page >= totalPages ? "disabled" : ""}
+        style="min-width:30px;height:30px;border-radius:6px;border:1px solid #e2e8f0;
+               background:#fff;color:#374151;font-size:12px;cursor:${page >= totalPages ? "not-allowed" : "pointer"};
+               opacity:${page >= totalPages ? "0.4" : "1"};padding:0 8px;">
+        ›
+      </button>
+      <span style="font-size:11px;color:#94a3b8;margin-left:4px;">
+        ${total} total &nbsp;|&nbsp; Page ${page} of ${totalPages}
+      </span>
+    </div>`;
+}
+
+function _goToTabPage(tab, employeeId, page) {
+  const state = _tabPagination[tab];
+  if (!state) return;
+  const total = _getTabTotal(tab, employeeId);
+  const totalPages = Math.ceil(total / state.limit);
+  if (page < 1 || page > totalPages) return;
+  state.page = page;
+
+  const content = document.getElementById("logsTabContent");
+  if (!content) return;
+
+  if (tab === "access")  _renderAccessTab(content, employeeId);
+  if (tab === "status")  _renderStatusTab(content, employeeId);
+  if (tab === "remarks") _renderRemarksTab(content, employeeId);
+}
+
+function _getTabTotal(tab, employeeId) {
+  if (tab === "access")  return (_logsCache[employeeId]          || []).length;
+  if (tab === "status")  return (_statusHistoryCache[employeeId] || []).length;
+  if (tab === "remarks") return (_remarksCache[employeeId]       || []).length;
+  return 0;
+}
+
 async function _renderAccessTab(container, employeeId) {
+  const state = _tabPagination.access;
+
   container.innerHTML = `
     <div style="display:flex;gap:16px;margin-bottom:16px;">
       <div style="flex:1;background:#ede9fe;border-radius:8px;padding:16px;text-align:center;">
@@ -2164,23 +2367,32 @@ async function _renderAccessTab(container, employeeId) {
         <div style="font-size:13px;color:#991b1b;font-weight:600;">Total OUT</div>
       </div>
     </div>
-    <div style="max-height:320px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead>
-          <tr style="background:#f8f9fa;border-bottom:2px solid #e9ecef;">
-            <th style="padding:10px 12px;text-align:left;width:50px;">SN</th>
-            <th style="padding:10px 12px;text-align:left;">Status</th>
-            <th style="padding:10px 12px;text-align:left;">Gate</th>
-            <th style="padding:10px 12px;text-align:left;">Timestamp</th>
-          </tr>
-        </thead>
-        <tbody id="logsTableBody">
-          <tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>
-        </tbody>
-      </table>
-    </div>`;
+    <div style="border:1px solid #f0f0f0;border-radius:8px;">
+      <div class="thead-sticky-wrap" style="top:0;z-index:1;">
+        <table class="thead-table">
+          <thead>
+            <tr style="background:#f8f9fa;">
+              <th class="sn-cell">SN</th>
+              <th style="width:100px;">Status</th>
+              <th style="width:120px;">Type</th>
+              <th style="width:150px;">Gate</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+        </table>
+      </div>
+      <div class="table-scroll-wrap" style="max-height:280px;overflow-y:auto;">
+        <table class="thead-table" style="font-size:13px;">
+          <tbody id="logsTableBody">
+            <tr><td colspan="5" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div id="accessTabPagination"></div>`;
 
   if (!_logsCache[employeeId]) {
+    state.page = 1;
     try {
       const res = await fetch(
         `${EmployeesBackend}?action=get_access_logs&id=${encodeURIComponent(employeeId)}`,
@@ -2198,42 +2410,53 @@ async function _renderAccessTab(container, employeeId) {
 
   const logs = _logsCache[employeeId];
   if (logs === null) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#ef4444;padding:24px;">Error loading logs.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#ef4444;padding:24px;">Error loading logs.</td></tr>`;
     return;
   }
 
-  const inCount = logs.filter((l) => l.check_status === "IN").length;
+  const inCount  = logs.filter((l) => l.check_status === "IN").length;
   const outCount = logs.filter((l) => l.check_status === "OUT").length;
 
-  const elIn = document.getElementById("logCountIn");
-  const elOut = document.getElementById("logCountOut");
+  const elIn    = document.getElementById("logCountIn");
+  const elOut   = document.getElementById("logCountOut");
   const elTotal = document.getElementById("logCountTotal");
-  if (elIn) elIn.textContent = inCount;
-  if (elOut) elOut.textContent = outCount;
+  if (elIn)    elIn.textContent    = inCount;
+  if (elOut)   elOut.textContent   = outCount;
   if (elTotal) elTotal.textContent = logs.length;
 
-  tbody.innerHTML = logs.length
-    ? logs
-        .map(
-          (log, i) => `
-            <tr style="border-bottom:1px solid #f0f0f0;">
-              <td style="padding:9px 12px;color:#aaa;">${i + 1}</td>
-              <td style="padding:9px 12px;">
-                <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
-                  background:${log.check_status === "IN" ? "#d1fae5" : "#fee2e2"};
-                  color:${log.check_status === "IN" ? "#065f46" : "#991b1b"};">
-                  ${escapeHtml(log.check_status)}
-                </span>
-              </td>
-              <td style="padding:9px 12px;">${escapeHtml(log.gate_name || log.user_id || "N/A")}</td>
-              <td style="padding:9px 12px;color:#aaa;font-size:11px;white-space:nowrap;">${escapeHtml(log.access_timestamp)}</td>
-            </tr>`,
-        )
-        .join("")
-    : `<tr><td colspan="4" style="text-align:center;padding:24px;color:#aaa;">No log records found.</td></tr>`;
+  const ACCESS_TYPE_MAP = {
+    manual_entry:   "Manual Entry",
+    proximity_scan: "Proximity Scan",
+  };
+
+  // ── Paginate ──────────────────────────────────────────────────
+  const { page, limit } = state;
+  const startIndex = (page - 1) * limit;
+  const pageRows   = logs.slice(startIndex, startIndex + limit);
+
+  tbody.innerHTML = pageRows.length
+    ? pageRows.map((log, i) => `
+        <tr style="border-bottom:1px solid #f0f0f0;">
+          <td class="sn-cell">${startIndex + i + 1}</td>
+          <td style="width:100px;">
+            <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
+              background:${log.check_status === "IN" ? "#d1fae5" : "#fee2e2"};
+              color:${log.check_status === "IN" ? "#065f46" : "#991b1b"};">
+              ${escapeHtml(log.check_status)}
+            </span>
+          </td>
+          <td style="width:120px;">${escapeHtml(ACCESS_TYPE_MAP[log.access_type] || log.access_type || "N/A")}</td>
+          <td style="width:150px;">${escapeHtml(log.gate_name || log.user_id || "N/A")}</td>
+          <td class="emp-timestamp" style="color:#aaa;font-size:11px;">${escapeHtml(log.access_timestamp)}</td>
+        </tr>`).join("")
+    : `<tr><td colspan="5" style="text-align:center;padding:24px;color:#aaa;">No log records found.</td></tr>`;
+
+  _renderTabPagination("accessTabPagination", "access", employeeId, logs.length, page, limit);
 }
 
 async function _renderStatusTab(container, employeeId) {
+  const state = _tabPagination.status;
+
   container.innerHTML = `
     <div style="display:flex;gap:16px;margin-bottom:16px;">
       <div style="flex:1;background:#ede9fe;border-radius:8px;padding:16px;text-align:center;">
@@ -2249,32 +2472,40 @@ async function _renderStatusTab(container, employeeId) {
         <div style="font-size:13px;color:#991b1b;font-weight:600;">→ Inactive</div>
       </div>
     </div>
-    <div style="max-height:320px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead>
-          <tr style="background:#f8f9fa;border-bottom:2px solid #e9ecef;">
-            <th style="padding:10px 12px;text-align:left;width:50px;">SN</th>
-            <th style="padding:10px 12px;text-align:left;">From</th>
-            <th style="padding:10px 12px;text-align:left;">To</th>
-            <th style="padding:10px 12px;text-align:left;">Operator</th>
-            <th style="padding:10px 12px;text-align:left;">Reason</th>
-            <th style="padding:10px 12px;text-align:left;">Date</th>
-          </tr>
-        </thead>
-        <tbody id="statusHistoryBody">
-          <tr><td colspan="6" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>
-        </tbody>
-      </table>
-    </div>`;
+    <div style="border:1px solid #f0f0f0;border-radius:8px;">
+      <div class="thead-sticky-wrap" style="top:0;z-index:1;">
+        <table class="thead-table">
+          <thead>
+            <tr style="background:#f8f9fa;">
+              <th class="sn-cell">SN</th>
+              <th style="width:80px;">From</th>
+              <th style="width:80px;">To</th>
+              <th style="width:120px;">Operator</th>
+              <th style="width:180px;">Reason</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+        </table>
+      </div>
+      <div class="table-scroll-wrap" style="max-height:280px;overflow-y:auto;">
+        <table class="thead-table" style="font-size:13px;">
+          <tbody id="statusHistoryBody">
+            <tr><td colspan="6" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div id="statusTabPagination"></div>`;
 
   if (!_statusHistoryCache[employeeId]) {
+    state.page = 1;
     try {
       const res = await fetch(
         `${EmployeesBackend}?action=get_status_history&id=${encodeURIComponent(employeeId)}`,
         { headers: { "X-Requested-With": "XMLHttpRequest" } },
       );
       const data = await res.json();
-      _statusHistoryCache[employeeId] = data.success ? data.history : [];
+      _statusHistoryCache[employeeId] = data.success ? data.history : null;
     } catch (e) {
       _statusHistoryCache[employeeId] = null;
     }
@@ -2289,13 +2520,13 @@ async function _renderStatusTab(container, employeeId) {
     return;
   }
 
-  const toActive = rows.filter((r) => r.new_status === "Active").length;
+  const toActive   = rows.filter((r) => r.new_status === "Active").length;
   const toInactive = rows.filter((r) => r.new_status === "Inactive").length;
-  const elTotal = document.getElementById("statCountTotal");
-  const elActive = document.getElementById("statCountActive");
+  const elTotal    = document.getElementById("statCountTotal");
+  const elActive   = document.getElementById("statCountActive");
   const elInactive = document.getElementById("statCountInactive");
-  if (elTotal) elTotal.textContent = rows.length;
-  if (elActive) elActive.textContent = toActive;
+  if (elTotal)    elTotal.textContent    = rows.length;
+  if (elActive)   elActive.textContent   = toActive;
   if (elInactive) elInactive.textContent = toInactive;
 
   const statusPill = (s) => {
@@ -2305,24 +2536,31 @@ async function _renderStatusTab(container, employeeId) {
       color:${isActive ? "#065f46" : "#991b1b"};">${escapeHtml(s || "—")}</span>`;
   };
 
-  tbody.innerHTML = rows.length
-    ? rows
-        .map(
-          (r, i) => `
+  // ── Paginate ──────────────────────────────────────────────────
+  const { page, limit } = state;
+  const startIndex = (page - 1) * limit;
+  const pageRows   = rows.slice(startIndex, startIndex + limit);
+
+  tbody.innerHTML = pageRows.length
+    ? pageRows.map((r, i) => `
         <tr style="border-bottom:1px solid #f0f0f0;">
-          <td style="padding:9px 12px;color:#aaa;">${i + 1}</td>
-          <td style="padding:9px 12px;">${statusPill(r.old_status)}</td>
-          <td style="padding:9px 12px;">${statusPill(r.new_status)}</td>
-          <td style="padding:9px 12px;color:#555;">${escapeHtml(r.changed_by || "System")}</td>
-          <td style="padding:9px 12px;color:#555;max-width:200px;word-break:break-word;">${escapeHtml(r.change_reason || "—")}</td>
-          <td style="padding:9px 12px;color:#aaa;font-size:11px;white-space:nowrap;">${escapeHtml(r.created_at || "—")}</td>
-        </tr>`,
-        )
-        .join("")
+          <td class="sn-cell">${startIndex + i + 1}</td>
+          <td style="width:80px;">${statusPill(r.old_status)}</td>
+          <td style="width:80px;">${statusPill(r.new_status)}</td>
+          <td style="width:120px;">${escapeHtml(r.changed_by || "System")}</td>
+          <td class="emp-remarks" style="width:180px;color:#555;word-break:break-word;">
+            ${escapeHtml(r.change_reason || "—")}
+          </td>
+          <td class="emp-createdAt" style="color:#aaa;font-size:11px;">${escapeHtml(r.created_at || "—")}</td>
+        </tr>`).join("")
     : `<tr><td colspan="6" style="text-align:center;padding:24px;color:#aaa;">No status changes recorded.</td></tr>`;
+
+  _renderTabPagination("statusTabPagination", "status", employeeId, rows.length, page, limit);
 }
 
 async function _renderRemarksTab(container, employeeId) {
+  const state = _tabPagination.remarks;
+
   container.innerHTML = `
     <div style="display:flex;gap:16px;margin-bottom:16px;">
       <div style="flex:1;background:#fff5f5;border-radius:8px;padding:16px;text-align:center;">
@@ -2338,24 +2576,32 @@ async function _renderRemarksTab(container, employeeId) {
         <div style="font-size:13px;color:#276749;font-weight:600;">Cleared</div>
       </div>
     </div>
-    <div style="max-height:320px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead>
-          <tr style="background:#f8f9fa;border-bottom:2px solid #e9ecef;">
-            <th style="padding:10px 12px;text-align:left;width:50px;">SN</th>
-            <th style="padding:10px 12px;text-align:left;">Type</th>
-            <th style="padding:10px 12px;text-align:left;">Description</th>
-            <th style="padding:10px 12px;text-align:left;">Date</th>
-            <th style="padding:10px 12px;text-align:left;">Recorded</th>
-          </tr>
-        </thead>
-        <tbody id="remarksHistoryBody">
-          <tr><td colspan="5" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>
-        </tbody>
-      </table>
-    </div>`;
+    <div style="border:1px solid #f0f0f0;border-radius:8px;">
+      <div class="thead-sticky-wrap" style="top:0;z-index:1;">
+        <table class="thead-table">
+          <thead>
+            <tr style="background:#f8f9fa;">
+              <th class="sn-cell">SN</th>
+              <th style="width:130px;">Type</th>
+              <th class="emp-remarks" style="width:200px;">Description</th>
+              <th style="width:100px;">Date</th>
+              <th>Recorded</th>
+            </tr>
+          </thead>
+        </table>
+      </div>
+      <div class="table-scroll-wrap" style="max-height:280px;overflow-y:auto;">
+        <table class="thead-table" style="font-size:13px;">
+          <tbody id="remarksHistoryBody">
+            <tr><td colspan="5" style="text-align:center;padding:24px;color:#aaa;">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div id="remarksTabPagination"></div>`;
 
   if (!_remarksCache[employeeId]) {
+    state.page = 1;
     try {
       const res = await fetch(
         `${EmployeesBackend}?action=get_violations&id=${encodeURIComponent(employeeId)}`,
@@ -2377,17 +2623,12 @@ async function _renderRemarksTab(container, employeeId) {
     return;
   }
 
-  const updates = rows.filter(
-    (r) => r.violation_type === "Remarks Updated",
-  ).length;
-  const cleared = rows.filter(
-    (r) => r.violation_type === "Remarks Cleared",
-  ).length;
-
-  const elTotal = document.getElementById("remCountTotal");
+  const updates = rows.filter((r) => r.violation_type === "Remarks Updated").length;
+  const cleared = rows.filter((r) => r.violation_type === "Remarks Cleared").length;
+  const elTotal   = document.getElementById("remCountTotal");
   const elUpdates = document.getElementById("remCountUpdates");
   const elCleared = document.getElementById("remCountCleared");
-  if (elTotal) elTotal.textContent = rows.length;
+  if (elTotal)   elTotal.textContent   = rows.length;
   if (elUpdates) elUpdates.textContent = updates;
   if (elCleared) elCleared.textContent = cleared;
 
@@ -2397,32 +2638,39 @@ async function _renderRemarksTab(container, employeeId) {
     return { bg: "#fff5f5", color: "#c53030" };
   };
 
-  tbody.innerHTML = rows.length
-    ? rows
-        .map((v, i) => {
-          const { bg, color } = typeBadge(v.violation_type);
-          return `
+  // ── Paginate ──────────────────────────────────────────────────
+  const { page, limit } = state;
+  const startIndex = (page - 1) * limit;
+  const pageRows   = rows.slice(startIndex, startIndex + limit);
+
+  tbody.innerHTML = pageRows.length
+    ? pageRows.map((v, i) => {
+        const { bg, color } = typeBadge(v.violation_type);
+        return `
           <tr style="border-bottom:1px solid #f0f0f0;">
-            <td style="padding:9px 12px;color:#aaa;">${i + 1}</td>
-            <td style="padding:9px 12px;">
+            <td class="sn-cell">${startIndex + i + 1}</td>
+            <td style="width:130px;">
               <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
                 background:${escapeHtml(bg)};color:${escapeHtml(color)};">
                 ${escapeHtml(v.violation_type || "—")}
               </span>
             </td>
-            <td style="padding:9px 12px;color:#555;max-width:220px;word-break:break-word;">
+            <td class="emp-remarks" style="width:200px;color:#555;word-break:break-word;">
               ${escapeHtml(v.violation_description || "—")}
             </td>
-            <td style="padding:9px 12px;white-space:nowrap;">${escapeHtml(v.violation_date || "—")}</td>
-            <td style="padding:9px 12px;color:#aaa;font-size:11px;white-space:nowrap;">${escapeHtml(v.created_at || "—")}</td>
+            <td style="width:100px;">${escapeHtml(v.violation_date || "—")}</td>
+            <td class="emp-createdAt" style="color:#aaa;font-size:11px;">${escapeHtml(v.created_at || "—")}</td>
           </tr>`;
-        })
-        .join("")
+      }).join("")
     : `<tr><td colspan="5" style="text-align:center;padding:24px;color:#aaa;">No remarks history found.</td></tr>`;
+
+  _renderTabPagination("remarksTabPagination", "remarks", employeeId, rows.length, page, limit);
 }
 
+// ── Violation popup ───────────────────────────────────────────────────────────
 async function openViolationsModal(employeeId, fullname) {
   closeAllActionsPanels();
+
   const modal = document.getElementById("violationsModal");
   const title = document.getElementById("violationsModalTitle");
   const tbody = document.getElementById("violationsTableBody");
@@ -2505,6 +2753,7 @@ async function openViolationsModal(employeeId, fullname) {
 
 function openViolationPopup(fullname, violation, employeeId) {
   closeAllActionsPanels();
+
   const existing = document.getElementById("violationPopupOverlay");
   if (existing) existing.remove();
 
@@ -2525,31 +2774,56 @@ function openViolationPopup(fullname, violation, employeeId) {
   const overlay = document.createElement("div");
   overlay.id = "violationPopupOverlay";
   overlay.style.cssText = `
-    position:fixed;inset:0;background:rgba(0,0,0,0.35);
-    display:flex;align-items:center;justify-content:center;z-index:9999;
-  `;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.35);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:9999;`;
 
   const reportUrl = "incident_report.php?" + params.toString();
 
   const card = document.createElement("div");
-  card.style.cssText = `background:#fff;border:0.5px solid #e2e8f0;border-radius:12px;
-    padding:1.25rem;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.12);`;
+  card.style.cssText = `
+    background:#fff;
+    border:0.5px solid #e2e8f0;
+    border-radius:12px;
+    padding:1.25rem;
+    max-width:360px;
+    width:90%;
+    box-shadow:0 4px 20px rgba(0,0,0,0.12);`;
 
   const header = document.createElement("div");
-  header.style.cssText =
-    "display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;";
+  header.style.cssText = `
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:12px;`;
 
   const headerLabel = document.createElement("span");
-  headerLabel.style.cssText = "font-size:13px;font-weight:500;color:#64748b;";
-  headerLabel.textContent = `${fullname} — Remarks`;
+  headerLabel.style.cssText = `
+    font-size:13px;
+    font-weight:500;
+    color:#64748b;`;
+  headerLabel.textContent = `${toProperCase(fullname)} — Remarks`;
 
   const footer = document.createElement("div");
-  footer.style.cssText =
-    "display:flex;justify-content:end;align-items:center;margin-top:12px;";
+  footer.style.cssText = `
+    display:flex;
+    justify-content:end;
+    align-items:center;
+    margin-top:12px;`;
 
   const closeBtn = document.createElement("button");
-  closeBtn.style.cssText =
-    "background:none;border:none;font-size:16px;cursor:pointer;color:#94a3b8;line-height:1;padding:0;";
+  closeBtn.style.cssText = `
+    background:none;
+    border:none;
+    font-size:16px;
+    cursor:pointer;
+    color:#94a3b8;
+    line-height:1;
+    padding:0;`;
   closeBtn.textContent = "✕";
   closeBtn.onclick = () => overlay.remove();
 
@@ -2557,18 +2831,39 @@ function openViolationPopup(fullname, violation, employeeId) {
   header.appendChild(closeBtn);
 
   const body = document.createElement("div");
-  body.style.cssText =
-    "display:flex;align-items:flex-start;justify-content:space-between;gap:12px;";
+  body.style.cssText = `
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;`;
 
   const violationText = document.createElement("div");
-  violationText.style.cssText =
-    "font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;flex:1;max-height:200px;overflow-y:auto;word-break:break-word;";
+  violationText.style.cssText = `
+    font-size:13px;
+    color:#1e293b;
+    line-height:1.6;
+    white-space:pre-wrap;
+    flex:1;
+    max-height:200px;
+    overflow-y:auto;
+    word-break:break-word;`;
   violationText.textContent = violation;
 
   const attachBtn = document.createElement("button");
-  attachBtn.style.cssText = `display:inline-flex;align-items:center;gap:5px;padding:5px 12px;
-    font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;
-    border:0.5px solid #cbd5e1;border-radius:6px;background:#f8fafc;color:#1e293b;`;
+  attachBtn.style.cssText = `
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    padding:5px 12px;
+    font-size:12px;
+    font-weight:500;
+    cursor:pointer;
+    white-space:nowrap;
+    flex-shrink:0;
+    border:0.5px solid #cbd5e1;
+    border-radius:6px;
+    background:#f8fafc;
+    color:#1e293b;`;
   attachBtn.textContent = "📎 View Attachment";
   attachBtn.onclick = () => window.open(reportUrl, "_blank");
 
@@ -2587,198 +2882,7 @@ function openViolationPopup(fullname, violation, employeeId) {
   document.body.appendChild(overlay);
 }
 
-function updateSelectColor(select) {
-  if (!select) return;
-  const isPlaceholder = select.selectedIndex === 0;
-  select.style.color = isPlaceholder ? "#999" : "#000";
-  [...select.options].forEach((opt) => {
-    opt.style.color = "#000";
-  });
-}
-
-function updateColor() {
-  const selects = [
-    document.getElementById("search_position"),
-    document.getElementById("search_brand"),
-    document.getElementById("search_status"),
-    document.getElementById("search_shift"),
-    document.getElementById("search_violation"),
-  ];
-
-  selects.forEach(updateSelectColor);
-}
-
-function populateFilter(employeeList) {
-  const position = document.getElementById("search_position");
-  const brand = document.getElementById("search_brand");
-  const status = document.getElementById("search_status");
-  const shift = document.getElementById("search_shift");
-  const violation = document.getElementById("search_violation");
-  if (!position || !brand || !status || !shift || !violation) return;
-
-  function buildSelect(select, placeholder, noneLabel, valuesMap) {
-    const current = select.value;
-
-    select.innerHTML =
-      `<option value="" disabled selected hidden>${placeholder}</option>` +
-      `<option value="">Default: ALL</option>` +
-      `<option value="__none__">${noneLabel}</option>`;
-
-    if (valuesMap.size > 0) {
-      select.innerHTML += `<option disabled>──────────</option>`;
-
-      [...valuesMap.values()]
-        .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
-        .forEach((v) => {
-          const opt = document.createElement("option");
-          opt.value = v;
-          opt.textContent = toProperCase(v);
-          select.appendChild(opt);
-        });
-    }
-
-    if (current && [...select.options].some((o) => o.value === current)) {
-      select.value = current;
-    }
-  }
-
-  const positionMap = new Map();
-  const brandMap = new Map();
-  const statusMap = new Map();
-  const shiftMap = new Map();
-  const violationMap = new Map();
-
-  for (const emp of employeeList) {
-    const add = (map, raw) => {
-      const v = (raw || "").trim();
-      if (v && v.toLowerCase() !== "none") {
-        const key = v.toLowerCase();
-        if (!map.has(key)) map.set(key, v);
-      }
-    };
-
-    add(positionMap, emp.position);
-    add(brandMap, emp.brand);
-    add(statusMap, emp.status);
-    add(shiftMap, emp.shift);
-    add(violationMap, emp.violation);
-  }
-
-  buildSelect(position, "Position", "No Position", positionMap);
-  buildSelect(brand, "Brand", "No Brand", brandMap);
-  buildSelect(status, "Status", "No Status", statusMap);
-  buildSelect(shift, "Shift", "No Shift", shiftMap);
-  buildSelect(violation, "Violation", "No Violation", violationMap);
-
-  updateColor();
-}
-
-async function loadEmployees(
-  filters = {},
-  preservePage = false,
-  silent = false,
-) {
-  setControlButtonsDisabled(true);
-  try {
-    // if (!silent) showLoading(true);
-
-    if (Object.keys(filters).length === 0 && hasActiveFilters()) {
-      filters = getActiveFilters();
-    }
-
-    activeFilters = filters;
-
-    const params = new URLSearchParams({ action: "get" });
-
-    params.append("page", currentPage);
-    params.append("limit", itemsPerPage);
-
-    if (sortCol) {
-      params.append("sort_col", sortCol);
-      params.append("sort_dir", sortDir);
-    }
-
-    for (const [key, value] of Object.entries(filters)) {
-      if (key === "position" && value === "__none__") {
-        params.append("position_none", "1");
-      } else if (key === "brand" && value === "__none__") {
-        params.append("brand_none", "1");
-      } else if (key === "status" && value === "__none__") {
-        params.append("status_none", "1");
-      } else if (key === "shift" && value === "__none__") {
-        params.append("shift_none", "1");
-      } else if (key === "violation" && value === "__none__") {
-        params.append("violation_none", "1");
-      } else {
-        params.append(key, value);
-      }
-    }
-
-    const response = await fetch(`${EmployeesBackend}?${params.toString()}`, {
-      headers: { "X-Requested-With": "XMLHttpRequest" },
-    });
-
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-    const data = await response.json();
-
-    if (data.success && Array.isArray(data.data)) {
-      employees = data.data;
-      totalPages = data.pages;
-      totalRecords = data.total;
-
-      if (Array.isArray(data.filter_options)) {
-        allEmployees = data.filter_options;
-      }
-
-      if (Object.keys(filters).length === 0) {
-        allEmployeesUnfiltered = data.filter_options ?? data.data ?? [];
-      } else if (allEmployeesUnfiltered.length === 0) {
-        fetch(`${EmployeesBackend}?action=get&page=1&limit=99999`, {
-          headers: {
-            "X-Requested-With": "XMLHttpRequest",
-            "X-Silent-Request": "true",
-          },
-        })
-          .then((r) => r.json())
-          .then((d) => {
-            if (d.success && Array.isArray(d.filter_options))
-              allEmployeesUnfiltered = d.filter_options;
-          })
-          .catch(() => {});
-      }
-
-      if (!preservePage && Object.keys(filters).length === 0) {
-        currentPage = 1;
-      }
-
-      await renderEmployeeTable();
-      await updateTotalEmployees();
-      await updateActiveEmployees();
-      await updateDeleteButtonState();
-      await syncOrphanStatuses();
-
-      if (Object.keys(filters).length > 0) {
-        displayFilterStatus();
-      }
-    } else {
-      await renderEmployeeError("Network error. Please try again.");
-      showAlert(data.message || "Error loading employees", "error");
-    }
-  } catch (error) {
-    console.error("Error loading employees:", error);
-    await renderEmployeeError("Network error. Please try again.");
-    showAlert(
-      "Failed to load employees. Please check your connection.",
-      "error",
-    );
-  } finally {
-    // if (!silent) showLoading(false);
-    setControlButtonsDisabled(false);
-    updateDeleteButtonState();
-  }
-}
-
+// ── Close modal ───────────────────────────────────────────────────────────────
 function closeModal() {
   const employeeModal = document.getElementById("employeeModal");
   const deleteModal = document.getElementById("deleteModal");
@@ -3053,8 +3157,6 @@ async function handleFormSubmit(e) {
       const filtersToUse = hasActiveFilters() ? getActiveFilters() : {};
       await loadEmployees(filtersToUse, preservePage, true);
 
-      await updateTotalEmployees();
-      await updateActiveEmployees();
       await syncOrphanStatuses();
     } else {
       showAlert(data.message || "Failed to save employee", "error");
@@ -3070,51 +3172,89 @@ async function handleFormSubmit(e) {
   }
 }
 
-async function convertImageToWebP(file, quality = 0.85) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
+async function deleteEmployee(employeeId) {
+  try {
+    showLoading(true);
 
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
+    const formData = new FormData();
+    formData.append("action", "delete");
+    formData.append("id", employeeId);
 
-      const ctx = canvas.getContext("2d");
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0);
+    const response = await fetch(`${EmployeesBackend}`, {
+      method: "POST",
+      body: formData,
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
 
-      URL.revokeObjectURL(objectUrl);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            const webpName = file.name.replace(/\.[^.]+$/, ".webp");
-            resolve(new File([blob], webpName, { type: "image/webp" }));
-          } else {
-            resolve(file);
-          }
-        },
-        "image/webp",
-        quality,
-      );
-    };
+    const data = await response.json();
 
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      resolve(file);
-    };
-
-    img.src = objectUrl;
-  });
+    if (data.success) {
+      showAlert(data.message, "success");
+      await loadEmployees(activeFilters, true, true);
+      await syncOrphanStatuses();
+    } else {
+      showAlert(data.message, "error");
+    }
+  } catch (error) {
+    showAlert("Failed to delete employee", "error");
+  } finally {
+    showLoading(false);
+  }
 }
 
+async function deleteAllEmployees(employeeId) {
+  try {
+    showLoading(true);
+
+    const formData = new FormData();
+    formData.append("action", "delete_all");
+    formData.append("id", employeeId);
+
+    const response = await fetch(`${EmployeesBackend}`, {
+      method: "POST",
+      body: formData,
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
+
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+    const data = await response.json();
+
+    if (data.success) {
+      showAlert(data.message, "success");
+      currentPage = 1;
+      clearSearch();
+    } else {
+      showAlert(data.message, "error");
+    }
+  } catch (error) {
+    console.error("Error:", error);
+
+    currentPage = 1;
+    clearSearch();
+
+    if (error instanceof TypeError) {
+      showAlert("Network error: Failed to connect to server", "error");
+    } else if (error.message.includes("JSON")) {
+      showAlert("Server returned invalid response", "error");
+    } else {
+      showAlert("Delete all employee data", "success");
+    }
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ── File upload handler ───────────────────────────────────────────────────────
 function setupFileUploadHandler() {
   const imageInput = document.getElementById("image");
+  if (!imageInput) return;
 
   imageInput.addEventListener("change", async function (e) {
     const label = document.querySelector(".file-upload-label");
+    if (!label) return;
 
     if (e.target.files.length === 0) {
       label.innerHTML = `<i class="fas fa-file-image"></i> Click to select image (Max 5MB)`;
@@ -3185,78 +3325,240 @@ function setupFileUploadHandler() {
   });
 }
 
-async function deleteEmployee(employeeId) {
-  try {
-    showLoading(true);
+// ── Generic field autocomplete (filter bar only) ──────────────────
+function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
 
-    const formData = new FormData();
-    formData.append("action", "delete");
-    formData.append("id", employeeId);
+  const hidden = options.hiddenId
+    ? document.getElementById(options.hiddenId)
+    : null;
 
-    const response = await fetch(`${EmployeesBackend}`, {
-      method: "POST",
-      body: formData,
-      headers: { "X-Requested-With": "XMLHttpRequest" },
+  const existing = document.getElementById(listId);
+  if (existing) existing.remove();
+
+  const list = document.createElement("ul");
+  list.id = listId;
+  list.dataset.suggestionList = "1";
+  list.dataset.ownerInput = inputId;
+  list.style.cssText = `
+    display:none;position:fixed;z-index:99999;
+    background:#fff;border:1px solid #cbd5e1;
+    border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.15);
+    list-style:none;margin:0;padding:0;
+    max-height:260px;overflow:hidden;overflow-y:auto;min-width:160px;
+  `;
+  document.body.appendChild(list);
+
+  let idx = -1;
+
+  function selectItem(displayValue, rawValue) {
+    if (rawValue === "") {
+      input.value = "";
+      if (hidden) hidden.value = "";
+    } else {
+      input.value = displayValue;
+      if (hidden) hidden.value = rawValue;
+    }
+    list.style.display = "none";
+    idx = -1;
+    if (options.onSelect) options.onSelect(rawValue);
+  }
+
+  function positionList() {
+    const rect = input.getBoundingClientRect();
+    list.style.top = rect.bottom + 4 + "px";
+    list.style.left = rect.left + "px";
+    list.style.width = Math.max(rect.width, 200) + "px";
+  }
+
+  function show(q) {
+    if (!isInputVisible(input)) {
+      list.style.display = "none";
+      idx = -1;
+      return;
+    }
+
+    const lower = q.trim().toLowerCase();
+    const raw = getValues();
+    const items = [];
+
+    if (!options.noDefaultAll) {
+      items.push({ display: "Default: ALL", raw: "", special: "all" });
+    }
+
+    if (options.noneLabel) {
+      items.push({
+        display: options.noneLabel,
+        raw: "__none__",
+        special: "none",
+      });
+      items.push({ display: "──────────", raw: null, special: "divider" });
+    }
+
+    const seen = new Map();
+    raw
+      .map((v) => (v || "").trim())
+      .filter((v) => v && v.toLowerCase() !== "none")
+      .filter((v) => !lower || v.toLowerCase().includes(lower))
+      .forEach((v) => {
+        const key = v.toLowerCase();
+        if (!seen.has(key)) seen.set(key, v);
+      });
+
+    [...seen.values()].forEach((v) => {
+      items.push({ display: options.raw ? v : toProperCase(v), raw: v });
     });
 
-    const data = await response.json();
+    const visibleItems =
+      lower && !options.showAll ? items.filter((i) => !i.special) : items;
 
-    if (data.success) {
-      showAlert(data.message, "success");
-      await loadEmployees(activeFilters, true, true);
-      await updateTotalEmployees();
-      await updateActiveEmployees();
-      await syncOrphanStatuses();
-    } else {
-      showAlert(data.message, "error");
+    const hasRealItems = visibleItems.some((i) => !i.special);
+    if (!visibleItems.length || (lower && !hasRealItems)) {
+      list.style.display = "none";
+      idx = -1;
+      return;
     }
-  } catch (error) {
-    console.error("Error:", error);
-    showAlert("Failed to delete employee", "error");
-  } finally {
-    showLoading(false);
-  }
-}
 
-async function deleteAllEmployees(employeeId) {
-  try {
-    showLoading(true);
+    list.innerHTML = visibleItems
+      .map((item, i) => {
+        if (item.special === "divider") {
+          return `
+            <li data-raw="" data-display=""
+              style="padding:4px 12px;font-size:11px;color:#94a3b8;
+                    pointer-events:none;user-select:none;border-bottom:1px solid #f1f5f9;">
+                      ──────────
+            </li>
+          `;
+        }
 
-    const formData = new FormData();
-    formData.append("action", "delete_all");
-    formData.append("id", employeeId);
+        const safeDisplay = escapeHtml(item.display);
+        let hl = safeDisplay;
+        if (lower && !item.special) {
+          const regex = new RegExp(
+            `(${lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+            "gi",
+          );
+          hl = safeDisplay.replace(
+            regex,
+            '<mark style="background:#fef08a;border-radius:2px;">$1</mark>',
+          );
+        }
 
-    const response = await fetch(`${EmployeesBackend}`, {
-      method: "POST",
-      body: formData,
-      headers: { "X-Requested-With": "XMLHttpRequest" },
+        const isSpecial = item.special === "all" || item.special === "none";
+        const specialStyle = isSpecial
+          ? "font-weight:600;color:#1e40af;background:#f0f9ff;"
+          : "";
+
+        return `
+          <li data-raw="${escapeHtml(item.raw ?? "")}"
+            data-display="${safeDisplay}"
+            data-index="${i}"
+            style="padding:8px 12px;cursor:pointer;font-size:13px;
+                  border-bottom:1px solid #f1f5f9;
+                  display:flex;align-items:center;${specialStyle}">
+            ${hl}
+          </li>
+        `;
+      })
+      .join("");
+
+    list.querySelectorAll("li[data-raw]").forEach((li) => {
+      if (li.style.pointerEvents === "none") return;
+      li.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        selectItem(li.dataset.display, li.dataset.raw);
+      });
+      li.addEventListener("mouseover", () => {
+        list
+          .querySelectorAll("li")
+          .forEach((l) => (l.style.background = l === li ? "#f0f9ff" : ""));
+        idx = [...list.querySelectorAll("li")].indexOf(li);
+      });
     });
 
-    const data = await response.json();
-
-    if (data.success) {
-      showAlert(data.message, "success");
-      currentPage = 1;
-      clearSearch();
-    } else {
-      showAlert(data.message, "error");
-    }
-  } catch (error) {
-    console.error("Error:", error);
-
-    currentPage = 1;
-    clearSearch();
-
-    if (error instanceof TypeError) {
-      showAlert("Network error: Failed to connect to server", "error");
-    } else if (error.message.includes("JSON")) {
-      showAlert("Server returned invalid response", "error");
-    } else {
-      showAlert("Delete all employee data", "success");
-    }
-  } finally {
-    showLoading(false);
+    positionList();
+    list.style.display = "block";
+    idx = -1;
   }
+
+  input.addEventListener("focus", async () => {
+    if (options.requireInput && !input.value.trim()) return;
+    show(input.value);
+    if (options.onFocus) {
+      await options.onFocus();
+      show(input.value);
+    }
+  });
+
+  input.addEventListener("blur", () => {
+    setTimeout(() => {
+      if (!list.contains(document.activeElement)) {
+        list.style.display = "none";
+        idx = -1;
+      }
+    }, 150);
+  });
+
+  input.addEventListener("click", () => {
+    if (options.showAll) show(input.value);
+  });
+
+  input.addEventListener("input", () => show(input.value));
+
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (list.style.display !== "none") positionList();
+    },
+    true,
+  );
+  window.addEventListener("resize", () => {
+    if (list.style.display !== "none") positionList();
+  });
+
+  input.addEventListener("keydown", (e) => {
+    const liItems = [...list.querySelectorAll("li")].filter(
+      (l) => l.style.pointerEvents !== "none",
+    );
+    if (e.key === "Tab") {
+      list.style.display = "none";
+      idx = -1;
+      return;
+    }
+    if (!liItems.length || list.style.display === "none") return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      idx = Math.min(idx + 1, liItems.length - 1);
+      liItems.forEach(
+        (l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""),
+      );
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      idx = Math.max(idx - 1, 0);
+      liItems.forEach(
+        (l, j) => (l.style.background = j === idx ? "#f0f9ff" : ""),
+      );
+    } else if (e.key === "Enter" && idx >= 0) {
+      e.preventDefault();
+      selectItem(liItems[idx].dataset.display, liItems[idx].dataset.raw);
+    } else if (e.key === "Escape") {
+      list.style.display = "none";
+      idx = -1;
+    }
+  });
+
+  if (input._outsideClickHandler) {
+    document.removeEventListener("click", input._outsideClickHandler);
+  }
+
+  input._outsideClickHandler = (e) => {
+    if (!input.contains(e.target) && !list.contains(e.target)) {
+      list.style.display = "none";
+      idx = -1;
+    }
+  };
+  document.addEventListener("click", input._outsideClickHandler);
 }
 
 // ── Utils ─────────────────────────────────────────────────────────────
@@ -3278,6 +3580,18 @@ function toProperCase(str) {
   });
 }
 
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
 function formatDateDisplay(dateStr) {
   if (!dateStr || dateStr === "—") return "—";
   const [y, m, d] = String(dateStr).split("-");
@@ -3288,6 +3602,46 @@ function formatDateDisplay(dateStr) {
     year: "numeric",
     month: "short",
     day: "2-digit",
+  });
+}
+
+async function convertImageToWebP(file, quality = 0.85) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+
+      URL.revokeObjectURL(objectUrl);
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            const webpName = file.name.replace(/\.[^.]+$/, ".webp");
+            resolve(new File([blob], webpName, { type: "image/webp" }));
+          } else {
+            resolve(file);
+          }
+        },
+        "image/webp",
+        quality,
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file);
+    };
+
+    img.src = objectUrl;
   });
 }
 
@@ -3373,6 +3727,50 @@ function setControlButtonsDisabled(disabled) {
   });
 }
 
+// ── Cleanup ───────────────────────────────────────────────────────────────────
+window.addEventListener("beforeunload", () => {
+  if (_currentReservedCode && ProxcodeBackend) {
+    navigator.sendBeacon(
+      ProxcodeBackend,
+      new Blob(
+        [
+          `action=release_code&qr_code=${encodeURIComponent(_currentReservedCode)}`,
+        ],
+        { type: "application/x-www-form-urlencoded" },
+      ),
+    );
+  }
+});
+
+document.getElementById("qr_code")?.addEventListener("input", function () {
+  const val = this.value.trim();
+  if (
+    _currentReservedCode &&
+    val.toLowerCase() !== _currentReservedCode.trim().toLowerCase()
+  ) {
+    releaseReservedCode(_currentReservedCode);
+    stopReservationHeartbeat();
+    _currentReservedCode = null;
+  }
+});
+
+(function () {
+  const wait = setInterval(() => {
+    if (typeof window.closeModal === "function") {
+      clearInterval(wait);
+      const original = window.closeModal;
+      window.closeModal = function (...args) {
+        if (_currentReservedCode) {
+          releaseReservedCode(_currentReservedCode);
+          stopReservationHeartbeat();
+          _currentReservedCode = null;
+        }
+        return original.apply(this, args);
+      };
+    }
+  }, 50);
+})();
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async function () {
   const ready = await resolveEndpoints();
@@ -3383,5 +3781,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   updateDeleteButtonState();
   setupEventListeners();
   syncOrphanStatuses();
+  updateStatsPanel();
   bindSortHeaders();
+  startOrphanSyncPolling();
 });

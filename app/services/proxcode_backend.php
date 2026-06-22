@@ -60,6 +60,8 @@ const ALLOWED_GET_ACTIONS = [
   'sync_orphans',
 ];
 
+const RESERVATION_TTL_SECONDS = 300;
+
 class Database
 {
   private $mainConn;
@@ -145,9 +147,9 @@ class EmployeeManager
     return false;
   }
 
-  public function getEmployees($filters = [])
+  public function getEmployees($filters = [], $page = null, $limit = 25)
   {
-    $where  = "SELECT * FROM " . $this->table . " WHERE 1=1";
+    $where  = "WHERE 1=1";
     $params = [];
 
     if (!empty($filters['qr_code'])) {
@@ -175,6 +177,16 @@ class EmployeeManager
       $params[':updated_at'] = '%' . $filters['updated_at'] . '%';
     }
 
+    // ── Remarks filter (Occupied / Available) ──────────────────────────
+    if (!empty($filters['remarks'])) {
+      $manpowerDb = DB_NAME . '.employees';
+      if ($filters['remarks'] === 'Occupied') {
+        $where .= " AND EXISTS (SELECT 1 FROM {$manpowerDb} e WHERE LOWER(TRIM(e.qr_code)) = LOWER(TRIM({$this->table}.qr_code)))";
+      } elseif ($filters['remarks'] === 'Available') {
+        $where .= " AND NOT EXISTS (SELECT 1 FROM {$manpowerDb} e WHERE LOWER(TRIM(e.qr_code)) = LOWER(TRIM({$this->table}.qr_code)))";
+      }
+    }
+
     // ── Build ORDER BY ────────────────────────────────────────────────
     $client_only_cols   = ['remarks'];
     $allowed_sort_cols  = ['status', 'created_at', 'updated_at'];
@@ -182,26 +194,56 @@ class EmployeeManager
     $raw_sort = $filters['sort_col'] ?? '';
     $sort_col = in_array($raw_sort, $client_only_cols, true)
       ? 'created_at'
-      : (in_array($raw_sort, $allowed_sort_cols, true) ? $raw_sort : 'created_at');;
+      : (in_array($raw_sort, $allowed_sort_cols, true) ? $raw_sort : 'created_at');
 
     $sort_dir = (isset($filters['sort_dir']) && strtolower($filters['sort_dir']) === 'asc')
       ? 'ASC' : 'DESC';
 
     $sql_col = $sort_col === 'status' ? 'is_active' : $sort_col;
 
-    $where .= " ORDER BY {$sql_col} {$sort_dir}";
+    $order = "ORDER BY {$sql_col} {$sort_dir}";
 
-    $stmt = $this->conn->prepare($where);
-    foreach ($params as $key => $value) {
-      $stmt->bindValue($key, $value);
+    if ($page === null) {
+      $stmt = $this->conn->prepare(
+        "SELECT * FROM {$this->table} {$where} {$order}"
+      );
+      foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+      }
+      $stmt->execute();
+      return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    $stmt->execute();
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $countStmt = $this->conn->prepare(
+      "SELECT COUNT(*) FROM {$this->table} {$where}"
+    );
+    foreach ($params as $key => $value) {
+      $countStmt->bindValue($key, $value);
+    }
+    $countStmt->execute();
+    $total = (int) $countStmt->fetchColumn();
+
+    $offset = ($page - 1) * $limit;
+    $dataStmt = $this->conn->prepare(
+      "SELECT * FROM {$this->table} {$where} {$order} LIMIT :limit OFFSET :offset"
+    );
+    foreach ($params as $key => $value) {
+      $dataStmt->bindValue($key, $value);
+    }
+    $dataStmt->bindValue(':limit',  $limit,  PDO::PARAM_INT);
+    $dataStmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $dataStmt->execute();
+
+    return [
+      'data'  => $dataStmt->fetchAll(PDO::FETCH_ASSOC),
+      'total' => $total,
+    ];
   }
 
   public function updateEmployee($id, $data)
   {
+    $current = $this->getEmployee($id);
+
     $query = "UPDATE " . $this->table . " 
                       SET qr_code = :qr_code, is_active = :is_active, updated_at = :updated_at
                       WHERE id = :id";
@@ -217,6 +259,19 @@ class EmployeeManager
     if ($result && $this->userId) {
       logSystemAction($this->userId, 'CODE_UPDATED', "Updated code: " . $data['qr_code']);
     }
+
+    if ($result && $current) {
+      $oldIsActive = (int)$current['is_active'];
+      $newIsActive = isset($data['is_active']) ? (int)$data['is_active'] : 1;
+
+      // Keep the linked employee's status in sync the instant this code's
+      // enabled state (or the qr_code text itself) changes, instead of
+      // waiting on the next sync_orphans poll.
+      if ($oldIsActive !== $newIsActive || $current['qr_code'] !== $data['qr_code']) {
+        $this->syncEmployeeStatusWithCode($data['qr_code'], $newIsActive);
+      }
+    }
+
     return $result;
   }
 
@@ -301,8 +356,8 @@ class EmployeeManager
         try {
           $hist = $userConn->prepare(
             "INSERT INTO status_history
-               (employee_id, old_status, new_status, changed_by, change_reason, created_at)
-             VALUES (:eid, :old, 'Inactive', :by, :reason, :ts)"
+              (employee_id, old_status, new_status, changed_by, change_reason, created_at)
+            VALUES (:eid, :old, 'Inactive', :by, :reason, :ts)"
           );
           $hist->execute([
             ':eid'    => $employee['id'],
@@ -349,8 +404,8 @@ class EmployeeManager
       try {
         $hist = $userConn->prepare(
           "INSERT INTO status_history
-       (employee_id, old_status, new_status, changed_by, change_reason, created_at)
-     VALUES (:eid, :old, 'Active', :by, :reason, :ts)"
+            (employee_id, old_status, new_status, changed_by, change_reason, created_at)
+          VALUES (:eid, :old, 'Active', :by, :reason, :ts)"
         );
         $hist->execute([
           ':eid'    => $employee['id'],
@@ -472,13 +527,69 @@ class EmployeeManager
   public function getProxcodeStats()
   {
     $stats = [];
+    $manpowerDb = DB_NAME . '.employees';
 
-    $query = "SELECT COUNT(*) as total FROM " . $this->table;
-    $stmt  = $this->conn->prepare($query);
+    $stmt = $this->conn->prepare("SELECT COUNT(*) as total FROM " . $this->table);
     $stmt->execute();
-    $stats['total'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    $stats['total'] = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'];
+
+    $stmt = $this->conn->prepare(
+      "SELECT COUNT(*) as cnt FROM {$this->table}
+     WHERE EXISTS (
+       SELECT 1 FROM {$manpowerDb} e
+       WHERE LOWER(TRIM(e.qr_code)) = LOWER(TRIM({$this->table}.qr_code))
+     )"
+    );
+    $stmt->execute();
+    $stats['occupied'] = (int)$stmt->fetch(PDO::FETCH_ASSOC)['cnt'];
+
+    $stats['available'] = $stats['total'] - $stats['occupied'];
 
     return $stats;
+  }
+
+  public function clearStaleReservations()
+  {
+    $staleCutoff = date('Y-m-d H:i:s', time() - RESERVATION_TTL_SECONDS);
+    $stmt = $this->conn->prepare(
+      "UPDATE " . $this->table . "
+       SET reserved_by = NULL, reserved_at = NULL
+       WHERE reserved_at IS NOT NULL AND reserved_at < :stale"
+    );
+    $stmt->execute([':stale' => $staleCutoff]);
+  }
+
+  public function reserveCode($qr_code, $reservedBy)
+  {
+    $this->clearStaleReservations();
+
+    $stmt = $this->conn->prepare(
+      "UPDATE " . $this->table . "
+       SET reserved_by = :reserved_by, reserved_at = :now
+       WHERE qr_code = :qr_code
+         AND is_active = 1
+         AND (reserved_by IS NULL OR reserved_by = :reserved_by_check)"
+    );
+    $stmt->execute([
+      ':reserved_by'       => $reservedBy,
+      ':now'               => date('Y-m-d H:i:s'),
+      ':qr_code'           => $qr_code,
+      ':reserved_by_check' => $reservedBy,
+    ]);
+
+    return $stmt->rowCount() > 0;
+  }
+
+  public function releaseCode($qr_code, $reservedBy)
+  {
+    $stmt = $this->conn->prepare(
+      "UPDATE " . $this->table . "
+       SET reserved_by = NULL, reserved_at = NULL
+       WHERE qr_code = :qr_code AND reserved_by = :reserved_by"
+    );
+    $stmt->execute([':qr_code' => $qr_code, ':reserved_by' => $reservedBy]);
+
+    return $stmt->rowCount() > 0;
   }
 }
 
@@ -579,9 +690,10 @@ try {
     exit;
   }
 
-  $database        = new Database();
-  $employeeManager = new EmployeeManager($database);
-  $fileUploader    = new FileUploader($database->getCurrentUserId());
+  $database         = new Database();
+  $employeeManager  = new EmployeeManager($database);
+  $reservationKey   = $database->getCurrentUserId() . '_' . session_id();
+  $fileUploader     = new FileUploader($database->getCurrentUserId());
 
   $response = ['success' => false, 'message' => '', 'data' => null];
 
@@ -927,6 +1039,32 @@ try {
         }
         break;
 
+      case 'reserve_code':
+        $qr_code = sanitizeInput($_POST['qr_code'] ?? '');
+
+        if (empty($qr_code)) {
+          $response['message'] = 'Proximity code is required';
+          break;
+        }
+
+        $reserved = $employeeManager->reserveCode($qr_code, $reservationKey);
+
+        $response['success'] = $reserved;
+        $response['message'] = $reserved
+          ? 'Code reserved'
+          : 'This code was just taken by another user';
+        break;
+
+      case 'release_code':
+        $qr_code = sanitizeInput($_POST['qr_code'] ?? '');
+
+        if (!empty($qr_code)) {
+          $employeeManager->releaseCode($qr_code, $reservationKey);
+        }
+
+        $response['success'] = true;
+        break;
+
       default:
         $response['message'] = 'Invalid action specified: ' . htmlspecialchars($action);
         break;
@@ -937,13 +1075,15 @@ try {
     switch ($action) {
       case 'get':
       case 'list':
+        $employeeManager->clearStaleReservations();
         $filters = [];
-
-        unset($filters['remarks']);
 
         if (!empty($_GET['qr_code'])) $filters['qr_code'] = sanitizeInput($_GET['qr_code']);
         if (isset($_GET['is_active']) && $_GET['is_active'] !== '') {
           $filters['is_active'] = (int)$_GET['is_active'];
+        }
+        if (!empty($_GET['remarks']) && in_array($_GET['remarks'], ['Occupied', 'Available'], true)) {
+          $filters['remarks'] = $_GET['remarks'];
         }
         if (!empty($_GET['created_at'])) {
           $d = $_GET['created_at'];
@@ -964,11 +1104,20 @@ try {
         if (!empty($_GET['sort_col'])) $filters['sort_col'] = $_GET['sort_col'];
         if (!empty($_GET['sort_dir'])) $filters['sort_dir'] = $_GET['sort_dir'];
 
+        $page  = max(1, (int)($_GET['page']  ?? 1));
+        $limit = max(1, (int)($_GET['limit'] ?? 25));
+
         try {
-          $employees           = $employeeManager->getEmployees($filters);
-          $response['success'] = true;
-          $response['data']    = $employees;
-          $response['total']   = count($employees);
+          $result  = $employeeManager->getEmployees($filters, $page, $limit);
+          $allRows = $employeeManager->getEmployees($filters, null);
+
+          $response['success']          = true;
+          $response['data']             = $result['data'];
+          $response['total']            = $result['total'];
+          $response['page']             = $page;
+          $response['pages']            = ceil($result['total'] / $limit);
+          $response['filter_options']   = $allRows;
+          $response['reservation_key']  = $reservationKey;
         } catch (Exception $e) {
           $response['message'] = 'Error retrieving proximity codes.';
         }
@@ -1156,7 +1305,12 @@ try {
             $histStmt->execute([':id' => $emp['id']]);
             $lastReason = $histStmt->fetchColumn();
 
-            if (!$lastReason || strpos($lastReason, 'Auto-disabled') === false) {
+            $isAutoInactive = $lastReason && (
+              strpos($lastReason, 'Auto-disabled') !== false ||
+              strpos($lastReason, 'Auto-set Inactive') !== false
+            );
+
+            if (!$isAutoInactive) {
               continue;
             }
 

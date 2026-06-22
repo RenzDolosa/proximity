@@ -365,9 +365,15 @@ try {
                   </div>
                 </div>
               </div>
-              <button type="submit" name="change_password" class="btn btn-primary" tabindex="-1">
-                <i class="fas fa-key"></i> Change Password
-              </button>
+              <div class="form-row-btn">
+                <div class="form-row">
+                  <div>
+                    <button type="submit" name="change_password" class="btn btn-primary" tabindex="-1">
+                      <i class="fas fa-key"></i> Change Password
+                    </button>
+                  </div>
+                </div>
+              </div>
             </form>
           </div>
         </div>

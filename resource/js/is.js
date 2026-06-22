@@ -48,12 +48,14 @@ async function previewFile() {
   }
 
   try {
-    let data;
+    const data =
+      fileExtension === "csv"
+        ? await parseCSVFile(file)
+        : await parseExcelFile(file);
 
-    if (fileExtension === "csv") {
-      data = await parseCSVFile(file);
-    } else {
-      data = await parseExcelFile(file);
+    if (!data || data.length === 0) {
+      showAlert("No data found in file", "error");
+      return;
     }
 
     displayPreview(data);
@@ -65,15 +67,20 @@ async function previewFile() {
 async function parseCSVFile(file) {
   const text = await file.text();
   const lines = text.split("\n").filter((line) => line.trim());
-  const skipHeader = document.getElementById("skipHeader").checked;
+  const skipHeader = document.getElementById("skipHeader")?.checked ?? true;
   const startIndex = skipHeader ? 1 : 0;
-  const previewLines = lines.slice(startIndex, startIndex + 5);
+  const previewLines = lines.slice(startIndex, startIndex + 10);
 
   return previewLines.map((line) => parseCSVLine(line));
 }
 
 async function parseExcelFile(file) {
   return new Promise((resolve, reject) => {
+    if (typeof XLSX === "undefined") {
+      reject(new Error("XLSX library not loaded"));
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = function (e) {
       try {
@@ -82,8 +89,12 @@ async function parseExcelFile(file) {
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-        const skipHeader = document.getElementById("skipHeader").checked;
+        if (!jsonData.length) {
+          reject(new Error("Sheet is empty"));
+          return;
+        }
+        const skipHeader =
+          document.getElementById("skipHeader")?.checked ?? true;
         const startIndex = skipHeader ? 1 : 0;
         const previewData = jsonData.slice(startIndex, startIndex + 10);
 
@@ -98,7 +109,17 @@ async function parseExcelFile(file) {
 }
 
 function displayPreview(data) {
-  let previewHTML = '<table class="preview-table"><thead><tr>';
+  const container = document.getElementById("importPreview");
+  if (!container) return;
+
+  if (!data || !data.length) {
+    container.innerHTML = '<p style="color:#dc3545;">No data to preview</p>';
+    container.style.display = "block";
+    return;
+  }
+
+  let previewHTML =
+    '<h4>Preview (First 10 rows):</h4><table class="preview-table"><thead><tr>';
   previewHTML += `<th>SN</th>
     <th>EMPID</th>
     <th>Fullname</th>
@@ -115,7 +136,7 @@ function displayPreview(data) {
 
   data.forEach((col, index) => {
     previewHTML += "<tr>";
-    previewHTML += `<td>${index + 1}</td>`;
+    previewHTML += `<td><span class="badge badge-info">${index + 1}</span></td>`;
     for (let i = 0; i < 7; i++) {
       previewHTML += `<td>${col[i] || ""}</td>`;
     }
@@ -225,9 +246,8 @@ function displayPreview(data) {
   });
 
   previewHTML += "</tbody></table>";
-
-  document.getElementById("importPreview").innerHTML = previewHTML;
-  document.getElementById("importPreview").style.display = "block";
+  container.innerHTML = previewHTML;
+  container.style.display = "block";
 }
 
 function formatDateValue(value) {
@@ -291,9 +311,15 @@ function parseCSVLine(line) {
 }
 
 async function handleImportSubmit(e) {
-  e.preventDefault();
+  if (e) e.preventDefault();
 
   const fileInput = document.getElementById("dataFile");
+
+  if (!fileInput) {
+    showAlert("File input element not found", "error");
+    return;
+  }
+
   const file = fileInput.files[0];
 
   if (!file) {
@@ -320,21 +346,23 @@ async function handleImportSubmit(e) {
       dataRows = await processExcelFile(file);
     }
 
+    updateProgress(10);
+
     if (dataRows.length === 0) {
       showAlert("No data found in file", "error");
       showImportProgress(false);
       return;
     }
 
-    updateImportStatus(`Processing ${dataRows.length} employees...`);
+    updateProgress(20);
+    updateImportStatus(`Processing ${dataRows.length} employee's...`);
 
     const employees = [];
     const errors = [];
+    const skipHeader = document.getElementById("skipHeader")?.checked ?? true;
 
     dataRows.forEach((row, index) => {
-      const rowNumber = document.getElementById("skipHeader").checked
-        ? index + 2
-        : index + 1;
+      const rowNumber = skipHeader ? index + 2 : index + 1;
 
       if (!row[0]) {
         errors.push(`Row ${rowNumber}: Missing required fields (empid)`);
@@ -382,11 +410,14 @@ async function handleImportSubmit(e) {
       return;
     }
 
-    // Send to backend
+    updateProgress(40);
+    updateImportStatus("Preparing upload...");
+
     const formData = new FormData();
     formData.append("action", "import");
     formData.append("employees", JSON.stringify(employees));
 
+    updateProgress(60);
     updateImportStatus("Importing employees to database...");
 
     const response = await fetch(`${EmployeesBackend}`, {
@@ -397,17 +428,25 @@ async function handleImportSubmit(e) {
       },
     });
 
+    if (!response.ok)
+      throw new Error(`HTTP ${response.status} ${response.statusText}`);
+
+    updateProgress(80);
+
     const data = await response.json();
 
     if (data.success) {
       updateProgress(100);
 
-      let statusMessage = `Successfully imported ${data.imported_count} employees!`;
-      let alertMessage = `Import completed! ${data.imported_count} employees imported successfully.`;
+      const imported = data.imported_count || employees.length;
+      const duplicates = data.duplicates_count || 0;
 
-      if (data.duplicates_count && data.duplicates_count > 0) {
-        statusMessage += ` (${data.duplicates_count} duplicates allowed)`;
-        alertMessage += `\n${data.duplicates_count} duplicate employees were imported as separate records.`;
+      let statusMessage = `Successfully imported ${imported} employees!`;
+      let alertMessage = `Import completed! ${imported} employees imported successfully.`;
+
+      if (duplicates > 0) {
+        statusMessage += `\n(${duplicates} duplicates allowed)`;
+        alertMessage += `\n${duplicates} duplicate employees were imported as separate records.`;
       }
 
       if (data.errors && data.errors.length > 0) {
@@ -438,7 +477,6 @@ async function handleImportSubmit(e) {
       showAlert(data.message, "error");
     }
   } catch (error) {
-    console.error("Import error:", error);
     showAlert("Import failed: " + error.message, "error");
   } finally {
     setTimeout(() => {
@@ -450,7 +488,7 @@ async function handleImportSubmit(e) {
 async function processCSVFile(file) {
   const text = await file.text();
   const lines = text.split("\n").filter((line) => line.trim());
-  const skipHeader = document.getElementById("skipHeader").checked;
+  const skipHeader = document.getElementById("skipHeader")?.checked ?? true;
   const dataLines = skipHeader ? lines.slice(1) : lines;
 
   return dataLines.map((line) => parseCSVLine(line));
@@ -467,7 +505,8 @@ async function processExcelFile(file) {
         const worksheet = workbook.Sheets[firstSheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-        const skipHeader = document.getElementById("skipHeader").checked;
+        const skipHeader =
+          document.getElementById("skipHeader")?.checked ?? true;
         const dataRows = skipHeader ? jsonData.slice(1) : jsonData;
 
         const filteredRows = dataRows.filter(
@@ -488,40 +527,26 @@ async function processExcelFile(file) {
   });
 }
 
+// ── PROGRESS HELPERS ──────────────────────────────────────────────────────
 function showImportProgress(show) {
-  document.getElementById("importProgress").style.display = show
-    ? "block"
-    : "none";
-  if (show) {
-    updateProgress(0);
+  const el = document.getElementById("importProgress");
+  if (el) {
+    el.style.display = show ? "block" : "none";
+    if (show) updateProgress(0);
   }
 }
 
 function updateProgress(percent) {
-  document.getElementById("progressFill").style.width = percent + "%";
-  document.getElementById("progressFill").textContent = percent + "%";
+  const fill = document.getElementById("progressFill");
+  if (fill) {
+    fill.style.width = percent + "%";
+    fill.textContent = percent + "%";
+  }
 }
 
 function updateImportStatus(message) {
-  document.getElementById("importStatus").textContent = message;
-}
-
-function showAlert(message, type = "info") {
-  const existingAlerts = document.querySelectorAll(".alert");
-  existingAlerts.forEach((alert) => alert.remove());
-
-  const alert = document.createElement("div");
-  alert.className = `alert alert-${type}`;
-  alert.innerHTML = `
-    <span>${message}</span>
-    <button onclick="this.parentElement.remove()" style="float: right; background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 5px;"><i class="fas fa-times"></i></button>
-  `;
-
-  document.body.insertBefore(alert, document.body.firstChild);
-
-  setTimeout(() => {
-    if (alert.parentElement) alert.remove();
-  }, 5000);
+  const el = document.getElementById("importStatus");
+  if (el) el.textContent = message;
 }
 
 window.onclick = function (event) {

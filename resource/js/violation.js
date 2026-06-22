@@ -3,11 +3,15 @@
 let ViolationBackend = null;
 
 // ── State ────────────────────────────────────────────────────────────
+let deleteTargetId = null;
+
+let currentPage = 1;
+const itemsPerPage = 25;
+let totalPages = 1;
+let totalRecords = 0;
+
 let allVio = [];
 let filteredVio = [];
-let currentPage = 1;
-const PER_PAGE = 25;
-let deleteTargetId = null;
 
 let sortCol = null;
 let sortDir = "asc";
@@ -25,6 +29,10 @@ new IntersectionObserver(([e]) => {
 
 // ── Load ─────────────────────────────────────────────────────────────
 async function loadViolations() {
+  if (!ViolationBackend) {
+    return;
+  }
+
   setControlButtonsDisabled(true);
   try {
     const res = await fetch(`${ViolationBackend}?action=list`, {
@@ -38,13 +46,49 @@ async function loadViolations() {
       applyFilters();
       refreshStats();
     } else {
-      showNoData();
+      renderEmployeeError();
     }
   } catch (e) {
     showAlert("Failed to load violations.", "error");
-    showNoData();
+    renderEmployeeError();
   } finally {
     setControlButtonsDisabled(false);
+  }
+}
+
+function setupEventListeners() {
+  (function () {
+    const controlsEl = document.querySelector(".controls");
+    const tableHeaderEl = document.querySelector(".table-header");
+
+    function sync() {
+      if (controlsEl) {
+        document.documentElement.style.setProperty(
+          "--controls-h",
+          controlsEl.offsetHeight + "px",
+        );
+      }
+      if (tableHeaderEl) {
+        document.documentElement.style.setProperty(
+          "--table-header-h",
+          tableHeaderEl.offsetHeight + "px",
+        );
+      }
+    }
+
+    sync();
+
+    if (controlsEl) new ResizeObserver(sync).observe(controlsEl);
+    if (tableHeaderEl) new ResizeObserver(sync).observe(tableHeaderEl);
+  })();
+
+  const theadWrap = document.querySelector(".thead-sticky-wrap");
+  const tbodyWrap = document.querySelector(".table-scroll-wrap");
+
+  if (theadWrap && tbodyWrap) {
+    tbodyWrap.addEventListener("scroll", () => {
+      theadWrap.scrollLeft = tbodyWrap.scrollLeft;
+    });
   }
 }
 
@@ -405,7 +449,7 @@ function updateFilterStatus() {
     const strong = document.createElement("strong");
     strong.textContent = `${key}:`;
     text.appendChild(strong);
-    text.appendChild(document.createTextNode(` ${value}`));
+    text.appendChild(document.createTextNode(` ${toProperCase(value)}`));
   });
 
   label.appendChild(text);
@@ -448,9 +492,11 @@ function bindSortHeaders() {
 
 // ── Render table ──────────────────────────────────────────────────
 function renderTable() {
-  const tbody = document.getElementById("violationTableBody");
+  const tbody = document.getElementById("employeeTableBody");
   const paginationDiv = document.getElementById("pagination");
   const noDataDiv = document.getElementById("no-data");
+
+  if (!tbody) return;
 
   if (!filteredVio || filteredVio.length === 0) {
     tbody.innerHTML = "";
@@ -460,14 +506,12 @@ function renderTable() {
   }
 
   if (noDataDiv) noDataDiv.style.display = "none";
-  
+
   if (sortCol) {
     filteredVio.sort((a, b) => {
       let va = a[sortCol] ?? "";
       let vb = b[sortCol] ?? "";
 
-      // Dates: compare as strings (ISO format sorts correctly)
-      // Strings: locale-aware, case-insensitive
       const cmp =
         typeof va === "string" && typeof vb === "string"
           ? va.localeCompare(vb, undefined, { sensitivity: "base" })
@@ -481,12 +525,13 @@ function renderTable() {
     });
   }
 
-  const totalPages = Math.ceil(filteredVio.length / PER_PAGE);
+  totalRecords = filteredVio.length;
+  totalPages = Math.ceil(totalRecords / itemsPerPage);
   if (currentPage > totalPages) currentPage = totalPages;
   if (currentPage < 1) currentPage = 1;
 
-  const startIndex = (currentPage - 1) * PER_PAGE;
-  const slice = filteredVio.slice(startIndex, startIndex + PER_PAGE);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const slice = filteredVio.slice(startIndex, startIndex + itemsPerPage);
 
   tbody.innerHTML = slice
     .map((v, index) => {
@@ -506,7 +551,7 @@ function renderTable() {
           <div class="emp-name"><strong>${safeFullname}</strong></div>
           <div class="emp-id"><strong>EMPID: ${safeEmpId}</strong></div>
         </td>
-        <td><span class="badge ${badge}">${safeViolation || "—"}</span></td>
+        <td class="emp-remark"><span class="badge ${badge}">${safeViolation || "—"}</span></td>
         <td class="desc-cell"><small>${safeDescription || "—"}</small></td>
         <td><small>${safeDate}</small></td>
         <td class="emp-createdAt"><small>${safeCreatedAt}</small></td>
@@ -514,7 +559,7 @@ function renderTable() {
         ${
           window.PERMISSIONS.delete
             ? `
-        <td style="position:relative;width:160px;overflow:visible;">
+        <td class="emp-actions">
           <button
             data-emp-id="${safeId}"
             class="actions-toggle-btn actions-item"
@@ -545,7 +590,7 @@ function renderTable() {
     })
     .join("");
 
-  renderPagination(totalPages);
+  updatePaginationControls();
 }
 
 // ── Actions panel (identical to system.js) ────────────────────────
@@ -660,60 +705,51 @@ function getBadgeClass(type) {
 }
 
 // ── Pagination ───────────────────────────────────────────────────
-function renderPagination(totalPages) {
-  const pg = document.getElementById("pagination");
-  if (!pg) return;
+function updatePaginationControls() {
+  const paginationDiv = document.getElementById("pagination");
+  if (!paginationDiv) return;
 
   if (totalPages <= 1) {
-    pg.style.display = "none";
+    paginationDiv.style.display = "none";
     return;
   }
 
-  pg.style.display = "flex";
+  paginationDiv.style.display = "flex";
 
   const delta = 2;
-  const range = new Set([1, totalPages]);
+  const range = new Set();
+  range.add(1);
+  range.add(totalPages);
   for (
-    let p = Math.max(2, currentPage - delta);
-    p <= Math.min(totalPages - 1, currentPage + delta);
-    p++
+    let i = Math.max(2, currentPage - delta);
+    i <= Math.min(totalPages - 1, currentPage + delta);
+    i++
   ) {
-    range.add(p);
+    range.add(i);
   }
 
   const sorted = [...range].sort((a, b) => a - b);
-  let prev = null,
-    html = "";
-
-  html += `<button class="page-arrow-btn" tabindex="-1" onclick="goTo(${currentPage - 1})"
-             ${currentPage <= 1 ? "disabled" : ""}>
-             <i class="fas fa-arrow-left"></i>
-           </button>`;
+  let prev = null;
+  let buttonsHTML = "";
 
   for (const p of sorted) {
     if (prev !== null && p - prev > 1) {
-      html += `<span class="page-ellipsis">…</span>`;
+      buttonsHTML += `<span class="page-ellipsis">…</span>`;
     }
-    html += `<button class="page-num-btn ${currentPage === p ? "active" : ""}"
-               tabindex="-1" onclick="goTo(${p})">${p}</button>`;
+    buttonsHTML += `<button class="page-num-btn ${currentPage === p ? "active" : ""}" onclick="goToPage(${p})">${p}</button>`;
     prev = p;
   }
 
-  html += `<button class="page-arrow-btn" tabindex="-1" onclick="goTo(${currentPage + 1})"
-             ${currentPage >= totalPages ? "disabled" : ""}>
-             <i class="fas fa-arrow-right"></i>
-           </button>`;
-  html += `<span id="page-info">
-             ${filteredVio.length} total &nbsp;|&nbsp;
-             Page ${currentPage} of ${totalPages}
-           </span>`;
-
-  pg.innerHTML = html;
-}
-
-function goTo(p) {
-  currentPage = p;
-  renderTable();
+  paginationDiv.innerHTML = `
+    <button class="page-arrow-btn" tabindex="-1" onclick="previousPage()" ${currentPage <= 1 ? "disabled" : ""}>
+      <i class="fas fa-arrow-left"></i>
+    </button>
+    ${buttonsHTML}
+    <button class="page-arrow-btn" tabindex="-1" onclick="nextPage()" ${currentPage >= totalPages ? "disabled" : ""}>
+      <i class="fas fa-arrow-right"></i>
+    </button>
+    <span id="page-info">${totalRecords} total &nbsp;|&nbsp; Page ${currentPage} of ${totalPages}</span>
+  `;
 }
 
 function previousPage() {
@@ -724,17 +760,42 @@ function previousPage() {
 }
 
 function nextPage() {
-  const totalPages = Math.ceil(filteredVio.length / PER_PAGE);
   if (currentPage < totalPages) {
     currentPage++;
     renderTable();
   }
 }
 
-function showNoData() {
-  document.getElementById("violationTableBody").innerHTML = "";
-  document.getElementById("no-data").style.display = "block";
-  document.getElementById("pagination").style.display = "none";
+function goToPage(page) {
+  if (page >= 1 && page <= totalPages) {
+    currentPage = page;
+    renderTable();
+  }
+}
+
+async function renderEmployeeError(message = "Failed to load remarks data.") {
+  const tbody = document.getElementById("employeeTableBody");
+  const paginationDiv = document.getElementById("pagination");
+  const noDataDiv = document.getElementById("no-data");
+
+  if (!tbody) return;
+
+  if (!filteredVio || filteredVio.length === 0) {
+    tbody.innerHTML = "";
+    if (paginationDiv) paginationDiv.style.display = "none";
+    if (noDataDiv) noDataDiv.style.display = "block";
+    return;
+  }
+
+  if (noDataDiv) noDataDiv.style.display = "none";
+
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="13" style="text-align: center; padding: 20px; color: #c0392b;">
+        ⚠️ ${escapeHtml(message)}
+      </td>
+    </tr>
+  `;
 }
 
 function refreshStats() {
@@ -760,7 +821,7 @@ function openDeleteModal(id, name, type) {
   document.getElementById("deleteModalMessage").innerHTML =
     `Delete the <strong>${escapeHtml(type)}</strong> violation for
      <strong>${escapeHtml(name)}</strong>?
-     <br><strong style="color:#d63031;">This cannot be undone.</strong>`;
+     <br><strong style="color: #d63031;">This cannot be undone.</strong>`;
   document.getElementById("deleteModal").style.display = "flex";
 }
 
@@ -889,6 +950,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   initDateRangePicker();
   loadViolations();
+  setupEventListeners()
   setupFilterSuggestions();
   bindSortHeaders();
 

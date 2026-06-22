@@ -10,7 +10,9 @@ let searchTimeout;
 let currentResults = [];
 let displayTimeout;
 let currentAudio = null;
-let activeController = null;
+
+let scanQueue = [];
+let isProcessing = false;
 
 // ── Global-audio endpoint ─────────────────────────────────────────
 const AUDIO_TYPE_MAP = {
@@ -23,8 +25,6 @@ const AUDIO_TYPE_MAP = {
 
 // ─────────────────────────────────────────────────────────────────
 //  SECURITY: Read the CSRF token from the meta tag injected by PHP.
-//  This token is attached to every POST request so the backend can
-//  verify the request originated from this page, not a foreign site.
 // ─────────────────────────────────────────────────────────────────
 function getCsrfToken() {
   const meta = document.querySelector('meta[name="csrf-token"]');
@@ -87,38 +87,74 @@ function imageUrl(filename) {
     : null;
 }
 
+async function processQueue() {
+  if (isProcessing || scanQueue.length === 0) return;
+
+  isProcessing = true;
+  const query = scanQueue.shift();
+
+  try {
+    await searchEmployees(query);
+  } catch (e) {
+    console.error("Queue processing error:", e);
+  } finally {
+    isProcessing = false;
+    if (scanQueue.length > 0) {
+      const latest = scanQueue[scanQueue.length - 1];
+      scanQueue = [];
+      scanQueue.push(latest);
+    }
+    processQueue();
+  }
+}
+
+function enqueueSearch(query) {
+  scanQueue.push(query);
+  processQueue();
+}
+
 // ─────────────────────────────────────────────────────────────────
 //  Event listeners
 // ─────────────────────────────────────────────────────────────────
 function setupEventListeners() {
-  searchInput.addEventListener("input", function (e) {
-    clearTimeout(searchTimeout);
-    clearTimeout(searchInput.autoClearTimeout);
-    const query = e.target.value.trim();
-    if (query === "") return;
-
-    searchInput.autoClearTimeout = setTimeout(() => {
-      searchInput.value = "";
-      searchInput.focus();
-    }, 30000);
-
-    searchTimeout = setTimeout(() => searchEmployees(query), 200);
-  });
-
   searchInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter") {
       clearTimeout(searchTimeout);
       const query = e.target.value.trim();
-      if (query !== "") searchEmployees(query);
+      if (query !== "") {
+        captureAndSearch(query);
+      }
+      return;
     }
-    // if ((e.ctrlKey || e.metaKey) && e.key === "v") {
-    //   e.preventDefault();
-    // }
+    if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+      e.preventDefault();
+    }
   });
 
-  // searchInput.addEventListener("paste", function (e) {
-  //   e.preventDefault();
-  // });
+  searchInput.addEventListener("input", function (e) {
+    if (isProcessing) return;
+
+    clearTimeout(searchTimeout);
+    const query = e.target.value.trim();
+    if (query === "") return;
+
+    clearTimeout(searchInput.autoClearTimeout);
+    searchInput.autoClearTimeout = setTimeout(() => {
+      if (!isProcessing) {
+        searchInput.value = "";
+        searchInput.focus();
+      }
+    }, 30000);
+
+    searchTimeout = setTimeout(() => {
+      const finalQuery = searchInput.value.trim();
+      if (finalQuery !== "") captureAndSearch(finalQuery);
+    }, 400);
+  });
+
+  searchInput.addEventListener("paste", function (e) {
+    e.preventDefault();
+  });
 
   document.addEventListener("click", function (e) {
     if (!e.target.matches("input,button,select,textarea,a"))
@@ -138,6 +174,16 @@ function setupEventListeners() {
     searchInput.value = "";
     searchInput.focus();
   }, 300);
+}
+
+function captureAndSearch(query) {
+  clearTimeout(searchTimeout);
+  clearTimeout(searchInput.autoClearTimeout);
+
+  searchInput.value = "";
+  searchInput.focus();
+
+  enqueueSearch(query);
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -180,31 +226,30 @@ function blockSearchInput(durationMs = 1000) {
     searchInput.style.opacity = "1";
     searchInput.style.pointerEvents = "auto";
     body.classList.remove("input-blocked-alt");
-    searchInput.value = "";
+    if (!isProcessing) {
+      searchInput.value = "";
+    }
     searchInput.focus();
   }, durationMs);
 }
 
+// ─────────────────────────────────────────────────────────────────
+//  QR Code detection
+// ─────────────────────────────────────────────────────────────────
 function looksLikeQRCode(query) {
-  if (query.length < 8) return false;
+  const q = query.trim();
 
-  const hasDigit = /\d/.test(query);
-  if (!hasDigit) return false;
+  if (/^\d+$/.test(q) && q.length >= 6) return true;
 
-  const isLong = query.length >= 10;
-  const hasSeparator = /[-_]/.test(query);
+  if (q.length >= 8 && /\d/.test(q)) return true;
 
-  return isLong || hasSeparator;
+  return false;
 }
 
 // ─────────────────────────────────────────────────────────────────
 //  Core search
 // ─────────────────────────────────────────────────────────────────
 async function searchEmployees(query) {
-  if (activeController) activeController.abort();
-  activeController = new AbortController();
-  const { signal } = activeController;
-
   const messageEl = document.getElementById("message");
   const resultsTable = document.getElementById("resultsTable");
   const resultsBody = document.getElementById("resultsBody");
@@ -221,6 +266,7 @@ async function searchEmployees(query) {
         action: "get_by_qr",
         qr_code: query,
         source: "scanner",
+        auto_toggle: true,
       });
     } else {
       url = `${QrProximityBackend}?q=${encodeURIComponent(query)}`;
@@ -229,7 +275,6 @@ async function searchEmployees(query) {
 
     const response = await fetch(url, {
       method,
-      signal,
       headers: {
         "X-Requested-With": "XMLHttpRequest",
         ...(method === "POST"
@@ -262,7 +307,7 @@ async function searchEmployees(query) {
       messageEl.innerHTML =
         '<p class="no-results-message">Too many searches. Please slow down.</p>';
       playNoResultSound();
-      blockSearchInput(3000);
+      blockSearchInput();
       return;
     }
 
@@ -294,9 +339,10 @@ async function searchEmployees(query) {
       blockSearchInput();
     }
   } catch (error) {
-    if (error.name === "AbortError") return;
-    messageEl.innerHTML =
-      '<div class="error-message">Failed to search. Please check your connection.</div>';
+    console.error("Search error:", error);
+    messageEl.innerHTML = `<p class="no-results-message">No results found. 🔍</p>`;
+      playNoResultSound();
+      blockSearchInput();
     currentResults = [];
   }
 }
@@ -342,24 +388,6 @@ function renderResults(results) {
   else playSuccessSound();
 
   blockSearchInput();
-}
-
-// ─────────────────────────────────────────────────────────────────
-//  Format helpers
-// ─────────────────────────────────────────────────────────────────
-function formatTimestamp(ts) {
-  if (!ts) return "—";
-  const d = new Date(ts);
-  return isNaN(d)
-    ? ts
-    : d.toLocaleString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -422,10 +450,25 @@ function escapeHtml(text) {
   return d.innerHTML;
 }
 
+function formatTimestamp(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  return isNaN(d)
+    ? ts
+    : d.toLocaleString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+}
+
 // ─────────────────────────────────────────────────────────────────
 //  Init
 // ─────────────────────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", async function() {
+document.addEventListener("DOMContentLoaded", async function () {
   const ready = await resolveEndpoints();
   if (!ready) return;
 

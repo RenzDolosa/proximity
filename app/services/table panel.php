@@ -180,7 +180,7 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
             focusFrameSearchInput(this);
           }
         } catch (e) {
-          window.top.location.href = ROUTE_LOGIN;
+          // window.top.location.href = ROUTE_LOGIN;
         }
       });
     });
