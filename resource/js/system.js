@@ -2427,6 +2427,8 @@ async function _renderAccessTab(container, employeeId) {
   const ACCESS_TYPE_MAP = {
     manual_entry:   "Manual Entry",
     proximity_scan: "Proximity Scan",
+    qr_code_scan:   "Proximity Scan",
+    search_result:  "Proximity Scan",
   };
 
   // ── Paginate ──────────────────────────────────────────────────
