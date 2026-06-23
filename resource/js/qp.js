@@ -16,11 +16,11 @@ let isProcessing = false;
 
 // ── Global-audio endpoint ─────────────────────────────────────────
 const AUDIO_TYPE_MAP = {
-  success: "successSound",
-  checkout: "checkoutSound",
-  not_found: "noResultSound",
+  success:    "successSound",
+  checkout:   "checkoutSound",
+  not_found:  "noResultSound",
   violations: "warningSound",
-  inactive: "inactiveSound",
+  inactive:   "inactiveSound",
 };
 
 // ─────────────────────────────────────────────────────────────────

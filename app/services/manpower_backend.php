@@ -1525,7 +1525,7 @@ try {
             "SELECT * FROM employee_access_log
              WHERE employee_id = :id
              ORDER BY access_timestamp DESC
-             LIMIT 200"
+             LIMIT 1000"
           );
           $stmt->execute([':id' => $id]);
           $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);

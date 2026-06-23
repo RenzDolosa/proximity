@@ -36,11 +36,11 @@ let _liveSyncInFlight = false;
 
 // ── Global-audio endpoint ─────────────────────────────────────────
 const AUDIO_TYPE_MAP = {
-  success: "successSound",
-  checkout: "checkoutSound",
-  not_found: "noResultSound",
+  success:    "successSound",
+  checkout:   "checkoutSound",
+  not_found:  "noResultSound",
   violations: "warningSound",
-  inactive: "inactiveSound",
+  inactive:   "inactiveSound",
 };
 
 // ── Controls CSS helper ───────────────────────────────────────────
@@ -2394,11 +2394,11 @@ async function _renderAccessTab(container, employeeId) {
   if (!_logsCache[employeeId]) {
     state.page = 1;
     try {
-      const res = await fetch(
+      const response = await fetch(
         `${EmployeesBackend}?action=get_access_logs&id=${encodeURIComponent(employeeId)}`,
         { headers: { "X-Requested-With": "XMLHttpRequest" } },
       );
-      const data = await res.json();
+      const data = await response.json();
       _logsCache[employeeId] = data.success ? data.logs : null;
     } catch (e) {
       _logsCache[employeeId] = null;
@@ -2425,10 +2425,11 @@ async function _renderAccessTab(container, employeeId) {
   if (elTotal) elTotal.textContent = logs.length;
 
   const ACCESS_TYPE_MAP = {
-    manual_entry:   "Manual Entry",
-    proximity_scan: "Proximity Scan",
-    qr_code_scan:   "Proximity Scan",
-    search_result:  "Proximity Scan",
+    manual_entry:       "Manual Entry",
+    proximity_scan:     "Proximity Scan",
+    qr_code_scan:       "Proximity Scan",
+    search_result:      "Proximity Scan",
+    facial_recognition: "Face ID",
   };
 
   // ── Paginate ──────────────────────────────────────────────────
