@@ -462,7 +462,7 @@ class LiveSearchHandler
 
       foreach ($rows as $employee) {
         $results[] = $employee;
-        if ($this->logger) $this->logger->logEmployeeAccess($employee, 'search_result');
+        // if ($this->logger) $this->logger->logEmployeeAccess($employee, 'search_result');
       }
     } catch (Exception $e) {
       $success      = false;
