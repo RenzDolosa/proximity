@@ -35,7 +35,7 @@
   justify-content: space-between;
   align-items: center;
   background: var(--grad-brand);
-  border-radius: 14px 14px 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   color: var(--dark-text);
   position: sticky;
   top: 0;
@@ -69,12 +69,24 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
+.camera-modal-footer {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--dark-border);
+  display: flex;
+  justify-content: space-between;
+  align-content: center;
+  align-items: center;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  color: var(--dark-text);
+  z-index: 10;
+}
+
 /* ── Body ─────────────────────────────────────────────────── */
 .camera-modal-body {
   padding: 16px;
   background-color: var(--dark-bg);
   color: var(--dark-text);
-  border-radius: 0 0 14px 14px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -144,7 +156,7 @@
 .camera-status {
   padding: 10px 14px;
   background-color: var(--dark-surface-alt);
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-size: 13px;
   color: var(--dark-text-muted);
   min-height: 40px;

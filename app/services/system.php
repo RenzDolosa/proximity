@@ -297,7 +297,6 @@ if ($databaseConnected) {
   <!-- Employee Modal -->
   <div id="employeeModal" class="modal modal-flex">
     <div class="modal-content">
-
       <!-- HEADER -->
       <div class="modal-header">
         <h2 id="modalTitle"><i class="fas fa-user-plus"></i> Add Employee</h2>
@@ -419,7 +418,6 @@ if ($databaseConnected) {
           <i class="fas fa-times"></i> Cancel
         </button>
       </div>
-
     </div>
   </div>
 
@@ -435,7 +433,6 @@ if ($databaseConnected) {
       </div>
 
       <div class="camera-modal-body">
-
         <div class="camera-selextor-grid">
           <div class="camera-selector-container">
             <label for="cameraSelector">
@@ -458,28 +455,26 @@ if ($databaseConnected) {
         <div id="cropContainer" style="display:none;">
           <img id="cropImage" alt="Capture for cropping" />
         </div>
+      </div>
 
+      <div class="camera-modal-footer">
         <div class="camera-controls">
           <button type="button" class="camera-btn capture" tabindex="-1"
             id="captureBtn" onclick="capturePhoto()">
             <i class="fas fa-circle"></i> Capture
           </button>
-
           <button type="button" class="camera-btn apply-crop" tabindex="-1"
             id="applyCropBtn" onclick="applyCrop()" style="display:none;">
             <i class="fas fa-crop-alt"></i> Apply Crop
           </button>
-
           <button type="button" class="camera-btn retake" tabindex="-1"
             id="retakeBtn" onclick="retakePhoto()" style="display:none;">
             <i class="fas fa-redo"></i> Retake
           </button>
-
           <button type="button" class="camera-btn upload" tabindex="-1"
             id="uploadCameraBtn" onclick="uploadCameraPhoto()" style="display:none;">
             <i class="fas fa-check"></i> Use Photo
           </button>
-
           <button type="button" class="camera-btn cancel" tabindex="-1" onclick="closeCameraModal()">
             <i class="fas fa-times"></i> Cancel
           </button>

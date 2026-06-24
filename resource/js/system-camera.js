@@ -61,7 +61,7 @@ function openCameraModal() {
   const modal = document.getElementById("cameraModal");
   if (!modal) return;
 
-  if (typeof _teardownModalSuggestions === 'function') {
+  if (typeof _teardownModalSuggestions === "function") {
     _teardownModalSuggestions();
   }
 
@@ -81,7 +81,7 @@ function closeCameraModal() {
   if (
     employeeModal &&
     employeeModal.style.display === "block" &&
-    typeof setupModalSuggestions === 'function'
+    typeof setupModalSuggestions === "function"
   ) {
     setupModalSuggestions();
   }
@@ -236,8 +236,6 @@ function injectAspectRatioToolbar(cropWrap) {
     "flex-wrap:wrap",
     "gap:6px",
     "padding:8px 10px",
-    "background:rgba(0,0,0,0.60)",
-    "border-bottom:1px solid rgba(255,255,255,0.12)",
     "align-items:center",
     "flex-shrink:0",
   ].join(";");
@@ -245,7 +243,7 @@ function injectAspectRatioToolbar(cropWrap) {
   const lbl = document.createElement("span");
   lbl.textContent = "Aspect Ratio:";
   lbl.style.cssText =
-    "color:#bbb;font-size:11px;font-weight:700;letter-spacing:.4px;" +
+    "font-size:11px;font-weight:700;letter-spacing:.4px;" +
     "margin-right:2px;white-space:nowrap;text-transform:uppercase;";
   toolbar.appendChild(lbl);
 
@@ -260,9 +258,9 @@ function injectAspectRatioToolbar(cropWrap) {
       "font-size:11px",
       "font-weight:600",
       "border-radius:5px",
-      "border:1px solid rgba(255,255,255,0.28)",
-      "background:rgba(255,255,255,0.07)",
-      "color:#ddd",
+      "border:1px solid rgba(0,0,0,0.18)",
+      "background:rgba(0,0,0,0.06)",
+      "color:#444",
       "cursor:pointer",
       "transition:background .15s,border-color .15s,color .15s",
       "white-space:nowrap",
@@ -271,14 +269,14 @@ function injectAspectRatioToolbar(cropWrap) {
 
     btn.addEventListener("mouseenter", () => {
       if (!btn.classList.contains("ar-active")) {
-        btn.style.background = "rgba(255,255,255,0.16)";
-        btn.style.borderColor = "rgba(255,255,255,0.5)";
+        btn.style.background = "rgba(0,0,0,0.12)";
+        btn.style.borderColor = "rgba(0,0,0,0.3)";
       }
     });
     btn.addEventListener("mouseleave", () => {
       if (!btn.classList.contains("ar-active")) {
-        btn.style.background = "rgba(255,255,255,0.07)";
-        btn.style.borderColor = "rgba(255,255,255,0.28)";
+        btn.style.background = "rgba(0,0,0,0.06)";
+        btn.style.borderColor = "rgba(0,0,0,0.18)";
       }
     });
 
@@ -286,7 +284,12 @@ function injectAspectRatioToolbar(cropWrap) {
     toolbar.appendChild(btn);
   });
 
-  cropWrap.insertAdjacentElement("afterend", toolbar);
+  const controls = document.querySelector(".camera-controls");
+  if (controls) {
+    controls.insertAdjacentElement("afterend", toolbar);
+  } else {
+    cropWrap.insertAdjacentElement("afterend", toolbar);
+  }
 
   _highlightRatioBtn(toolbar, NaN);
 }
