@@ -214,7 +214,7 @@ class AccessLogManager
     $order = $sort_col === 'gate_name'
       ? "ORDER BY (SELECT first_name FROM " . DB_NAME . ".users WHERE id = l.user_id LIMIT 1) {$sort_dir}"
       : "ORDER BY l.{$sort_col} {$sort_dir}";
-      
+
     if ($page === null) {
       $order_no_alias = $sort_col === 'gate_name'
         ? "ORDER BY (SELECT first_name FROM " . DB_NAME . ".users WHERE id = user_id LIMIT 1) {$sort_dir}"
@@ -352,17 +352,9 @@ class AccessLogManager
     $stmt->bindParam(':id', $id);
     $result = $stmt->execute();
 
-    if ($result && $log) {
-      $checkStmt = $this->conn->prepare(
-        "DELETE FROM {$this->checkTable}
-       WHERE employee_id = :employee_id
-          OR qr_code     = :qr_code"
-      );
-      $checkStmt->execute([
-        ':employee_id' => $log['employee_id'] ?? null,
-        ':qr_code'     => $log['qr_code']     ?? null,
-      ]);
-    }
+    // Do NOT cascade delete into check_in_out here.
+    // Status is now derived from employee_access_log directly.
+    // check_in_out is only used as a write target for toggle logic.
 
     if ($result && $this->userId && $log) {
       logSystemAction(
@@ -382,42 +374,14 @@ class AccessLogManager
 
     $placeholders = implode(',', array_fill(0, count($logIds), '?'));
 
-    $fetchStmt = $this->conn->prepare(
-      "SELECT employee_id, qr_code FROM {$this->logTable}
-     WHERE id IN ({$placeholders})"
-    );
-    $fetchStmt->execute($logIds);
-    $affected = $fetchStmt->fetchAll(PDO::FETCH_ASSOC);
-
-    $employeeIds = array_unique(array_filter(array_column($affected, 'employee_id')));
-    $qrCodes     = array_unique(array_filter(array_column($affected, 'qr_code')));
-
     $stmt = $this->conn->prepare(
       "DELETE FROM {$this->logTable} WHERE id IN ({$placeholders})"
     );
     $stmt->execute($logIds);
     $deleted = $stmt->rowCount();
 
-    if ($deleted > 0 && (!empty($employeeIds) || !empty($qrCodes))) {
-      $conditions = [];
-      $params     = [];
-
-      if (!empty($employeeIds)) {
-        $ep = implode(',', array_fill(0, count($employeeIds), '?'));
-        $conditions[] = "employee_id IN ({$ep})";
-        $params = array_merge($params, $employeeIds);
-      }
-      if (!empty($qrCodes)) {
-        $qp = implode(',', array_fill(0, count($qrCodes), '?'));
-        $conditions[] = "qr_code IN ({$qp})";
-        $params = array_merge($params, $qrCodes);
-      }
-
-      $checkStmt = $this->conn->prepare(
-        "DELETE FROM {$this->checkTable} WHERE " . implode(' OR ', $conditions)
-      );
-      $checkStmt->execute($params);
-    }
+    // Do NOT cascade delete into check_in_out here.
+    // Status is now derived from employee_access_log directly.
 
     return $deleted;
   }
@@ -644,8 +608,8 @@ try {
             $response['deleted_count'] = $deleted_count;
 
             logSystemAction(
-              $database->getCurrentUserId(), 
-              'FILTERED_LOGS_DELETED', 
+              $database->getCurrentUserId(),
+              'FILTERED_LOGS_DELETED',
               "Deleted $deleted_count log entries — filters: $filterStr"
             );
           } else {
@@ -777,7 +741,7 @@ try {
         break;
     }
 
-  // ── GET actions ───────────────────────────────────────────────────────────────
+    // ── GET actions ───────────────────────────────────────────────────────────────
   } elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $action = $_GET['action'] ?? '';
 
@@ -945,7 +909,7 @@ try {
           'last_name'  => $_SESSION['last_name']   ?? '',
         ];
         break;
-      
+
       case 'health_check':
         $health = [
           'status'             => 'OK',

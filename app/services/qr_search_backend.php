@@ -190,17 +190,15 @@ class QueryLogger
     try {
       $normalized = normalizeCardNo($qrCode);
       $stmt = $this->conn->prepare(
-        "SELECT check_type FROM check_in_out
-          WHERE qr_code = :qr
-             OR employee_id = :qr2
-             OR (qr_code REGEXP '^[0-9]+$'     AND TRIM(LEADING '0' FROM qr_code)     = :norm)
-             OR (employee_id REGEXP '^[0-9]+$'  AND TRIM(LEADING '0' FROM employee_id) = :norm2)
-          ORDER BY scan_timestamp DESC, id DESC
-          LIMIT 1"
+        "SELECT check_status FROM employee_access_log
+              WHERE qr_code = :qr
+                 OR (qr_code REGEXP '^[0-9]+$' AND TRIM(LEADING '0' FROM qr_code) = :norm)
+              ORDER BY access_timestamp DESC, id DESC
+              LIMIT 1"
       );
-      $stmt->execute([':qr' => $qrCode, ':qr2' => $qrCode, ':norm' => $normalized, ':norm2' => $normalized]);
+      $stmt->execute([':qr' => $qrCode, ':norm' => $normalized]);
       $row = $stmt->fetch(PDO::FETCH_ASSOC);
-      return $row ? $row['check_type'] : 'OUT';
+      return $row ? $row['check_status'] : 'OUT';
     } catch (PDOException $e) {
       error_log("getEmployeeCheckStatus error: " . $e->getMessage());
       return 'OUT';
@@ -254,20 +252,20 @@ class QueryLogger
             :atype, :ip, :ua, NOW())"
       );
       return $stmt->execute([
-        ':uid'   => $this->userId,
-        ':eid'   => $employeeData['id']           ?? null,
-        ':name'  => $employeeData['fullname']      ?? null,
-        ':pos'   => $employeeData['position']      ?? null,
-        ':brand' => $employeeData['brand']         ?? null,
+        ':uid'    => $this->userId,
+        ':eid'    => $employeeData['id']           ?? null,
+        ':name'   => $employeeData['fullname']      ?? null,
+        ':pos'    => $employeeData['position']      ?? null,
+        ':brand'  => $employeeData['brand']         ?? null,
         ':status' => $employeeData['status']        ?? null,
-        ':shift' => $employeeData['shift']         ?? null,
-        ':vio'   => $employeeData['violation']     ?? null,
-        ':img'   => $employeeData['image']         ?? null,
-        ':qr'    => $employeeData['qr_code']       ?? null,
-        ':cs'    => $employeeData['check_status']  ?? null,
-        ':atype' => $accessType,
-        ':ip'    => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-        ':ua'    => sanitizeUserAgent($_SERVER['HTTP_USER_AGENT'] ?? null),
+        ':shift'  => $employeeData['shift']         ?? null,
+        ':vio'    => $employeeData['violation']     ?? null,
+        ':img'    => $employeeData['image']         ?? null,
+        ':qr'     => $employeeData['qr_code']       ?? null,
+        ':cs'     => $employeeData['check_status']  ?? null,
+        ':atype'  => $accessType,
+        ':ip'     => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+        ':ua'     => sanitizeUserAgent($_SERVER['HTTP_USER_AGENT'] ?? null),
       ]);
     } catch (PDOException $e) {
       error_log("logEmployeeAccess error: " . $e->getMessage());
@@ -359,14 +357,14 @@ class LiveSearchHandler
 
       $placeholders = implode(',', array_fill(0, count($qrCodes), '?'));
 
-      $sql = "SELECT qr_code, check_type
-                FROM (
-                  SELECT qr_code, check_type,
-                         ROW_NUMBER() OVER (PARTITION BY qr_code ORDER BY scan_timestamp DESC, id DESC) AS rn
-                  FROM check_in_out
-                  WHERE qr_code IN ($placeholders)
-                ) ranked
-               WHERE rn = 1";
+      $sql = "SELECT qr_code, check_status
+          FROM (
+            SELECT qr_code, check_status,
+                   ROW_NUMBER() OVER (PARTITION BY qr_code ORDER BY access_timestamp DESC, id DESC) AS rn
+            FROM employee_access_log
+            WHERE qr_code IN ($placeholders)
+          ) ranked
+         WHERE rn = 1";
 
       $stmt = $this->conn->prepare($sql);
       $stmt->execute(array_values($qrCodes));
@@ -374,7 +372,7 @@ class LiveSearchHandler
 
       $statusMap = [];
       foreach ($statusRows as $sr) {
-        $statusMap[$sr['qr_code']] = $sr['check_type'];
+        $statusMap[$sr['qr_code']] = $sr['check_status'];
       }
 
       $normalizedMap = [];
