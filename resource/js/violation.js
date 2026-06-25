@@ -244,8 +244,26 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
   }
 
   // ── event wiring ────────────────────────────────────────────────
-  input.addEventListener("focus", () => show(input.value));
-  input.addEventListener("click", () => show(input.value));
+  input.addEventListener("mousedown", (e) => {
+    if (!options.showAll) return;
+    if (input.value.trim() !== "") {
+      e.preventDefault();
+      input.value = "";
+      if (hidden) hidden.value = "";
+      list.style.display = "none";
+      idx = -1;
+      if (options.onSelect) options.onSelect("");
+    }
+  });
+
+  input.addEventListener("focus", async () => {
+    if (options.requireInput && !input.value.trim()) return;
+    show(input.value);
+    if (options.onFocus) {
+      await options.onFocus();
+      show(input.value);
+    }
+  });
 
   input.addEventListener("blur", () => {
     setTimeout(() => {
@@ -254,6 +272,13 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
         idx = -1;
       }
     }, 150);
+  });
+
+  input.addEventListener("click", () => {
+    if (!options.showAll) return;
+    if (input.value.trim() === "") {
+      show(input.value);
+    }
   });
 
   input.addEventListener("input", () => show(input.value));
@@ -342,6 +367,7 @@ function setupFilterSuggestions() {
     {
       hiddenId: "f_type_val",
       noneLabel: "No Type",
+      showAll: true,
       onSelect: () => applyFilters(),
     },
   );

@@ -22,6 +22,7 @@ let totalRecords = 0;
 
 let activeFilters = {};
 let allEmployees = [];
+let fieldFilterOptions = {};
 
 let sortCol = null;
 let sortDir = "asc";
@@ -137,12 +138,14 @@ function setupEventListeners() {
     "search_position",
     "search-position-suggestions",
     () =>
-      [...allEmployees]
+      [...(fieldFilterOptions.position || allEmployees)]
         .sort((a, b) => (a.position || "").localeCompare(b.position || ""))
-        .map((e) => e.position),
+        .map((e) => e.position)
+        .filter(Boolean),
     {
       hiddenId: "search_position_val",
       noneLabel: "No Position",
+      showAll: true,
       onSelect: () => searchEmployees(),
     },
   );
@@ -151,12 +154,14 @@ function setupEventListeners() {
     "search_brand",
     "search-brand-suggestions",
     () =>
-      [...allEmployees]
+      [...(fieldFilterOptions.brand || allEmployees)]
         .sort((a, b) => (a.brand || "").localeCompare(b.brand || ""))
-        .map((e) => e.brand),
+        .map((e) => e.brand)
+        .filter(Boolean),
     {
       hiddenId: "search_brand_val",
       noneLabel: "No Brand",
+      showAll: true,
       onSelect: () => searchEmployees(),
     },
   );
@@ -164,10 +169,15 @@ function setupEventListeners() {
   setupFieldSuggestions(
     "search_status",
     "search-status-suggestions",
-    () => [...allEmployees].map((e) => e.status),
+    () =>
+      [...(fieldFilterOptions.status || allEmployees)]
+        .sort((a, b) => (a.status || "").localeCompare(b.status || ""))
+        .map((e) => e.status)
+        .filter(Boolean),
     {
       hiddenId: "search_status_val",
       noneLabel: "No Status",
+      showAll: true,
       onSelect: () => searchEmployees(),
     },
   );
@@ -175,10 +185,15 @@ function setupEventListeners() {
   setupFieldSuggestions(
     "search_shift",
     "search-shift-suggestions",
-    () => [...allEmployees].map((e) => e.shift),
+    () =>
+      [...(fieldFilterOptions.shift || allEmployees)]
+        .sort((a, b) => (a.shift || "").localeCompare(b.shift || ""))
+        .map((e) => e.shift)
+        .filter(Boolean),
     {
       hiddenId: "search_shift_val",
       noneLabel: "No Shift",
+      showAll: true,
       onSelect: () => searchEmployees(),
     },
   );
@@ -186,10 +201,15 @@ function setupEventListeners() {
   setupFieldSuggestions(
     "search_violation",
     "search-violation-suggestions",
-    () => allEmployees.map((e) => e.violation),
+    () =>
+      [...(fieldFilterOptions.violation || allEmployees)]
+        .sort((a, b) => (a.violation || "").localeCompare(b.violation || ""))
+        .map((e) => e.violation)
+        .filter(Boolean),
     {
       hiddenId: "search_violation_val",
       noneLabel: "No Violation",
+      showAll: true,
       onSelect: () => searchEmployees(),
     },
   );
@@ -197,10 +217,15 @@ function setupEventListeners() {
   setupFieldSuggestions(
     "search_user_id",
     "search-userid-suggestions",
-    () => [...employees].map((e) => e.gate_name || e.user_id),
+    () =>
+      [...(fieldFilterOptions.user_id || allEmployees)]
+        .sort((a, b) => (a.gate_name || "").localeCompare(b.gate_name || ""))
+        .map((e) => e.gate_name || "")
+        .filter(Boolean),
     {
       hiddenId: "search_user_id_val",
       noneLabel: "No Operator",
+      showAll: true,
       onSelect: () => searchEmployees(),
     },
   );
@@ -1296,8 +1321,13 @@ async function loadEmployees(
       totalPages = data.pages;
       totalRecords = data.total;
 
-      if (Array.isArray(data.filter_options))
+      if (Array.isArray(data.filter_options)) {
         allEmployees = data.filter_options;
+      }
+
+      if (data.field_filter_options && typeof data.field_filter_options === "object") {
+        fieldFilterOptions = data.field_filter_options;
+      }
 
       if (Object.keys(filters).length === 0) {
         allEmployees = data.filter_options ?? data.data ?? [];
@@ -2022,10 +2052,10 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
 
   input.addEventListener("focus", async () => {
     if (options.requireInput && !input.value.trim()) return;
-    show(input.value);
+    show(options.showAll ? "" : input.value);
     if (options.onFocus) {
       await options.onFocus();
-      show(input.value);
+      show(options.showAll ? "" : input.value);
     }
   });
 
@@ -2039,7 +2069,8 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
   });
 
   input.addEventListener("click", () => {
-    if (options.showAll) show(input.value);
+    if (!options.showAll) return;
+    show("");
   });
 
   input.addEventListener("input", () => show(input.value));

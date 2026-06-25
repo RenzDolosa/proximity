@@ -26,6 +26,25 @@ if (!defined('APP_TIMEZONE')) {
 }
 date_default_timezone_set(APP_TIMEZONE);
 
+// ── Whitelists ────────────────────────────────────────────────────────────────
+const ALLOWED_POST_ACTIONS = [
+  'delete',
+  'delete_filtered',
+  'delete_all',
+  'get_stats',
+  'search_qr',
+];
+
+const ALLOWED_GET_ACTIONS = [
+  'get',
+  'list',
+  'get_single',
+  'check_qr',
+  'stats',
+  'user_info',
+  'health_check',
+];
+
 // ── Safe json_decode wrapper ──────────────────────────────────────────────────
 function safeJsonDecode($json, $assoc = true, $depth = 32)
 {
@@ -49,9 +68,9 @@ if (isset($_GET['serve_file'])) {
   }
 }
 
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 // Database — connection manager
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 class Database
 {
   private $mainConn;
@@ -208,7 +227,7 @@ class AccessLogManager
     $order = $sort_col === 'gate_name'
       ? "ORDER BY (SELECT first_name FROM " . DB_NAME . ".users WHERE id = l.user_id LIMIT 1) {$sort_dir}"
       : "ORDER BY l.{$sort_col} {$sort_dir}";
-      
+
     if ($page === null) {
       $order_no_alias = $sort_col === 'gate_name'
         ? "ORDER BY (SELECT first_name FROM " . DB_NAME . ".users WHERE id = user_id LIMIT 1) {$sort_dir}"
@@ -221,7 +240,33 @@ class AccessLogManager
         $stmt->bindValue($key, $value);
       }
       $stmt->execute();
-      return $stmt->fetchAll(PDO::FETCH_ASSOC);
+      $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      // ── Hydrate gate_name on unpaginated rows ──────────────────────
+      $userIds = array_unique(array_filter(array_column($rows, 'user_id')));
+      $userNameMap = [];
+      if (!empty($userIds)) {
+        try {
+          $mainConn = getMainDBConnection();
+          $ph = implode(',', array_fill(0, count($userIds), '?'));
+          $uStmt = $mainConn->prepare(
+            "SELECT id, first_name FROM users WHERE id IN ($ph)"
+          );
+          $uStmt->execute(array_values($userIds));
+          foreach ($uStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $userNameMap[(int)$row['id']] = $row['first_name'];
+          }
+        } catch (Exception $e) {
+          error_log("Gate name lookup (unpaginated) failed: " . $e->getMessage());
+        }
+      }
+      foreach ($rows as &$row) {
+        $uid = (int)($row['user_id'] ?? 0);
+        $row['gate_name'] = $uid && isset($userNameMap[$uid]) ? $userNameMap[$uid] : null;
+      }
+      unset($row);
+
+      return $rows;
     }
 
     $countStmt = $this->conn->prepare(
@@ -344,14 +389,6 @@ class AccessLogManager
     $stmt->execute($logIds);
     $deleted = $stmt->rowCount();
 
-    if ($deleted > 0 && $this->userId) {
-      logSystemAction(
-        $this->userId,
-        'FILTERED_LOGS_DELETED',
-        "Deleted {$deleted} attendance log entries"
-      );
-    }
-
     return $deleted;
   }
 
@@ -366,7 +403,7 @@ class AccessLogManager
     }
 
     if ($this->userId) {
-      logSystemAction($this->userId, 'ALL_LOGS_DELETED', 'Cleared employee_attendance_log');
+      logSystemAction($this->userId, 'ALL_LOGS_DELETED', 'Cleared attedance');
     }
 
     return true;
@@ -420,9 +457,9 @@ class AccessLogManager
   }
 }
 
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 // FileUploader — serves/validates images referenced in log rows
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 function sanitizeFilename($filename)
 {
   return preg_replace('/[^a-zA-Z0-9_\.-]/', '', $filename);
@@ -490,12 +527,17 @@ try {
 
   // ── POST actions ───────────────────────────────────────────────────────────
   if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
+    $action = sanitizeInput($_POST['action'] ?? '');
+
+    if (!in_array($action, ALLOWED_POST_ACTIONS, true)) {
+      $response['message'] = 'Invalid action specified.';
+      goto send_response;
+    }
 
     switch ($action) {
 
       case 'delete':
-        $log_id = $_POST['id'] ?? 0;
+        $log_id = sanitizeInput($_POST['id'] ?? 0);
 
         if (!$log_id) {
           $response['message'] = 'Log entry ID is required';
@@ -503,27 +545,25 @@ try {
         }
 
         try {
-          if ($logManager->deleteLog($log_id)) {
+          $deleted = $logManager->deleteLog($log_id);
+
+          if ($deleted) {
             $response['success'] = true;
-            $response['message'] = 'Log entry deleted successfully';
+            $response['message'] = 'Attendance deleted successfully';
           } else {
-            $response['message'] = 'Failed to delete log entry';
+            $response['message'] = 'Failed to delete attendance';
           }
         } catch (Exception $e) {
           $response['message'] = 'Delete error: ' . $e->getMessage();
         }
         break;
 
-      // ── Delete filtered log entries ──────────────────────────────────────
       case 'delete_filtered':
-        $log_ids_json = $_POST['employee_ids'] ?? '[]';
-        $filters_json = $_POST['filters']      ?? '{}';
-
-        $log_ids = json_decode($log_ids_json, true) ?: [];
-        $filters = json_decode($filters_json, true)  ?: [];
+        $log_ids = safeJsonDecode($_POST['employee_ids'] ?? '[]') ?: [];
+        $filters = safeJsonDecode($_POST['filters']      ?? '{}') ?: [];
 
         if (empty($log_ids)) {
-          $response['message'] = 'No log entries to delete';
+          $response['message'] = 'No attendance to delete';
           break;
         }
 
@@ -537,23 +577,23 @@ try {
             $db->commit();
 
             $filterStr = implode(', ', array_map(
-              fn($k, $v) => "$k: $v",
+              fn($k, $v) => sanitizeInput($k) . ': ' . sanitizeInput($v),
               array_keys($filters),
               $filters
             )) ?: 'All';
 
             $response['success']       = true;
-            $response['message']       = "Deleted $deleted_count log entry/entries matching filters: $filterStr";
+            $response['message']       = "Deleted $deleted_count attendance matching filters: $filterStr";
             $response['deleted_count'] = $deleted_count;
 
             logSystemAction(
               $database->getCurrentUserId(),
               'FILTERED_LOGS_DELETED',
-              "Deleted $deleted_count log entries — filters: $filterStr"
+              "Deleted $deleted_count attendance — filters: $filterStr"
             );
           } else {
             $db->rollBack();
-            $response['message'] = 'Failed to delete log entries';
+            $response['message'] = 'Failed to delete attendance';
           }
         } catch (Exception $e) {
           if (isset($db)) $db->rollBack();
@@ -605,7 +645,7 @@ try {
         break;
 
       case 'search_qr':
-        $qr_code = $_POST['qr_code'] ?? '';
+        $qr_code = sanitizeInput($_POST['qr_code'] ?? '');
 
         if (empty($qr_code)) {
           $response['message'] = 'QR code is required';
@@ -618,9 +658,9 @@ try {
           if ($log) {
             $response['success'] = true;
             $response['data']    = $log;
-            $response['message'] = 'Log entry found';
+            $response['message'] = 'Attendance found';
           } else {
-            $response['message'] = 'No log entry found for this QR code';
+            $response['message'] = 'No attendance found for this employee';
           }
         } catch (Exception $e) {
           $response['message'] = 'QR search error: ' . $e->getMessage();
@@ -632,9 +672,14 @@ try {
         break;
     }
 
-  // ── GET actions ────────────────────────────────────────────────────────────
+    // ── GET actions ────────────────────────────────────────────────────────────
   } elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    $action = $_GET['action'] ?? '';
+    $action = sanitizeInput($_GET['action'] ?? '');
+
+    if (!empty($action) && !in_array($action, ALLOWED_GET_ACTIONS, true)) {
+      $response['message'] = 'Invalid GET action specified.';
+      goto send_response;
+    }
 
     switch ($action) {
 
@@ -642,50 +687,54 @@ try {
       case 'list':
         $filters = [];
 
-        if (!empty($_GET['fullname']))          $filters['fullname']         = $_GET['fullname'];
-        if (!empty($_GET['position']))          $filters['position']         = $_GET['position'];
+        if (!empty($_GET['fullname']))          $filters['fullname']         = sanitizeInput($_GET['fullname']);
+        if (!empty($_GET['position']))          $filters['position']         = sanitizeInput($_GET['position']);
         if (!empty($_GET['position_none']))     $filters['position_none']    = '1';
-        if (!empty($_GET['brand']))             $filters['brand']            = $_GET['brand'];
+        if (!empty($_GET['brand']))             $filters['brand']            = sanitizeInput($_GET['brand']);
         if (!empty($_GET['brand_none']))        $filters['brand_none']       = '1';
-        if (!empty($_GET['status']))            $filters['status']           = $_GET['status'];
+        if (!empty($_GET['status']))            $filters['status']           = sanitizeInput($_GET['status']);
         if (!empty($_GET['status_none']))       $filters['status_none']      = '1';
-        if (!empty($_GET['shift']))             $filters['shift']            = $_GET['shift'];
+        if (!empty($_GET['shift']))             $filters['shift']            = sanitizeInput($_GET['shift']);
         if (!empty($_GET['shift_none']))        $filters['shift_none']       = '1';
-        if (!empty($_GET['violation']))         $filters['violation']        = $_GET['violation'];
+        if (!empty($_GET['violation']))         $filters['violation']        = sanitizeInput($_GET['violation']);
         if (!empty($_GET['violation_none']))    $filters['violation_none']   = '1';
-        if (!empty($_GET['qr_code']))           $filters['qr_code']          = $_GET['qr_code'];
-        if (!empty($_GET['user_id']))           $filters['user_id']          = $_GET['user_id'];
-        if (!empty($_GET['gate_name']))         $filters['gate_name']        = $_GET['gate_name'];
+        if (!empty($_GET['qr_code']))           $filters['qr_code']          = sanitizeInput($_GET['qr_code']);
+        if (!empty($_GET['user_id']))           $filters['user_id']          = sanitizeInput($_GET['user_id']);
+        if (!empty($_GET['gate_name']))         $filters['gate_name']        = sanitizeInput($_GET['gate_name']);
         if (!empty($_GET['user_id_none']))      $filters['user_id_none']     = '1';
-        if (!empty($_GET['access_type']))       $filters['access_type']      = $_GET['access_type'];
+        if (!empty($_GET['access_type']))       $filters['access_type']      = sanitizeInput($_GET['access_type']);
         if (!empty($_GET['access_timestamp'])) {
-          $d = $_GET['access_timestamp'];
+          $d = sanitizeInput($_GET['access_timestamp']);
           if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['access_timestamp'] = $d;
         }
         if (!empty($_GET['date_from'])) {
-          $d = $_GET['date_from'];
+          $d = sanitizeInput($_GET['date_from']);
           if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_from'] = $d;
         }
         if (!empty($_GET['date_to'])) {
-          $d = $_GET['date_to'];
+          $d = sanitizeInput($_GET['date_to']);
           if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_to'] = $d;
         }
-        if (!empty($_GET['sort_col'])) $filters['sort_col'] = $_GET['sort_col'];
-        if (!empty($_GET['sort_dir'])) $filters['sort_dir'] = $_GET['sort_dir'];
+        if (!empty($_GET['sort_col'])) $filters['sort_col'] = sanitizeInput($_GET['sort_col']);
+        if (!empty($_GET['sort_dir'])) $filters['sort_dir'] = sanitizeInput($_GET['sort_dir']);
 
         $page  = max(1, (int)($_GET['page']  ?? 1));
         $limit = max(1, (int)($_GET['limit'] ?? 25));
 
         try {
-          $result = $logManager->getLogs($filters, $page, $limit);
+          $result   = $logManager->getLogs($filters, $page, $limit);
+          $allRows  = $logManager->getLogs($filters, null);
 
-          $db     = $database->getUserConnection();
-          $optStmt = $db->query("
-            SELECT DISTINCT fullname, position, brand, status, shift,
-                            violation, user_id
-            FROM employee_attendance_log
-          ");
-          $allRows = $optStmt->fetchAll(PDO::FETCH_ASSOC);
+          $filterableFields = ['position', 'brand', 'status', 'shift', 'violation', 'user_id'];
+          $fieldOptions = [];
+          foreach ($filterableFields as $field) {
+            $fieldFilters = $filters;
+            unset($fieldFilters[$field], $fieldFilters["{$field}_none"]);
+            if ($field === 'user_id') {
+              unset($fieldFilters['gate_name']);
+            }
+            $fieldOptions[$field] = $logManager->getLogs($fieldFilters, null);
+          }
 
           $distinctUserIds = array_unique(array_filter(array_column($allRows, 'user_id')));
           $gateNameMap     = [];
@@ -703,42 +752,60 @@ try {
 
           foreach ($allRows as &$row) {
             $uid = (int)($row['user_id'] ?? 0);
-            $row['gate_name'] = $uid && isset($gateNameMap[$uid]) 
-              ? $gateNameMap[$uid] 
-              : null;
+            $row['gate_name'] = $uid && isset($gateNameMap[$uid]) ? $gateNameMap[$uid] : null;
           }
           unset($row);
 
-          $response['success']        = true;
-          $response['data']           = $result['data'];
-          $response['total']          = $result['total'];
-          $response['page']           = $page;
-          $response['pages']          = ceil($result['total'] / $limit);
-          $response['filter_options'] = $allRows;
+          $response['success']              = true;
+          $response['data']                 = $result['data'];
+          $response['total']                = $result['total'];
+          $response['page']                 = $page;
+          $response['pages']                = ceil($result['total'] / $limit);
+          $response['filter_options']       = $allRows;
+          $response['field_filter_options'] = $fieldOptions;
         } catch (Exception $e) {
-          $response['message'] = 'Error retrieving logs: ' . $e->getMessage();
+          $response['message'] = 'Error retrieving logs.';
         }
         break;
 
       case 'get_single':
-        $log_id = $_GET['id'] ?? 0;
+        $log_id = sanitizeInput($_GET['id'] ?? 0);
 
         if (!$log_id) {
-          $response['message'] = 'Log entry ID is required';
+          $response['message'] = 'Attendance ID is required';
           break;
         }
 
         try {
           $log = $logManager->getLog($log_id);
-
           if ($log) {
             $response['success'] = true;
             $response['data']    = $log;
           } else {
-            $response['message'] = 'Log entry not found';
+            $response['message'] = 'Attendance not found';
           }
         } catch (Exception $e) {
-          $response['message'] = 'Error retrieving log entry: ' . $e->getMessage();
+          $response['message'] = 'Error retrieving attendance: ' . $e->getMessage();
+        }
+        break;
+
+      case 'check_qr':
+        $qr_code = sanitizeInput($_GET['qr_code'] ?? '');
+
+        if (empty($qr_code)) {
+          $response['message'] = 'Proximity code parameter is required';
+          break;
+        }
+
+        try {
+          $log = $logManager->getLogByQR($qr_code);
+
+          $response['success'] = true;
+          $response['exists']  = (bool)$log;
+          $response['data']    = $log ?: null;
+          $response['message'] = $log ? 'Attendance found' : 'No attendance for this employee';
+        } catch (Exception $e) {
+          $response['message'] = 'Error checking Proximity code: ' . $e->getMessage();
         }
         break;
 
@@ -751,44 +818,24 @@ try {
         }
         break;
 
-      case 'check_qr':
-        $qr_code = $_GET['qr_code'] ?? '';
-
-        if (empty($qr_code)) {
-          $response['message'] = 'QR code parameter is required';
-          break;
-        }
-
-        try {
-          $log = $logManager->getLogByQR($qr_code);
-
-          $response['success'] = true;
-          $response['exists']  = (bool)$log;
-          $response['data']    = $log ?: null;
-          $response['message'] = $log ? 'Log entry found' : 'No log entry for this QR code';
-        } catch (Exception $e) {
-          $response['message'] = 'Error checking QR code: ' . $e->getMessage();
-        }
-        break;
-
       case 'user_info':
         $response['success'] = true;
         $response['data']    = [
           'user_id'    => $database->getCurrentUserId(),
-          'username'   => $_SESSION['username']   ?? 'Unknown',
-          'email'      => $_SESSION['email']       ?? '',
-          'first_name' => $_SESSION['first_name']  ?? '',
-          'last_name'  => $_SESSION['last_name']   ?? '',
+          'username'   => sanitizeInput($_SESSION['username']    ?? 'Unknown'),
+          'email'      => sanitizeInput($_SESSION['email']       ?? ''),
+          'first_name' => sanitizeInput($_SESSION['first_name']  ?? ''),
+          'last_name'  => sanitizeInput($_SESSION['last_name']   ?? ''),
         ];
         break;
 
       case 'health_check':
         $health = [
-          'status'             => 'OK',
-          'timestamp'          => date('Y-m-d H:i:s'),
-          'timezone'           => date_default_timezone_get(),
-          'user_authenticated' => isset($_SESSION['user_id']),
-          'user_id'            => $_SESSION['user_id'] ?? null,
+          'status'              => 'OK',
+          'timestamp'           => date('Y-m-d H:i:s'),
+          'timezone'            => date_default_timezone_get(),
+          'user_authenticated'  => isset($_SESSION['user_id']),
+          'user_id'             => sanitizeInput($_SESSION['user_id'] ?? null),
         ];
 
         try {
@@ -810,10 +857,9 @@ try {
     }
   }
 
-  if (
-    !empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
-    strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest'
-  ) {
+  send_response:
+
+  if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
     header('Content-Type: application/json');
     echo json_encode($response);
     exit;
@@ -836,10 +882,7 @@ try {
     logSystemAction($_SESSION['user_id'], 'SYSTEM_ERROR', $e->getMessage());
   }
 
-  if (
-    !empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
-    strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest'
-  ) {
+  if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
     header('Content-Type: application/json');
     echo json_encode($error_response);
     exit;
@@ -848,9 +891,9 @@ try {
   $_SESSION['error_message'] = $error_response['message'];
 }
 
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 // File-serving helper (for images referenced in log rows)
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 function serveFile($filepath, $filename = null)
 {
   if (!file_exists($filepath)) {
@@ -867,6 +910,11 @@ function serveFile($filepath, $filename = null)
     'jpeg' => 'image/jpeg',
     'png'  => 'image/png',
     'gif'  => 'image/gif',
+    'webp' => 'image/webp',
+    'pdf'  => 'application/pdf',
+    'csv'  => 'text/csv',
+    'xls'  => 'application/vnd.ms-excel',
+    'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   ];
 
   $content_type = $content_types[$file_extension] ?? 'application/octet-stream';
@@ -882,7 +930,7 @@ function serveFile($filepath, $filename = null)
 }
 
 if (isset($_GET['serve_file'])) {
-  $userId = $_SESSION['user_id'] ?? null;
+  $userId = sanitizeInput($_SESSION['user_id'] ?? null);
 
   if (!$userId) {
     http_response_code(403);
@@ -891,8 +939,55 @@ if (isset($_GET['serve_file'])) {
   }
 
   $fileUploader = new FileUploader($userId);
-  $filename     = basename($_GET['serve_file']);
+  $filename     = sanitizeFilename(basename($_GET['serve_file']));
   $filepath     = $fileUploader->getImagePath($filename);
 
   serveFile($filepath, $filename);
+}
+
+function getAPIInfo()
+{
+  return [
+    'version'     => '2.6',
+    'name'        => 'Attendance Log Management System',
+    'description' => 'Read / delete access for employee_attendance_log; gate_name resolved from main users table',
+    'features'    => [
+      'Transaction Support'     => 'Database transactions on filtered delete and delete-all',
+      'Audit Logging'           => 'Full audit trail via logSystemAction() on every mutating operation',
+      'Filtered Delete'         => 'Delete attendance rows by explicit ID list derived from active search filters',
+      'Gate Name Hydration'     => 'user_id values in log rows are resolved to first_name from the main users table',
+      'Stats'                   => 'Total, active/inactive, today count, shift and access-type breakdowns',
+    ],
+    'endpoints' => [
+      'POST' => [
+        'delete'                => 'Delete a single attendance row by id',
+        'delete_filtered'       => 'Delete attendance rows by explicit ID list',
+        'delete_all'            => 'Truncate employee_attendance_log; resets AUTO_INCREMENT',
+        'get_stats'             => 'Return attendance statistics (total, active, inactive, today, by_shift, by_access_type)',
+        'search_qr'             => 'Find employee by exact proximity value',
+      ],
+      'GET' => [
+        'get / list'            => 'Paginated attendance list with server-side filters, sort, gate_name hydration, and field_filter_options',
+        'get_single'            => 'Fetch one attendance row by id',
+        'check_qr'              => 'Check whether a proximity is already assigned to an employee',
+        'stats'                 => 'Same as POST get_stats',
+        'user_info'             => 'Return session user_id, username, email, first_name, last_name',
+        'health_check'          => 'Verify main DB and user DB connectivity; returns JSON (bypasses XHR check)',
+      ],
+    ],
+    'query_parameters' => [
+      'Filters'                 => 'fullname, position, brand, status, shift, violation, qr_code, user_id, gate_name, access_type, access_timestamp, date_from, date_to',
+      'None filters'            => 'position_none, brand_none, status_none, shift_none, violation_none, user_id_none',
+      'Sorting'                 => 'sort_col (fullname|brand|shift|violation|access_timestamp|gate_name), sort_dir (asc|desc)',
+      'Paging'                  => 'page (default 1), limit (default 25)',
+    ],
+    'authentication'            => 'Session-based ($_SESSION[user_id] required for every request)',
+    'database'                  => 'Per-user databases; main DB holds users table for gate-name resolution',
+  ];
+}
+
+if (isset($_GET['api_info'])) {
+  header('Content-Type: application/json');
+  echo json_encode(getAPIInfo(), JSON_PRETTY_PRINT);
+  exit;
 }

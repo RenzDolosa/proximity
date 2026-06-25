@@ -18,6 +18,7 @@ let totalRecords = 0;
 
 let activeFilters = {};
 let allEmployees = [];
+let fieldFilterOptions = {};
 
 let sortCol = null;
 let sortDir = "asc";
@@ -235,17 +236,20 @@ function setupEventListeners() {
     "search-remarks-suggestions",
     () => {
       const map = qrImageMapCache || {};
-      return allEmployees.map((e) => {
-        const isOccupied = Object.prototype.hasOwnProperty.call(
-          map,
-          String(e.qr_code).trim().toLowerCase(),
-        );
-        return isOccupied ? "Occupied" : "Available";
-      });
+      return [...(fieldFilterOptions.remarks || allEmployees)]
+        .map((e) => {
+          const isOccupied = Object.prototype.hasOwnProperty.call(
+            map,
+            String(e.qr_code).trim().toLowerCase(),
+          );
+          return isOccupied ? "Occupied" : "Available";
+        })
+        .filter(Boolean);
     },
     {
       hiddenId: "search_remarks_val",
       noneLabel: "No Remarks",
+      showAll: true,
       onSelect: () => searchEmployees(),
     },
   );
@@ -253,10 +257,14 @@ function setupEventListeners() {
   setupFieldSuggestions(
     "search_status",
     "search-status-suggestions",
-    () => allEmployees.map((e) => (e.is_active == 1 ? "Enabled" : "Disabled")),
+    () =>
+      [...(fieldFilterOptions.status || allEmployees)]
+        .map((e) => (e.is_active == 1 ? "Enabled" : "Disabled"))
+        .filter(Boolean),
     {
       hiddenId: "search_status_val",
       noneLabel: "No Status",
+      showAll: true,
       onSelect: () => searchEmployees(),
     },
   );
@@ -303,6 +311,8 @@ function buildFilterParams(filters) {
   for (const [key, value] of Object.entries(filters)) {
     if (key === "remarks" && value === "__none__") {
       continue;
+    } else if (key === "remarks") {
+      params.append("remarks", value);
     } else if (key === "status" && value === "__none__") {
       continue;
     } else if (key === "status" && value === "Enabled") {
@@ -1079,8 +1089,6 @@ async function loadEmployees(
 
     if (statusFilter === "Enabled") params.set("is_active", "1");
     else if (statusFilter === "Disabled") params.set("is_active", "0");
-    else if (statusFilter === "__none__") {
-    }
 
     const response = await fetch(`${ProxcodeBackend}?${params.toString()}`, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -1094,9 +1102,14 @@ async function loadEmployees(
       employees = data.data;
       totalPages = data.pages;
       totalRecords = data.total;
-      allEmployees = Array.isArray(data.filter_options)
-        ? data.filter_options
-        : [];
+      
+      if (Array.isArray(data.filter_options)) {
+        allEmployees = data.filter_options;
+      }
+
+      if (data.field_filter_options && typeof data.field_filter_options === "object") {
+        fieldFilterOptions = data.field_filter_options;
+      }
 
       if (sortCol === "remarks") {
         const qrImageMap = await buildQRToImageMap();
@@ -1777,10 +1790,10 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
 
   input.addEventListener("focus", async () => {
     if (options.requireInput && !input.value.trim()) return;
-    show(input.value);
+    show(options.showAll ? "" : input.value);
     if (options.onFocus) {
       await options.onFocus();
-      show(input.value);
+      show(options.showAll ? "" : input.value);
     }
   });
 
@@ -1794,7 +1807,8 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
   });
 
   input.addEventListener("click", () => {
-    if (options.showAll) show(input.value);
+    if (!options.showAll) return;
+    show("");
   });
 
   input.addEventListener("input", () => show(input.value));

@@ -1394,14 +1394,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
     function viewAttachment(i) {
       const a = attachments[i];
       const win = window.open('', '_blank');
-      win.document.write(`<!DOCTYPE html><html><head><title>${a.name}</title>
-    <style>*{margin:0;padding:0;}body{background:#1a1a1a;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px;font-family:sans-serif;}
-    .tb{display:flex;gap:10px;margin-bottom:16px;}button{padding:8px 20px;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:500;}
-    .p{background:#1565c0;color:#fff;}.c{background:#555;color:#fff;}img{max-width:100%;border-radius:4px;}embed{width:100%;min-height:85vh;}h3{color:#fff;font-size:14px;margin-bottom:12px;}</style>
-    </head><body><h3>${a.name}</h3>
-    <div class="tb"><button class="p" onclick="window.print()">Print</button><button class="c" onclick="window.close()">Close</button></div>
-    ${a.type.startsWith('image/') ? `<img src="${a.url}" alt="${a.name}">` : `<embed src="${a.url}" type="application/pdf">`}
-    </body></html>`);
+      win.document.write(`<!DOCTYPE html>
+      <html>
+        <head>
+          <title>${a.name}</title>
+          <style>*{margin:0;padding:0;}body{background:#1a1a1a;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px;font-family:sans-serif;}
+            .tb{display:flex;gap:10px;margin-bottom:16px;}button{padding:8px 20px;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:500;}
+            .p{background:#1565c0;color:#fff;}.c{background:#555;color:#fff;}img{max-width:100%;border-radius:4px;}embed{width:100%;min-height:85vh;}h3{color:#fff;font-size:14px;margin-bottom:12px;}</style>
+        </head>
+        <body>
+          <h3>${a.name}</h3>
+          <div class="tb">
+            <button class="p" onclick="window.print()">Print</button>
+            <button class="c" onclick="window.close()">Close</button>
+          </div>
+          ${a.type.startsWith('image/') ? `<img src="${a.url}" alt="${a.name}">` : `<embed src="${a.url}" type="application/pdf">`}
+        </body>
+      </html>`);
       win.document.close();
     }
 

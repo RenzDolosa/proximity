@@ -54,6 +54,7 @@ const ALLOWED_GET_ACTIONS = [
   'get_violations',
   'get_status_history',
   'get_statuses',
+  'health_check',
 ];
 
 const ALLOWED_STATUSES   = ['Active', 'Inactive'];
@@ -173,6 +174,9 @@ if (isset($_GET['serve_file'])) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Database — connection manager
+// ─────────────────────────────────────────────────────────────────────────────
 class Database
 {
   private $mainConn;
@@ -823,6 +827,7 @@ try {
   if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'backup_data') {
     $employees   = $employeeManager->getEmployees();
     $stats       = $employeeManager->getEmployeeStats();
+
     $backup_data = [
       'timestamp'        => date('Y-m-d H:i:s'),
       'user_id'          => $database->getCurrentUserId(),
@@ -847,7 +852,7 @@ try {
 
   // ── POST handler ──────────────────────────────────────────────────────────
   if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
+    $action = sanitizeInput($_POST['action'] ?? '');
 
     if (!in_array($action, ALLOWED_POST_ACTIONS, true)) {
       $response['message'] = 'Invalid action specified.';
@@ -856,7 +861,6 @@ try {
 
     switch ($action) {
 
-      // ── ADD ───────────────────────────────────────────────────────────────
       case 'add':
       case 'create':
         $image_filename = null;
@@ -872,12 +876,12 @@ try {
 
         $qr_code = QRCodeGenerator::generateQRCode($database->getCurrentUserId());
 
-        $raw_status = $_POST['status'] ?? 'Active';
-        $raw_shift  = $_POST['shift']  ?? '';
-        $status = in_array($raw_status, ALLOWED_STATUSES, true) ? $raw_status : 'Active';
-        $shift  = in_array($raw_shift,  ALLOWED_SHIFTS,   true) ? $raw_shift  : '';
-        $raw_gender = $_POST['gender'] ?? '';
-        $gender = in_array($raw_gender, ['Male', 'Female'], true) ? $raw_gender : null;
+        $raw_status = sanitizeInput($_POST['status'] ?? 'Active');
+        $raw_shift  = sanitizeInput($_POST['shift']  ?? '');
+        $status     = in_array($raw_status, ALLOWED_STATUSES, true) ? $raw_status : 'Active';
+        $shift      = in_array($raw_shift,  ALLOWED_SHIFTS,   true) ? $raw_shift  : '';
+        $raw_gender = sanitizeInput($_POST['gender'] ?? '');
+        $gender     = in_array($raw_gender, ['Male', 'Female'], true) ? $raw_gender : null;
 
         $employee_data = [
           'user_id'   => $database->getCurrentUserId(),
@@ -886,12 +890,12 @@ try {
           'position'  => sanitizeInput($_POST['position']  ?? ''),
           'brand'     => sanitizeInput($_POST['brand']     ?? ''),
           'gender'    => $gender,
-          'birth'     => !empty($_POST['birth'])  ? sanitizeInput($_POST['birth'])  : null,
-          'hired'     => !empty($_POST['hired'])  ? sanitizeInput($_POST['hired'])  : null,
+          'birth'     => sanitizeInput(!empty($_POST['birth'])  ? $_POST['birth']  : null),
+          'hired'     => sanitizeInput(!empty($_POST['hired'])  ? $_POST['hired']  : null),
           'status'    => $status,
           'shift'     => $shift,
           'violation' => sanitizeInput($_POST['violation'] ?? ''),
-          'image'     => $image_filename,
+          'image'     => sanitizeInput($image_filename),
           'qr_code'   => sanitizeInput(!empty($_POST['qr_code']) ? $_POST['qr_code'] : $qr_code),
         ];
 
@@ -940,10 +944,9 @@ try {
         }
         break;
 
-      // ── EDIT ──────────────────────────────────────────────────────────────
       case 'edit':
       case 'update':
-        $old_id = $_POST['original_id'] ?? 0;
+        $old_id = sanitizeInput($_POST['original_id'] ?? 0);
 
         if (!$old_id) {
           $response['message'] = 'Original employee ID is required';
@@ -977,13 +980,13 @@ try {
           break;
         }
 
-        $raw_status = $_POST['status'] ?? $current_employee['status'];
-        $raw_shift  = $_POST['shift']  ?? $current_employee['shift'];
-        $status = in_array($raw_status, ALLOWED_STATUSES, true) ? $raw_status : $current_employee['status'];
-        $shift  = in_array($raw_shift,  ALLOWED_SHIFTS,   true) ? $raw_shift  : $current_employee['shift'];
-        $new_qr_code = sanitizeInput(!empty($_POST['qr_code']) ? $_POST['qr_code'] : $current_employee['qr_code']);
-        $raw_gender_edit = $_POST['gender'] ?? $current_employee['gender'] ?? '';
-        $gender_edit = in_array($raw_gender_edit, ['Male', 'Female'], true) ? $raw_gender_edit : null;
+        $raw_status       = sanitizeInput($_POST['status'] ?? $current_employee['status']);
+        $raw_shift        = sanitizeInput($_POST['shift']  ?? $current_employee['shift']);
+        $status           = in_array($raw_status, ALLOWED_STATUSES, true) ? $raw_status : $current_employee['status'];
+        $shift            = in_array($raw_shift,  ALLOWED_SHIFTS,   true) ? $raw_shift  : $current_employee['shift'];
+        $new_qr_code      = sanitizeInput(!empty($_POST['qr_code']) ? $_POST['qr_code'] : $current_employee['qr_code']);
+        $raw_gender_edit  = sanitizeInput($_POST['gender'] ?? $current_employee['gender'] ?? '');
+        $gender_edit      = in_array($raw_gender_edit, ['Male', 'Female'], true) ? $raw_gender_edit : null;
 
         $employee_data = [
           'user_id'   => $database->getCurrentUserId(),
@@ -992,8 +995,8 @@ try {
           'position'  => sanitizeInput($_POST['position']  ?? $current_employee['position']),
           'brand'     => sanitizeInput($_POST['brand']     ?? $current_employee['brand']),
           'gender'    => $gender_edit,
-          'birth'     => !empty($_POST['birth']) ? sanitizeInput($_POST['birth']) : ($current_employee['birth'] ?? null),
-          'hired'     => !empty($_POST['hired']) ? sanitizeInput($_POST['hired']) : ($current_employee['hired'] ?? null),
+          'birth'     => sanitizeInput(!empty($_POST['birth']) ? $_POST['birth'] : ($current_employee['birth'] ?? null)),
+          'hired'     => sanitizeInput(!empty($_POST['hired']) ? $_POST['hired'] : ($current_employee['hired'] ?? null)),
           'status'    => $status,
           'shift'     => $shift,
           'violation' => sanitizeInput($_POST['violation'] ?? $current_employee['violation']),
@@ -1004,9 +1007,9 @@ try {
         try {
           $employeeManager->updateEmployee($old_id, $employee_data);
 
-          $conn       = $database->getUserConnection();
-          $changedBy  = $_SESSION['username'] ?? 'System';
-          $finalStatus = syncStatusByQR($conn, $new_id, $new_qr_code, $changedBy);
+          $conn         = $database->getUserConnection();
+          $changedBy    = $_SESSION['username'] ?? 'System';
+          $finalStatus  = syncStatusByQR($conn, $new_id, $new_qr_code, $changedBy);
 
           $response['success'] = true;
           $response['message'] = 'Employee updated successfully';
@@ -1040,7 +1043,7 @@ try {
         break;
 
       case 'delete':
-        $employee_id = $_POST['id'] ?? 0;
+        $employee_id = sanitizeInput($_POST['id'] ?? 0);
         $employee    = $employeeManager->getEmployee($employee_id);
 
         if ($employee && $employeeManager->deleteEmployee($employee_id)) {
@@ -1154,7 +1157,6 @@ try {
         }
         break;
 
-      // ── IMPORT ───────────────────────────────────────────────────────────
       case 'import':
         $employees_data = safeJsonDecode($_POST['employees'] ?? '');
 
@@ -1255,7 +1257,7 @@ try {
 
       case 'bulk_status_update':
         $employee_ids = $_POST['employee_ids'] ?? [];
-        $new_status   = $_POST['new_status']   ?? '';
+        $new_status   = sanitizeInput($_POST['new_status'] ?? '');
         $reason       = sanitizeInput($_POST['reason'] ?? 'Bulk status update');
 
         if (!in_array($new_status, ALLOWED_STATUSES, true)) {
@@ -1352,7 +1354,7 @@ try {
 
       case 'restore_data':
         $backup_json  = $_POST['backup_data'] ?? '';
-        $raw_mode     = $_POST['restore_mode'] ?? 'replace';
+        $raw_mode     = sanitizeInput($_POST['restore_mode'] ?? 'replace');
         $restore_mode = in_array($raw_mode, ALLOWED_RESTORE, true) ? $raw_mode : 'replace';
 
         if (empty($backup_json)) {
@@ -1397,6 +1399,23 @@ try {
               $employee_data['shift']  = in_array($employee_data['shift']  ?? '', ALLOWED_SHIFTS,   true)
                 ? $employee_data['shift']  : 'Day Shift';
 
+              $import_gender_restore = $employee_data['gender'] ?? '';
+              $employee_data = [
+                'user_id'   => $database->getCurrentUserId(),
+                'id'        => sanitizeInput(trim((string)($employee_data['id']        ?? ''))),
+                'fullname'  => sanitizeInput(trim((string)($employee_data['fullname']  ?? ''))),
+                'position'  => sanitizeInput(trim((string)($employee_data['position']  ?? ''))),
+                'brand'     => sanitizeInput(trim((string)($employee_data['brand']     ?? ''))),
+                'gender'    => in_array($import_gender_restore, ['Male', 'Female'], true) ? $import_gender_restore : null,
+                'birth'     => !empty($employee_data['birth'])     ? sanitizeInput(trim($employee_data['birth']))     : null,
+                'hired'     => !empty($employee_data['hired'])     ? sanitizeInput(trim($employee_data['hired']))     : null,
+                'status'    => $employee_data['status'],
+                'shift'     => $employee_data['shift'],
+                'violation' => sanitizeInput(trim((string)($employee_data['violation'] ?? ''))),
+                'image'     => null,
+                'qr_code'   => sanitizeInput(trim((string)($employee_data['qr_code']  ?? ''))),
+              ];
+
               $employee_id = $employeeManager->createEmployee($employee_data);
 
               if ($employee_id !== false) {
@@ -1431,7 +1450,7 @@ try {
 
     // ── GET handler ──────────────────────────────────────────────────────────
   } elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    $action = $_GET['action'] ?? '';
+    $action = sanitizeInput($_GET['action'] ?? '');
 
     if (!empty($action) && !in_array($action, ALLOWED_GET_ACTIONS, true)) {
       $response['message'] = 'Invalid GET action specified.';
@@ -1458,44 +1477,54 @@ try {
         if (!empty($_GET['violation_none'])) $filters['violation_none'] = '1';
         if (!empty($_GET['qr_code']))        $filters['qr_code']        = sanitizeInput($_GET['qr_code']);
         if (!empty($_GET['created_at'])) {
-          $d = $_GET['created_at'];
+          $d = sanitizeInput($_GET['created_at']);
           if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['created_at'] = $d;
         }
         if (!empty($_GET['date_from'])) {
-          $d = $_GET['date_from'];
+          $d = sanitizeInput($_GET['date_from']);
           if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_from'] = $d;
         }
         if (!empty($_GET['date_to'])) {
-          $d = $_GET['date_to'];
+          $d = sanitizeInput($_GET['date_to']);
           if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_to'] = $d;
         }
         if (!empty($_GET['updated_at'])) {
-          $d = $_GET['updated_at'];
+          $d = sanitizeInput($_GET['updated_at']);
           if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['updated_at'] = $d;
         }
-        if (!empty($_GET['sort_col'])) $filters['sort_col'] = $_GET['sort_col'];
-        if (!empty($_GET['sort_dir'])) $filters['sort_dir'] = $_GET['sort_dir'];
+        if (!empty($_GET['sort_col'])) $filters['sort_col'] = sanitizeInput($_GET['sort_col']);
+        if (!empty($_GET['sort_dir'])) $filters['sort_dir'] = sanitizeInput($_GET['sort_dir']);
 
         $page  = max(1, (int)($_GET['page']  ?? 1));
         $limit = max(1, (int)($_GET['limit'] ?? 25));
 
         try {
-          $result  = $employeeManager->getEmployees($filters, $page, $limit);
-          $allRows = $employeeManager->getEmployees($filters, null);
+          $result   = $employeeManager->getEmployees($filters, $page, $limit);
+          $allRows  = $employeeManager->getEmployees([], null);
 
-          $response['success']        = true;
-          $response['data']           = $result['data'];
-          $response['total']          = $result['total'];
-          $response['page']           = $page;
-          $response['pages']          = ceil($result['total'] / $limit);
-          $response['filter_options'] = $allRows;
+          $filterableFields = ['position', 'brand', 'status', 'shift', 'violation'];
+          $fieldOptions = [];
+          foreach ($filterableFields as $field) {
+            $fieldFilters = $filters;
+            unset($fieldFilters[$field], $fieldFilters["{$field}_none"]);
+            $fieldOptions[$field] = $employeeManager->getEmployees($fieldFilters, null);
+          }
+
+          $response['success']              = true;
+          $response['data']                 = $result['data'];
+          $response['total']                = $result['total'];
+          $response['page']                 = $page;
+          $response['pages']                = ceil($result['total'] / $limit);
+          $response['filter_options']       = $allRows;
+          $response['field_filter_options'] = $fieldOptions;
         } catch (Exception $e) {
           $response['message'] = 'Error retrieving employees.';
         }
         break;
 
       case 'get_single':
-        $employee_id = $_GET['id'] ?? 0;
+        $employee_id = sanitizeInput($_GET['id'] ?? '');
+
         if ($employee_id) {
           try {
             $employee = $employeeManager->getEmployee($employee_id);
@@ -1515,6 +1544,7 @@ try {
 
       case 'get_access_logs':
         $id = intval($_GET['id'] ?? 0);
+
         if (!$id) {
           $response['message'] = 'Employee ID required';
           break;
@@ -1567,6 +1597,7 @@ try {
 
       case 'get_status_history':
         $emp_id = intval($_GET['id'] ?? 0);
+
         if (!$emp_id) {
           $response['message'] = 'Employee ID required';
           break;
@@ -1606,6 +1637,7 @@ try {
 
       case 'get_violations':
         $emp_id = intval($_GET['id'] ?? 0);
+
         if (!$emp_id) {
           $response['message'] = 'Employee ID required';
           break;
@@ -1642,6 +1674,7 @@ try {
 
       case 'check_qr':
         $qr_code = sanitizeInput($_GET['qr_code'] ?? '');
+
         if (!empty($qr_code)) {
           try {
             $employee = $employeeManager->getEmployeeByQR($qr_code);
@@ -1675,11 +1708,37 @@ try {
         $response['success'] = true;
         $response['data']    = [
           'user_id'    => $database->getCurrentUserId(),
-          'username'   => $_SESSION['username']   ?? 'Unknown',
-          'email'      => $_SESSION['email']      ?? '',
-          'first_name' => $_SESSION['first_name'] ?? '',
-          'last_name'  => $_SESSION['last_name']  ?? '',
+          'username'   => sanitizeInput($_SESSION['username']    ?? 'Unknown'),
+          'email'      => sanitizeInput($_SESSION['email']       ?? ''),
+          'first_name' => sanitizeInput($_SESSION['first_name']  ?? ''),
+          'last_name'  => sanitizeInput($_SESSION['last_name']   ?? ''),
         ];
+        break;
+
+      case 'health_check':
+        $health = [
+          'status'              => 'OK',
+          'timestamp'           => date('Y-m-d H:i:s'),
+          'timezone'            => date_default_timezone_get(),
+          'user_authenticated'  => isset($_SESSION['user_id']),
+          'user_id'             => sanitizeInput($_SESSION['user_id'] ?? ''),
+        ];
+
+        try {
+          $database->getMainConnection();
+          $database->getUserConnection();
+          $health['user_database'] = 'OK';
+        } catch (Exception $e) {
+          $health['status']        = 'ERROR';
+          $health['user_database'] = 'ERROR: ' . $e->getMessage();
+        }
+
+        header('Content-Type: application/json');
+        echo json_encode($health, JSON_PRETTY_PRINT);
+        exit;
+
+      default:
+        $response['message'] = 'Invalid GET action: ' . $action;
         break;
     }
   }
@@ -1718,7 +1777,6 @@ try {
 // ─────────────────────────────────────────────────────────────────────────────
 // FILE SERVING
 // ─────────────────────────────────────────────────────────────────────────────
-
 function serveFile($filepath, $filename = null)
 {
   if (!file_exists($filepath)) {
@@ -1768,42 +1826,71 @@ if (isset($_GET['serve_file'])) {
     echo "Access denied";
     exit;
   }
+
   $fileUploader = new FileUploader($userId);
   $filename     = basename($_GET['serve_file']);
   $filepath     = $fileUploader->getImagePath($filename);
+
   serveFile($filepath, $filename);
+}
+
+function getAPIInfo()
+{
+  return [
+    'version'     => '2.6',
+    'name'        => 'Manpower Management System',
+    'description' => 'Multi-user employee management — employee status auto-derived from the code table via syncStatusByQR()',
+    'features'    => [
+      'Transaction Support'   => 'Database transactions on ID-change edits, filtered delete, delete-all, import, restore, and bulk status update',
+      'Audit Logging'         => 'Full audit trail via logSystemAction() on every mutating operation',
+      'Filtered Delete'       => 'Delete employees by explicit ID list derived from active search filters',
+      'Image Handling'        => 'Upload → WebP conversion (max 800 px, 82 % quality) + thumbnail; MIME-validated; served via ?serve_file=',
+      'QR Reservation'        => 'Time-limited (300 s) proximity-code reservation with heartbeat to prevent concurrent assignment',
+      'Status Auto-Sync'      => 'syncStatusByQR() writes to status_history and adjusts employee.status on add/edit',
+      'Orphan Sync'           => 'sync_orphans GET action reconciles employees whose Proximity code is missing or disabled in the code table',
+      'Import / Restore'      => 'Bulk-import up to 2000 rows; restore from JSON backup in replace or merge mode',
+      'Backup'                => 'POST backup_data streams a timestamped JSON file containing all employees + stats',
+    ],
+    'endpoints' => [
+      'POST' => [
+        'add / create'        => 'Create employee; auto-generates QR if omitted; calls syncStatusByQR()',
+        'edit / update'       => 'Update employee; supports ID change via delete-insert; calls syncStatusByQR()',
+        'delete'              => 'Delete single employee and associated image file',
+        'delete_filtered'     => 'Delete employees by explicit ID list (max ' . MAX_BULK_DELETE . '); deletes associated images',
+        'delete_all'          => 'Delete all employees and all associated images',
+        'import'              => 'Bulk-import array of employee objects (max ' . MAX_IMPORT_ROWS . ' rows)',
+        'get_stats'           => 'Return total / active / inactive counts and shift breakdown',
+        'bulk_status_update'  => 'Set status for a list of employee IDs; logs each change to status_history',
+        'search_qr'           => 'Find employee by exact proximity value',
+        'restore_data'        => 'Restore from JSON backup; mode: replace (wipe first) or merge (skip existing)',
+        'backup_data'         => 'Stream all employees as a downloadable JSON backup file',
+      ],
+      'GET' => [
+        'get / list'          => 'Paginated employee list with server-side filters, sort, and field_filter_options',
+        'get_single'          => 'Fetch one employee by id',
+        'get_access_logs'     => 'Fetch up to 1000 employee_access_log rows for an employee; hydrates gate_name from users table',
+        'get_status_history'  => 'Fetch up to 200 status_history rows for an employee',
+        'get_violations'      => 'Fetch up to 200 violations rows for an employee',
+        'get_statuses'        => 'Return id + status for every employee (used by cross-tab live-sync polling)',
+        'check_qr'            => 'Check whether a proximity is already assigned to an employee',
+        'stats'               => 'Same as POST get_stats',
+        'user_info'           => 'Return session user_id, username, email, first_name, last_name',
+        'health_check'        => 'Verify main DB and user DB connectivity; returns JSON (bypasses XHR check)',
+      ],
+    ],
+    'query_parameters' => [
+      'Filters'               => 'id, fullname, position, brand, status, shift, violation, qr_code, created_at, date_from, date_to, updated_at (all optional)',
+      'None filters'          => 'position_none, brand_none, status_none, shift_none, violation_none — match NULL / empty / "none" values',
+      'Sorting'               => 'sort_col (fullname|brand|shift|violation|created_at|updated_at), sort_dir (asc|desc)',
+      'Paging'                => 'page (default 1), limit (default 25)',
+    ],
+    'authentication'          => 'Session-based ($_SESSION[user_id] required for every request)',
+    'database'                => 'Per-user databases; main DB holds users table used for gate-name lookup',
+  ];
 }
 
 if (isset($_GET['api_info'])) {
   header('Content-Type: application/json');
-  echo json_encode([
-    'version'     => '2.6',
-    'name'        => 'Integrated Manpower Management System',
-    'description' => 'Multi-user employee management — status auto-derived from code table',
-  ], JSON_PRETTY_PRINT);
-  exit;
-}
-
-if (isset($_GET['health_check'])) {
-  $health = [
-    'status'              => 'OK',
-    'timestamp'           => date('Y-m-d H:i:s'),
-    'timezone'            => date_default_timezone_get(),
-    'user_authenticated'  => isset($_SESSION['user_id']),
-    'database_connection' => 'OK',
-  ];
-
-  try {
-    $db = new Database();
-    $db->getMainConnection();
-    $db->getUserConnection();
-    $health['user_database'] = 'OK';
-  } catch (Exception $e) {
-    $health['status']        = 'ERROR';
-    $health['user_database'] = 'ERROR';
-  }
-
-  header('Content-Type: application/json');
-  echo json_encode($health, JSON_PRETTY_PRINT);
+  echo json_encode(getAPIInfo(), JSON_PRETTY_PRINT);
   exit;
 }

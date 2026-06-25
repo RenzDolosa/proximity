@@ -26,6 +26,36 @@ if (!defined('APP_TIMEZONE')) {
 }
 date_default_timezone_set(APP_TIMEZONE);
 
+// ── Whitelists ────────────────────────────────────────────────────────────────
+const ALLOWED_POST_ACTIONS = [
+  'add',
+  'create',
+  'edit',
+  'update',
+  'delete',
+  'delete_filtered',
+  'delete_all',
+  'import',
+  'search_qr',
+  'toggle_status',
+  'reserve_code',
+  'release_code',
+  'restore_data',
+];
+
+const ALLOWED_GET_ACTIONS = [
+  'get',
+  'list',
+  'get_single',
+  'check_qr',
+  'stats',
+  'user_info',
+  'sync_orphans',
+  'health_check',
+];
+
+const RESERVATION_TTL_SECONDS = 300;
+
 // ── Safe json_decode wrapper ──────────────────────────────────────────────────
 function safeJsonDecode($json, $assoc = true, $depth = 32)
 {
@@ -50,18 +80,9 @@ if (isset($_GET['serve_file'])) {
   }
 }
 
-const ALLOWED_GET_ACTIONS = [
-  'get',
-  'list',
-  'get_single',
-  'check_qr',
-  'stats',
-  'user_info',
-  'sync_orphans',
-];
-
-const RESERVATION_TTL_SECONDS = 300;
-
+// ─────────────────────────────────────────────────────────────────────────────
+// Database — connection manager
+// ─────────────────────────────────────────────────────────────────────────────
 class Database
 {
   private $mainConn;
@@ -264,9 +285,6 @@ class EmployeeManager
       $oldIsActive = (int)$current['is_active'];
       $newIsActive = isset($data['is_active']) ? (int)$data['is_active'] : 1;
 
-      // Keep the linked employee's status in sync the instant this code's
-      // enabled state (or the qr_code text itself) changes, instead of
-      // waiting on the next sync_orphans poll.
       if ($oldIsActive !== $newIsActive || $current['qr_code'] !== $data['qr_code']) {
         $this->syncEmployeeStatusWithCode($data['qr_code'], $newIsActive);
       }
@@ -318,7 +336,6 @@ class EmployeeManager
     try {
       $userConn = getUserDBConnection($this->userId);
 
-      // Find employee by QR code
       $stmt = $userConn->prepare(
         "SELECT id, fullname, status
          FROM employees
@@ -331,7 +348,7 @@ class EmployeeManager
       if (!$employee) {
         return [
           'success' => true,
-          'message' => "No employee assigned to QR: $qr_code — nothing to sync",
+          'message' => "No employee assigned to Proximity code: $qr_code — nothing to sync",
         ];
       }
 
@@ -593,6 +610,14 @@ class EmployeeManager
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FileUploader — only used here for serving/deleting images referenced in logs
+// ─────────────────────────────────────────────────────────────────────────────
+function sanitizeFilename($filename)
+{
+  return preg_replace('/[^a-zA-Z0-9_\.-]/', '', $filename);
+}
+
 class FileUploader
 {
   private $upload_dir;
@@ -698,7 +723,12 @@ try {
   $response = ['success' => false, 'message' => '', 'data' => null];
 
   if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
+    $action = sanitizeInput($_POST['action'] ?? '');
+
+    if (!in_array($action, ALLOWED_POST_ACTIONS, true)) {
+      $response['message'] = 'Invalid action specified.';
+      goto send_response;
+    }
 
     switch ($action) {
       case 'add':
@@ -738,7 +768,7 @@ try {
 
       case 'edit':
       case 'update':
-        $employee_id      = $_POST['id'] ?? 0;
+        $employee_id      = sanitizeInput($_POST['id'] ?? 0);
         $current_employee = $employeeManager->getEmployee($employee_id);
 
         if (!$current_employee) {
@@ -780,13 +810,26 @@ try {
         }
         break;
 
+      case 'delete':
+        $employee_id = sanitizeInput($_POST['id'] ?? 0);
+        $employee    = $employeeManager->getEmployee($employee_id);
+
+        if ($employee && $employeeManager->deleteEmployee($employee_id)) {
+          if (!empty($employee['image'])) {
+            $fileUploader->deleteImage($employee['image']);
+          }
+
+          $response['success'] = true;
+          $response['message'] = 'Proximity code deleted successfully';
+        } else {
+          $response['message'] = 'Failed to delete proximity code';
+        }
+        break;
+
       case 'delete_filtered':
         try {
-          $employee_ids_json = $_POST['employee_ids'] ?? '[]';
-          $filters_json      = $_POST['filters']      ?? '{}';
-
-          $raw_ids      = json_decode($employee_ids_json, true) ?: [];
-          $filters      = json_decode($filters_json, true)      ?: [];
+          $raw_ids      = safeJsonDecode($_POST['employee_ids'] ?? '[]') ?: [];
+          $filters      = safeJsonDecode($_POST['filters']      ?? '{}') ?: [];
           $employee_ids = array_values(array_filter(array_map('intval', $raw_ids)));
 
           if (empty($employee_ids)) {
@@ -819,7 +862,7 @@ try {
 
             $filterDescriptions = [];
             foreach ($filters as $key => $value) {
-              $filterDescriptions[] = "$key: $value";
+              $filterDescriptions[] = sanitizeInput($key) . ': ' . sanitizeInput($value);
             }
             $filterStr = implode(', ', $filterDescriptions) ?: 'All';
 
@@ -828,7 +871,10 @@ try {
             $response['deleted_count']  = $deleted_count;
             $response['deleted_images'] = $deleted_images;
 
-            logSystemAction($database->getCurrentUserId(), 'FILTERED_CODE_DELETED', "Deleted $deleted_count proximity codes with filters: $filterStr");
+            logSystemAction(
+              $database->getCurrentUserId(),
+              'FILTERED_CODE_DELETED',
+              "Deleted $deleted_count proximity codes with filters: $filterStr");
           } else {
             $db->rollBack();
             $response['message'] = 'Failed to delete proximity codes';
@@ -836,22 +882,6 @@ try {
         } catch (Exception $e) {
           if (isset($db)) $db->rollBack();
           $response['message'] = 'Delete filtered error: ' . $e->getMessage();
-        }
-        break;
-
-      case 'delete':
-        $employee_id = $_POST['id'] ?? 0;
-        $employee    = $employeeManager->getEmployee($employee_id);
-
-        if ($employee && $employeeManager->deleteEmployee($employee_id)) {
-          if (!empty($employee['image'])) {
-            $fileUploader->deleteImage($employee['image']);
-          }
-
-          $response['success'] = true;
-          $response['message'] = 'Proximity code deleted successfully';
-        } else {
-          $response['message'] = 'Failed to delete proximity code';
         }
         break;
 
@@ -887,7 +917,7 @@ try {
           break;
         }
 
-        $employees_data = json_decode($employees_json, true);
+        $employees_data = safeJsonDecode($employees_json);
 
         if (!is_array($employees_data) || empty($employees_data)) {
           $response['message'] = 'Invalid proximity code format';
@@ -978,7 +1008,7 @@ try {
         break;
 
       case 'search_qr':
-        $qr_code = $_POST['qr_code'] ?? '';
+        $qr_code = sanitizeInput($_POST['qr_code'] ?? '');
 
         if (empty($qr_code)) {
           $response['message'] = 'Proximity code is required';
@@ -1013,7 +1043,7 @@ try {
         break;
 
       case 'toggle_status':
-        $employee_id = $_POST['id'] ?? 0;
+        $employee_id = sanitizeInput($_POST['id'] ?? 0);
 
         if (!$employee_id) {
           $response['message'] = 'Proximity code ID is required';
@@ -1064,13 +1094,16 @@ try {
 
         $response['success'] = true;
         break;
-
-      default:
-        $response['message'] = 'Invalid action specified: ' . htmlspecialchars($action);
-        break;
     }
+
+    // ── GET handler ──────────────────────────────────────────────────────────
   } elseif ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    $action = $_GET['action'] ?? '';
+    $action = sanitizeInput($_GET['action'] ?? '');
+
+    if (!empty($action) && !in_array($action, ALLOWED_GET_ACTIONS, true)) {
+      $response['message'] = 'Invalid GET action.';
+      goto send_response;
+    }
 
     switch ($action) {
       case 'get':
@@ -1080,56 +1113,67 @@ try {
 
         if (!empty($_GET['qr_code'])) $filters['qr_code'] = sanitizeInput($_GET['qr_code']);
         if (isset($_GET['is_active']) && $_GET['is_active'] !== '') {
-          $filters['is_active'] = (int)$_GET['is_active'];
+          $filters['is_active'] = sanitizeInput((int)$_GET['is_active']);
         }
         if (!empty($_GET['remarks']) && in_array($_GET['remarks'], ['Occupied', 'Available'], true)) {
-          $filters['remarks'] = $_GET['remarks'];
+          $filters['remarks'] = sanitizeInput($_GET['remarks']);
         }
         if (!empty($_GET['created_at'])) {
-          $d = $_GET['created_at'];
+          $d = sanitizeInput($_GET['created_at']);
           if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['created_at'] = $d;
         }
         if (!empty($_GET['date_from'])) {
-          $d = $_GET['date_from'];
+          $d = sanitizeInput($_GET['date_from']);
           if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_from'] = $d;
         }
         if (!empty($_GET['date_to'])) {
-          $d = $_GET['date_to'];
+          $d = sanitizeInput($_GET['date_to']);
           if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_to'] = $d;
         }
         if (!empty($_GET['updated_at'])) {
-          $d = $_GET['updated_at'];
+          $d = sanitizeInput($_GET['updated_at']);
           if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['updated_at'] = $d;
         }
-        if (!empty($_GET['sort_col'])) $filters['sort_col'] = $_GET['sort_col'];
-        if (!empty($_GET['sort_dir'])) $filters['sort_dir'] = $_GET['sort_dir'];
+        if (!empty($_GET['sort_col'])) $filters['sort_col'] = sanitizeInput($_GET['sort_col']);
+        if (!empty($_GET['sort_dir'])) $filters['sort_dir'] = sanitizeInput($_GET['sort_dir']);
 
         $page  = max(1, (int)($_GET['page']  ?? 1));
         $limit = max(1, (int)($_GET['limit'] ?? 25));
 
         try {
-          $result  = $employeeManager->getEmployees($filters, $page, $limit);
-          $allRows = $employeeManager->getEmployees($filters, null);
+          $result   = $employeeManager->getEmployees($filters, $page, $limit);
+          $allRows  = $employeeManager->getEmployees($filters, null);
 
-          $response['success']          = true;
-          $response['data']             = $result['data'];
-          $response['total']            = $result['total'];
-          $response['page']             = $page;
-          $response['pages']            = ceil($result['total'] / $limit);
-          $response['filter_options']   = $allRows;
-          $response['reservation_key']  = $reservationKey;
+          $filterableFields = ['remarks', 'status'];
+          $fieldOptions = [];
+          foreach ($filterableFields as $field) {
+            $fieldFilters = $filters;
+            unset($fieldFilters[$field], $fieldFilters["{$field}_none"]);
+            if ($field === 'status') {
+              unset($fieldFilters['is_active']);
+            }
+            $fieldOptions[$field] = $employeeManager->getEmployees($fieldFilters, null);
+          }
+
+          $response['success']              = true;
+          $response['data']                 = $result['data'];
+          $response['total']                = $result['total'];
+          $response['page']                 = $page;
+          $response['pages']                = ceil($result['total'] / $limit);
+          $response['filter_options']       = $allRows;
+          $response['field_filter_options'] = $fieldOptions;
+          $response['reservation_key']      = $reservationKey;
         } catch (Exception $e) {
           $response['message'] = 'Error retrieving proximity codes.';
         }
         break;
 
       case 'get_single':
-        $employee_id = $_GET['id'] ?? 0;
+        $employee_id = sanitizeInput($_GET['id'] ?? 0);
 
         if ($employee_id) {
           try {
             $employee = $employeeManager->getEmployee($employee_id);
-
             if ($employee) {
               $response['success'] = true;
               $response['data']    = $employee;
@@ -1145,7 +1189,7 @@ try {
         break;
 
       case 'check_qr':
-        $qr_code = $_GET['qr_code'] ?? '';
+        $qr_code = sanitizeInput($_GET['qr_code'] ?? '');
 
         if (!empty($qr_code)) {
           try {
@@ -1182,10 +1226,10 @@ try {
         $response['success'] = true;
         $response['data']    = [
           'user_id'    => $database->getCurrentUserId(),
-          'username'   => $_SESSION['username']   ?? 'Unknown',
-          'email'      => $_SESSION['email']       ?? '',
-          'first_name' => $_SESSION['first_name']  ?? '',
-          'last_name'  => $_SESSION['last_name']   ?? '',
+          'username'   => sanitizeInput($_SESSION['username']    ?? 'Unknown'),
+          'email'      => sanitizeInput($_SESSION['email']       ?? ''),
+          'first_name' => sanitizeInput($_SESSION['first_name']  ?? ''),
+          'last_name'  => sanitizeInput($_SESSION['last_name']   ?? ''),
         ];
         break;
 
@@ -1323,8 +1367,8 @@ try {
               try {
                 $histInsert = $userConn->prepare(
                   "INSERT INTO status_history
-           (employee_id, old_status, new_status, changed_by, change_reason, created_at)
-         VALUES (:eid, 'Inactive', 'Active', :by, :reason, :ts)"
+                    (employee_id, old_status, new_status, changed_by, change_reason, created_at)
+                  VALUES (:eid, 'Inactive', 'Active', :by, :reason, :ts)"
                 );
                 $histInsert->execute([
                   ':eid'    => $emp['id'],
@@ -1365,14 +1409,36 @@ try {
           error_log("sync_orphans error: " . $e->getMessage());
         }
         break;
+      
+      case 'health_check':
+        $health = [
+          'status'              => 'OK',
+          'timestamp'           => date('Y-m-d H:i:s'),
+          'timezone'            => date_default_timezone_get(),
+          'user_authenticated'  => isset($_SESSION['user_id']),
+          'user_id'             => sanitizeInput($_SESSION['user_id'] ?? ''),
+        ];
+
+        try {
+          $database->getMainConnection();
+          $database->getUserConnection();
+          $health['user_database'] = 'OK';
+        } catch (Exception $e) {
+          $health['status']        = 'ERROR';
+          $health['user_database'] = 'ERROR: ' . $e->getMessage();
+        }
+
+        header('Content-Type: application/json');
+        echo json_encode($health, JSON_PRETTY_PRINT);
+        exit;
 
       default:
-        $response['message'] = 'Invalid GET action specified: ' . htmlspecialchars($action);
+        $response['message'] = 'Invalid GET action: ' . $action;
         break;
     }
-  } else {
-    $response['message'] = 'Invalid request method. Use GET or POST.';
-  }
+  } 
+  
+  send_response:
 
   if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
     header('Content-Type: application/json');
@@ -1391,7 +1457,7 @@ try {
     'message' => 'System error: ' . $e->getMessage()
   ];
 
-  error_log("Proximity Management System Error: " . $e->getMessage());
+  error_log("Proximity System Error: " . $e->getMessage());
 
   if (isset($_SESSION['user_id'])) {
     logSystemAction($_SESSION['user_id'], 'SYSTEM_ERROR', $e->getMessage());
@@ -1406,64 +1472,118 @@ try {
   $_SESSION['error_message'] = $error_response['message'];
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FILE SERVING
+// ─────────────────────────────────────────────────────────────────────────────
+function serveFile($filepath, $filename = null)
+{
+  if (!file_exists($filepath)) {
+    http_response_code(404);
+    echo "File not found";
+    return;
+  }
+
+  $filename       = $filename ?: basename($filepath);
+  $file_extension = strtolower(pathinfo($filepath, PATHINFO_EXTENSION));
+
+  $content_types = [
+    'jpg'  => 'image/jpeg',
+    'jpeg' => 'image/jpeg',
+    'png'  => 'image/png',
+    'gif'  => 'image/gif',
+    'webp' => 'image/webp',
+    'pdf'  => 'application/pdf',
+    'csv'  => 'text/csv',
+    'xls'  => 'application/vnd.ms-excel',
+    'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ];
+
+  $content_type = $content_types[$file_extension] ?? 'application/octet-stream';
+  $image_types  = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+
+  if (in_array($file_extension, $image_types)) {
+    header('Content-Disposition: inline; filename="' . $filename . '"');
+    header('Cache-Control: public, max-age=31536000, immutable');
+    header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 31536000) . ' GMT');
+  } else {
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Cache-Control: no-cache, must-revalidate');
+    header('Expires: 0');
+  }
+
+  header('Content-Type: ' . $content_type);
+  header('Content-Length: ' . filesize($filepath));
+  readfile($filepath);
+  exit;
+}
+
+if (isset($_GET['serve_file'])) {
+  $userId = $_SESSION['user_id'] ?? null;
+  if (!$userId) {
+    http_response_code(403);
+    echo "Access denied";
+    exit;
+  }
+
+  $fileUploader = new FileUploader($userId);
+  $filename     = sanitizeFilename(basename($_GET['serve_file']));
+  $filepath     = $fileUploader->getImagePath($filename);
+
+  serveFile($filepath, $filename);
+}
+
 function getAPIInfo()
 {
   return [
-    'version'     => '2.2',
-    'name'        => 'Proximity Management System',
-    'description' => 'Multi-user proximity management system with user-specific databases',
+    'version'     => '2.6',
+    'name'        => 'Proximity Code Management System',
+    'description' => 'CRUD for the code table; toggling a code\'s is_active syncs the linked employee\'s status automatically',
     'features'    => [
-      'Transaction Support' => 'Database transactions for critical operations',
-      'Audit Logging'       => 'Complete audit trail of all operations',
-      'Filtered Delete'     => 'Delete employees based on active search filters',
+      'Transaction Support'     => 'Database transactions on filtered delete and delete-all',
+      'Audit Logging'           => 'Full audit trail via logSystemAction() on every mutating operation',
+      'Filtered Delete'         => 'Delete codes by explicit ID list derived from active search filters',
+      'Status Auto-Sync'        => 'toggle_status and update write to status_history and flip employee.status via syncEmployeeStatusWithCode()',
+      'Orphan Sync'             => 'sync_orphans GET action sets employees Inactive when their Proximity is missing/disabled; restores Active when re-enabled',
+      'Code Reservation'        => 'Time-limited (300 s TTL) reserve_code / release_code prevent concurrent assignment; stale reservations cleared on each list request',
+      'Remarks Filter'          => 'Occupied / Available filter resolved server-side by EXISTS check against the employees table',
+      'Import'                  => 'Bulk-import array of proximity strings; duplicate codes are skipped',
     ],
     'endpoints' => [
       'POST' => [
-        'add/create'     => 'Create new proximity code',
-        'edit/update'    => 'Update existing proximity code',
-        'delete'         => 'Delete proximity code',
-        'delete_all'     => 'Delete all proximity codes',
-        'search_qr'      => 'Search proximity code by Proximity code',
+        'add / create'          => 'Create a proximity code entry; defaults to enabled',
+        'edit / update'         => 'Update proximity and/or is_active; triggers syncEmployeeStatusWithCode()',
+        'delete'                => 'Delete a single code row',
+        'delete_filtered'       => 'Delete codes by explicit ID list',
+        'delete_all'            => 'Delete all code rows; resets AUTO_INCREMENT',
+        'import'                => 'Bulk-import array of proximity objects; skips duplicates',
+        'toggle_status'         => 'Flip is_active for a code and sync the linked employee\'s status',
+        'reserve_code'          => 'Mark a code as reserved by the current session (300 s TTL)',
+        'release_code'          => 'Release the current session\'s reservation on a code',
+        'search_qr'             => 'Find an active code by exact proximity value',
+        'restore_data'          => '(declared in ALLOWED_POST_ACTIONS; handler not yet implemented)',
       ],
       'GET' => [
-        'get/list'   => 'Get proximity codes with optional filters',
-        'get_single' => 'Get single proximity code by ID',
-        'check_qr'   => 'Check if Proximity code exists',
-        'stats'      => 'Get proximity code statistics',
-        'user_info'  => 'Get current user information',
+        'get / list'            => 'Paginated code list with filters, sort, Occupied/Available remarks, reservation_key, and field_filter_options',
+        'get_single'            => 'Fetch one code row by id',
+        'check_qr'              => 'Check whether a proximity is already assigned to an employee',
+        'stats'                 => 'Return total, occupied, and available counts',
+        'sync_orphans'          => 'Reconcile employee statuses against the code table (disable orphans, restore re-enabled)',
+        'user_info'             => 'Return session user_id, username, email, first_name, last_name',
+        'health_check'          => 'Verify main DB and user DB connectivity; returns JSON (bypasses XHR check)',
       ],
     ],
-    'authentication' => 'Session-based (user must be logged in)',
-    'database'       => 'User-specific databases',
+    'query_parameters' => [
+      'Filters'                 => 'proximity, status (Enabled|Disabled), remarks (Occupied|Available), created_at, date_from, date_to, updated_at',
+      'Sorting'                 => 'sort_col (status|created_at|updated_at — "remarks" falls back to created_at), sort_dir (asc|desc)',
+      'Paging'                  => 'page (default 1), limit (default 25)',
+    ],
+    'authentication'            => 'Session-based ($_SESSION[user_id] required for every request)',
+    'database'                  => 'Per-user databases; cross-DB EXISTS query references DB_NAME.employees for Occupied/Available',
   ];
 }
 
 if (isset($_GET['api_info'])) {
   header('Content-Type: application/json');
   echo json_encode(getAPIInfo(), JSON_PRETTY_PRINT);
-  exit;
-}
-
-if (isset($_GET['health_check'])) {
-  $health = [
-    'status'             => 'OK',
-    'timestamp'          => date('Y-m-d H:i:s'),
-    'timezone'           => date_default_timezone_get(),
-    'user_authenticated' => isset($_SESSION['user_id']),
-    'user_id'            => $_SESSION['user_id'] ?? null,
-  ];
-
-  try {
-    $database = new Database();
-    $database->getMainConnection();
-    $database->getUserConnection();
-    $health['user_database'] = 'OK';
-  } catch (Exception $e) {
-    $health['status']        = 'ERROR';
-    $health['user_database'] = 'ERROR: ' . $e->getMessage();
-  }
-
-  header('Content-Type: application/json');
-  echo json_encode($health, JSON_PRETTY_PRINT);
   exit;
 }
