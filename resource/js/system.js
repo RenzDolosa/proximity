@@ -29,6 +29,7 @@ let _currentReservedCode = null;
 let _myReservationKey = null;
 let _reservationHeartbeat = null;
 const RESERVATION_HEARTBEAT_MS = 90000;
+const SUGGESTION_POLL_MS = 3000;
 
 const LIVE_SYNC_POLL_MS = 2000;
 let _liveSyncInterval = null;
@@ -37,11 +38,11 @@ let _liveSyncInFlight = false;
 
 // ── Global-audio endpoint ─────────────────────────────────────────
 const AUDIO_TYPE_MAP = {
-  success:    "successSound",
-  checkout:   "checkoutSound",
-  not_found:  "noResultSound",
+  success: "successSound",
+  checkout: "checkoutSound",
+  not_found: "noResultSound",
   violations: "warningSound",
-  inactive:   "inactiveSound",
+  inactive: "inactiveSound",
 };
 
 // ── Controls CSS helper ───────────────────────────────────────────
@@ -269,7 +270,7 @@ function setupEventListeners() {
     "search_fullname",
     "fullname-suggestions",
     () =>
-      [...allEmployees]
+      [...(fieldFilterOptions.fullname || allEmployees)]
         .sort((a, b) => {
           const lastName = (name) => {
             const parts = (name || "").trim().split(/\s+/);
@@ -277,9 +278,11 @@ function setupEventListeners() {
           };
           return lastName(a.fullname).localeCompare(lastName(b.fullname));
         })
-        .map((e) => e.fullname),
+        .map((e) => e.fullname)
+        .filter(Boolean),
     {
       requireInput: false,
+      showAll: true,
       onSelect: () => searchEmployees(),
     },
   );
@@ -354,7 +357,8 @@ function setupEventListeners() {
     () =>
       [...(fieldFilterOptions.violation || allEmployees)]
         .sort((a, b) => (a.violation || "").localeCompare(b.violation || ""))
-        .map((e) => e.violation),
+        .map((e) => e.violation)
+        .filter(Boolean),
     {
       hiddenId: "search_violation_val",
       noneLabel: "No Violation",
@@ -430,6 +434,33 @@ function setupModalSuggestions() {
     document.body.appendChild(list);
 
     let idx = -1;
+    let pollInterval = null;
+    let pollInFlight = false;
+
+    function startSuggestionPolling() {
+      if (!opts.pollMs || pollInterval) return;
+      pollInterval = setInterval(async () => {
+        if (!isModalOpen()) {
+          stopSuggestionPolling();
+          return;
+        }
+        if (pollInFlight) return;
+        pollInFlight = true;
+        try {
+          if (opts.onFocus) await opts.onFocus();
+          show(input.value);
+        } finally {
+          pollInFlight = false;
+        }
+      }, opts.pollMs);
+    }
+
+    function stopSuggestionPolling() {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    }
 
     function isModalOpen() {
       const m = document.getElementById("employeeModal");
@@ -505,9 +536,14 @@ function setupModalSuggestions() {
           const iconHtml = opts.icon
             ? `<img src="${escapeHtml(opts.icon)}" style="width:14px;height:14px;margin-right:6px;vertical-align:middle;">`
             : "";
-          const badgeHtml = opts.badge
+          const badgeInfo = opts.getBadge
+            ? opts.getBadge(v)
+            : opts.badge
+              ? { label: opts.badge, bg: "#d1fae5", color: "#065f46" }
+              : null;
+          const badgeHtml = badgeInfo
             ? `<span style="margin-left:6px;font-size:10px;padding:1px 6px;border-radius:10px;
-                background:#d1fae5;color:#065f46;font-weight:600;">${escapeHtml(opts.badge)}</span>`
+                background:${escapeHtml(badgeInfo.bg)};color:${escapeHtml(badgeInfo.color)};font-weight:600;">${escapeHtml(badgeInfo.label)}</span>`
             : "";
 
           return `
@@ -546,6 +582,7 @@ function setupModalSuggestions() {
         await opts.onFocus();
         show(input.value);
       }
+      startSuggestionPolling();
     };
 
     const onBlur = () => {
@@ -553,6 +590,7 @@ function setupModalSuggestions() {
         if (!list.contains(document.activeElement)) {
           list.style.display = "none";
           idx = -1;
+          stopSuggestionPolling();
         }
       }, 150);
     };
@@ -617,6 +655,7 @@ function setupModalSuggestions() {
     document.addEventListener("click", outsideClick);
 
     _modalSuggestionTeardowns.push(() => {
+      stopSuggestionPolling();
       input.removeEventListener("focus", onFocus);
       input.removeEventListener("click", onClick);
       input.removeEventListener("blur", onBlur);
@@ -633,7 +672,7 @@ function setupModalSuggestions() {
     "employee_id",
     "modal-empid-suggestions",
     () =>
-      [...allEmployees]
+      [...(fieldFilterOptions.id || allEmployees)]
         .sort((a, b) => Number(b.id) - Number(a.id))
         .map((e) => String(e.id)),
     { raw: true, requireInput: true },
@@ -643,7 +682,7 @@ function setupModalSuggestions() {
     "fullname",
     "modal-fullname-suggestions",
     () =>
-      [...allEmployees]
+      [...(fieldFilterOptions.fullname || allEmployees)]
         .sort((a, b) => {
           const lastName = (name) => {
             const parts = (name || "").trim().split(/\s+/);
@@ -695,6 +734,8 @@ function setupModalSuggestions() {
   );
 
   let _availableModalCodes = [];
+  let _currentOwnedCode =
+    document.getElementById("qr_code")?.value.trim() || "";
 
   attachModalSuggestion(
     "qr_code",
@@ -704,20 +745,51 @@ function setupModalSuggestions() {
       raw: true,
       requireInput: false,
       icon: `/config/asset.php?t=gnks2`,
-      badge: "Available",
+      getBadge: (val) => {
+        if (
+          val.trim().toLowerCase() === _currentOwnedCode.trim().toLowerCase()
+        ) {
+          return { label: "Current", bg: "#dbeafe", color: "#1e40af" };
+        }
+        return { label: "Available", bg: "#d1fae5", color: "#065f46" };
+      },
       onSelect: (val) => {
-        _availableModalCodes = _availableModalCodes.filter(
-          (c) => c.trim().toLowerCase() !== val.trim().toLowerCase(),
-        );
+        const prevReserved = _currentReservedCode;
 
         if (_currentReservedCode && _currentReservedCode !== val) {
           releaseReservedCode(_currentReservedCode);
+
+          if (
+            prevReserved &&
+            prevReserved.trim().toLowerCase() !==
+              _currentOwnedCode.trim().toLowerCase() &&
+            !_availableModalCodes.some(
+              (c) =>
+                c.trim().toLowerCase() === prevReserved.trim().toLowerCase(),
+            )
+          ) {
+            _availableModalCodes.push(prevReserved);
+            const currentCode = _currentOwnedCode.toLowerCase();
+            _availableModalCodes.sort((a, b) => {
+              const aL = a.trim().toLowerCase();
+              const bL = b.trim().toLowerCase();
+              if (aL === currentCode) return -1;
+              if (bL === currentCode) return 1;
+              const numA = Number(a);
+              const numB = Number(b);
+              return !isNaN(numA) && !isNaN(numB)
+                ? numA - numB
+                : String(a).localeCompare(String(b));
+            });
+          }
         }
+
         _currentReservedCode = val;
         reserveCode(val);
         startReservationHeartbeat();
       },
       alwaysShowAll: true,
+      pollMs: SUGGESTION_POLL_MS,
       onFocus: async () => {
         try {
           const [proxRes, allEmpRes] = await Promise.all([
@@ -740,9 +812,7 @@ function setupModalSuggestions() {
 
           _myReservationKey = proxJson.reservation_key || _myReservationKey;
 
-          const currentCode =
-            document.getElementById("qr_code")?.value.trim().toLowerCase() ||
-            "";
+          const currentCode = _currentOwnedCode.toLowerCase();
 
           const empList =
             allEmpJson.success && Array.isArray(allEmpJson.filter_options)
@@ -755,30 +825,54 @@ function setupModalSuggestions() {
               .filter(Boolean),
           );
 
-          _availableModalCodes = proxJson.filter_options
+          const filteredCodes = proxJson.filter_options
             .filter((c) => {
               const cLower = (c.qr_code || "").trim().toLowerCase();
               const isCurrentValue = cLower === currentCode;
               const reservedByOther =
                 c.reserved_by && c.reserved_by !== _myReservationKey;
 
+              const reservedBySelfOnly =
+                c.reserved_by &&
+                c.reserved_by === _myReservationKey &&
+                !isCurrentValue;
+
               return (
                 c.is_active == 1 &&
+                !reservedBySelfOnly &&
                 (isCurrentValue || !assignedSet.has(cLower)) &&
                 (isCurrentValue || !reservedByOther)
               );
             })
-            .map((c) => c.qr_code)
-            .sort((a, b) => {
-              const numA = Number(a);
-              const numB = Number(b);
-              const bothNumeric = !isNaN(numA) && !isNaN(numB);
-              return bothNumeric
-                ? numA - numB
-                : String(a).localeCompare(String(b));
-            });
+            .map((c) => c.qr_code);
+
+          if (
+            _currentOwnedCode &&
+            !filteredCodes.some((c) => c.trim().toLowerCase() === currentCode)
+          ) {
+            filteredCodes.unshift(_currentOwnedCode);
+          }
+
+          const newCodes = filteredCodes.sort((a, b) => {
+            const aLower = a.trim().toLowerCase();
+            const bLower = b.trim().toLowerCase();
+            if (aLower === currentCode) return -1;
+            if (bLower === currentCode) return 1;
+            const numA = Number(a);
+            const numB = Number(b);
+            return !isNaN(numA) && !isNaN(numB)
+              ? numA - numB
+              : String(a).localeCompare(String(b));
+          });
+
+          if (newCodes.length > 0 || _availableModalCodes.length === 0) {
+            _availableModalCodes = newCodes;
+          }
         } catch (error) {
-          console.warn("Modal Proximity code suggestions: failed to load", error);
+          console.warn(
+            "Modal Proximity code suggestions: failed to load",
+            error,
+          );
         }
       },
     },
@@ -1828,26 +1922,16 @@ async function loadEmployees(
       if (Array.isArray(data.filter_options)) {
         allEmployees = data.filter_options;
       }
-      
-      if (data.field_filter_options && typeof data.field_filter_options === "object") {
+
+      if (
+        data.field_filter_options &&
+        typeof data.field_filter_options === "object"
+      ) {
         fieldFilterOptions = data.field_filter_options;
       }
 
       if (Object.keys(filters).length === 0) {
         allEmployees = data.filter_options ?? data.data ?? [];
-      } else if (allEmployees.length === 0) {
-        fetch(`${EmployeesBackend}?action=get&page=1&limit=99999`, {
-          headers: {
-            "X-Requested-With": "XMLHttpRequest",
-            "X-Silent-Request": "true",
-          },
-        })
-          .then((r) => r.json())
-          .then((d) => {
-            if (d.success && Array.isArray(d.filter_options))
-              allEmployees = d.filter_options;
-          })
-          .catch(() => {});
       }
 
       if (!preservePage && Object.keys(filters).length === 0) currentPage = 1;
@@ -1922,7 +2006,7 @@ async function openModal(action, employeeId = null) {
 async function reserveCode(qr_code) {
   if (!ProxcodeBackend || !qr_code) return;
   try {
-    const res = await fetch(`${ProxcodeBackend}`, {
+    const response = await fetch(`${ProxcodeBackend}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -1931,7 +2015,7 @@ async function reserveCode(qr_code) {
       },
       body: new URLSearchParams({ action: "reserve_code", qr_code }),
     });
-    const data = await res.json();
+    const data = await response.json();
 
     if (!data.success) {
       showAlert(
@@ -1949,8 +2033,8 @@ async function reserveCode(qr_code) {
       stopReservationHeartbeat();
       _currentReservedCode = null;
     }
-  } catch (e) {
-    console.warn("reserveCode failed:", e);
+  } catch (error) {
+    console.warn("reserveCode failed:", error);
   }
 }
 
@@ -2257,20 +2341,23 @@ let _statusHistoryCache = {};
 let _remarksCache = {};
 
 async function _switchLogsTab(tab, employeeId) {
-  const accessBtn  = document.getElementById("logsTabAccess");
-  const statusBtn  = document.getElementById("logsTabStatus");
+  const accessBtn = document.getElementById("logsTabAccess");
+  const statusBtn = document.getElementById("logsTabStatus");
   const remarksBtn = document.getElementById("logsTabRemarks");
-  const content    = document.getElementById("logsTabContent");
+  const content = document.getElementById("logsTabContent");
 
-  const active   = "padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid #3b82f6;background:none;color:#3b82f6;cursor:pointer;";
-  const inactive = "padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid transparent;background:none;color:#94a3b8;cursor:pointer;";
+  const active =
+    "padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid #3b82f6;background:none;color:#3b82f6;cursor:pointer;";
+  const inactive =
+    "padding:8px 20px;font-size:13px;font-weight:600;border:none;border-bottom:2px solid transparent;background:none;color:#94a3b8;cursor:pointer;";
 
-  accessBtn.style.cssText  = inactive;
-  statusBtn.style.cssText  = inactive;
+  accessBtn.style.cssText = inactive;
+  statusBtn.style.cssText = inactive;
   remarksBtn.style.cssText = inactive;
 
   // Reset page only when switching tabs (not when re-rendering same tab via pagination)
-  const switching = !content.dataset.activeTab || content.dataset.activeTab !== tab;
+  const switching =
+    !content.dataset.activeTab || content.dataset.activeTab !== tab;
   if (switching) _tabPagination[tab].page = 1;
   content.dataset.activeTab = tab;
 
@@ -2288,13 +2375,20 @@ async function _switchLogsTab(tab, employeeId) {
 
 // ── Per-tab pagination state ──────────────────────────────────────────────────
 const _tabPagination = {
-  access:  { page: 1, limit: 25 },
-  status:  { page: 1, limit: 25 },
+  access: { page: 1, limit: 25 },
+  status: { page: 1, limit: 25 },
   remarks: { page: 1, limit: 25 },
 };
 
 // ── Shared pagination renderer ────────────────────────────────────────────────
-function _renderTabPagination(containerId, tab, employeeId, total, page, limit) {
+function _renderTabPagination(
+  containerId,
+  tab,
+  employeeId,
+  total,
+  page,
+  limit,
+) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
@@ -2307,7 +2401,11 @@ function _renderTabPagination(containerId, tab, employeeId, total, page, limit) 
 
   const delta = 2;
   const range = new Set([1, totalPages]);
-  for (let i = Math.max(2, page - delta); i <= Math.min(totalPages - 1, page + delta); i++) {
+  for (
+    let i = Math.max(2, page - delta);
+    i <= Math.min(totalPages - 1, page + delta);
+    i++
+  ) {
     range.add(i);
   }
 
@@ -2369,15 +2467,15 @@ function _goToTabPage(tab, employeeId, page) {
   const content = document.getElementById("logsTabContent");
   if (!content) return;
 
-  if (tab === "access")  _renderAccessTab(content, employeeId);
-  if (tab === "status")  _renderStatusTab(content, employeeId);
+  if (tab === "access") _renderAccessTab(content, employeeId);
+  if (tab === "status") _renderStatusTab(content, employeeId);
   if (tab === "remarks") _renderRemarksTab(content, employeeId);
 }
 
 function _getTabTotal(tab, employeeId) {
-  if (tab === "access")  return (_logsCache[employeeId]          || []).length;
-  if (tab === "status")  return (_statusHistoryCache[employeeId] || []).length;
-  if (tab === "remarks") return (_remarksCache[employeeId]       || []).length;
+  if (tab === "access") return (_logsCache[employeeId] || []).length;
+  if (tab === "status") return (_statusHistoryCache[employeeId] || []).length;
+  if (tab === "remarks") return (_remarksCache[employeeId] || []).length;
   return 0;
 }
 
@@ -2446,31 +2544,33 @@ async function _renderAccessTab(container, employeeId) {
     return;
   }
 
-  const inCount  = logs.filter((l) => l.check_status === "IN").length;
+  const inCount = logs.filter((l) => l.check_status === "IN").length;
   const outCount = logs.filter((l) => l.check_status === "OUT").length;
 
-  const elIn    = document.getElementById("logCountIn");
-  const elOut   = document.getElementById("logCountOut");
+  const elIn = document.getElementById("logCountIn");
+  const elOut = document.getElementById("logCountOut");
   const elTotal = document.getElementById("logCountTotal");
-  if (elIn)    elIn.textContent    = inCount;
-  if (elOut)   elOut.textContent   = outCount;
+  if (elIn) elIn.textContent = inCount;
+  if (elOut) elOut.textContent = outCount;
   if (elTotal) elTotal.textContent = logs.length;
 
   const ACCESS_TYPE_MAP = {
-    manual_entry:       "Manual Entry",
-    proximity_scan:     "Proximity Scan",
-    qr_code_scan:       "Proximity Scan",
-    search_result:      "Proximity Scan",
+    manual_entry: "Manual Entry",
+    proximity_scan: "Proximity Scan",
+    qr_code_scan: "Proximity Scan",
+    search_result: "Proximity Scan",
     facial_recognition: "Face ID",
   };
 
   // ── Paginate ──────────────────────────────────────────────────
   const { page, limit } = state;
   const startIndex = (page - 1) * limit;
-  const pageRows   = logs.slice(startIndex, startIndex + limit);
+  const pageRows = logs.slice(startIndex, startIndex + limit);
 
   tbody.innerHTML = pageRows.length
-    ? pageRows.map((log, i) => `
+    ? pageRows
+        .map(
+          (log, i) => `
         <tr style="border-bottom:1px solid #f0f0f0;">
           <td class="sn-cell">${startIndex + i + 1}</td>
           <td style="width:100px;">
@@ -2483,10 +2583,19 @@ async function _renderAccessTab(container, employeeId) {
           <td style="width:120px;">${escapeHtml(ACCESS_TYPE_MAP[log.access_type] || log.access_type || "N/A")}</td>
           <td style="width:150px;">${escapeHtml(log.gate_name || log.user_id || "N/A")}</td>
           <td class="emp-timestamp" style="color:#aaa;font-size:11px;">${escapeHtml(log.access_timestamp)}</td>
-        </tr>`).join("")
+        </tr>`,
+        )
+        .join("")
     : `<tr><td colspan="5" style="text-align:center;padding:24px;color:#aaa;">No log records found.</td></tr>`;
 
-  _renderTabPagination("accessTabPagination", "access", employeeId, logs.length, page, limit);
+  _renderTabPagination(
+    "accessTabPagination",
+    "access",
+    employeeId,
+    logs.length,
+    page,
+    limit,
+  );
 }
 
 async function _renderStatusTab(container, employeeId) {
@@ -2555,13 +2664,13 @@ async function _renderStatusTab(container, employeeId) {
     return;
   }
 
-  const toActive   = rows.filter((r) => r.new_status === "Active").length;
+  const toActive = rows.filter((r) => r.new_status === "Active").length;
   const toInactive = rows.filter((r) => r.new_status === "Inactive").length;
-  const elTotal    = document.getElementById("statCountTotal");
-  const elActive   = document.getElementById("statCountActive");
+  const elTotal = document.getElementById("statCountTotal");
+  const elActive = document.getElementById("statCountActive");
   const elInactive = document.getElementById("statCountInactive");
-  if (elTotal)    elTotal.textContent    = rows.length;
-  if (elActive)   elActive.textContent   = toActive;
+  if (elTotal) elTotal.textContent = rows.length;
+  if (elActive) elActive.textContent = toActive;
   if (elInactive) elInactive.textContent = toInactive;
 
   const statusPill = (s) => {
@@ -2574,10 +2683,12 @@ async function _renderStatusTab(container, employeeId) {
   // ── Paginate ──────────────────────────────────────────────────
   const { page, limit } = state;
   const startIndex = (page - 1) * limit;
-  const pageRows   = rows.slice(startIndex, startIndex + limit);
+  const pageRows = rows.slice(startIndex, startIndex + limit);
 
   tbody.innerHTML = pageRows.length
-    ? pageRows.map((r, i) => `
+    ? pageRows
+        .map(
+          (r, i) => `
         <tr style="border-bottom:1px solid #f0f0f0;">
           <td class="sn-cell">${startIndex + i + 1}</td>
           <td style="width:80px;">${statusPill(r.old_status)}</td>
@@ -2587,10 +2698,19 @@ async function _renderStatusTab(container, employeeId) {
             ${escapeHtml(r.change_reason || "—")}
           </td>
           <td class="emp-createdAt" style="color:#aaa;font-size:11px;">${escapeHtml(r.created_at || "—")}</td>
-        </tr>`).join("")
+        </tr>`,
+        )
+        .join("")
     : `<tr><td colspan="6" style="text-align:center;padding:24px;color:#aaa;">No status changes recorded.</td></tr>`;
 
-  _renderTabPagination("statusTabPagination", "status", employeeId, rows.length, page, limit);
+  _renderTabPagination(
+    "statusTabPagination",
+    "status",
+    employeeId,
+    rows.length,
+    page,
+    limit,
+  );
 }
 
 async function _renderRemarksTab(container, employeeId) {
@@ -2658,12 +2778,16 @@ async function _renderRemarksTab(container, employeeId) {
     return;
   }
 
-  const updates = rows.filter((r) => r.violation_type === "Remarks Updated").length;
-  const cleared = rows.filter((r) => r.violation_type === "Remarks Cleared").length;
-  const elTotal   = document.getElementById("remCountTotal");
+  const updates = rows.filter(
+    (r) => r.violation_type === "Remarks Updated",
+  ).length;
+  const cleared = rows.filter(
+    (r) => r.violation_type === "Remarks Cleared",
+  ).length;
+  const elTotal = document.getElementById("remCountTotal");
   const elUpdates = document.getElementById("remCountUpdates");
   const elCleared = document.getElementById("remCountCleared");
-  if (elTotal)   elTotal.textContent   = rows.length;
+  if (elTotal) elTotal.textContent = rows.length;
   if (elUpdates) elUpdates.textContent = updates;
   if (elCleared) elCleared.textContent = cleared;
 
@@ -2676,12 +2800,13 @@ async function _renderRemarksTab(container, employeeId) {
   // ── Paginate ──────────────────────────────────────────────────
   const { page, limit } = state;
   const startIndex = (page - 1) * limit;
-  const pageRows   = rows.slice(startIndex, startIndex + limit);
+  const pageRows = rows.slice(startIndex, startIndex + limit);
 
   tbody.innerHTML = pageRows.length
-    ? pageRows.map((v, i) => {
-        const { bg, color } = typeBadge(v.violation_type);
-        return `
+    ? pageRows
+        .map((v, i) => {
+          const { bg, color } = typeBadge(v.violation_type);
+          return `
           <tr style="border-bottom:1px solid #f0f0f0;">
             <td class="sn-cell">${startIndex + i + 1}</td>
             <td style="width:130px;">
@@ -2696,10 +2821,18 @@ async function _renderRemarksTab(container, employeeId) {
             <td style="width:100px;">${escapeHtml(v.violation_date || "—")}</td>
             <td class="emp-createdAt" style="color:#aaa;font-size:11px;">${escapeHtml(v.created_at || "—")}</td>
           </tr>`;
-      }).join("")
+        })
+        .join("")
     : `<tr><td colspan="5" style="text-align:center;padding:24px;color:#aaa;">No remarks history found.</td></tr>`;
 
-  _renderTabPagination("remarksTabPagination", "remarks", employeeId, rows.length, page, limit);
+  _renderTabPagination(
+    "remarksTabPagination",
+    "remarks",
+    employeeId,
+    rows.length,
+    page,
+    limit,
+  );
 }
 
 // ── Violation popup ───────────────────────────────────────────────────────────

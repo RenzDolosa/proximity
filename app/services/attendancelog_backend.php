@@ -222,7 +222,6 @@ class AccessLogManager
       ? $filters['sort_col'] : 'access_timestamp';
     $sort_dir = (isset($filters['sort_dir']) && strtolower($filters['sort_dir']) === 'asc')
       ? 'ASC' : 'DESC';
-    $order = "ORDER BY e.{$sort_col} {$sort_dir}";
 
     $order = $sort_col === 'gate_name'
       ? "ORDER BY (SELECT first_name FROM " . DB_NAME . ".users WHERE id = l.user_id LIMIT 1) {$sort_dir}"
@@ -318,6 +317,70 @@ class AccessLogManager
     unset($log);
 
     return ['data' => $logs, 'total' => $total];
+  }
+
+  // ── FILTER OPTIONS — single query for all distinct dropdown values ─────
+  public function getFilterOptions($baseFilters = [])
+  {
+    $where  = "WHERE 1=1";
+    $params = [];
+
+    if (!empty($baseFilters['date_from'])) {
+      $where .= " AND DATE(access_timestamp) >= :date_from";
+      $params[':date_from'] = $baseFilters['date_from'];
+    }
+    if (!empty($baseFilters['date_to'])) {
+      $where .= " AND DATE(access_timestamp) <= :date_to";
+      $params[':date_to'] = $baseFilters['date_to'];
+    }
+    if (!empty($baseFilters['qr_code'])) {
+      $where .= " AND qr_code LIKE :qr_code";
+      $params[':qr_code'] = $baseFilters['qr_code'];
+    }
+
+    $stmt = $this->conn->prepare(
+      "SELECT
+            DISTINCT fullname,
+            position,
+            brand,
+            status,
+            shift,
+            violation,
+            user_id
+         FROM {$this->logTable}
+         $where"
+    );
+    foreach ($params as $key => $value) {
+      $stmt->bindValue($key, $value);
+    }
+    $stmt->execute();
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Hydrate gate_name
+    $userIds = array_unique(array_filter(array_column($rows, 'user_id')));
+    $userNameMap = [];
+    if (!empty($userIds)) {
+      try {
+        $mainConn = getMainDBConnection();
+        $ph = implode(',', array_fill(0, count($userIds), '?'));
+        $uStmt = $mainConn->prepare(
+          "SELECT id, first_name FROM users WHERE id IN ($ph)"
+        );
+        $uStmt->execute(array_values($userIds));
+        foreach ($uStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+          $userNameMap[(int)$row['id']] = $row['first_name'];
+        }
+      } catch (Exception $e) {
+        error_log("Filter options gate_name lookup failed: " . $e->getMessage());
+      }
+    }
+    foreach ($rows as &$row) {
+      $uid = (int)($row['user_id'] ?? 0);
+      $row['gate_name'] = $uid && isset($userNameMap[$uid]) ? $userNameMap[$uid] : null;
+    }
+    unset($row);
+
+    return $rows;
   }
 
   // ── Single log entry ───────────────────────────────────────────────────
@@ -722,49 +785,47 @@ try {
         $limit = max(1, (int)($_GET['limit'] ?? 25));
 
         try {
-          $result   = $logManager->getLogs($filters, $page, $limit);
-          $allRows  = $logManager->getLogs($filters, null);
+          $result = $logManager->getLogs($filters, $page, $limit);
+          $filterOptions = $logManager->getFilterOptions($filters);
 
-          $filterableFields = ['position', 'brand', 'status', 'shift', 'violation', 'user_id'];
-          $fieldOptions = [];
-          foreach ($filterableFields as $field) {
-            $fieldFilters = $filters;
-            unset($fieldFilters[$field], $fieldFilters["{$field}_none"]);
-            if ($field === 'user_id') {
-              unset($fieldFilters['gate_name']);
-            }
-            $fieldOptions[$field] = $logManager->getLogs($fieldFilters, null);
-          }
-
-          $distinctUserIds = array_unique(array_filter(array_column($allRows, 'user_id')));
-          $gateNameMap     = [];
-          if (!empty($distinctUserIds)) {
-            $mainConn = getMainDBConnection();
-            $ph       = implode(',', array_fill(0, count($distinctUserIds), '?'));
-            $gStmt    = $mainConn->prepare(
-              "SELECT id, first_name FROM users WHERE id IN ($ph)"
-            );
-            $gStmt->execute(array_values($distinctUserIds));
-            foreach ($gStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-              $gateNameMap[(int)$row['id']] = $row['first_name'];
+          $fieldFilterOptions = [
+            'fullname'      => [],
+            'position'      => [],
+            'brand'         => [],
+            'status'        => [],
+            'shift'         => [],
+            'violation'     => [],
+            'user_id'       => [],
+          ];
+          foreach ($filterOptions as $row) {
+            foreach ($fieldFilterOptions as $field => $_) {
+              $val = $row[$field] ?? null;
+              if ($val !== null && $val !== '') {
+                $fieldFilterOptions[$field][] = $row;
+              }
             }
           }
-
-          foreach ($allRows as &$row) {
-            $uid = (int)($row['user_id'] ?? 0);
-            $row['gate_name'] = $uid && isset($gateNameMap[$uid]) ? $gateNameMap[$uid] : null;
+          foreach ($fieldFilterOptions as $field => &$bucket) {
+            $seen = [];
+            $bucket = array_values(array_filter($bucket, function ($r) use ($field, &$seen) {
+              $v = $r[$field] ?? '';
+              if (isset($seen[$v])) return false;
+              $seen[$v] = true;
+              return true;
+            }));
           }
-          unset($row);
+          unset($bucket);
 
           $response['success']              = true;
           $response['data']                 = $result['data'];
           $response['total']                = $result['total'];
           $response['page']                 = $page;
           $response['pages']                = ceil($result['total'] / $limit);
-          $response['filter_options']       = $allRows;
-          $response['field_filter_options'] = $fieldOptions;
+          $response['filter_options']       = $filterOptions;
+          $response['field_filter_options'] = $fieldFilterOptions;
         } catch (Exception $e) {
-          $response['message'] = 'Error retrieving logs.';
+          error_log("getLogs error: " . $e->getMessage());
+          $response['message'] = 'Error retrieving logs: ' . $e->getMessage();
         }
         break;
 

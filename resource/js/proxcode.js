@@ -236,21 +236,27 @@ function setupEventListeners() {
     "search-remarks-suggestions",
     () => {
       const map = qrImageMapCache || {};
-      return [...(fieldFilterOptions.remarks || allEmployees)]
-        .map((e) => {
-          const isOccupied = Object.prototype.hasOwnProperty.call(
-            map,
-            String(e.qr_code).trim().toLowerCase(),
-          );
-          return isOccupied ? "Occupied" : "Available";
-        })
-        .filter(Boolean);
+      const values = new Set();
+      (allEmployees.length ? allEmployees : employees).forEach((row) => {
+        const qr = String(row.qr_code || "").trim().toLowerCase();
+        if (!qr) return;
+        values.add(
+          Object.prototype.hasOwnProperty.call(map, qr)
+            ? "Occupied"
+            : "Available",
+        );
+      });
+      return [...values];
     },
     {
       hiddenId: "search_remarks_val",
       noneLabel: "No Remarks",
       showAll: true,
+      raw: true,
       onSelect: () => searchEmployees(),
+      onFocus: async () => {
+        if (!qrImageMapCache) await buildQRToImageMap();
+      },
     },
   );
 
@@ -1130,6 +1136,7 @@ async function loadEmployees(
 
       if (!preservePage && Object.keys(filters).length === 0) currentPage = 1;
 
+      await buildQRToImageMap();
       await renderEmployeeTable();
       await syncOrphanStatuses();
 

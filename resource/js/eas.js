@@ -803,48 +803,44 @@ async function exportFilteredCodes() {
   showAlert("Fetching filtered proximity codes…", "info");
 
   try {
-    const serverParams = new URLSearchParams({ action: "get" });
-    if (currentFilters.qr_code)
-      serverParams.append("qr_code", currentFilters.qr_code);
-    if (currentFilters.created_at)
-      serverParams.append("created_at", currentFilters.created_at);
+    const serverParams = new URLSearchParams({
+      action: "get",
+      page:   1,
+      limit:  999999,
+    });
+
+    const serverFilterMap = {
+      qr_code:    "qr_code",
+      date_from:  "date_from",
+      date_to:    "date_to",
+      created_at: "created_at",
+      updated_at: "updated_at",
+      remarks:    "remarks",
+    };
+
+    for (const [jsKey, apiKey] of Object.entries(serverFilterMap)) {
+      if (currentFilters[jsKey] && currentFilters[jsKey] !== "__none__") {
+        serverParams.append(apiKey, currentFilters[jsKey]);
+      }
+    }
+
+    if (currentFilters.status === "Enabled") {
+      serverParams.append("is_active", "1");
+    } else if (currentFilters.status === "Disabled") {
+      serverParams.append("is_active", "0");
+    }
 
     const res = await fetch(`${ProxcodeBackend}?${serverParams.toString()}`, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     const json = await res.json();
 
-    if (!json.success || !Array.isArray(json.data)) {
-      showAlert("No proximity codes found!", "warning");
-      return;
-    }
-
-    let filteredCodes = json.data;
-
-    const remarksFilter = currentFilters.remarks;
-    if (remarksFilter) {
-      let qrImageMap = {};
-      if (typeof buildQRToImageMap === "function") {
-        try {
-          qrImageMap = await buildQRToImageMap();
-        } catch (e) {}
-      }
-      filteredCodes = filteredCodes.filter((c) => {
-        const isOccupied = Object.prototype.hasOwnProperty.call(
-          qrImageMap,
-          (c.qr_code || "").trim().toLowerCase(),
-        );
-        const remarks = isOccupied ? "Occupied" : "Available";
-        return remarks.toLowerCase() === remarksFilter.toLowerCase();
-      });
-    }
-
-    if (filteredCodes.length === 0) {
+    if (!json.success || !Array.isArray(json.data) || json.data.length === 0) {
       showAlert("No proximity codes match the current filters!", "warning");
       return;
     }
 
-    await exportProximityCodes(filteredCodes, "Filtered");
+    await exportProximityCodes(json.data, "Filtered");
   } catch (error) {
     console.error("Export filtered codes error:", error);
     showAlert("Error exporting filtered codes: " + error.message, "error");

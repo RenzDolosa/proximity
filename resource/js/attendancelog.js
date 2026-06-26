@@ -122,7 +122,7 @@ function setupEventListeners() {
     "search_fullname",
     "fullname-suggestions",
     () =>
-      [...allEmployees]
+      [...(fieldFilterOptions.fullname || allEmployees)]
         .sort((a, b) => {
           const lastName = (name) => {
             const parts = (name || "").trim().split(/\s+/);
@@ -130,8 +130,13 @@ function setupEventListeners() {
           };
           return lastName(a.fullname).localeCompare(lastName(b.fullname));
         })
-        .map((e) => e.fullname),
-    { requireInput: false, onSelect: () => searchEmployees() },
+        .map((e) => e.fullname)
+        .filter(Boolean),
+    { 
+      requireInput: false,
+      showAll: true,
+      onSelect: () => searchEmployees()
+    },
   );
 
   setupFieldSuggestions(
@@ -1331,19 +1336,6 @@ async function loadEmployees(
 
       if (Object.keys(filters).length === 0) {
         allEmployees = data.filter_options ?? data.data ?? [];
-      } else if (allEmployees.length === 0) {
-        fetch(`${AttendanceBackend}?action=get&page=1&limit=99999`, {
-          headers: {
-            "X-Requested-With": "XMLHttpRequest",
-            "X-Silent-Request": "true",
-          },
-        })
-          .then((r) => r.json())
-          .then((d) => {
-            if (d.success && Array.isArray(d.filter_options))
-              allEmployees = d.filter_options;
-          })
-          .catch(() => {});
       }
 
       if (!preservePage && Object.keys(filters).length === 0) currentPage = 1;

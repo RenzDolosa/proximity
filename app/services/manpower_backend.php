@@ -267,7 +267,7 @@ class EmployeeManager
     return false;
   }
 
-  public function getEmployees($filters = [], $page = null, $limit = 25)
+  public function getEmployees($filters = [], $page = 1, $limit = 25)
   {
     $where  = "WHERE 1=1";
     $params = [];
@@ -390,6 +390,50 @@ class EmployeeManager
       'data'  => $dataStmt->fetchAll(PDO::FETCH_ASSOC),
       'total' => $total,
     ];
+  }
+
+  // ── FILTER OPTIONS — single query for all distinct dropdown values ─────
+  public function getFilterOptions($baseFilters = [])
+  {
+    $where  = "WHERE 1=1";
+    $params = [];
+
+    if (!empty($baseFilters['date_from'])) {
+      $where .= " AND DATE(created_at) >= :date_from";
+      $params[':date_from'] = $baseFilters['date_from'];
+    }
+    if (!empty($baseFilters['date_to'])) {
+      $where .= " AND DATE(created_at) <= :date_to";
+      $params[':date_to'] = $baseFilters['date_to'];
+    }
+    if (!empty($baseFilters['updated_at'])) {
+      $where .= " AND DATE(updated_at) = :updated_at";
+      $params[':updated_at'] = $baseFilters['updated_at'];
+    }
+    if (!empty($baseFilters['qr_code'])) {
+      $where .= " AND qr_code LIKE :qr_code";
+      $params[':qr_code'] = $baseFilters['qr_code'];
+    }
+
+    $stmt = $this->conn->prepare(
+      "SELECT 
+            DISTINCT id,
+            fullname,
+            position, 
+            brand,
+            status,
+            shift,
+            violation,
+            image,
+            qr_code
+         FROM {$this->table} e
+         $where"
+    );
+    foreach ($params as $key => $value) {
+      $stmt->bindValue($key, $value);
+    }
+    $stmt->execute();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
   }
 
   public function updateEmployee($old_id, $data)
@@ -1499,25 +1543,47 @@ try {
         $limit = max(1, (int)($_GET['limit'] ?? 25));
 
         try {
-          $result   = $employeeManager->getEmployees($filters, $page, $limit);
-          $allRows  = $employeeManager->getEmployees([], null);
+          $result = $employeeManager->getEmployees($filters, $page, $limit);
+          $filterOptions = $employeeManager->getFilterOptions($filters);
 
-          $filterableFields = ['position', 'brand', 'status', 'shift', 'violation'];
-          $fieldOptions = [];
-          foreach ($filterableFields as $field) {
-            $fieldFilters = $filters;
-            unset($fieldFilters[$field], $fieldFilters["{$field}_none"]);
-            $fieldOptions[$field] = $employeeManager->getEmployees($fieldFilters, null);
+          $fieldFilterOptions = [
+            'id'          => [],
+            'fullname'    => [],
+            'position'    => [],
+            'brand'       => [],
+            'status'      => [],
+            'shift'       => [],
+            'violation'   => [],
+            'qr_code'     => [],
+          ];
+          foreach ($filterOptions as $row) {
+            foreach ($fieldFilterOptions as $field => $_) {
+              $val = $row[$field] ?? null;
+              if ($val !== null && $val !== '') {
+                $fieldFilterOptions[$field][] = $row;
+              }
+            }
           }
+          foreach ($fieldFilterOptions as $field => &$bucket) {
+            $seen = [];
+            $bucket = array_values(array_filter($bucket, function ($r) use ($field, &$seen) {
+              $v = $r[$field] ?? '';
+              if (isset($seen[$v])) return false;
+              $seen[$v] = true;
+              return true;
+            }));
+          }
+          unset($bucket);
 
           $response['success']              = true;
           $response['data']                 = $result['data'];
           $response['total']                = $result['total'];
           $response['page']                 = $page;
           $response['pages']                = ceil($result['total'] / $limit);
-          $response['filter_options']       = $allRows;
-          $response['field_filter_options'] = $fieldOptions;
+          $response['filter_options']       = $filterOptions;
+          $response['field_filter_options'] = $fieldFilterOptions;
         } catch (Exception $e) {
+          error_log("getEmployees error: " . $e->getMessage());
           $response['message'] = 'Error retrieving employees.';
         }
         break;

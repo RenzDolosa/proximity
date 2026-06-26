@@ -168,7 +168,7 @@ class EmployeeManager
     return false;
   }
 
-  public function getEmployees($filters = [], $page = null, $limit = 25)
+  public function getEmployees($filters = [], $page = 1, $limit = 25)
   {
     $where  = "WHERE 1=1";
     $params = [];
@@ -261,13 +261,72 @@ class EmployeeManager
     ];
   }
 
+  // ── FILTER OPTIONS — single query for all distinct dropdown values ─────
+  public function getFilterOptions($baseFilters = [])
+  {
+    $where  = "WHERE 1=1";
+    $params = [];
+
+    if (!empty($baseFilters['date_from'])) {
+      $where .= " AND DATE(created_at) >= :date_from";
+      $params[':date_from'] = $baseFilters['date_from'];
+    }
+    if (!empty($baseFilters['date_to'])) {
+      $where .= " AND DATE(created_at) <= :date_to";
+      $params[':date_to'] = $baseFilters['date_to'];
+    }
+    if (!empty($baseFilters['qr_code'])) {
+      $where .= " AND qr_code LIKE :qr_code";
+      $params[':qr_code'] = '%' . $baseFilters['qr_code'] . '%';
+    }
+
+    if (!empty($baseFilters['remarks'])) {
+      $manpowerDb = DB_NAME . '.employees';
+      if ($baseFilters['remarks'] === 'Occupied') {
+        $where .= " AND EXISTS (SELECT 1 FROM {$manpowerDb} e WHERE LOWER(TRIM(e.qr_code)) = LOWER(TRIM({$this->table}.qr_code)))";
+      } elseif ($baseFilters['remarks'] === 'Available') {
+        $where .= " AND NOT EXISTS (SELECT 1 FROM {$manpowerDb} e WHERE LOWER(TRIM(e.qr_code)) = LOWER(TRIM({$this->table}.qr_code)))";
+      }
+    }
+
+    $stmt = $this->conn->prepare(
+      "SELECT 
+            qr_code, 
+            is_active,
+            reserved_by
+          FROM {$this->table}
+          $where
+          ORDER BY id DESC"
+    );
+    foreach ($params as $key => $value) {
+      $stmt->bindValue($key, $value);
+    }
+    $stmt->execute();
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $seenActive = [];
+    $statusRows = [];
+    foreach ($rows as $row) {
+      $v = $row['is_active'];
+      if (!isset($seenActive[$v])) {
+        $seenActive[$v] = true;
+        $statusRows[] = ['is_active' => $v];
+      }
+    }
+
+    return [
+      'all_rows'    => $rows,
+      'status_rows' => $statusRows,
+    ];
+  }
+
   public function updateEmployee($id, $data)
   {
     $current = $this->getEmployee($id);
 
     $query = "UPDATE " . $this->table . " 
-                      SET qr_code = :qr_code, is_active = :is_active, updated_at = :updated_at
-                      WHERE id = :id";
+          SET qr_code = :qr_code, is_active = :is_active, updated_at = :updated_at
+          WHERE id = :id";
 
     $stmt = $this->conn->prepare($query);
 
@@ -874,7 +933,8 @@ try {
             logSystemAction(
               $database->getCurrentUserId(),
               'FILTERED_CODE_DELETED',
-              "Deleted $deleted_count proximity codes with filters: $filterStr");
+              "Deleted $deleted_count proximity codes with filters: $filterStr"
+            );
           } else {
             $db->rollBack();
             $response['message'] = 'Failed to delete proximity codes';
@@ -1141,29 +1201,23 @@ try {
         $limit = max(1, (int)($_GET['limit'] ?? 25));
 
         try {
-          $result   = $employeeManager->getEmployees($filters, $page, $limit);
-          $allRows  = $employeeManager->getEmployees($filters, null);
-
-          $filterableFields = ['remarks', 'status'];
-          $fieldOptions = [];
-          foreach ($filterableFields as $field) {
-            $fieldFilters = $filters;
-            unset($fieldFilters[$field], $fieldFilters["{$field}_none"]);
-            if ($field === 'status') {
-              unset($fieldFilters['is_active']);
-            }
-            $fieldOptions[$field] = $employeeManager->getEmployees($fieldFilters, null);
-          }
+          $result = $employeeManager->getEmployees($filters, $page, $limit);
+          $baseFilters  = array_diff_key($filters, array_flip(['is_active', 'remarks']));
+          $filterOptions = $employeeManager->getFilterOptions($baseFilters);
 
           $response['success']              = true;
           $response['data']                 = $result['data'];
           $response['total']                = $result['total'];
           $response['page']                 = $page;
           $response['pages']                = ceil($result['total'] / $limit);
-          $response['filter_options']       = $allRows;
-          $response['field_filter_options'] = $fieldOptions;
+          $response['filter_options']       = $filterOptions['all_rows'];
+          $response['field_filter_options'] = [
+            'status'  => $filterOptions['status_rows'],
+            'remarks' => [],
+          ];
           $response['reservation_key']      = $reservationKey;
         } catch (Exception $e) {
+          error_log("getEmployees (proxcode) error: " . $e->getMessage());
           $response['message'] = 'Error retrieving proximity codes.';
         }
         break;
@@ -1409,7 +1463,7 @@ try {
           error_log("sync_orphans error: " . $e->getMessage());
         }
         break;
-      
+
       case 'health_check':
         $health = [
           'status'              => 'OK',
@@ -1436,8 +1490,8 @@ try {
         $response['message'] = 'Invalid GET action: ' . $action;
         break;
     }
-  } 
-  
+  }
+
   send_response:
 
   if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
