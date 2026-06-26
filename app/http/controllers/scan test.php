@@ -48,7 +48,7 @@ if (!isset($_SESSION['user_id'])) {
     <h2 style="position: fixed; top: 2%; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; z-index: 0; pointer-events: none;">Test Proximity Code Live Search</h2>
 
     <div class="search-container">
-      <input type="text" id="searchInput" autocomplete="off" autofocus>
+      <input type="text" id="searchInput" autocomplete="off" autofocus inputmode="none" enterkeyhint="done">
     </div>
 
     <div id="resultsTable" style="display: none;">

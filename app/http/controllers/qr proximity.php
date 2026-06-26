@@ -108,10 +108,10 @@ try {
   </div>
 
   <div class="container">
-    <h2 style="position: fixed; top: 2%; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; z-index: 0; pointer-events: none;">Live Search</h2>
+    <h2 class="header">Live Search</h2>
 
     <div class="search-container">
-      <input type="text" id="searchInput" autocomplete="off" autofocus>
+      <input type="text" id="searchInput" autocomplete="off" autofocus inputmode="none" enterkeyhint="done">
     </div>
 
     <div id="resultsTable" style="display: none;">

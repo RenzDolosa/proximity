@@ -14,6 +14,28 @@ let currentAudio = null;
 let scanQueue = [];
 let isProcessing = false;
 
+let _wasHidden = false;
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    _wasHidden = true;
+    body.classList.add("scanner-paused");
+  } else if (_wasHidden) {
+    _wasHidden = false;
+    body.classList.remove("scanner-paused");
+    searchInput.focus();
+  }
+});
+
+window.addEventListener("focus", () => {
+  body.classList.remove("scanner-paused");
+  searchInput.focus();
+});
+
+window.addEventListener("blur", () => {
+  body.classList.add("scanner-paused");
+});
+
 // ── Global-audio endpoint ─────────────────────────────────────────
 const AUDIO_TYPE_MAP = {
   success:    "successSound",
