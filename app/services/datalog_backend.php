@@ -150,6 +150,10 @@ class AccessLogManager
     $where  = "WHERE 1=1";
     $params = [];
 
+    if (!empty($filters['employee_id'])) {
+      $where .= " AND l.employee_id = :employee_id";
+      $params[':employee_id']       = $filters['employee_id'];
+    }
     if (!empty($filters['fullname'])) {
       $where .= " AND l.fullname LIKE :fullname";
       $params[':fullname'] = '%' . $filters['fullname'] . '%';
@@ -169,15 +173,15 @@ class AccessLogManager
       $where .= " AND (l.brand IS NULL OR TRIM(l.brand) = '' OR LOWER(TRIM(l.brand)) = 'none')";
     }
     if (!empty($filters['status'])) {
-      $where .= " AND l.status = :status";
-      $params[':status'] = $filters['status'];
+      $where .= " AND l.status  = :status";
+      $params[':status']        = $filters['status'];
     }
     if (!empty($filters['status_none'])) {
       $where .= " AND (l.status IS NULL OR TRIM(l.status) = '' OR LOWER(TRIM(l.status)) = 'none')";
     }
     if (!empty($filters['shift'])) {
       $where .= " AND l.shift = :shift";
-      $params[':shift'] = $filters['shift'];
+      $params[':shift']       = $filters['shift'];
     }
     if (!empty($filters['shift_none'])) {
       $where .= " AND (l.shift IS NULL OR TRIM(l.shift) = '' OR LOWER(TRIM(l.shift)) = 'none')";
@@ -190,8 +194,8 @@ class AccessLogManager
       $where .= " AND (l.violation IS NULL OR TRIM(l.violation) = '' OR LOWER(TRIM(l.violation)) = 'none')";
     }
     if (!empty($filters['qr_code'])) {
-      $where .= " AND l.qr_code LIKE :qr_code";
-      $params[':qr_code'] = $filters['qr_code'];
+      $where .= " AND l.qr_code = :qr_code";
+      $params[':qr_code']       = $filters['qr_code'];
     }
     if (!empty($filters['check_status'])) {
       $where .= " AND l.check_status = :check_status";
@@ -318,7 +322,8 @@ class AccessLogManager
 
     $stmt = $this->conn->prepare(
       "SELECT
-            DISTINCT fullname,
+            DISTINCT employee_id,
+            fullname,
             position,
             brand,
             status,
@@ -834,6 +839,7 @@ try {
       case 'list':
         $filters = [];
 
+        if (!empty($_GET['employee_id']))       $filters['employee_id']      = sanitizeInput($_GET['employee_id']);
         if (!empty($_GET['fullname']))          $filters['fullname']         = sanitizeInput($_GET['fullname']);
         if (!empty($_GET['position']))          $filters['position']         = sanitizeInput($_GET['position']);
         if (!empty($_GET['position_none']))     $filters['position_none']    = '1';
@@ -874,6 +880,7 @@ try {
           $filterOptions = $logManager->getFilterOptions($filters);
 
           $fieldFilterOptions = [
+            'employee_id'   => [],
             'fullname'      => [],
             'position'      => [],
             'brand'         => [],

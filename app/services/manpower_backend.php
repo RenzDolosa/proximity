@@ -283,8 +283,8 @@ class EmployeeManager
       $params[':user_id']    = '%' . $filters['user_id'] . '%';
     }
     if (!empty($filters['id'])) {
-      $where .= " AND id LIKE :id";
-      $params[':id']         = '%' . $filters['id'] . '%';
+      $where .= " AND id = :id";
+      $params[':id']     = $filters['id'];
     }
     if (!empty($filters['fullname'])) {
       $where .= " AND fullname LIKE :fullname";
@@ -313,7 +313,7 @@ class EmployeeManager
     }
     if (!empty($filters['shift'])) {
       $where .= " AND shift = :shift";
-      $params[':shift']      = $filters['shift'];
+      $params[':shift']     = $filters['shift'];
     }
     if (!empty($filters['shift_none'])) {
       $where .= " AND (shift IS NULL OR TRIM(shift) = '' OR LOWER(TRIM(shift)) = 'none')";
@@ -326,8 +326,8 @@ class EmployeeManager
       $where .= " AND (violation IS NULL OR TRIM(violation) = '' OR LOWER(TRIM(violation)) = 'none')";
     }
     if (!empty($filters['qr_code'])) {
-      $where .= " AND qr_code LIKE :qr_code";
-      $params[':qr_code']    = $filters['qr_code'];
+      $where .= " AND qr_code = :qr_code";
+      $params[':qr_code']     = $filters['qr_code'];
     }
     if (!empty($filters['created_at'])) {
       $where .= " AND DATE(created_at) = :created_at";

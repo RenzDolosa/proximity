@@ -115,6 +115,19 @@ function setupEventListeners() {
 
   // ── Field suggestion dropdowns ─────────────────────────────────────────
   setupFieldSuggestions(
+    "search_empid",
+    "search-empid-suggestions",
+    () =>
+      [...(fieldFilterOptions.employee_id || allEmployees)]
+        .sort((a, b) => Number(a.employee_id || "") - Number(b.employee_id || ""))
+        .map((e) => String(e.employee_id)),
+    {
+      showAll: true,
+      onSelect: () => searchEmployees(),
+    },
+  );
+  
+  setupFieldSuggestions(
     "search_fullname",
     "fullname-suggestions",
     () =>
@@ -684,10 +697,20 @@ function displayFilterStatus() {
   const textSpan = document.createElement("span");
   textSpan.appendChild(document.createTextNode("Active Filters: "));
 
+  const overrideKeys = {
+    id: "EMPID",
+    violation: "Remarks",
+    check_status: "Check Status",
+    user_id: "Operator",
+    date_from: "From",
+    date_to: "To",
+    qr_code: "Proximity",
+  };
+
   Object.entries(filters).forEach(([key, value], index) => {
     if (index > 0) textSpan.appendChild(document.createTextNode(" | "));
     const strong = document.createElement("strong");
-    const properKey = key
+    const properKey = overrideKeys[key] || key
       .split(/(?=[A-Z])/)
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
       .join(" ");

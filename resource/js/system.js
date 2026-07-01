@@ -269,6 +269,19 @@ function setupEventListeners() {
 
   // ── Field suggestion dropdowns ─────────────────────────────────────────
   setupFieldSuggestions(
+    "search_empid",
+    "search-empid-suggestions",
+    () =>
+      [...(fieldFilterOptions.id || allEmployees)]
+        .sort((a, b) => Number(a.id || "") - Number(b.id || ""))
+        .map((e) => String(e.id)),
+    {
+      showAll: true,
+      onSelect: () => searchEmployees(),
+    },
+  );
+
+  setupFieldSuggestions(
     "search_fullname",
     "fullname-suggestions",
     () =>
@@ -971,10 +984,18 @@ function displayFilterStatus() {
   const textSpan = document.createElement("span");
   textSpan.appendChild(document.createTextNode("Active Filters: "));
 
+  const overrideKeys = {
+    id: "EMPID",
+    violation: "Remarks",
+    date_from: "From",
+    date_to: "To",
+    qr_code: "Proximity",
+  };
+
   Object.entries(filters).forEach(([key, value], index) => {
     if (index > 0) textSpan.appendChild(document.createTextNode(" | "));
     const strong = document.createElement("strong");
-    const properKey = key
+    const properKey = overrideKeys[key] || key
       .split(/(?=[A-Z])/)
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
       .join(" ");
@@ -2988,7 +3009,7 @@ async function handleFormSubmit(e) {
     }
 
     try {
-      const checkRes = await fetch(
+      const response = await fetch(
         `${EmployeesBackend}?action=get&page=1&limit=1` +
           `&id=${encodeURIComponent(empid)}`,
         {
@@ -2998,7 +3019,7 @@ async function handleFormSubmit(e) {
           },
         },
       );
-      const checkData = await checkRes.json();
+      const checkData = await response.json();
 
       if (checkData.success && checkData.total > 0) {
         const conflict = checkData.data.find(
