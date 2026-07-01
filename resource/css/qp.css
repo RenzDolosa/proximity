@@ -8,7 +8,7 @@
 body {
   margin: 0;
   font-family: "roboto", "arial";
-  background: transparent;
+  background: var(--surface, #ffffff);
   text-align: center;
   justify-content: center;
   justify-items: center;
@@ -37,6 +37,12 @@ body.scanner-paused::after {
   height: 90vmin;
 }
 
+.background-image {
+  width: 50%;
+  height: 100vh;
+  object-fit: contain;
+}
+
 .container {
   margin: 0 auto;
   background: transparent;
@@ -55,12 +61,13 @@ h2 {
 
 .header {
   position: fixed;
-  top: 2%;
+  top: 3%;
   left: 0;
   width: 100%;
-  height: 100%;
+  /* height: 100%; */
   display: flex;
   justify-content: center;
+  justify-items: center;
   z-index: 0;
   pointer-events: none;
 }
@@ -80,17 +87,20 @@ h2 {
 
 #searchInput {
   width: 100%;
-  background: transparent;
-  border: transparent;
+  background: white;
+  border: black 1px solid;
   border-radius: 1vmin;
   outline: none;
-  /* width: 200px;
+  width: 200px;
+  height: 10px;
+  justify-items: center;
+  justify-content: center;
   position: fixed;
-  top: 0; */
+  top: 0;
 }
 
 input[type="text"] {
-  color: transparent;
+  color: black;
   pointer-events: none;
   justify-items: center;
 }
@@ -482,9 +492,13 @@ input[type="text"] {
     font-size: 10vmin;
   }
 
+  .background-image {
+    width: 100vw;
+  }
+
   .result {
     position: fixed;
-    top: 0;
+    top: 10%;
     left: 0;
     width: 100vw;
     height: 100dvh;
@@ -570,5 +584,11 @@ input[type="text"] {
 
   .no-results-message {
     top: 30%;
+  }
+}
+
+@media (max-width: 1024px) {
+  h2 {
+    font-size: 5vmin;
   }
 }

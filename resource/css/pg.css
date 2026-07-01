@@ -3,7 +3,7 @@
 .pagination {
   display: flex;
   position: fixed;
-  bottom: 0;
+  bottom: calc(var(--bottom-nav-h) - 4px);
   left: 0;
   right: 0;
   justify-content: center;
@@ -12,6 +12,7 @@
   gap: 6px;
   margin: 0;
   padding: 5.5px 16px;
+  padding-bottom: calc(5.5px + env(safe-area-inset-bottom, 0px));
   background: var(--surface);
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.12);
   z-index: 999;
@@ -25,9 +26,7 @@
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
-  transition:
-    background 0.2s,
-    color 0.2s;
+  transition: background 0.2s, color 0.2s;
 }
 
 .page-arrow-btn:hover:not(:disabled) {
@@ -52,9 +51,7 @@
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
-  transition:
-    background 0.2s,
-    color 0.2s;
+  transition: background 0.2s, color 0.2s;
 }
 
 .page-num-btn:hover:not(.active) {
@@ -87,9 +84,8 @@
 
 @media (max-width: 640px) {
   .pagination {
-    bottom: 50px;
     padding: 6px 8px;
-    padding-bottom: 10px;
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
     gap: 4px;
     flex-wrap: nowrap;
   }
@@ -118,5 +114,14 @@
   .page-ellipsis {
     padding: 0 2px;
     line-height: 26px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .pagination {
+    padding: 6px 8px;
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+    gap: 4px;
+    flex-wrap: nowrap;
   }
 }

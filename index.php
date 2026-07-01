@@ -20,7 +20,7 @@ if ($page === 'forget') {
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; script-src 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; script-src 'self';">
   <meta http-equiv="X-XSS-Protection" content="1; mode=block">
   <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
   <title>Login</title>
@@ -113,7 +113,6 @@ if ($page === 'forget') {
   </div>
 
   <script src="/config/route-config.php?page=login"></script>
-  <script src="/config/route-config.php?page=endpoint"></script>
   <script src="/config/asset.php?t=p1q2r"></script>
   <script src="/config/asset.php?t=g5h6i"></script>
   <script src="/config/asset.php?t=j7k8l"></script>

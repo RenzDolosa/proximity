@@ -43,6 +43,7 @@ if ($page === 'facial-identification' && $canFacial) {
   <link rel="stylesheet" href="/config/asset.php?t=zdsj4">
   <link rel="stylesheet" href="/config/asset.php?t=mq4wc">
   <link rel="stylesheet" href="/config/asset.php?t=ht5sf">
+  <link rel="stylesheet" href="/config/asset.php?t=fg6r2">
   <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
@@ -59,18 +60,20 @@ if ($page === 'facial-identification' && $canFacial) {
   <script src="/config/route-config.php?page=endpoint"></script>
   <script src="/config/asset.php?t=p1q2r"></script>
   <script src="/config/asset.php?t=m6efw"></script>
+  <script src="/config/asset.php?t=dsf23"></script>
   <script src="/config/asset.php?t=j7k8l"></script>
   <script>
+    const _loginRoute = <?= json_encode(ROUTE_LOGIN) ?>;
     const mainFrame = document.querySelector('.sec-frames');
     if (mainFrame) {
       mainFrame.addEventListener('load', function() {
         try {
           const frameUrl = this.contentWindow.location.href;
-          if (frameUrl.includes(ROUTE_LOGIN) || frameUrl.includes('login')) {
+          if (frameUrl.includes(_loginRoute) || frameUrl.includes('login')) {
             window.top.location.href = frameUrl;
           }
         } catch (e) {
-          window.top.location.href = ROUTE_LOGIN;
+          window.top.location.href = _loginRoute;
         }
       });
     }

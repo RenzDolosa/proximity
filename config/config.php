@@ -26,6 +26,8 @@ define('USER_DB_PASS', DB_PASS);
 
 define('MAX_DB_NAME_LENGTH', 64);
 
+define('QR_EMP_CACHE_FILE', __DIR__ . '/../database/seeders/cache/employee_qr_cache.json');
+
 // ── Timezone ──────────────────────────────────────────────────────────────────
 define('APP_TIMEZONE',    'Asia/Manila');
 define('APP_TIMEZONE_TZ', '+08:00');
@@ -117,28 +119,6 @@ function createDatabase()
         PRIMARY KEY (`id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    $dbPdo->exec("CREATE TABLE IF NOT EXISTS employee_attendance_log (
-        `id` INT AUTO_INCREMENT PRIMARY KEY,
-        `user_id` int(11) DEFAULT NULL,
-        `employee_id` INT DEFAULT NULL,
-        `fullname` VARCHAR(100) DEFAULT NULL,
-        `position` VARCHAR(50) DEFAULT NULL,
-        `brand` VARCHAR(50) DEFAULT NULL,
-        `status` ENUM ('Active', 'Inactive') DEFAULT NULL,
-        `shift` ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
-        `violation` TEXT DEFAULT NULL,
-        `image` VARCHAR(255) DEFAULT NULL,
-        `qr_code` VARCHAR(100) DEFAULT NULL,
-        `access_type` VARCHAR(50) DEFAULT NULL,
-        `ip_address` VARCHAR(45) DEFAULT NULL,
-        `user_agent` TEXT DEFAULT NULL,
-        `access_timestamp` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_employee_id (employee_id),
-        INDEX idx_qr_code (qr_code),
-        INDEX idx_access_timestamp (access_timestamp),
-        INDEX idx_access_type (access_type)
-    ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;");
-
     $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `user_group` VARCHAR(50) NOT NULL DEFAULT ''");
     $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP");
     $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
@@ -147,25 +127,34 @@ function createDatabase()
     $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `my_database` VARCHAR(50) NOT NULL DEFAULT ''");
 
     $alterStatements = [
-      "ALTER TABLE employees ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL",
-      "ALTER TABLE employee_access_log ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL",
-      "ALTER TABLE check_in_out ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL",
-      "ALTER TABLE code ADD COLUMN IF NOT EXISTS is_active TINYINT(1) NOT NULL DEFAULT 1",
-      "ALTER TABLE employee_access_log ADD INDEX idx_timestamp (access_timestamp DESC)",
-      "ALTER TABLE employee_access_log ADD INDEX idx_status (status)",
+      "ALTER TABLE check_in_out
+          ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL,
+          ADD INDEX IF NOT EXISTS idx_employee_scan (employee_id, scan_timestamp)",
+      "ALTER TABLE employee_access_log
+          ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL,
+          ADD INDEX IF NOT EXISTS idx_timestamp (access_timestamp),
+          ADD INDEX IF NOT EXISTS idx_status (status),
+          ADD INDEX IF NOT EXISTS idx_shift (shift),
+          ADD INDEX IF NOT EXISTS idx_check_status (check_status),
+          ADD INDEX IF NOT EXISTS idx_user_id (user_id),
+          ADD INDEX IF NOT EXISTS idx_status_timestamp (status, access_timestamp),
+          ADD INDEX IF NOT EXISTS idx_qr_ts_id (qr_code, access_timestamp, id)",
       "ALTER TABLE employees
+          ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL,
           ADD COLUMN IF NOT EXISTS gender ENUM('Male','Female') DEFAULT NULL AFTER brand,
           ADD COLUMN IF NOT EXISTS birth  DATE DEFAULT NULL AFTER gender,
-          ADD COLUMN IF NOT EXISTS hired  DATE DEFAULT NULL AFTER birth;",
+          ADD COLUMN IF NOT EXISTS hired  DATE DEFAULT NULL AFTER birth",
       "ALTER TABLE code
-          ADD COLUMN reserved_by VARCHAR(64)  NULL DEFAULT NULL,
-          ADD COLUMN reserved_at DATETIME     NULL DEFAULT NULL;"
+          ADD COLUMN IF NOT EXISTS is_active TINYINT(1) NOT NULL DEFAULT 1,
+          ADD COLUMN IF NOT EXISTS reserved_by VARCHAR(64) NULL DEFAULT NULL,
+          ADD COLUMN IF NOT EXISTS reserved_at DATETIME    NULL DEFAULT NULL",
     ];
 
     foreach ($alterStatements as $sql) {
       try {
         $dbPdo->exec($sql);
       } catch (PDOException $e) {
+        error_log("Alter statement failed: " . $e->getMessage() . " | SQL: " . $sql);
       }
     }
     // ──────────────────────────────────────────────────────────────────────
@@ -189,7 +178,7 @@ createDatabase();
 // ============================================================================
 // DATABASE CONNECTION FUNCTIONS
 // ============================================================================
-function getDBConnection()
+function getMainDBConnection()
 {
   try {
     $pdo = new PDO(
@@ -199,19 +188,15 @@ function getDBConnection()
       [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES => false
+        PDO::ATTR_EMULATE_PREPARES => false,
+        PDO::ATTR_PERSISTENT => true,
       ]
     );
     $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
     return $pdo;
   } catch (PDOException $e) {
-    die("Database connection failed. Please try again later.");
+    die("Database connection failed: " . $e->getMessage() . " | Host: " . DB_HOST . " | DB: " . DB_NAME);
   }
-}
-
-function getMainDBConnection()
-{
-  return getDBConnection();
 }
 
 function getUserDBConnection($userId)
@@ -236,7 +221,8 @@ function getUserDBConnection($userId)
       [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES => false
+        PDO::ATTR_EMULATE_PREPARES => false,
+        PDO::ATTR_PERSISTENT => true,
       ]
     );
     $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
@@ -298,7 +284,6 @@ function createUserDatabase($userId)
     $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
 
     $createDbQuery = "CREATE DATABASE IF NOT EXISTS `" . str_replace("`", "``", $dbName) . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
-
     $pdo->exec($createDbQuery);
 
     $userPdo = new PDO(
@@ -309,162 +294,152 @@ function createUserDatabase($userId)
     );
     $userPdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
 
-    $sql = "
-        CREATE TABLE
-          IF NOT EXISTS employees (
-            IF NOT EXISTS employees (
-            id INT NOT NULL,
-            user_id int(11) DEFAULT NULL,
-            fullname VARCHAR(100) NOT NULL,
-            position VARCHAR(50) NOT NULL,
-            brand VARCHAR(50) NOT NULL,
-            gender ENUM('Male', 'Female') DEFAULT NULL,
-            birth DATE DEFAULT NULL,
-            hired DATE DEFAULT NULL,
-            status ENUM ('Active', 'Inactive') DEFAULT 'Active',
-            shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') NOT NULL,
-            violation TEXT,
-            image VARCHAR(255),
-            qr_code VARCHAR(100) UNIQUE PRIMARY KEY,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            INDEX idx_qr_code (qr_code)
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS employees (
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        user_id int(11) DEFAULT NULL,
+        fullname VARCHAR(100) NOT NULL,
+        position VARCHAR(50) NOT NULL,
+        brand VARCHAR(50) NOT NULL,
+        gender ENUM('Male', 'Female') DEFAULT NULL,
+        birth DATE DEFAULT NULL,
+        hired DATE DEFAULT NULL,
+        status ENUM ('Active', 'Inactive') DEFAULT 'Active',
+        shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') NOT NULL,
+        violation TEXT,
+        image VARCHAR(255),
+        qr_code VARCHAR(100) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_qr_code (qr_code)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-        CREATE TABLE
-          IF NOT EXISTS code (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            is_active TINYINT(1) NOT NULL DEFAULT 1,
-            qr_code VARCHAR(100) UNIQUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS code (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        qr_code VARCHAR(100) UNIQUE,
+        reserved_by VARCHAR(64) NULL DEFAULT NULL,
+        reserved_at DATETIME NULL DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-        CREATE TABLE
-          IF NOT EXISTS violations (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            employee_id INT NOT NULL,
-            violation_type VARCHAR(100),
-            violation_description TEXT,
-            violation_date DATE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS violations (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        employee_id INT NOT NULL,
+        violation_type VARCHAR(100),
+        violation_description TEXT,
+        violation_date DATE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-        CREATE TABLE
-          IF NOT EXISTS status_history (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            employee_id INT NOT NULL,
-            old_status VARCHAR(20),
-            new_status VARCHAR(20),
-            changed_by VARCHAR(100),
-            change_reason TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS status_history (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        employee_id INT NOT NULL,
+        old_status VARCHAR(20),
+        new_status VARCHAR(20),
+        changed_by VARCHAR(100),
+        change_reason TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-        CREATE TABLE
-          IF NOT EXISTS search_queries (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            query_type VARCHAR(50) NOT NULL,
-            search_term VARCHAR(255) DEFAULT NULL,
-            search_parameters JSON DEFAULT NULL,
-            results_count INT DEFAULT 0,
-            results_data JSON DEFAULT NULL,
-            ip_address VARCHAR(45) DEFAULT NULL,
-            user_agent TEXT DEFAULT NULL,
-            query_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            execution_time_ms DECIMAL(10, 3) DEFAULT NULL,
-            success BOOLEAN DEFAULT FALSE,
-            error_message TEXT DEFAULT NULL,
-            INDEX idx_query_type (query_type),
-            INDEX idx_timestamp (query_timestamp),
-            INDEX idx_success (success)
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS search_queries (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        query_type VARCHAR(50) NOT NULL,
+        search_term VARCHAR(255) DEFAULT NULL,
+        search_parameters JSON DEFAULT NULL,
+        results_count INT DEFAULT 0,
+        results_data JSON DEFAULT NULL,
+        ip_address VARCHAR(45) DEFAULT NULL,
+        user_agent TEXT DEFAULT NULL,
+        query_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        execution_time_ms DECIMAL(10, 3) DEFAULT NULL,
+        success BOOLEAN DEFAULT FALSE,
+        error_message TEXT DEFAULT NULL,
+        INDEX idx_query_type (query_type),
+        INDEX idx_timestamp (query_timestamp),
+        INDEX idx_success (success)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-        CREATE TABLE
-          IF NOT EXISTS employee_access_log (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            user_id int(11) DEFAULT NULL,
-            employee_id INT DEFAULT NULL,
-            fullname VARCHAR(100) DEFAULT NULL,
-            position VARCHAR(50) DEFAULT NULL,
-            brand VARCHAR(50) DEFAULT NULL,
-            status ENUM ('Active', 'Inactive') DEFAULT NULL,
-            shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
-            violation TEXT DEFAULT NULL,
-            image VARCHAR(255) DEFAULT NULL,
-            qr_code VARCHAR(100) DEFAULT NULL,
-            access_type VARCHAR(50) DEFAULT NULL,
-            ip_address VARCHAR(45) DEFAULT NULL,
-            user_agent TEXT DEFAULT NULL,
-            check_status ENUM ('IN', 'OUT') DEFAULT NULL,
-            access_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_employee_id (employee_id),
-            INDEX idx_qr_code (qr_code),
-            INDEX idx_access_timestamp (access_timestamp),
-            INDEX idx_access_type (access_type)
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS employee_access_log (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id int(11) DEFAULT NULL,
+        employee_id INT DEFAULT NULL,
+        fullname VARCHAR(100) DEFAULT NULL,
+        position VARCHAR(50) DEFAULT NULL,
+        brand VARCHAR(50) DEFAULT NULL,
+        status ENUM ('Active', 'Inactive') DEFAULT NULL,
+        shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
+        violation TEXT DEFAULT NULL,
+        image VARCHAR(255) DEFAULT NULL,
+        qr_code VARCHAR(100) DEFAULT NULL,
+        access_type VARCHAR(50) DEFAULT NULL,
+        ip_address VARCHAR(45) DEFAULT NULL,
+        user_agent TEXT DEFAULT NULL,
+        check_status ENUM ('IN', 'OUT') DEFAULT NULL,
+        access_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_employee_id (employee_id),
+        INDEX idx_qr_code (qr_code),
+        INDEX idx_access_timestamp (access_timestamp),
+        INDEX idx_access_type (access_type)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-        CREATE TABLE
-          IF NOT EXISTS employee_attendance_log (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            user_id int(11) DEFAULT NULL,
-            employee_id INT DEFAULT NULL,
-            fullname VARCHAR(100) DEFAULT NULL,
-            position VARCHAR(50) DEFAULT NULL,
-            brand VARCHAR(50) DEFAULT NULL,
-            status ENUM ('Active', 'Inactive') DEFAULT NULL,
-            shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
-            violation TEXT DEFAULT NULL,
-            image VARCHAR(255) DEFAULT NULL,
-            qr_code VARCHAR(100) DEFAULT NULL,
-            access_type VARCHAR(50) DEFAULT NULL,
-            ip_address VARCHAR(45) DEFAULT NULL,
-            user_agent TEXT DEFAULT NULL,
-            access_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_employee_id (employee_id),
-            INDEX idx_qr_code (qr_code),
-            INDEX idx_access_timestamp (access_timestamp),
-            INDEX idx_access_type (access_type)
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS employee_attendance_log (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id int(11) DEFAULT NULL,
+        employee_id INT DEFAULT NULL,
+        fullname VARCHAR(100) DEFAULT NULL,
+        position VARCHAR(50) DEFAULT NULL,
+        brand VARCHAR(50) DEFAULT NULL,
+        status ENUM ('Active', 'Inactive') DEFAULT NULL,
+        shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
+        violation TEXT DEFAULT NULL,
+        image VARCHAR(255) DEFAULT NULL,
+        qr_code VARCHAR(100) DEFAULT NULL,
+        access_type VARCHAR(50) DEFAULT NULL,
+        ip_address VARCHAR(45) DEFAULT NULL,
+        user_agent TEXT DEFAULT NULL,
+        access_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_employee_id (employee_id),
+        INDEX idx_qr_code (qr_code),
+        INDEX idx_access_timestamp (access_timestamp),
+        INDEX idx_access_type (access_type)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-        CREATE TABLE
-          IF NOT EXISTS check_in_out (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            user_id int(11) DEFAULT NULL,
-            employee_id INT NOT NULL,
-            qr_code VARCHAR(255) NOT NULL,
-            fullname VARCHAR(255) NOT NULL,
-            check_type ENUM ('IN', 'OUT') NOT NULL,
-            scan_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            ip_address VARCHAR(45),
-            user_agent TEXT,
-            INDEX idx_employee_id (employee_id),
-            INDEX idx_qr_code (qr_code),
-            INDEX idx_timestamp (scan_timestamp)
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS check_in_out (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id int(11) DEFAULT NULL,
+        employee_id INT NOT NULL,
+        qr_code VARCHAR(255) NOT NULL,
+        fullname VARCHAR(255) NOT NULL,
+        check_type ENUM ('IN', 'OUT') NOT NULL,
+        scan_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        ip_address VARCHAR(45),
+        user_agent TEXT,
+        INDEX idx_employee_id (employee_id),
+        INDEX idx_qr_code (qr_code),
+        INDEX idx_timestamp (scan_timestamp),
+        INDEX idx_employee_scan (employee_id, scan_timestamp)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-        CREATE TABLE
-          IF NOT EXISTS user_audio_settings (
-            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-            user_id INT UNSIGNED NOT NULL,
-            success_audio_path VARCHAR(512) DEFAULT NULL,
-            not_found_audio_path VARCHAR(512) DEFAULT NULL,
-            inactive_audio_path VARCHAR(512) DEFAULT NULL,
-            violations_audio_path VARCHAR(512) DEFAULT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            UNIQUE KEY uq_user_id (user_id)
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
-    ";
-
-    $userPdo->exec($sql);
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS user_audio_settings (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        user_id INT UNSIGNED NOT NULL,
+        success_audio_path VARCHAR(512) DEFAULT NULL,
+        not_found_audio_path VARCHAR(512) DEFAULT NULL,
+        inactive_audio_path VARCHAR(512) DEFAULT NULL,
+        violations_audio_path VARCHAR(512) DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_user_id (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
     return ['success' => true, 'database_name' => $dbName];
   } catch (PDOException $e) {
     $errorMsg = "Error creating user database for user $userId: " . $e->getMessage();
+    error_log($errorMsg);
     return ['success' => false, 'error' => $errorMsg];
   }
 }
@@ -478,156 +453,147 @@ function ensureUserTablesExist($userId)
   try {
     $userPdo = getUserDBConnection($userId);
 
-    $sql = "
-        CREATE TABLE
-          IF NOT EXISTS employees (
-            id INT NOT NULL,
-            user_id int(11) DEFAULT NULL,
-            fullname VARCHAR(100) NOT NULL,
-            position VARCHAR(50) NOT NULL,
-            brand VARCHAR(50) NOT NULL,
-            gender ENUM('Male', 'Female') DEFAULT NULL,
-            birth DATE DEFAULT NULL,
-            hired DATE DEFAULT NULL,
-            status ENUM ('Active', 'Inactive') DEFAULT 'Active',
-            shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') NOT NULL,
-            violation TEXT,
-            image VARCHAR(255),
-            qr_code VARCHAR(100) UNIQUE PRIMARY KEY,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            INDEX idx_qr_code (qr_code)
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS employees (
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        user_id int(11) DEFAULT NULL,
+        fullname VARCHAR(100) NOT NULL,
+        position VARCHAR(50) NOT NULL,
+        brand VARCHAR(50) NOT NULL,
+        gender ENUM('Male', 'Female') DEFAULT NULL,
+        birth DATE DEFAULT NULL,
+        hired DATE DEFAULT NULL,
+        status ENUM ('Active', 'Inactive') DEFAULT 'Active',
+        shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') NOT NULL,
+        violation TEXT,
+        image VARCHAR(255),
+        qr_code VARCHAR(100) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_qr_code (qr_code)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-        CREATE TABLE
-          IF NOT EXISTS code (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            is_active TINYINT(1) NOT NULL DEFAULT 1,
-            qr_code VARCHAR(100) UNIQUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS code (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        qr_code VARCHAR(100) UNIQUE,
+        reserved_by VARCHAR(64) NULL DEFAULT NULL,
+        reserved_at DATETIME NULL DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-        CREATE TABLE
-          IF NOT EXISTS violations (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            employee_id INT NOT NULL,
-            violation_type VARCHAR(100),
-            violation_description TEXT,
-            violation_date DATE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS violations (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        employee_id INT NOT NULL,
+        violation_type VARCHAR(100),
+        violation_description TEXT,
+        violation_date DATE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-        CREATE TABLE
-          IF NOT EXISTS status_history (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            employee_id INT NOT NULL,
-            old_status VARCHAR(20),
-            new_status VARCHAR(20),
-            changed_by VARCHAR(100),
-            change_reason TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS status_history (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        employee_id INT NOT NULL,
+        old_status VARCHAR(20),
+        new_status VARCHAR(20),
+        changed_by VARCHAR(100),
+        change_reason TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-        CREATE TABLE
-          IF NOT EXISTS search_queries (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            query_type VARCHAR(50) NOT NULL,
-            search_term VARCHAR(255) DEFAULT NULL,
-            search_parameters JSON DEFAULT NULL,
-            results_count INT DEFAULT 0,
-            results_data JSON DEFAULT NULL,
-            ip_address VARCHAR(45) DEFAULT NULL,
-            user_agent TEXT DEFAULT NULL,
-            query_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            execution_time_ms DECIMAL(10, 3) DEFAULT NULL,
-            success BOOLEAN DEFAULT FALSE,
-            error_message TEXT DEFAULT NULL,
-            INDEX idx_query_type (query_type),
-            INDEX idx_timestamp (query_timestamp),
-            INDEX idx_success (success)
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS search_queries (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        query_type VARCHAR(50) NOT NULL,
+        search_term VARCHAR(255) DEFAULT NULL,
+        search_parameters JSON DEFAULT NULL,
+        results_count INT DEFAULT 0,
+        results_data JSON DEFAULT NULL,
+        ip_address VARCHAR(45) DEFAULT NULL,
+        user_agent TEXT DEFAULT NULL,
+        query_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        execution_time_ms DECIMAL(10, 3) DEFAULT NULL,
+        success BOOLEAN DEFAULT FALSE,
+        error_message TEXT DEFAULT NULL,
+        INDEX idx_query_type (query_type),
+        INDEX idx_timestamp (query_timestamp),
+        INDEX idx_success (success)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-        CREATE TABLE
-          IF NOT EXISTS employee_access_log (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            user_id int(11) DEFAULT NULL,
-            employee_id INT DEFAULT NULL,
-            fullname VARCHAR(100) DEFAULT NULL,
-            position VARCHAR(50) DEFAULT NULL,
-            brand VARCHAR(50) DEFAULT NULL,
-            status ENUM ('Active', 'Inactive') DEFAULT NULL,
-            shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
-            violation TEXT DEFAULT NULL,
-            image VARCHAR(255) DEFAULT NULL,
-            qr_code VARCHAR(100) DEFAULT NULL,
-            access_type VARCHAR(50) DEFAULT NULL,
-            ip_address VARCHAR(45) DEFAULT NULL,
-            user_agent TEXT DEFAULT NULL,
-            check_status ENUM ('IN', 'OUT') DEFAULT NULL,
-            access_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_employee_id (employee_id),
-            INDEX idx_qr_code (qr_code),
-            INDEX idx_access_timestamp (access_timestamp),
-            INDEX idx_access_type (access_type)
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
-        
-        CREATE TABLE
-          IF NOT EXISTS employee_attendance_log (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            user_id int(11) DEFAULT NULL,
-            employee_id INT DEFAULT NULL,
-            fullname VARCHAR(100) DEFAULT NULL,
-            position VARCHAR(50) DEFAULT NULL,
-            brand VARCHAR(50) DEFAULT NULL,
-            status ENUM ('Active', 'Inactive') DEFAULT NULL,
-            shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
-            violation TEXT DEFAULT NULL,
-            image VARCHAR(255) DEFAULT NULL,
-            qr_code VARCHAR(100) DEFAULT NULL,
-            access_type VARCHAR(50) DEFAULT NULL,
-            ip_address VARCHAR(45) DEFAULT NULL,
-            user_agent TEXT DEFAULT NULL,
-            access_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_employee_id (employee_id),
-            INDEX idx_qr_code (qr_code),
-            INDEX idx_access_timestamp (access_timestamp),
-            INDEX idx_access_type (access_type)
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS employee_access_log (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id int(11) DEFAULT NULL,
+        employee_id INT DEFAULT NULL,
+        fullname VARCHAR(100) DEFAULT NULL,
+        position VARCHAR(50) DEFAULT NULL,
+        brand VARCHAR(50) DEFAULT NULL,
+        status ENUM ('Active', 'Inactive') DEFAULT NULL,
+        shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
+        violation TEXT DEFAULT NULL,
+        image VARCHAR(255) DEFAULT NULL,
+        qr_code VARCHAR(100) DEFAULT NULL,
+        access_type VARCHAR(50) DEFAULT NULL,
+        ip_address VARCHAR(45) DEFAULT NULL,
+        user_agent TEXT DEFAULT NULL,
+        check_status ENUM ('IN', 'OUT') DEFAULT NULL,
+        access_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_employee_id (employee_id),
+        INDEX idx_qr_code (qr_code),
+        INDEX idx_access_timestamp (access_timestamp),
+        INDEX idx_access_type (access_type)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-        CREATE TABLE
-          IF NOT EXISTS check_in_out (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            user_id int(11) DEFAULT NULL,
-            employee_id INT NOT NULL,
-            qr_code VARCHAR(255) NOT NULL,
-            fullname VARCHAR(255) NOT NULL,
-            check_type ENUM ('IN', 'OUT') NOT NULL,
-            scan_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            ip_address VARCHAR(45),
-            user_agent TEXT,
-            INDEX idx_employee_id (employee_id),
-            INDEX idx_qr_code (qr_code),
-            INDEX idx_timestamp (scan_timestamp)
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS employee_attendance_log (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id int(11) DEFAULT NULL,
+        employee_id INT DEFAULT NULL,
+        fullname VARCHAR(100) DEFAULT NULL,
+        position VARCHAR(50) DEFAULT NULL,
+        brand VARCHAR(50) DEFAULT NULL,
+        status ENUM ('Active', 'Inactive') DEFAULT NULL,
+        shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
+        violation TEXT DEFAULT NULL,
+        image VARCHAR(255) DEFAULT NULL,
+        qr_code VARCHAR(100) DEFAULT NULL,
+        access_type VARCHAR(50) DEFAULT NULL,
+        ip_address VARCHAR(45) DEFAULT NULL,
+        user_agent TEXT DEFAULT NULL,
+        access_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_employee_id (employee_id),
+        INDEX idx_qr_code (qr_code),
+        INDEX idx_access_timestamp (access_timestamp),
+        INDEX idx_access_type (access_type)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-        CREATE TABLE
-          IF NOT EXISTS user_audio_settings (
-            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            user_id INT UNSIGNED NOT NULL,
-            success_audio_path VARCHAR(512) DEFAULT NULL,
-            not_found_audio_path VARCHAR(512) DEFAULT NULL,
-            inactive_audio_path VARCHAR(512) DEFAULT NULL,
-            violations_audio_path VARCHAR(512) DEFAULT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY uq_user_id (user_id)
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;
-    ";
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS check_in_out (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id int(11) DEFAULT NULL,
+        employee_id INT NOT NULL,
+        qr_code VARCHAR(255) NOT NULL,
+        fullname VARCHAR(255) NOT NULL,
+        check_type ENUM ('IN', 'OUT') NOT NULL,
+        scan_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        ip_address VARCHAR(45),
+        user_agent TEXT,
+        INDEX idx_employee_id (employee_id),
+        INDEX idx_qr_code (qr_code),
+        INDEX idx_timestamp (scan_timestamp),
+        INDEX idx_employee_scan (employee_id, scan_timestamp)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-    $userPdo->exec($sql);
+    $userPdo->exec("CREATE TABLE IF NOT EXISTS user_audio_settings (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        user_id INT UNSIGNED NOT NULL,
+        success_audio_path VARCHAR(512) DEFAULT NULL,
+        not_found_audio_path VARCHAR(512) DEFAULT NULL,
+        inactive_audio_path VARCHAR(512) DEFAULT NULL,
+        violations_audio_path VARCHAR(512) DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_user_id (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
     return true;
   } catch (PDOException $e) {
     error_log("Error ensuring user tables exist: " . $e->getMessage());
@@ -714,12 +680,12 @@ function customDatabaseExists($dbName)
 
 /**
  * Enhanced User Registration Function
- * 
+ *
  * DATABASE NAMING STRATEGY:
  * - Actual database created: user_{$userId} (e.g., user_1, user_2, user_3)
  * - The 'my_database' field is stored in users table as METADATA ONLY
  * - This ensures clean, predictable database names while preserving user's custom name
- * 
+ *
  * @param string $username - Unique username (3+ chars)
  * @param string $email - Valid email address
  * @param string $password - Strong password (8+ chars, uppercase, lowercase, number)
@@ -727,7 +693,7 @@ function customDatabaseExists($dbName)
  * @param string $lastName - User's last name
  * @param string|null $myDatabase - Custom database name (stored as metadata)
  * @param string|null $phoneNum - User's phone number
- * 
+ *
  * @return array - ['success' => bool, 'user_id' => int, 'database_created' => bool, 'database_name' => string, 'message' => string, 'errors' => array]
  */
 function registerUser($username, $email, $password, $firstName, $lastName, $user_group, $myDatabase = null, $phoneNum = null)
@@ -770,7 +736,7 @@ function registerUser($username, $email, $password, $firstName, $lastName, $user
     $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
     $stmt = $pdo->prepare("
-      INSERT INTO users (username, email, password, first_name, last_name, my_database, phone, user_group, created_at) 
+      INSERT INTO users (username, email, password, first_name, last_name, my_database, phone, user_group, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
 
@@ -871,76 +837,72 @@ function createMainTables()
   try {
     $pdo = getMainDBConnection();
 
-    $sql = "
-        CREATE TABLE IF NOT EXISTS users (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) UNIQUE NOT NULL,
-            email VARCHAR(100) UNIQUE NOT NULL,
-            password VARCHAR(255) NOT NULL,
-            first_name VARCHAR(50) NOT NULL,
-            last_name VARCHAR(50) NOT NULL,
-            phone VARCHAR(20),
-            my_database VARCHAR(100),
-            user_group VARCHAR(50),
-            session_token VARCHAR(255) DEFAULT NULL,
-            session_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            last_login TIMESTAMP NULL,
-            INDEX idx_username (username),
-            INDEX idx_email (email),
-            INDEX idx_session_token (session_token)
-        );
+    $pdo->exec("CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        email VARCHAR(100) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        first_name VARCHAR(50) NOT NULL,
+        last_name VARCHAR(50) NOT NULL,
+        phone VARCHAR(20),
+        my_database VARCHAR(100),
+        user_group VARCHAR(50),
+        session_token VARCHAR(255) DEFAULT NULL,
+        session_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        last_login TIMESTAMP NULL,
+        INDEX idx_username (username),
+        INDEX idx_email (email),
+        INDEX idx_session_token (session_token)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-        CREATE TABLE IF NOT EXISTS user_sessions (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            user_id INT NOT NULL,
-            session_token VARCHAR(255) NOT NULL,
-            ip_address VARCHAR(45),
-            user_agent TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            is_active BOOLEAN DEFAULT TRUE,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            UNIQUE KEY unique_session (session_token),
-            INDEX idx_user_sessions_user_id (user_id),
-            INDEX idx_user_sessions_token (session_token)
-        );
+    $pdo->exec("CREATE TABLE IF NOT EXISTS user_sessions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        session_token VARCHAR(255) NOT NULL,
+        ip_address VARCHAR(45),
+        user_agent TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        is_active BOOLEAN DEFAULT TRUE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_session (session_token),
+        INDEX idx_user_sessions_user_id (user_id),
+        INDEX idx_user_sessions_token (session_token)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-        CREATE TABLE IF NOT EXISTS system_logs (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            user_id INT,
-            action VARCHAR(100) NOT NULL,
-            details TEXT,
-            ip_address VARCHAR(45),
-            user_agent TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
-            INDEX idx_user_id (user_id),
-            INDEX idx_action (action),
-            INDEX idx_created_at (created_at)
-        );
+    $pdo->exec("CREATE TABLE IF NOT EXISTS system_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT,
+        action VARCHAR(100) NOT NULL,
+        details TEXT,
+        ip_address VARCHAR(45),
+        user_agent TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+        INDEX idx_user_id (user_id),
+        INDEX idx_action (action),
+        INDEX idx_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-        CREATE TABLE
-          IF NOT EXISTS `user_groups` (
-            `id` INT (11) NOT NULL AUTO_INCREMENT,
-            `group_number` VARCHAR(64) NOT NULL UNIQUE COMMENT 'Auto-generated unique group number',
-            `group_name` VARCHAR(100) NOT NULL UNIQUE COMMENT 'Human-readable name e.g. Administrator',
-            `description` VARCHAR(255) DEFAULT NULL,
-            `is_enabled` TINYINT (1) NOT NULL DEFAULT 1 COMMENT '1 = enabled, 0 = disabled',
-            `permissions` JSON DEFAULT NULL COMMENT 'JSON object: { order: true, social: false, ... }',
-            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            `updated_at` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (`id`)
-          ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
-    ";
-
-    $pdo->exec($sql);
+    $pdo->exec("CREATE TABLE IF NOT EXISTS `user_groups` (
+        `id` INT(11) NOT NULL AUTO_INCREMENT,
+        `group_number` VARCHAR(64) NOT NULL UNIQUE COMMENT 'Auto-generated unique group number',
+        `group_name` VARCHAR(100) NOT NULL UNIQUE COMMENT 'Human-readable name e.g. Administrator',
+        `description` VARCHAR(255) DEFAULT NULL,
+        `is_enabled` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '1 = enabled, 0 = disabled',
+        `permissions` JSON DEFAULT NULL COMMENT 'JSON object: { order: true, social: false, ... }',
+        `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
     $pdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `user_group` VARCHAR(50)");
 
     return true;
   } catch (PDOException $e) {
+    error_log("createMainTables() failed: " . $e->getMessage());
     return false;
   }
 }
@@ -952,7 +914,7 @@ function logSystemAction($userId, $action, $details = null)
   try {
     $pdo = getMainDBConnection();
     $stmt = $pdo->prepare("
-        INSERT INTO system_logs (user_id, action, details, ip_address, user_agent, created_at) 
+        INSERT INTO system_logs (user_id, action, details, ip_address, user_agent, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
     ");
 
@@ -965,6 +927,7 @@ function logSystemAction($userId, $action, $details = null)
       date('Y-m-d H:i:s'),
     ]);
   } catch (PDOException $e) {
+    error_log("logSystemAction() failed: " . $e->getMessage());
   }
 }
 

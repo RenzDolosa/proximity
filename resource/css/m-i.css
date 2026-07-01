@@ -12,7 +12,7 @@ body {
   margin: 0 auto;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
   overflow: hidden;
 }
@@ -59,6 +59,15 @@ body {
   font-size: 2.5rem;
   margin-bottom: 10px;
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.proximity-logo {
+  position: absolute;
+  left: 24px;
+  top: 5%;
+  width: 100px;
+  height: 100px;
+  filter: invert(1);
 }
 
 .stats-bar {
@@ -377,7 +386,6 @@ body {
   opacity: 0.6;
 }
 
-
 @media (max-width: 768px) {
   .employee-grid {
     grid-template-columns: 1fr;
@@ -395,4 +403,100 @@ body {
   .header h1 {
     font-size: 2rem;
   }
+}
+
+@media (max-width: 1024px) {
+  .container {
+    border-radius: var(--radius-md);
+  }
+
+  .header h1 {
+    font-size: 1.5rem;
+    margin-bottom: 5px;
+  }
+
+  .proximity-logo {
+    width: 90px;
+    height: 80px;
+  }
+
+  .stats-bar {
+    gap: 15px;
+    margin-top: 10px;
+  }
+
+  .stat-item {
+    padding: 5px 10px;
+    border-radius: var(--radius-lg);
+  }
+
+  .stat-number {
+    font-size: 1.5rem;
+  }
+
+  .stat-label {
+    font-size: 0.9rem;
+    opacity: 0.9;
+  }
+
+  .search-section {
+    padding: 5px 20px;
+    background: var(--slate-bg);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .search-form {
+    margin-bottom: 10px;
+  }
+
+  .results-section {
+    padding: 5px;
+    height: 58vmin;
+  }
+
+  .results-count {
+    font-size: 1rem;
+  }
+
+  .employee-grid {
+    gap: 10px;
+    padding: 10px 0;
+    min-height: 200px;
+  }
+
+  .employee-card {
+    border-radius: var(--radius-lg);
+    padding: 15px;
+  }
+
+  .employee-header {
+    margin-bottom: 10px;
+  }
+
+  .employee-info h3 {
+    font-size: 1.3rem;
+    color: var(--text);
+    margin-bottom: 5px;
+  }
+
+  .employee-info .id {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  .employee-details {
+    gap: 5px;
+    margin-bottom: 10px;
+  }
+
+  .no-results {
+    padding: 30px 10px;
+  }
+
+  .no-results-icon {
+    font-size: 2rem;
+    margin-bottom: 10px;
+    opacity: 0.5;
+  }
+
 }

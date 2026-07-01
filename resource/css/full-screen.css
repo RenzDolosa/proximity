@@ -1,0 +1,57 @@
+/* resource/css/full-screen.css --> web full-screen */
+
+/* ── Fullscreen button (tablet / mobile only) ─────────────── */
+#fullscreenBtn {
+  display: none; /* hidden by default; JS shows it on touch devices */
+  position: fixed;
+  top: 3vmin;
+  right: 3vmin;
+  z-index: 1500;
+  width: 9vmin;
+  height: 9vmin;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 4.5vmin;
+  line-height: 1;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition:
+    background 0.2s ease,
+    transform 0.15s ease;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* JS adds this class on touch devices to make the button visible */
+#fullscreenBtn.fs-visible {
+  display: flex;
+}
+
+#fullscreenBtn:active {
+  transform: scale(0.92);
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.fs-icon {
+  pointer-events: none;
+  user-select: none;
+}
+
+@media (max-width: 1024px) {
+  #fullscreenBtn {
+    top: 4vmin;
+    right: 4vmin;
+    width: 11vmin;
+    height: 11vmin;
+    font-size: 5.5vmin;
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

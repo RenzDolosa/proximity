@@ -211,9 +211,10 @@
 
   /* ── Pagination ── */
   --page-active:         #007bff;
+  --bottom-nav-h:        0px;
 
   /* ── Controls ── */
-  --controls-h: 0px;
+  --controls-h:          0px;
 
   /* ── Border radius ── */
   --radius:              8px;

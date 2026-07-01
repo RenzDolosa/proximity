@@ -28,6 +28,7 @@ if (!isset($_SESSION['user_id'])) {
   <link rel="icon" href="/config/asset.php?t=asc4s" type="image/png">
   <link rel="stylesheet" href="/config/asset.php?t=zdsj4">
   <link rel="stylesheet" href="/config/asset.php?t=c24hj">
+  <link rel="stylesheet" href="/config/asset.php?t=fg6r2">
   <link rel="stylesheet" href="/config/asset.php?t=jrsb4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
@@ -35,8 +36,8 @@ if (!isset($_SESSION['user_id'])) {
 <body>
 
   <background>
-    <div class="background-image" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; z-index: 0; pointer-events: none;">
-      <img src="/config/asset.php?t=aur2d" loading="lazy" alt="Proximity Code" style="width: 50%; height: 100vh; object-fit: contain;">
+    <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; z-index: 0; pointer-events: none;">
+      <img src="/config/asset.php?t=aur2d" class="background-image" loading="lazy" alt="Proximity Code">
     </div>
   </background>
 
@@ -68,6 +69,7 @@ if (!isset($_SESSION['user_id'])) {
   <script src="/config/asset.php?t=p1q2r"></script>
   <script src="/config/asset.php?t=aw4sa"></script>
   <script src="/config/asset.php?t=m6efw"></script>
+  <script src="/config/asset.php?t=dsf23"></script>
   <script src="/config/asset.php?t=j7k8l"></script>
 </body>
 

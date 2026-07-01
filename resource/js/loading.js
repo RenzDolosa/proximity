@@ -311,6 +311,12 @@ if (window.self !== window.top) {
 // ── AJAX request interceptor ──
 const originalFetch = window.fetch;
 window.fetch = function (...args) {
+  const url = args[0];
+
+  if (!url || url === 'null' || url === 'undefined') {
+    return Promise.reject(new TypeError('fetch: invalid URL (backend not ready)'));
+  }
+
   const options = args[1] || {};
   const headers = options.headers || {};
 

@@ -1154,10 +1154,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       transition: opacity 0.13s;
     }
 
-    .ptl-tab .ptl-tab-pin:hover  { opacity: 1; }
-    .ptl-tab.pinned .ptl-tab-pin { opacity: 1; }
-    .ptl-tab.active .ptl-tab-pin { opacity: 0.75; }
-    .ptl-tab.active .ptl-tab-pin:hover { opacity: 1; }
+    .ptl-tab .ptl-tab-pin:hover {
+      opacity: 1;
+    }
+
+    .ptl-tab.pinned .ptl-tab-pin {
+      opacity: 1;
+    }
+
+    .ptl-tab.active .ptl-tab-pin {
+      opacity: 0.75;
+    }
+
+    .ptl-tab.active .ptl-tab-pin:hover {
+      opacity: 1;
+    }
 
     .ptl-tab .ptl-tab-close {
       font-size: 11px;
@@ -1175,8 +1186,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     .ptl-tab:hover .ptl-tab-close,
     .ptl-tab.active .ptl-tab-close,
-    .ptl-tab.pinned .ptl-tab-close { opacity: 0.7; }
-    .ptl-tab .ptl-tab-close:hover  { opacity: 1 !important; }
+    .ptl-tab.pinned .ptl-tab-close {
+      opacity: 0.7;
+    }
+
+    .ptl-tab .ptl-tab-close:hover {
+      opacity: 1 !important;
+    }
 
     /* separator between breadcrumb and tabs */
     .ptl-tabs-sep {
@@ -1407,6 +1423,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     (function() {
       const INTERVAL = 10000;
       let wasOffline = false;
+
+      // ── Minimal alert used before portal.js loads ─────────────────
+      function showAlert(msg, type) {
+        // Delegate to portal.js's showAlert once it's available,
+        // otherwise fall back to a silent console log.
+        if (typeof window.showAlert === 'function' && window.showAlert !== showAlert) {
+          window.showAlert(msg, type);
+        } else {
+          console.info('[connectivity]', type, msg);
+        }
+      }
 
       function checkConnectivity(callback) {
         if (!navigator.onLine) {

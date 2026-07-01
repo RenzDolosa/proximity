@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $isAjax) {
   header('Cache-Control: no-store, no-cache, must-revalidate');
   header('Pragma: no-cache');
 
-  $pdo = getDBConnection();
+  $pdo = getMainDBConnection();
   ensureGlobalAudioTable($pdo);
 
   $rows = $pdo->query(
@@ -72,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
     exit;
   }
 
-  $pdo = getDBConnection();
+  $pdo = getMainDBConnection();
   ensureGlobalAudioTable($pdo);
 
   $stmt = $pdo->prepare(
@@ -99,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE' && $isAjax) {
     exit;
   }
 
-  $pdo = getDBConnection();
+  $pdo = getMainDBConnection();
   ensureGlobalAudioTable($pdo);
 
   $stmt = $pdo->prepare(

@@ -335,20 +335,26 @@ try {
           </div>
           <div class="card-body">
             <form method="POST">
+              <input type="text" name="username_hint"
+                value="<?= htmlspecialchars($user['username'] ?? ''); ?>"
+                autocomplete="username"
+                style="display:none;"
+                aria-hidden="true"
+                tabindex="-1">
               <div class="form-grid">
                 <div class="form-group full">
-                  <label for="current_password">Current Password</label>
+                  <label for="current-password">Current Password</label>
                   <div class="input-wrapper">
-                    <input type="password" id="current_password" name="current_password" class="form-control" required>
+                    <input type="password" id="current-password" name="current_password" class="form-control" autocomplete="current-password" required>
                     <button type="button" class="toggle-pw" tabindex="-1" onclick="togglePw('current_password', this)">
                       <i class="fas fa-eye"></i>
                     </button>
                   </div>
                 </div>
                 <div class="form-group full">
-                  <label for="new_password">New Password</label>
+                  <label for="new-password">New Password</label>
                   <div class="input-wrapper">
-                    <input type="password" id="new_password" name="new_password" class="form-control" required>
+                    <input type="password" id="new-password" name="new_password" class="form-control" autocomplete="new-password" required>
                     <button type="button" class="toggle-pw" tabindex="-1" onclick="togglePw('new_password', this)">
                       <i class="fas fa-eye"></i>
                     </button>
@@ -356,9 +362,9 @@ try {
                   <span class="form-hint">At least 8 characters with uppercase, lowercase, and number.</span>
                 </div>
                 <div class="form-group full">
-                  <label for="confirm_password">Confirm New Password</label>
+                  <label for="confirm-password">Confirm New Password</label>
                   <div class="input-wrapper">
-                    <input type="password" id="confirm_password" name="confirm_password" class="form-control" required>
+                    <input type="password" id="confirm-password" name="confirm_password" class="form-control" autocomplete="new-password" required>
                     <button type="button" class="toggle-pw" tabindex="-1" onclick="togglePw('confirm_password', this)">
                       <i class="fas fa-eye"></i>
                     </button>

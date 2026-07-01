@@ -52,7 +52,7 @@ if ($databaseConnected) {
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title><?= htmlspecialchars($myDatabase ?? 'System', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?> - Remarks Log</title>
   <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
   <link rel="stylesheet" href="/config/asset.php?t=yde24">
@@ -292,6 +292,7 @@ if ($databaseConnected) {
   <script src="/config/asset.php?t=kaew3"></script>
   <script src="/config/asset.php?t=m6efw"></script>
   <script src="/config/asset.php?t=as3ks"></script>
+  <script src="/config/asset.php?t=edrg3"></script>
 </body>
 
 </html>

@@ -62,7 +62,8 @@
             </button>
           </div>
         </div>
-      </div>`;
+      </div>
+    `;
 
     const grid = document.getElementById("global-audio-grid");
 

@@ -2016,60 +2016,62 @@ function renderBindRows(array $pages, int $depth = 0): void
   <!-- ══════════════════════════════════════════ MODAL: USER FORM ══ -->
   <div class="modal-overlay" id="userFormModal">
     <div class="modal-box">
-      <h3 id="userFormTitle"><i class="fas fa-user-plus" style="color:#7c3aed"></i> Add New User</h3>
-      <div class="err-box" id="userFormErr"></div>
-      <div class="form-grid">
-        <div class="form-row">
-          <label for="fFirstName">First name <span style="color:#ef4444">*</span></label>
-          <input type="text" id="fFirstName" placeholder="Firstname">
+      <form id="userFormInner" onsubmit="event.preventDefault(); submitUserForm();" autocomplete="off">
+        <h3 id="userFormTitle"><i class="fas fa-user-plus" style="color:#7c3aed"></i> Add New User</h3>
+        <div class="err-box" id="userFormErr"></div>
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="fFirstName">First name <span style="color:#ef4444">*</span></label>
+            <input type="text" id="fFirstName" placeholder="Firstname">
+          </div>
+          <div class="form-row">
+            <label for="fLastName">Last name <span style="color:#ef4444">*</span></label>
+            <input type="text" id="fLastName" placeholder="Lastname">
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="fUsername">Username <span style="color:#ef4444">*</span></label>
+            <input type="text" id="fUsername" placeholder="Minimum 3 characters" autocomplete="username">
+          </div>
+          <div class="form-row">
+            <label for="fEmail">Email <span style="color:#ef4444">*</span></label>
+            <input type="email" id="fEmail" placeholder="user@example.com">
+          </div>
         </div>
         <div class="form-row">
-          <label for="fLastName">Last name <span style="color:#ef4444">*</span></label>
-          <input type="text" id="fLastName" placeholder="Lastname">
-        </div>
-      </div>
-      <div class="form-grid">
-        <div class="form-row">
-          <label for="fUsername">Username <span style="color:#ef4444">*</span></label>
-          <input type="text" id="fUsername" placeholder="Minimum 3 characters">
+          <label for="fUsergroup">User Group <span style="color:#ef4444">*</span></label>
+          <select id="fUsergroup">
+            <option value="">— Select group —</option>
+          </select>
         </div>
         <div class="form-row">
-          <label for="fEmail">Email <span style="color:#ef4444">*</span></label>
-          <input type="email" id="fEmail" placeholder="user@example.com">
+          <label for="fPassword">Password <span id="pwHint" style="font-weight:400;color:#9ca3af">(min 8 chars, upper, lower, number)</span></label>
+          <div style="position:relative;display:flex;align-items:center;">
+            <input type="password" id="fPassword" placeholder="Password" style="padding-right:36px;width:100%;" autocomplete="new-password">
+            <button type="button" class="toggle-pw" tabindex="-1" onclick="togglePw('fPassword',this)"
+              style="position:absolute;right:10px;background:none;border:none;cursor:pointer;color:#9ca3af;font-size:13px;padding:0;line-height:1;">
+              <i class="fas fa-eye"></i>
+            </button>
+          </div>
         </div>
-      </div>
-      <div class="form-row">
-        <label for="fUsergroup">User Group <span style="color:#ef4444">*</span></label>
-        <select id="fUsergroup">
-          <option value="">— Select group —</option>
-        </select>
-      </div>
-      <div class="form-row">
-        <label for="fPassword">Password <span id="pwHint" style="font-weight:400;color:#9ca3af">(min 8 chars, upper, lower, number)</span></label>
-        <div style="position:relative;display:flex;align-items:center;">
-          <input type="password" id="fPassword" placeholder="Password" style="padding-right:36px;width:100%;">
-          <button type="button" class="toggle-pw" tabindex="-1" onclick="togglePw('fPassword',this)"
-            style="position:absolute;right:10px;background:none;border:none;cursor:pointer;color:#9ca3af;font-size:13px;padding:0;line-height:1;">
-            <i class="fas fa-eye"></i>
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="fPhone">Phone</label>
+            <input type="text" id="fPhone" placeholder="09XXXXXXXXX">
+          </div>
+          <div class="form-row">
+            <label for="fDatabase">My database <span style="color:#ef4444">*</span></label>
+            <input type="text" id="fDatabase" placeholder="e.g. AdminServer">
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-cancel" tabindex="-1" onclick="closeModal('userFormModal')">Cancel</button>
+          <button class="btn btn-confirm" id="btnUserFormSubmit" tabindex="-1" onclick="submitUserForm()">
+            <i class="fas fa-save"></i> Register User
           </button>
         </div>
-      </div>
-      <div class="form-grid">
-        <div class="form-row">
-          <label for="fPhone">Phone</label>
-          <input type="text" id="fPhone" placeholder="09XXXXXXXXX">
-        </div>
-        <div class="form-row">
-          <label for="fDatabase">My database <span style="color:#ef4444">*</span></label>
-          <input type="text" id="fDatabase" placeholder="e.g. AdminServer">
-        </div>
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-cancel" tabindex="-1" onclick="closeModal('userFormModal')">Cancel</button>
-        <button class="btn btn-confirm" id="btnUserFormSubmit" tabindex="-1" onclick="submitUserForm()">
-          <i class="fas fa-save"></i> Register User
-        </button>
-      </div>
+      </form>
     </div>
   </div>
 

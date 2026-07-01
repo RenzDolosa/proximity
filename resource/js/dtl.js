@@ -8,6 +8,7 @@ let currentAction = "add";
 let employees = [];
 let employeeDataCache = null;
 let qrImageMapCache = null;
+let _lastImageFingerprint = null;
 
 let autoUpdateInterval = null;
 let autoUpdateEnabled = false;
@@ -15,9 +16,6 @@ let lastUpdateTimestamp = null;
 let userActivityTimer = null;
 let isUserActive = false;
 
-let currentPage = 1;
-const itemsPerPage = 25;
-let totalPages = 1;
 let totalRecords = 0;
 
 let activeFilters = {};
@@ -56,6 +54,15 @@ function isAnySuggestionOpen() {
   return [...document.querySelectorAll("ul[data-suggestion-list]")].some(
     (el) => el.style.display === "block",
   );
+}
+
+function computeImageFingerprint(qrImageMap) {
+  const parts = [];
+  for (const key in qrImageMap) {
+    const v = qrImageMap[key];
+    parts.push(`${key}:${v.image || ""}:${v.updated_at || ""}`);
+  }
+  return parts.sort().join("|");
 }
 
 // ── Event listeners setup ─────────────────────────────────────────────────────
@@ -213,7 +220,9 @@ function setupEventListeners() {
     "search-inout-suggestions",
     () =>
       [...(fieldFilterOptions.check_status || allEmployees)]
-        .sort((a, b) => (a.check_status || "").localeCompare(b.check_status || ""))
+        .sort((a, b) =>
+          (a.check_status || "").localeCompare(b.check_status || ""),
+        )
         .map((e) => e.check_status)
         .filter(Boolean),
     {
@@ -399,10 +408,7 @@ function startAutoUpdate(intervalMs) {
 
   autoUpdateInterval = setInterval(() => {
     if (autoUpdateEnabled && !isUserActive) {
-      console.log("Performing auto-update...");
       loadEmployeesAuto();
-    } else if (isUserActive) {
-      console.log("Skipping auto-update - user is active");
     }
   }, intervalMs);
 
@@ -538,15 +544,17 @@ async function loadEmployeesAuto(filters = {}) {
     if (data.success && Array.isArray(data.data)) {
       const hasChanges = checkForChanges(data.data);
 
-      if (hasChanges) {
+      employeeDataCache = null;
+      qrImageMapCache = null;
+      const freshMap = await buildQRToImageMap();
+      const freshFingerprint = computeImageFingerprint(freshMap);
+      const hasImageChanges = freshFingerprint !== _lastImageFingerprint;
+      _lastImageFingerprint = freshFingerprint;
+
+      if (hasChanges || hasImageChanges) {
         employees = data.data;
-        employeeDataCache = null;
-        qrImageMapCache = null;
         await renderEmployeeTable();
         showAutoUpdateNotification();
-        console.log(`Auto-update: ${employees.length} records refreshed`);
-      } else {
-        console.log("Auto-update: No changes detected");
       }
 
       lastUpdateTimestamp = Date.now();
@@ -592,8 +600,10 @@ function handleNetworkError() {
 }
 
 function resetNetworkErrorCount() {
-  if (networkErrorCount > 0) networkErrorCount = 0;
-  console.log("Network connection restored");
+  if (networkErrorCount > 0) {
+    networkErrorCount = 0;
+    console.log("Network connection restored");
+  }
 }
 
 // ── Filter helpers ────────────────────────────────────────────────────────────
@@ -696,14 +706,9 @@ function displayFilterStatus() {
 // ── Manpower image lookup ─────────────────────────────────────────────────────
 async function getManpowerEmployeeData() {
   if (employeeDataCache) return employeeDataCache;
-
   if (!EmployeesBackend) return [];
 
   try {
-    if (employeeDataCache) {
-      return employeeDataCache;
-    }
-
     const response = await fetch(
       `${EmployeesBackend}?action=get&page=1&limit=1`,
       {
@@ -716,9 +721,9 @@ async function getManpowerEmployeeData() {
 
     if (response.ok) {
       const data = await response.json();
-      if (data.success && Array.isArray(data.data)) {
-        employeeDataCache = data.data;
-        return data.data;
+      if (data.success && Array.isArray(data.filter_options)) {
+        employeeDataCache = data.filter_options;
+        return data.filter_options;
       }
     }
   } catch (error) {
@@ -745,6 +750,7 @@ async function buildQRToImageMap() {
         status: emp.status,
         shift: emp.shift,
         user_id: emp.user_id,
+        updated_at: emp.updated_at,
       };
     }
   });
@@ -909,8 +915,16 @@ async function renderEmployeeTable() {
 
       const isAboveFold = index < 5;
 
-      const thumbSrc = `${window.location.origin}/public/uploads/user/${safeImage}`;
-      const imageSrc = `${window.location.origin}/public/uploads/user/${safeImage}`;
+      const liveImage = matchedEmployeeData?.image || employee.image;
+      const safeLiveImage = escapeHtml(liveImage);
+      const imgVersion = encodeURIComponent(
+        matchedEmployeeData?.updated_at ||
+          employee.updated_at ||
+          employee.created_at ||
+          Date.now(),
+      );
+      const thumbSrc = `${window.location.origin}/../public/uploads/user/${safeImage}?v=${imgVersion}`;
+      const imageSrc = `${window.location.origin}/../public/uploads/user/${safeImage}?v=${imgVersion}`;
 
       return `
         <tr class="row">
@@ -946,7 +960,7 @@ async function renderEmployeeTable() {
             </div>
           </td>
           <td class="emp-img">${
-            employee.image
+            liveImage
               ? `<div class="img-skeleton-wrap">
                   <div class="img-skel-shimmer"></div>
                   <img src="${thumbSrc}" alt="${safeFullname}" class="employee-image"
@@ -963,7 +977,7 @@ async function renderEmployeeTable() {
                 </div>`
               : `<div class="ph-cont" title="${tooltipText}"><div class="employee-ph">${escapeHtml(fullnameInitials)}</div></div>`
           }</td>
-          <td data-qr="${safeQrCode}" class="emp-proximity" onclick="copyQRCodeFromCell(this)" title="Copy Proximity code" style="cursor:pointer;">
+          <td class="emp-proximity" onclick="copyQRCodeFromCell(this)" title="Copy Proximity code" style="cursor:pointer;">
             <svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 512 512">
               <path d="M0 0 C1.8671875 1.1328125 1.8671875 1.1328125 3.6875 2.4375 C4.32945312 2.88867188 4.97140625 3.33984375 5.6328125 3.8046875 C12.06627036 8.87576605 16.39227202 15.57014088 20.6875 22.4375 C21.34621094 23.46746094 22.00492187 24.49742187 22.68359375 25.55859375 C51.23747477 74.33574664 50.67378716 139.45530043 36.90576172 192.44628906 C32.19944267 209.92529327 25.88960765 232.01237335 9.6875 242.4375 C2.18206673 245.55178766 -6.35065802 244.93076013 -13.875 241.9375 C-19.14967759 239.24807732 -23.73112419 235.58208816 -28.37744141 231.94384766 C-31.42555165 229.5710442 -34.50536176 227.24019229 -37.58105469 224.90332031 C-40.30508099 222.83314006 -43.02599356 220.75892945 -45.74609375 218.68359375 C-51.09985975 214.5993256 -56.45591129 210.51806505 -61.8125 206.4375 C-63.56251122 205.10418139 -65.3125112 203.77084803 -67.0625 202.4375 C-67.92875 201.7775 -68.795 201.1175 -69.6875 200.4375 C-72.3125 198.4375 -74.9375 196.4375 -77.5625 194.4375 C-78.42907227 193.7772583 -79.29564453 193.1170166 -80.18847656 192.43676758 C-81.9352363 191.10589527 -83.68198114 189.7750034 -85.42871094 188.4440918 C-89.85316371 185.07294264 -94.27788987 181.70215338 -98.703125 178.33203125 C-106.74477361 172.20728725 -114.78445594 166.08006898 -122.8125 159.9375 C-124.89869859 158.34220087 -126.98498216 156.74701295 -129.07128906 155.15185547 C-130.64134924 153.95087915 -132.21097407 152.74933357 -133.78027344 151.54736328 C-139.06420007 147.50114011 -144.35941498 143.47036492 -149.66503906 139.45263672 C-152.30619108 137.44230209 -154.93073125 135.41161082 -157.5546875 133.37890625 C-159.22341526 132.10605854 -160.89266422 130.83389376 -162.5625 129.5625 C-163.31192871 128.973479 -164.06135742 128.38445801 -164.83349609 127.77758789 C-169.81057833 124.0261219 -174.12716029 122.26475737 -180.3125 121.4375 C-183.02071018 131.93181446 -180.27502005 142.64420844 -178.4375 153.0625 C-169.81571431 202.54806425 -169.81571431 202.54806425 -179.3125 216.4375 C-183.81158383 221.30840894 -188.4569437 223.48711211 -195 223.875 C-202.53024915 223.69570835 -208.61065492 220.30643654 -214.0625 215.25 C-235.32229346 192.09379304 -236.87144312 154.02810893 -236.64868164 124.47436523 C-236.62489127 121.10962175 -236.62817992 117.74566707 -236.63476562 114.38085938 C-236.61485561 98.21599681 -235.96840475 82.30978699 -232 66.5625 C-231.7827124 65.68174805 -231.5654248 64.80099609 -231.34155273 63.89355469 C-228.32415574 52.08493076 -224.01327523 38.4774837 -213.3125 31.4375 C-207.94979312 28.26702055 -202.32020821 28.27153031 -196.3125 29.4375 C-192.09096398 31.83748382 -188.60139581 34.76885808 -184.98046875 37.98339844 C-182.20688021 40.40135706 -179.28405319 42.62373022 -176.375 44.875 C-175.19827495 45.79958133 -174.02249634 46.72536844 -172.84765625 47.65234375 C-169.33864683 50.41751679 -165.82593816 53.17795747 -162.3125 55.9375 C-158.85820963 58.65086594 -155.40433949 61.36475356 -151.953125 64.08203125 C-145.42264114 69.22176392 -138.87500641 74.33870342 -132.3125 79.4375 C-125.18920722 84.97200443 -118.08553308 90.5305816 -110.99804688 96.11083984 C-108.10441177 98.38836203 -105.20833448 100.66277541 -102.3125 102.9375 C-98.85822649 105.65088743 -95.40433952 108.36475354 -91.953125 111.08203125 C-85.42264114 116.22176392 -78.87500641 121.33870342 -72.3125 126.4375 C-66.88571801 130.65388559 -61.46481919 134.87730466 -56.0625 139.125 C-55.50264404 139.56497314 -54.94278809 140.00494629 -54.3659668 140.45825195 C-51.48061532 142.72725785 -48.59952425 145.00149711 -45.72265625 147.28125 C-40.27313516 151.59474817 -34.80485176 155.88519191 -29.25 160.0625 C-28.41339844 160.69414062 -27.57679688 161.32578125 -26.71484375 161.9765625 C-24.19631168 163.50815761 -22.21601235 164.0545055 -19.3125 164.4375 C-9.10480357 144.85115863 -9.46577344 119.72535392 -13.3125 98.4375 C-13.44188965 97.72094238 -13.5712793 97.00438477 -13.70458984 96.26611328 C-16.41204935 82.09248627 -21.16605208 68.59405778 -26.03466797 55.04760742 C-36.42156063 25.92954697 -36.42156063 25.92954697 -31.3125 11.4375 C-28.62882779 5.94656542 -25.48071594 1.42886825 -19.71484375 -0.97265625 C-13.28256384 -2.551964 -6.11637655 -2.78675144 0 0 Z " transform="translate(236.3125,130.5625)"/>
               <path d="M0 0 C7.26898446 5.49051451 11.12104728 13.12410054 14.86499023 21.22119141 C15.38407959 22.3255957 15.90316895 23.43 16.43798828 24.56787109 C20.45869356 33.24832584 24.00310046 42.01248934 27.07055664 51.07080078 C27.89188276 53.48783179 28.74235191 55.89333608 29.59545898 58.29931641 C40.66219268 89.95873469 47.45564462 123.20833432 51.86499023 156.40869141 C52.01597168 157.46862305 52.16695313 158.52855469 52.32250977 159.62060547 C57.62579224 197.87060185 57.53667483 239.22115111 51.86499023 277.40869141 C51.75328491 278.17000366 51.64157959 278.93131592 51.52648926 279.71569824 C44.84488014 324.89943161 34.52877403 370.10531454 15.23999023 411.72119141 C14.71791992 412.85935303 14.71791992 412.85935303 14.18530273 414.02050781 C10.73888282 421.22680468 6.8187842 427.9459778 -0.38500977 431.84619141 C-1.23579102 432.31927734 -2.08657227 432.79236328 -2.96313477 433.27978516 C-9.56903839 436.7134293 -17.95627341 436.58533559 -25.10375977 434.57275391 C-34.22746272 430.37697693 -39.07560744 423.70052165 -42.60375977 414.51025391 C-44.26729381 404.79815073 -40.52962578 396.01127593 -37.19750977 387.03369141 C-36.69985116 385.66426811 -36.20345328 384.29438606 -35.70825195 382.92407227 C-34.44084721 379.42358825 -33.16170697 375.92754294 -31.87823486 372.43292236 C-4.95643159 299.10931181 6.14218564 223.84268686 -7.13500977 146.40869141 C-7.33046387 145.26513184 -7.52591797 144.12157227 -7.72729492 142.94335938 C-12.97285106 113.28242678 -22.1294479 84.52830799 -32.95629883 56.46923828 C-34.90837902 51.40062245 -36.81137668 46.3146536 -38.69750977 41.22119141 C-39.03226318 40.34213135 -39.3670166 39.46307129 -39.71191406 38.55737305 C-42.8745721 30.01394836 -44.20515601 22.22660004 -41.13500977 13.40869141 C-37.00136999 6.07564003 -30.98784591 0.31936144 -22.82641602 -2.08349609 C-15.41735805 -3.48143156 -6.60210421 -4.24441332 0 0 Z " transform="translate(457.135009765625,39.59130859375)"/>
@@ -1172,75 +1186,6 @@ function copyQRCodeFromCell(td) {
   copyQRCode(td.dataset.qr);
 }
 
-// ── Pagination ────────────────────────────────────────────────────────────────
-function updatePaginationControls() {
-  const paginationDiv = document.getElementById("pagination");
-  if (!paginationDiv) return;
-
-  if (totalPages <= 1) {
-    paginationDiv.style.display = "none";
-    return;
-  }
-
-  paginationDiv.style.display = "flex";
-
-  const delta = 2;
-  const range = new Set();
-  range.add(1);
-  range.add(totalPages);
-  for (
-    let i = Math.max(2, currentPage - delta);
-    i <= Math.min(totalPages - 1, currentPage + delta);
-    i++
-  ) {
-    range.add(i);
-  }
-
-  const sorted = [...range].sort((a, b) => a - b);
-  let prev = null;
-  let buttonsHTML = "";
-
-  for (const p of sorted) {
-    if (prev !== null && p - prev > 1) {
-      buttonsHTML += `<span class="page-ellipsis">…</span>`;
-    }
-    buttonsHTML += `<button class="page-num-btn ${currentPage === p ? "active" : ""}" onclick="goToPage(${p})">${p}</button>`;
-    prev = p;
-  }
-
-  paginationDiv.innerHTML = `
-    <button class="page-arrow-btn" tabindex="-1" onclick="previousPage()" ${currentPage <= 1 ? "disabled" : ""}>
-      <i class="fas fa-arrow-left"></i>
-    </button>
-    ${buttonsHTML}
-    <button class="page-arrow-btn" tabindex="-1" onclick="nextPage()" ${currentPage >= totalPages ? "disabled" : ""}>
-      <i class="fas fa-arrow-right"></i>
-    </button>
-    <span id="page-info">${totalRecords} total &nbsp;|&nbsp; Page ${currentPage} of ${totalPages}</span>
-  `;
-}
-
-function previousPage() {
-  if (currentPage > 1) {
-    currentPage--;
-    loadEmployees(activeFilters, true, true);
-  }
-}
-
-function nextPage() {
-  if (currentPage < totalPages) {
-    currentPage++;
-    loadEmployees(activeFilters, true, true);
-  }
-}
-
-function goToPage(page) {
-  if (page >= 1 && page <= totalPages) {
-    currentPage = page;
-    loadEmployees(activeFilters, true, true);
-  }
-}
-
 // ── Search / clear ────────────────────────────────────────────────────────────
 function searchEmployees() {
   const searchForm = document.getElementById("searchForm");
@@ -1335,9 +1280,7 @@ async function loadEmployees(
     }
 
     const response = await fetch(`${AccessLogBackend}?${params.toString()}`, {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
+      headers: { "X-Requested-With": "XMLHttpRequest" },
     });
 
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -1353,7 +1296,10 @@ async function loadEmployees(
         allEmployees = data.filter_options;
       }
 
-      if (data.field_filter_options && typeof data.field_filter_options === "object") {
+      if (
+        data.field_filter_options &&
+        typeof data.field_filter_options === "object"
+      ) {
         fieldFilterOptions = data.field_filter_options;
       }
 
@@ -1365,6 +1311,8 @@ async function loadEmployees(
 
       employeeDataCache = null;
       qrImageMapCache = null;
+      const initialMap = await buildQRToImageMap();
+      _lastImageFingerprint = computeImageFingerprint(initialMap);
 
       await renderEmployeeTable();
       lastUpdateTimestamp = Date.now();
@@ -1599,10 +1547,7 @@ async function deleteFilteredEmployees() {
       currentPage = 1;
       clearSearch();
     } else {
-      showAlert(
-        data.message || "Failed to delete filtered employees",
-        "error",
-      );
+      showAlert(data.message || "Failed to delete filtered employees", "error");
     }
   } catch (error) {
     showAlert("Failed to delete filtered employees", "error");

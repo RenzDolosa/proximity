@@ -26,6 +26,12 @@ if (!defined('APP_TIMEZONE')) {
 }
 date_default_timezone_set(APP_TIMEZONE);
 
+// ── QR scanner cache invalidation ─────────────────────────────────────────────
+function invalidateQrEmployeeCache(): void
+{
+  if (file_exists(QR_EMP_CACHE_FILE)) @unlink(QR_EMP_CACHE_FILE);
+}
+
 // ── Whitelists ────────────────────────────────────────────────────────────────
 const ALLOWED_POST_ACTIONS = [
   'add',
@@ -425,7 +431,8 @@ class EmployeeManager
             shift,
             violation,
             image,
-            qr_code
+            qr_code,
+            updated_at
          FROM {$this->table} e
          $where"
     );
@@ -971,6 +978,7 @@ try {
             'status'  => $finalStatus,
           ];
           logSystemAction($database->getCurrentUserId(), 'EMPLOYEE_CREATED', "Created employee: " . $employee_data['fullname']);
+          invalidateQrEmployeeCache();
 
           if (!empty($employee_data['violation'])) {
             try {
@@ -1058,6 +1066,7 @@ try {
           $response['success'] = true;
           $response['message'] = 'Employee updated successfully';
           $response['data']    = ['status' => $finalStatus];
+          invalidateQrEmployeeCache();
 
           $oldViolation = trim($current_employee['violation'] ?? '');
           $newViolation = trim($employee_data['violation'] ?? '');
@@ -1096,6 +1105,7 @@ try {
           }
           $response['success'] = true;
           $response['message'] = 'Employee deleted successfully';
+          invalidateQrEmployeeCache();
         } else {
           $response['message'] = 'Failed to delete employee';
         }
@@ -1157,6 +1167,7 @@ try {
             $response['deleted_images'] = $deleted_images;
 
             logSystemAction($database->getCurrentUserId(), 'FILTERED_EMPLOYEES_DELETED', "Deleted $deleted_count $emp_label with filters: $filterStr");
+            invalidateQrEmployeeCache();
           } else {
             $db->rollBack();
             $response['message'] = "Failed to delete employee(s)";
@@ -1190,6 +1201,7 @@ try {
 
             $response['success'] = true;
             $response['message'] = "All employee data deleted successfully. $emp_count $emp_label and $deleted_images $img_label removed.";
+            invalidateQrEmployeeCache();
           } else {
             $db->rollBack();
             $response['message'] = "Failed to delete employee data";
@@ -1198,6 +1210,7 @@ try {
           if (isset($db)) $db->rollBack();
           $response['success'] = true;
           $response['message'] = 'All employee data deleted successfully.';
+          invalidateQrEmployeeCache();
         }
         break;
 
@@ -1279,6 +1292,7 @@ try {
             }
 
             logSystemAction($database->getCurrentUserId(), 'DATA_IMPORTED', "Imported $imported_count employees");
+            invalidateQrEmployeeCache();
           } else {
             $db->rollBack();
             $response['message'] = 'Import failed. No valid employee records were processed.';
@@ -1369,6 +1383,7 @@ try {
             'BULK_STATUS_UPDATE',
             "Updated $updated_count employees to status: $new_status"
           );
+          invalidateQrEmployeeCache();
         } catch (Exception $e) {
           if (isset($db)) $db->rollBack();
           $response['message'] = 'Bulk update error: ' . $e->getMessage();
@@ -1485,6 +1500,7 @@ try {
           }
 
           logSystemAction($database->getCurrentUserId(), 'DATA_RESTORED', "Restored $restored_count employees from backup");
+          invalidateQrEmployeeCache();
         } catch (Exception $e) {
           if (isset($db)) $db->rollBack();
           $response['message'] = 'Restore error: ' . $e->getMessage();
@@ -1916,6 +1932,7 @@ function getAPIInfo()
       'Orphan Sync'           => 'sync_orphans GET action reconciles employees whose Proximity code is missing or disabled in the code table',
       'Import / Restore'      => 'Bulk-import up to 2000 rows; restore from JSON backup in replace or merge mode',
       'Backup'                => 'POST backup_data streams a timestamped JSON file containing all employees + stats',
+      'Scanner Cache Sync'    => 'invalidateQrEmployeeCache() clears the qr_search_backend.php employee cache on every mutation so the scanner never serves stale data',
     ],
     'endpoints' => [
       'POST' => [

@@ -12,6 +12,9 @@ let displayTimeout;
 let currentAudio = null;
 let activeController = null;
 
+let scanQueue = [];
+let isProcessing = false;
+
 let _wasHidden = false;
 
 document.addEventListener("visibilitychange", () => {
@@ -36,11 +39,11 @@ window.addEventListener("blur", () => {
 
 // ── Global-audio endpoint ─────────────────────────────────────────
 const AUDIO_TYPE_MAP = {
-  success:    "successSound",
-  checkout:   "checkoutSound",
-  not_found:  "noResultSound",
+  success: "successSound",
+  checkout: "checkoutSound",
+  not_found: "noResultSound",
   violations: "warningSound",
-  inactive:   "inactiveSound",
+  inactive: "inactiveSound",
 };
 
 // ─────────────────────────────────────────────────────────────────
@@ -50,7 +53,7 @@ const AUDIO_TYPE_MAP = {
 // ─────────────────────────────────────────────────────────────────
 function getCsrfToken() {
   const meta = document.querySelector('meta[name="csrf-token"]');
-  return meta ? meta.content : '';
+  return meta ? meta.content : "";
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -69,30 +72,29 @@ async function loadGlobalAudio() {
     if (!json.success) throw new Error("Server returned success:false");
 
     Object.entries(AUDIO_TYPE_MAP).forEach(([audioType, elementId]) => {
-      const el    = document.getElementById(elementId);
+      const el = document.getElementById(elementId);
       if (!el) return;
 
       const entry = json.audio?.[audioType];
 
       if (entry?.data && entry.data.length > 0) {
-        el.src     = entry.data;
+        el.src = entry.data;
         el.preload = "auto";
       } else {
         const fallback = el.dataset.fallback;
         if (fallback) {
-          el.src     = fallback;
+          el.src = fallback;
           el.preload = "auto";
         }
       }
     });
-
   } catch (e) {
     console.warn("Could not load global audio; using bundled fallbacks.", e);
 
     Object.values(AUDIO_TYPE_MAP).forEach((elementId) => {
       const el = document.getElementById(elementId);
       if (el && !el.src && el.dataset.fallback) {
-        el.src     = el.dataset.fallback;
+        el.src = el.dataset.fallback;
         el.preload = "auto";
       }
     });
@@ -102,38 +104,82 @@ async function loadGlobalAudio() {
 // ─────────────────────────────────────────────────────────────────
 //  IMAGE URL HELPER
 // ─────────────────────────────────────────────────────────────────
-function imageUrl(filename) {
+function imageUrl(filename, updatedAt) {
   if (!filename || !filename.trim()) return null;
   const bare = filename.trim().replace(/^.*[\\/]/, "");
-  return bare
-    ? `${window.location.origin}/../../public/uploads/user/${bare}`
-    : null;
+  if (!bare) return null;
+  const version = updatedAt ? encodeURIComponent(updatedAt) : Date.now();
+  return `${window.location.origin}/../../public/uploads/user/${bare}?v=${version}`;
+}
+
+async function processQueue() {
+  if (isProcessing || scanQueue.length === 0) return;
+
+  isProcessing = true;
+  const query = scanQueue.shift();
+
+  try {
+    await searchEmployees(query);
+  } catch (e) {
+    console.error("Queue processing error:", e);
+  } finally {
+    isProcessing = false;
+    if (scanQueue.length > 0) {
+      const latest = scanQueue[scanQueue.length - 1];
+      scanQueue = [];
+      scanQueue.push(latest);
+    }
+    processQueue();
+  }
+}
+
+function enqueueSearch(query) {
+  scanQueue.push(query);
+  processQueue();
 }
 
 // ─────────────────────────────────────────────────────────────────
 //  Event listeners
 // ─────────────────────────────────────────────────────────────────
 function setupEventListeners() {
-  searchInput.addEventListener("input", function (e) {
-    clearTimeout(searchTimeout);
-    clearTimeout(searchInput.autoClearTimeout);
-    const query = e.target.value.trim();
-    if (query === "") return;
-
-    searchInput.autoClearTimeout = setTimeout(() => {
-      searchInput.value = "";
-      searchInput.focus();
-    }, 30000);
-
-    searchTimeout = setTimeout(() => searchEmployees(query), 200);
-  });
-
   searchInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter") {
       clearTimeout(searchTimeout);
       const query = e.target.value.trim();
-      if (query !== "") searchEmployees(query);
+      if (query !== "") {
+        captureAndSearch(query);
+      }
+      return;
     }
+    if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+      e.preventDefault();
+    }
+  });
+
+  searchInput.addEventListener("input", function (e) {
+
+    if (isProcessing) return;
+
+    clearTimeout(searchTimeout);
+    const query = e.target.value.trim();
+    if (query === "") return;
+
+    clearTimeout(searchInput.autoClearTimeout);
+    searchInput.autoClearTimeout = setTimeout(() => {
+      if (!isProcessing) {
+        searchInput.value = "";
+        searchInput.focus();
+      }
+    }, 30000);
+
+    searchTimeout = setTimeout(() => {
+      const finalQuery = searchInput.value.trim();
+      if (finalQuery !== "") captureAndSearch(finalQuery);
+    }, 400);
+  });
+
+  searchInput.addEventListener("paste", function (e) {
+    e.preventDefault();
   });
 
   document.addEventListener("click", function (e) {
@@ -156,6 +202,17 @@ function setupEventListeners() {
   }, 300);
 }
 
+function captureAndSearch(query) {
+  clearTimeout(searchTimeout);
+  clearTimeout(searchInput.autoClearTimeout);
+
+  searchInput.value = "";
+  lockSearchInput();
+  searchInput.focus();
+
+  enqueueSearch(query);
+}
+
 // ─────────────────────────────────────────────────────────────────
 //  Audio helpers
 // ─────────────────────────────────────────────────────────────────
@@ -176,38 +233,45 @@ function playSound(id) {
   sound.play().catch((e) => console.log("Audio play error:", e));
 }
 
-const playSuccessSound  = () => playSound("successSound");
+const playSuccessSound = () => playSound("successSound");
 const playCheckoutSound = () => playSound("checkoutSound");
 const playInactiveSound = () => playSound("inactiveSound");
 const playNoResultSound = () => playSound("noResultSound");
-const playWarningSound  = () => playSound("warningSound");
+const playWarningSound = () => playSound("warningSound");
 
 // ─────────────────────────────────────────────────────────────────
 //  Input-block helper
 // ─────────────────────────────────────────────────────────────────
-function blockSearchInput(durationMs = 1000) {
+function lockSearchInput() {
   searchInput.disabled = true;
-  searchInput.style.opacity = "0.7";
+  searchInput.style.opacity = "0";
   searchInput.style.pointerEvents = "none";
   body.classList.add("input-blocked-alt");
+}
 
+function unlockSearchInput(durationMs = 500) {
   setTimeout(() => {
     searchInput.disabled = false;
     searchInput.style.opacity = "1";
     searchInput.style.pointerEvents = "auto";
     body.classList.remove("input-blocked-alt");
-    searchInput.value = "";
+    if (!isProcessing) {
+      searchInput.value = "";
+    }
     searchInput.focus();
   }, durationMs);
 }
 
+// ─────────────────────────────────────────────────────────────────
+//  QR Code detection
+// ─────────────────────────────────────────────────────────────────
 function looksLikeQRCode(query) {
   if (query.length < 8) return false;
 
   const hasDigit = /\d/.test(query);
   if (!hasDigit) return false;
 
-  const isLong      = query.length >= 10;
+  const isLong = query.length >= 10;
   const hasSeparator = /[-_]/.test(query);
 
   return isLong || hasSeparator;
@@ -221,9 +285,9 @@ async function searchEmployees(query) {
   activeController = new AbortController();
   const { signal } = activeController;
 
-  const messageEl    = document.getElementById("message");
+  const messageEl = document.getElementById("message");
   const resultsTable = document.getElementById("resultsTable");
-  const resultsBody  = document.getElementById("resultsBody");
+  const resultsBody = document.getElementById("resultsBody");
 
   try {
     resultsTable.style.display = "none";
@@ -231,15 +295,15 @@ async function searchEmployees(query) {
     let url, method, fetchBody;
 
     if (looksLikeQRCode(query)) {
-      url    = `${ScanTestBackend}`;
+      url = `${ScanTestBackend}`;
       method = "POST";
       fetchBody = JSON.stringify({
-        action:      "get_by_qr",
-        qr_code:     query,
-        source:      "scanner",
+        action: "get_by_qr",
+        qr_code: query,
+        source: "scanner",
       });
     } else {
-      url    = `${ScanTestBackend}?q=${encodeURIComponent(query)}`;
+      url = `${ScanTestBackend}?q=${encodeURIComponent(query)}`;
       method = "GET";
     }
 
@@ -262,7 +326,6 @@ async function searchEmployees(query) {
       messageEl.innerHTML =
         '<p class="no-results-message">Session expired. Please log in again.</p>';
       playNoResultSound();
-      blockSearchInput();
       return;
     }
 
@@ -270,7 +333,6 @@ async function searchEmployees(query) {
       messageEl.innerHTML =
         '<p class="no-results-message">Request blocked. Please refresh the page.</p>';
       playNoResultSound();
-      blockSearchInput();
       return;
     }
 
@@ -278,21 +340,19 @@ async function searchEmployees(query) {
       messageEl.innerHTML =
         '<p class="no-results-message">Too many searches. Please slow down.</p>';
       playNoResultSound();
-      blockSearchInput(3000);
       return;
     }
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const data = await response.json();
-    
+
     if (data.success) {
       currentResults = Array.isArray(data.data) ? data.data : [data.data];
 
       if (currentResults.length === 0) {
         messageEl.innerHTML = `<p class="no-results-message">No results found. 🔍</p>`;
         playNoResultSound();
-        blockSearchInput();
         return;
       }
 
@@ -300,13 +360,14 @@ async function searchEmployees(query) {
     } else {
       messageEl.innerHTML = `<p class="no-results-message">No results found. 🔍</p>`;
       playNoResultSound();
-      blockSearchInput();
     }
   } catch (error) {
     if (error.name === "AbortError") return;
     messageEl.innerHTML =
       '<div class="error-message">Failed to search. Please check your connection.</div>';
     currentResults = [];
+  } finally {
+    unlockSearchInput();
   }
 }
 
@@ -316,9 +377,9 @@ async function searchEmployees(query) {
 function renderResults(results) {
   stopCurrentAudio();
 
-  const messageEl    = document.getElementById("message");
+  const messageEl = document.getElementById("message");
   const resultsTable = document.getElementById("resultsTable");
-  const resultsBody  = document.getElementById("resultsBody");
+  const resultsBody = document.getElementById("resultsBody");
 
   if (displayTimeout) {
     clearTimeout(displayTimeout);
@@ -346,44 +407,27 @@ function renderResults(results) {
   }, 10000);
 
   if (hasViolations) playWarningSound();
-  else if (hasInactive) { 
+  else if (hasInactive) {
     messageEl.innerHTML = `<p class="inactive-message">⛔ Employee Inactive</p>`;
     playInactiveSound();
   } else if (hasCheckedOut) playCheckoutSound();
   else playSuccessSound();
 
-  blockSearchInput();
-}
-
-// ─────────────────────────────────────────────────────────────────
-//  Format helpers
-// ─────────────────────────────────────────────────────────────────
-function formatTimestamp(ts) {
-  if (!ts) return "—";
-  const d = new Date(ts);
-  return isNaN(d)
-    ? ts
-    : d.toLocaleString(undefined, {
-        year:   "numeric",
-        month:  "short",
-        day:    "numeric",
-        hour:   "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
 }
 
 // ─────────────────────────────────────────────────────────────────
 //  Card builder
 // ─────────────────────────────────────────────────────────────────
 function buildCard(employee) {
-  const fullname    = escapeHtml(employee.fullname    || "Unknown");
-  const position    = escapeHtml(employee.position    || "Unknown");
-  const brand       = escapeHtml(employee.brand       || "N/A");
-  const status      = escapeHtml(employee.status      || "unknown");
-  const shift       = escapeHtml(employee.shift       || "N/A");
-  const violation   = employee.violation ? escapeHtml(employee.violation) : null;
-  const checkStatus = escapeHtml((employee.check_status || "OUT").toUpperCase());
+  const fullname = escapeHtml(employee.fullname || "Unknown");
+  const position = escapeHtml(employee.position || "Unknown");
+  const brand = escapeHtml(employee.brand || "N/A");
+  const status = escapeHtml(employee.status || "unknown");
+  const shift = escapeHtml(employee.shift || "N/A");
+  const violation = employee.violation ? escapeHtml(employee.violation) : null;
+  const checkStatus = escapeHtml(
+    (employee.check_status || "OUT").toUpperCase(),
+  );
 
   const initials = (employee.fullname || "UN")
     .split(" ")
@@ -392,7 +436,7 @@ function buildCard(employee) {
     .substring(0, 2)
     .toUpperCase();
 
-  const src = imageUrl(employee.image);
+  const src = imageUrl(employee.image, employee.updated_at);
   const imageHtml = src
     ? `<img src="${src}" alt="${fullname}" class="employee-image" loading="lazy"
             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
@@ -424,20 +468,44 @@ function buildCard(employee) {
 // ─────────────────────────────────────────────────────────────────
 //  Utilities
 // ─────────────────────────────────────────────────────────────────
-function escapeHtml(text) {
-  if (typeof text !== "string") return String(text ?? "");
-  const d = document.createElement("div");
-  d.textContent = text;
-  return d.innerHTML;
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  Format helpers
+// ─────────────────────────────────────────────────────────────────
+function formatTimestamp(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  return isNaN(d)
+    ? ts
+    : d.toLocaleString(undefined, {
+        year:   "numeric",
+        month:  "short",
+        day:    "numeric",
+        hour:   "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
 }
 
 // ─────────────────────────────────────────────────────────────────
 //  Init
 // ─────────────────────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", async function() {
+document.addEventListener("DOMContentLoaded", async function () {
   const ready = await resolveEndpoints();
   if (!ready) return;
 
+  searchInput.type = "password";
+  searchInput.setAttribute("autocomplete", "off");
+  
   loadGlobalAudio();
   setupEventListeners();
 });

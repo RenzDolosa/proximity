@@ -191,9 +191,13 @@ document.addEventListener("DOMContentLoaded", () => {
 const tabBar = document.querySelector(".tab-bar");
 
 function setTabBarVisible(visible) {
+  if (!tabBar) return;
+
   tabBar.style.display = visible ? "flex" : "none";
 
   const mainWrap = document.querySelector(".main-wrap");
+  if (!mainWrap) return;
+
   mainWrap.style.marginTop = visible
     ? "calc(var(--topbar-h) * 2)"
     : "var(--topbar-h)";

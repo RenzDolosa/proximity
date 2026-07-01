@@ -235,6 +235,13 @@ if (!$portalAccessGranted) {
       <?php endif; ?>
 
       <form method="POST" class="access-form">
+        <input type="text"
+          name="username_hint"
+          value="<?= htmlspecialchars($firstName . ' ' . $lastName) ?>"
+          autocomplete="username"
+          style="display:none;"
+          aria-hidden="true"
+          tabindex="-1">
         <div class="password-input-wrapper">
           <input
             type="password"

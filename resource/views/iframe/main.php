@@ -56,6 +56,9 @@ $stats = [
   'total_proxcode'    => 0,
 ];
 
+$gateStats  = [];
+$recentLogs = [];
+
 try {
   if (!isset($userDb) || !($userDb instanceof PDO)) {
     $userDb = getUserDBConnection($userId);
@@ -683,6 +686,8 @@ if ($databaseConnected) {
     }
 
     function fetchAttendanceData() {
+      if (!AccessLogBackend) return;
+
       const now = new Date();
       const yd = new Date(now);
       yd.setDate(yd.getDate() - 1);
@@ -875,6 +880,8 @@ if ($databaseConnected) {
     }
 
     function renderDailyChart(days) {
+      if (!AccessLogBackend) return;
+
       const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
       const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
       const tickColor = isDark ? '#9ca3af' : '#94a3b8';
@@ -1054,6 +1061,18 @@ if ($databaseConnected) {
 
     renderChart('volume');
     window.__endpointsReady.then(function() {
+      AccessLogBackend = window.AccessLogBackend ??
+        window.AttendanceBackend ??
+        window.__backends?.AccessLogBackend ??
+        window.__backends?.AttendanceBackend ??
+        null;
+
+      if (!AccessLogBackend) {
+        console.warn('[main] AccessLogBackend not resolved. Available backends:', window.__backends);
+        console.warn('[main] Available window Backend keys:',
+          Object.keys(window).filter(k => k.toLowerCase().includes('backend')));
+        return;
+      }
       fetchAttendanceData();
     });
   </script>

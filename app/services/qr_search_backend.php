@@ -61,22 +61,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 }
 
-$rateBucketMinute = 'search_rate_min_' . date('YmdHi');
-$rateBucketSecond = 'search_rate_sec_' . date('YmdHis');
+// ── Bounded rate limiter ────────────────────────────────────────────────────
+function checkRateLimit(string $sessionKey, string $currentWindow, int $limit): bool
+{
+  $data = $_SESSION[$sessionKey] ?? null;
+  if (!is_array($data) || ($data['w'] ?? null) !== $currentWindow) {
+    $data = ['w' => $currentWindow, 'c' => 0];
+  }
+  $data['c']++;
+  $_SESSION[$sessionKey] = $data;
+  return $data['c'] <= $limit;
+}
 
-$_SESSION[$rateBucketMinute] = ($_SESSION[$rateBucketMinute] ?? 0) + 1;
-$_SESSION[$rateBucketSecond] = ($_SESSION[$rateBucketSecond] ?? 0) + 1;
+$minuteWindow = date('YmdHi');
+$secondWindow = date('YmdHis');
 
-if ($_SESSION[$rateBucketMinute] > 120) {
+if (!checkRateLimit('rl_min', $minuteWindow, 120)) {
   http_response_code(429);
   echo json_encode(['success' => false, 'message' => 'Too many requests. Please slow down.', 'data' => []]);
   exit();
 }
 
-if ($_SESSION[$rateBucketSecond] > 5) {
+if (!checkRateLimit('rl_sec', $secondWindow, 5)) {
   http_response_code(429);
   echo json_encode(['success' => false, 'message' => 'Scanning too fast. Please wait a moment.', 'data' => []]);
   exit();
+}
+
+if (session_status() === PHP_SESSION_ACTIVE) {
+  session_write_close();
+}
+
+function flushResponse(array $payload): void
+{
+  $json = json_encode($payload, JSON_PRETTY_PRINT);
+  while (ob_get_level() > 0) ob_end_clean();
+  header('Content-Length: ' . strlen($json));
+  header('Connection: close');
+  echo $json;
+  if (function_exists('fastcgi_finish_request')) {
+    fastcgi_finish_request();
+  } else {
+    flush();
+  }
 }
 
 // ── Card number normalizer ─────────────────────────────────────────────────────
@@ -116,8 +143,50 @@ function resolveImage(?string $raw): ?string
   return verifyImageExists(normalizeImageFilename($raw));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Employee QR cache ───────────────────────────────────────────────────────
+define('QR_EMP_CACHE_TTL', 300);
 
+function getEmployeeCacheMap(PDO $conn): array
+{
+  $file = QR_EMP_CACHE_FILE;
+
+  if (file_exists($file) && (time() - filemtime($file)) < QR_EMP_CACHE_TTL) {
+    $decoded = json_decode((string) @file_get_contents($file), true);
+    if (is_array($decoded)) return $decoded;
+  }
+
+  $rows = $conn->query(
+    "SELECT id, fullname, position, brand, status, shift,
+            violation, image, qr_code, updated_at
+       FROM employees"
+  )->fetchAll(PDO::FETCH_ASSOC);
+
+  $byQr = [];
+  foreach ($rows as $row) {
+    $row['image'] = resolveImage($row['image']);
+    $byQr[$row['qr_code']] = $row;
+    $norm = normalizeCardNo($row['qr_code']);
+    if ($norm !== '' && $norm !== $row['qr_code']) {
+      $byQr[$norm] = $row;
+    }
+  }
+
+  $dir = dirname($file);
+  if (!is_dir($dir)) @mkdir($dir, 0755, true);
+  @file_put_contents($file, json_encode($byQr), LOCK_EX);
+
+  return $byQr;
+}
+
+// ── QR scanner cache invalidation ─────────────────────────────────────────────
+function invalidateQrEmployeeCache(): void
+{
+  if (file_exists(QR_EMP_CACHE_FILE)) @unlink(QR_EMP_CACHE_FILE);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Database — connection manager
+// ─────────────────────────────────────────────────────────────────────────────
 class Database
 {
   private $conn;
@@ -131,12 +200,24 @@ class Database
   public function connect()
   {
     try {
-      if (!userDatabaseExists($this->userId)) {
-        if (!createUserDatabase($this->userId)) throw new Exception("Failed to create user database");
+      static $dbVerified = false;
+      $marker = __DIR__ . '/../../database/seeders/cache/userdb_verified.flag';
+
+      if (!$dbVerified) {
+        if (!file_exists($marker)) {
+          if (!userDatabaseExists($this->userId)) {
+            if (!createUserDatabase($this->userId)) throw new Exception("Failed to create user database");
+          }
+          @touch($marker);
+        }
+        $dbVerified = true;
       }
+
       $this->conn = getUserDBConnection($this->userId);
       $this->conn->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
+
       $this->ensureCheckInOutTable();
+
       return $this->conn;
     } catch (Exception $e) {
       error_log("User DB Connection error: " . $e->getMessage());
@@ -146,6 +227,9 @@ class Database
 
   private function ensureCheckInOutTable()
   {
+    $marker = __DIR__ . '/../../database/seeders/cache/checkinout_verified.flag';
+    if (file_exists($marker)) return;
+
     $this->conn->exec("CREATE TABLE IF NOT EXISTS check_in_out (
       id             INT AUTO_INCREMENT PRIMARY KEY,
       user_id        INT(11) DEFAULT NULL,
@@ -160,6 +244,10 @@ class Database
       INDEX idx_qr_code     (qr_code),
       INDEX idx_timestamp   (scan_timestamp)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    $dir = dirname($marker);
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    @touch($marker);
   }
 
   public function getUserId()
@@ -189,14 +277,18 @@ class QueryLogger
     if (!$this->conn) return 'OUT';
     try {
       $normalized = normalizeCardNo($qrCode);
+      $candidates = ($normalized !== '' && $normalized !== $qrCode)
+        ? [$qrCode, $normalized]
+        : [$qrCode];
+
+      $placeholders = implode(',', array_fill(0, count($candidates), '?'));
       $stmt = $this->conn->prepare(
         "SELECT check_status FROM employee_access_log
-              WHERE qr_code = :qr
-                 OR (qr_code REGEXP '^[0-9]+$' AND TRIM(LEADING '0' FROM qr_code) = :norm)
-              ORDER BY access_timestamp DESC, id DESC
-              LIMIT 1"
+            WHERE qr_code IN ($placeholders)
+            ORDER BY access_timestamp DESC, id DESC
+            LIMIT 1"
       );
-      $stmt->execute([':qr' => $qrCode, ':norm' => $normalized]);
+      $stmt->execute($candidates);
       $row = $stmt->fetch(PDO::FETCH_ASSOC);
       return $row ? $row['check_status'] : 'OUT';
     } catch (PDOException $e) {
@@ -230,9 +322,9 @@ class QueryLogger
     }
   }
 
-  public function toggleEmployeeStatus(string $qrCode, string $fullname): string|false
+  public function toggleEmployeeStatus(string $qrCode, string $fullname, ?string $knownCurrentStatus = null): string|false
   {
-    $last      = $this->getEmployeeCheckStatus($qrCode);
+    $last      = $knownCurrentStatus ?? $this->getEmployeeCheckStatus($qrCode);
     $newStatus = ($last === 'IN') ? 'OUT' : 'IN';
     return $this->logCheckInOut($qrCode, $fullname, $newStatus) ? $newStatus : false;
   }
@@ -296,13 +388,6 @@ class QueryLogger
         ':s'   => $success ? 1 : 0,
         ':em'  => $errorMessage,
       ]);
-
-      logSystemAction($this->userId, 'SEARCH_QUERY', json_encode([
-        'employee_id'  => $auditData['employee_id']  ?? null,
-        'fullname'     => $auditData['fullname']      ?? null,
-        'qr_code'      => $auditData['qr_code']       ?? null,
-        'check_status' => $auditData['check_status']  ?? null,
-      ]));
 
       return true;
     } catch (PDOException $e) {
@@ -410,7 +495,7 @@ class LiveSearchHandler
 
     try {
       $sql    = "SELECT id, fullname, position, brand, status, shift,
-                        violation, image, qr_code
+                        violation, image, qr_code, updated_at
                    FROM employees WHERE 1=1";
       $params = [];
 
@@ -468,13 +553,6 @@ class LiveSearchHandler
       error_log("Search error: " . $e->getMessage());
     }
 
-    $executionTime = (microtime(true) - $startTime) * 1000;
-    if ($this->logger) {
-      $first     = $results[0] ?? [];
-      $auditData = $first ? ['employee_id' => $first['id'] ?? null, 'fullname' => $first['fullname'] ?? null, 'qr_code' => $first['qr_code'] ?? null, 'check_status' => $first['check_status'] ?? null] : [];
-      $this->logger->logSearchQuery('live_search', $searchTerm, $searchParams, count($results), $auditData, $executionTime, $success, $errorMessage);
-    }
-
     return $results;
   }
 
@@ -486,21 +564,10 @@ class LiveSearchHandler
     $result       = null;
 
     try {
-      $normalized = normalizeCardNo($qr_code);
-
-      $stmt = $this->conn->prepare(
-        "SELECT id, fullname, position, brand, status, shift,
-                violation, image, qr_code
-           FROM employees
-          WHERE qr_code = :exact
-             OR (qr_code REGEXP '^[0-9]+$' AND TRIM(LEADING '0' FROM qr_code) = :norm)
-          LIMIT 1"
-      );
-      $stmt->execute([':exact' => $qr_code, ':norm' => $normalized]);
-      $result = $stmt->fetch(PDO::FETCH_ASSOC);
+      $map    = getEmployeeCacheMap($this->conn);
+      $result = $map[$qr_code] ?? $map[normalizeCardNo($qr_code)] ?? null;
 
       if ($result) {
-        $result = $this->cleanEmployee($result);
 
         if (isset($result['status']) && strtolower(trim($result['status'])) === 'inactive') {
           return ['__inactive__' => true];
@@ -509,8 +576,8 @@ class LiveSearchHandler
         $canonicalQr = $result['qr_code'];
 
         if ($autoToggle && $this->logger) {
-          $previousStatus        = $this->logger->getEmployeeCheckStatus($canonicalQr);
-          $newStatus             = $this->logger->toggleEmployeeStatus($canonicalQr, $result['fullname']);
+          $previousStatus            = $this->logger->getEmployeeCheckStatus($canonicalQr);
+          $newStatus                 = $this->logger->toggleEmployeeStatus($canonicalQr, $result['fullname'], $previousStatus);
           $result['check_status']    = ($newStatus !== false) ? $newStatus : $previousStatus;
           $result['previous_status'] = $previousStatus;
           $result['status_changed']  = ($newStatus !== false);
@@ -546,7 +613,7 @@ class LiveSearchHandler
     try {
       $stmt = $this->conn->prepare(
         "SELECT id, fullname, position, brand, status, shift,
-                violation, image, qr_code
+                violation, image, qr_code, updated_at
            FROM employees WHERE id = :id LIMIT 1"
       );
       $stmt->execute([':id' => $id]);
@@ -624,13 +691,25 @@ try {
           break;
         }
 
-        $employee = $searchHandler->getEmployeeByQR($qr_code, $autoToggle);
+        $map    = getEmployeeCacheMap($db);
+        $employee = $map[$qr_code] ?? $map[normalizeCardNo($qr_code)] ?? null;
 
-        if (isset($employee['__inactive__'])) {
+        if ($employee && isset($employee['status']) && strtolower(trim($employee['status'])) === 'inactive') {
           $response['success']    = false;
           $response['error_code'] = 'EMPLOYEE_INACTIVE';
           $response['message']    = 'Access denied. Employee is inactive.';
-          break;
+          echo json_encode($response, JSON_PRETTY_PRINT);
+          exit;
+        }
+
+        if ($employee && $autoToggle) {
+          $previousStatus = $logger->getEmployeeCheckStatus($employee['qr_code']);
+          $newStatus = ($previousStatus === 'IN') ? 'OUT' : 'IN';
+          $employee['check_status']    = $newStatus;
+          $employee['previous_status'] = $previousStatus;
+          $employee['status_changed']  = true;
+        } elseif ($employee) {
+          $employee['check_status'] = $employee['check_status'] ?? 'OUT';
         }
 
         if ($employee) {
@@ -642,7 +721,17 @@ try {
         } else {
           $response['message'] = 'No employee found for the provided QR code.';
         }
-        break;
+
+        flushResponse($response);
+
+        if ($employee && $autoToggle) {
+          $logger->logCheckInOut($employee['qr_code'], $employee['fullname'], $employee['check_status']);
+        }
+        if ($employee) {
+          $logger->logEmployeeAccess($employee, 'proximity_scan');
+        }
+
+        exit;
 
       case 'get_by_id':
         $employee_id = intval($input['id'] ?? 0);

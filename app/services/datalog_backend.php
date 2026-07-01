@@ -151,77 +151,77 @@ class AccessLogManager
     $params = [];
 
     if (!empty($filters['fullname'])) {
-      $where .= " AND fullname LIKE :fullname";
+      $where .= " AND l.fullname LIKE :fullname";
       $params[':fullname'] = '%' . $filters['fullname'] . '%';
     }
     if (!empty($filters['position'])) {
-      $where .= " AND position LIKE :position";
+      $where .= " AND l.position LIKE :position";
       $params[':position'] = $filters['position'];
     }
     if (!empty($filters['position_none'])) {
-      $where .= " AND (position IS NULL OR TRIM(position) = '' OR LOWER(TRIM(position)) = 'none')";
+      $where .= " AND (l.position IS NULL OR TRIM(l.position) = '' OR LOWER(TRIM(l.position)) = 'none')";
     }
     if (!empty($filters['brand'])) {
-      $where .= " AND brand LIKE :brand";
+      $where .= " AND l.brand LIKE :brand";
       $params[':brand'] = $filters['brand'];
     }
     if (!empty($filters['brand_none'])) {
-      $where .= " AND (brand IS NULL OR TRIM(brand) = '' OR LOWER(TRIM(brand)) = 'none')";
+      $where .= " AND (l.brand IS NULL OR TRIM(l.brand) = '' OR LOWER(TRIM(l.brand)) = 'none')";
     }
     if (!empty($filters['status'])) {
-      $where .= " AND status = :status";
+      $where .= " AND l.status = :status";
       $params[':status'] = $filters['status'];
     }
     if (!empty($filters['status_none'])) {
-      $where .= " AND (status IS NULL OR TRIM(status) = '' OR LOWER(TRIM(status)) = 'none')";
+      $where .= " AND (l.status IS NULL OR TRIM(l.status) = '' OR LOWER(TRIM(l.status)) = 'none')";
     }
     if (!empty($filters['shift'])) {
-      $where .= " AND shift = :shift";
+      $where .= " AND l.shift = :shift";
       $params[':shift'] = $filters['shift'];
     }
     if (!empty($filters['shift_none'])) {
-      $where .= " AND (shift IS NULL OR TRIM(shift) = '' OR LOWER(TRIM(shift)) = 'none')";
+      $where .= " AND (l.shift IS NULL OR TRIM(l.shift) = '' OR LOWER(TRIM(l.shift)) = 'none')";
     }
     if (!empty($filters['violation'])) {
-      $where .= " AND violation LIKE :violation";
+      $where .= " AND l.violation LIKE :violation";
       $params[':violation'] = '%' . $filters['violation'] . '%';
     }
     if (!empty($filters['violation_none'])) {
-      $where .= " AND (violation IS NULL OR TRIM(violation) = '' OR LOWER(TRIM(violation)) = 'none')";
+      $where .= " AND (l.violation IS NULL OR TRIM(l.violation) = '' OR LOWER(TRIM(l.violation)) = 'none')";
     }
     if (!empty($filters['qr_code'])) {
-      $where .= " AND qr_code LIKE :qr_code";
+      $where .= " AND l.qr_code LIKE :qr_code";
       $params[':qr_code'] = $filters['qr_code'];
     }
     if (!empty($filters['check_status'])) {
-      $where .= " AND check_status = :check_status";
+      $where .= " AND l.check_status = :check_status";
       $params[':check_status'] = $filters['check_status'];
     }
     if (!empty($filters['user_id'])) {
-      $where .= " AND user_id LIKE :user_id";
+      $where .= " AND l.user_id LIKE :user_id";
       $params[':user_id'] = '%' . $filters['user_id'] . '%';
     }
     if (!empty($filters['gate_name'])) {
-      $where .= " AND user_id IN (SELECT id FROM " . DB_NAME . ".users WHERE first_name LIKE :gate_name)";
+      $where .= " AND l.user_id IN (SELECT id FROM " . DB_NAME . ".users WHERE first_name LIKE :gate_name)";
       $params[':gate_name'] = '%' . $filters['gate_name'] . '%';
     }
     if (!empty($filters['user_id_none'])) {
-      $where .= " AND (user_id IS NULL OR TRIM(user_id) = '' OR LOWER(TRIM(user_id)) = 'none')";
+      $where .= " AND (l.user_id IS NULL OR TRIM(l.user_id) = '' OR LOWER(TRIM(l.user_id)) = 'none')";
     }
     if (!empty($filters['access_type'])) {
-      $where .= " AND access_type LIKE :access_type";
+      $where .= " AND l.access_type LIKE :access_type";
       $params[':access_type'] = '%' . $filters['access_type'] . '%';
     }
     if (!empty($filters['access_timestamp'])) {
-      $where .= " AND access_timestamp LIKE :access_timestamp";
+      $where .= " AND l.access_timestamp LIKE :access_timestamp";
       $params[':access_timestamp'] = '%' . $filters['access_timestamp'] . '%';
     }
     if (!empty($filters['date_from'])) {
-      $where .= " AND DATE(access_timestamp) >= :date_from";
+      $where .= " AND DATE(l.access_timestamp) >= :date_from";
       $params[':date_from'] = $filters['date_from'];
     }
     if (!empty($filters['date_to'])) {
-      $where .= " AND DATE(access_timestamp) <= :date_to";
+      $where .= " AND DATE(l.access_timestamp) <= :date_to";
       $params[':date_to'] = $filters['date_to'];
     }
 
@@ -233,46 +233,24 @@ class AccessLogManager
       ? 'ASC' : 'DESC';
 
     $order = $sort_col === 'gate_name'
-      ? "ORDER BY (SELECT first_name FROM " . DB_NAME . ".users WHERE id = l.user_id LIMIT 1) {$sort_dir}"
+      ? "ORDER BY u.first_name {$sort_dir}"
       : "ORDER BY l.{$sort_col} {$sort_dir}";
 
-    if ($page === null) {
-      $order_no_alias = $sort_col === 'gate_name'
-        ? "ORDER BY (SELECT first_name FROM " . DB_NAME . ".users WHERE id = user_id LIMIT 1) {$sort_dir}"
-        : "ORDER BY {$sort_col} {$sort_dir}";
+    $joinUsers = "LEFT JOIN " . DB_NAME . ".users u ON u.id = l.user_id";
 
+    if ($page === null) {
       $stmt = $this->conn->prepare(
-        "SELECT * FROM {$this->logTable} $where $order_no_alias"
+        "SELECT l.*, u.first_name AS gate_name
+         FROM {$this->logTable} l
+         $joinUsers
+         $where
+         $order"
       );
       foreach ($params as $key => $value) {
         $stmt->bindValue($key, $value);
       }
       $stmt->execute();
       $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-      // ── Hydrate gate_name on unpaginated rows ──────────────────────
-      $userIds = array_unique(array_filter(array_column($rows, 'user_id')));
-      $userNameMap = [];
-      if (!empty($userIds)) {
-        try {
-          $mainConn = getMainDBConnection();
-          $ph = implode(',', array_fill(0, count($userIds), '?'));
-          $uStmt = $mainConn->prepare(
-            "SELECT id, first_name FROM users WHERE id IN ($ph)"
-          );
-          $uStmt->execute(array_values($userIds));
-          foreach ($uStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $userNameMap[(int)$row['id']] = $row['first_name'];
-          }
-        } catch (Exception $e) {
-          error_log("Gate name lookup (unpaginated) failed: " . $e->getMessage());
-        }
-      }
-      foreach ($rows as &$row) {
-        $uid = (int)($row['user_id'] ?? 0);
-        $row['gate_name'] = $uid && isset($userNameMap[$uid]) ? $userNameMap[$uid] : null;
-      }
-      unset($row);
 
       return $rows;
     }
@@ -288,7 +266,9 @@ class AccessLogManager
 
     $offset = ($page - 1) * $limit;
     $dataStmt = $this->conn->prepare(
-      "SELECT * FROM {$this->logTable} l
+      "SELECT l.*, u.first_name AS gate_name
+      FROM {$this->logTable} l
+      $joinUsers
       $where
       $order
       LIMIT :limit OFFSET :offset"
@@ -301,36 +281,25 @@ class AccessLogManager
     $dataStmt->execute();
     $logs = $dataStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $userIds      = array_unique(array_filter(array_column($logs, 'user_id')));
-    $userNameMap  = [];
-    if (!empty($userIds)) {
-      try {
-        $mainConn = getMainDBConnection();
-        $ph       = implode(',', array_fill(0, count($userIds), '?'));
-        $uStmt    = $mainConn->prepare(
-          "SELECT id, first_name FROM users WHERE id IN ($ph)"
-        );
-        $uStmt->execute(array_values($userIds));
-        foreach ($uStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-          $userNameMap[(int)$row['id']] = $row['first_name'];
-        }
-      } catch (Exception $e) {
-        error_log("Gate name lookup failed: " . $e->getMessage());
-      }
-    }
-
-    foreach ($logs as &$log) {
-      $uid = (int)($log['user_id'] ?? 0);
-      $log['gate_name'] = $uid && isset($userNameMap[$uid]) ? $userNameMap[$uid] : null;
-    }
-    unset($log);
-
     return ['data' => $logs, 'total' => $total];
   }
 
   // ── FILTER OPTIONS — single query for all distinct dropdown values ─────
   public function getFilterOptions($baseFilters = [])
   {
+    $cacheKey = 'filter_options_' . md5(json_encode([
+      'date_from' => $baseFilters['date_from'] ?? '',
+      'date_to'   => $baseFilters['date_to']   ?? '',
+      'qr_code'   => $baseFilters['qr_code']   ?? '',
+    ]));
+
+    if (
+      isset($_SESSION[$cacheKey]) &&
+      (time() - $_SESSION[$cacheKey]['time']) < 60
+    ) {
+      return $_SESSION[$cacheKey]['data'];
+    }
+
     $where  = "WHERE 1=1";
     $params = [];
 
@@ -389,6 +358,8 @@ class AccessLogManager
       $row['gate_name'] = $uid && isset($userNameMap[$uid]) ? $userNameMap[$uid] : null;
     }
     unset($row);
+
+    $_SESSION[$cacheKey] = ['data' => $rows, 'time' => time()];
 
     return $rows;
   }

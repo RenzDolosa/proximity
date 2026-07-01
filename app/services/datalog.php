@@ -81,7 +81,7 @@ if ($databaseConnected) {
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title><?= htmlspecialchars($myDatabase ?? 'System', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?> - Scanned Log</title>
   <link rel="icon" href="/config/asset.php?t=s3t4u" type="image/png">
   <link rel="stylesheet" href="/config/asset.php?t=yde24">
@@ -166,7 +166,7 @@ if ($databaseConnected) {
           </div>
 
           <div class="search-group" style="position: fixed; left: 0; top: 0; opacity: 0;">
-            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; width: 8px; cursor: default;" autocomplete="off">
+            <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; width: 8px; cursor: default;" autocomplete="off" autofocus inputmode="none" enterkeyhint="done">
           </div>
         </div>
         <img src="/config/asset.php?t=gnks2" alt="Proximity" loading="lazy" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
@@ -467,6 +467,7 @@ if ($databaseConnected) {
   <script src="/config/asset.php?t=mt6ed"></script>
   <script src="/config/asset.php?t=as3ks"></script>
   <script src="/config/asset.php?t=oqw56"></script>
+  <script src="/config/asset.php?t=edrg3"></script>
   <script src="/config/asset.php?t=j7k8l"></script>
 </body>
 
