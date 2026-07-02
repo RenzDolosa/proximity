@@ -96,6 +96,12 @@ if ($databaseConnected) {
     <div class="controls">
       <form id="searchForm">
         <div class="search-row">
+          <!-- EMPID -->
+          <div class="search-group">
+            <input type="text" id="search_empid" name="employee_id"
+              placeholder="EMPID" autocomplete="off">
+          </div>
+          
           <!-- Fullname -->
           <div class="search-group">
             <input type="text" id="search_fullname" name="fullname"

@@ -82,6 +82,12 @@ if ($databaseConnected) {
     <div class="controls">
       <form id="searchForm">
         <div class="search-row">
+          <!-- EMPID -->
+          <div class="search-group">
+            <input type="text" id="search_empid" name="empid"
+              placeholder="EMPID" autocomplete="off">
+          </div>
+
           <!-- Remarks -->
           <div class="search-group" style="position:relative;">
             <input type="text" id="search_remarks" placeholder="Remarks" autocomplete="off" readonly style="cursor:pointer;">

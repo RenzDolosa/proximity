@@ -198,6 +198,13 @@ class EmployeeManager
       $params[':updated_at'] = '%' . $filters['updated_at'] . '%';
     }
 
+    // ── EMPID filter ───────────────────────────────────────────────────
+    if (!empty($filters['empid'])) {
+      $manpowerDb = DB_NAME . '.employees';
+      $where .= " AND EXISTS (SELECT 1 FROM {$manpowerDb} e WHERE LOWER(TRIM(e.qr_code)) = LOWER(TRIM({$this->table}.qr_code)) AND e.id = :empid)";
+      $params[':empid'] = $filters['empid'];
+    }
+
     // ── Remarks filter (Occupied / Available) ──────────────────────────
     if (!empty($filters['remarks'])) {
       $manpowerDb = DB_NAME . '.employees';
@@ -209,7 +216,7 @@ class EmployeeManager
     }
 
     // ── Build ORDER BY ────────────────────────────────────────────────
-    $client_only_cols   = ['remarks'];
+    $client_only_cols   = ['empid', 'remarks'];
     $allowed_sort_cols  = ['status', 'created_at', 'updated_at'];
 
     $raw_sort = $filters['sort_col'] ?? '';
@@ -278,6 +285,12 @@ class EmployeeManager
     if (!empty($baseFilters['qr_code'])) {
       $where .= " AND qr_code LIKE :qr_code";
       $params[':qr_code'] = '%' . $baseFilters['qr_code'] . '%';
+    }
+
+    if (!empty($baseFilters['empid'])) {
+      $manpowerDb = DB_NAME . '.employees';
+      $where .= " AND EXISTS (SELECT 1 FROM {$manpowerDb} e WHERE LOWER(TRIM(e.qr_code)) = LOWER(TRIM({$this->table}.qr_code)) AND e.id = :empid)";
+      $params[':empid'] = $baseFilters['empid'];
     }
 
     if (!empty($baseFilters['remarks'])) {
@@ -1174,6 +1187,12 @@ try {
         if (!empty($_GET['qr_code'])) $filters['qr_code'] = sanitizeInput($_GET['qr_code']);
         if (isset($_GET['is_active']) && $_GET['is_active'] !== '') {
           $filters['is_active'] = sanitizeInput((int)$_GET['is_active']);
+        }
+        if (!empty($_GET['empid'])) {
+          $empid = sanitizeInput($_GET['empid']);
+          if (preg_match('/^\d+$/', $empid)) {
+            $filters['empid'] = $empid;
+          }
         }
         if (!empty($_GET['remarks']) && in_array($_GET['remarks'], ['Occupied', 'Available'], true)) {
           $filters['remarks'] = sanitizeInput($_GET['remarks']);

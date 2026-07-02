@@ -230,7 +230,7 @@ class AccessLogManager
     }
 
     // ── Build ORDER BY ────────────────────────────────────────────────
-    $allowed_sort_cols = ['fullname', 'brand', 'shift', 'violation', 'access_timestamp', 'check_status', 'gate_name'];
+    $allowed_sort_cols = ['employee_id', 'fullname', 'brand', 'shift', 'violation', 'access_timestamp', 'check_status', 'gate_name'];
     $sort_col = (isset($filters['sort_col']) && in_array($filters['sort_col'], $allowed_sort_cols, true))
       ? $filters['sort_col'] : 'access_timestamp';
     $sort_dir = (isset($filters['sort_dir']) && strtolower($filters['sort_dir']) === 'asc')
@@ -481,7 +481,7 @@ class AccessLogManager
     try {
       $this->conn->exec("ALTER TABLE {$this->logTable} AUTO_INCREMENT = 1");
     } catch (Exception $e) {
-      error_log("AUTO_INCREMENT reset warning (employee_access_log): " . $e->getMessage());
+      error_log("AUTO_INCREMENT reset warning: " . $e->getMessage());
     }
 
     if ($this->userId) {

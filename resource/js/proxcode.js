@@ -229,6 +229,28 @@ function setupEventListeners() {
 
   // ── Field suggestion dropdowns ─────────────────────────────────────────
   setupFieldSuggestions(
+    "search_empid",
+    "search-empid-suggestions",
+    () => {
+      const map = qrImageMapCache || {};
+      const ids = new Set();
+      Object.values(map).forEach((v) => {
+        if (v && v.id !== undefined && v.id !== null && v.id !== "") {
+          ids.add(String(v.id));
+        }
+      });
+      return [...ids].sort((a, b) => Number(a) - Number(b));
+    },
+    {
+      showAll: true,
+      onSelect: () => searchEmployees(),
+      onFocus: async () => {
+        if (!qrImageMapCache) await buildQRToImageMap();
+      },
+    },
+  );
+  
+  setupFieldSuggestions(
     "search_remarks",
     "search-remarks-suggestions",
     () => {
@@ -381,16 +403,28 @@ function displayFilterStatus() {
   const textSpan = document.createElement("span");
   textSpan.appendChild(document.createTextNode("Active Filters: "));
 
+  const overrideKeys = {
+    empid: "EMPID",
+    remarks: "REMARKS",
+    date_from: "FROM",
+    date_to: "TO",
+    qr_code: "PROXIMITY",
+  };
+
+  const overrideValues = {
+    "__none__": "None",
+  }
+
   Object.entries(filters).forEach(([key, value], index) => {
     if (index > 0) textSpan.appendChild(document.createTextNode(" | "));
     const strong = document.createElement("strong");
-    const properKey = key
+    const properKey = overrideKeys[key] || key
       .split(/(?=[A-Z])/)
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
       .join(" ");
     strong.textContent = `${properKey}:`;
     textSpan.appendChild(strong);
-    textSpan.appendChild(document.createTextNode(` ${toProperCase(value)}`));
+    textSpan.appendChild(document.createTextNode(` ${toProperCase(overrideValues[value] || value)}`));
   });
 
   label.appendChild(textSpan);

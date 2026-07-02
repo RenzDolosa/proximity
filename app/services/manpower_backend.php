@@ -347,7 +347,7 @@ class EmployeeManager
     }
 
     // ── Build ORDER BY ────────────────────────────────────────────────
-    $allowed_sort_cols = ['fullname', 'brand', 'shift', 'violation', 'created_at', 'updated_at'];
+    $allowed_sort_cols = ['id', 'fullname', 'brand', 'shift', 'violation', 'created_at', 'updated_at'];
     $sort_col = (isset($filters['sort_col']) && in_array($filters['sort_col'], $allowed_sort_cols, true))
       ? $filters['sort_col'] : 'created_at';
     $sort_dir = (isset($filters['sort_dir']) && strtolower($filters['sort_dir']) === 'asc')

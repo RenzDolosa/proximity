@@ -986,11 +986,15 @@ function displayFilterStatus() {
 
   const overrideKeys = {
     id: "EMPID",
-    violation: "Remarks",
-    date_from: "From",
-    date_to: "To",
-    qr_code: "Proximity",
+    violation: "REMARKS",
+    date_from: "FROM",
+    date_to: "TO",
+    qr_code: "PROXIMITY",
   };
+
+  const overrideValues = {
+    "__none__": "None",
+  }
 
   Object.entries(filters).forEach(([key, value], index) => {
     if (index > 0) textSpan.appendChild(document.createTextNode(" | "));
@@ -1001,7 +1005,7 @@ function displayFilterStatus() {
       .join(" ");
     strong.textContent = `${properKey}:`;
     textSpan.appendChild(strong);
-    textSpan.appendChild(document.createTextNode(` ${toProperCase(value)}`));
+    textSpan.appendChild(document.createTextNode(` ${toProperCase(overrideValues[value] || value)}`));
   });
 
   label.appendChild(textSpan);
@@ -3480,8 +3484,8 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
           return `
             <li data-raw="" data-display=""
               style="padding:4px 12px;font-size:11px;color:#94a3b8;
-                    pointer-events:none;user-select:none;border-bottom:1px solid #f1f5f9;">
-                      ──────────
+                pointer-events:none;user-select:none;border-bottom:1px solid #f1f5f9;">
+                  ──────────
             </li>
           `;
         }

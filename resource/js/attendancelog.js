@@ -115,6 +115,19 @@ function setupEventListeners() {
 
   // ── Field suggestion dropdowns ─────────────────────────────────────────
   setupFieldSuggestions(
+    "search_empid",
+    "search-empid-suggestions",
+    () =>
+      [...(fieldFilterOptions.employee_id || allEmployees)]
+        .sort((a, b) => Number(a.employee_id || "") - Number(b.employee_id || ""))
+        .map((e) => String(e.employee_id)),
+    {
+      showAll: true,
+      onSelect: () => searchEmployees(),
+    },
+  );
+  
+  setupFieldSuggestions(
     "search_fullname",
     "fullname-suggestions",
     () =>
@@ -664,16 +677,29 @@ function displayFilterStatus() {
   const textSpan = document.createElement("span");
   textSpan.appendChild(document.createTextNode("Active Filters: "));
 
+  const overrideKeys = {
+    employee_id: "EMPID",
+    violation: "REMARKS",
+    user_id: "OPERATOR",
+    date_from: "FROM",
+    date_to: "TO",
+    qr_code: "PROXIMITY",
+  };
+
+  const overrideValues = {
+    "__none__": "None",
+  }
+
   Object.entries(filters).forEach(([key, value], index) => {
     if (index > 0) textSpan.appendChild(document.createTextNode(" | "));
     const strong = document.createElement("strong");
-    const properKey = key
+    const properKey = overrideKeys[key] || key
       .split(/(?=[A-Z])/)
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
       .join(" ");
     strong.textContent = `${properKey}:`;
     textSpan.appendChild(strong);
-    textSpan.appendChild(document.createTextNode(` ${toProperCase(value)}`));
+    textSpan.appendChild(document.createTextNode(` ${toProperCase(overrideValues[value] || value)}`));
   });
 
   label.appendChild(textSpan);
@@ -686,7 +712,6 @@ function displayFilterStatus() {
 // ── Manpower image lookup ─────────────────────────────────────────────────────
 async function getManpowerEmployeeData() {
   if (employeeDataCache) return employeeDataCache;
-
   if (!EmployeesBackend) return [];
 
   try {
@@ -702,9 +727,9 @@ async function getManpowerEmployeeData() {
 
     if (response.ok) {
       const data = await response.json();
-      if (data.success && Array.isArray(data.data)) {
-        employeeDataCache = data.data;
-        return data.data;
+      if (data.success && Array.isArray(data.filter_options)) {
+        employeeDataCache = data.filter_options;
+        return data.filter_options;
       }
     }
   } catch (error) {
@@ -874,11 +899,11 @@ async function renderEmployeeTable() {
       const safeTimestamp = escapeHtml(employee.access_timestamp);
 
       if (matchedEmployeeData && matchedEmployeeData.image) {
-        imageUrl = `${window.location.origin}/public/uploads/user/${matchedEmployeeData.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${matchedEmployeeData.image}`;
+        imageUrl = `${window.location.origin}/public/uploads/user/${matchedEmployeeData.image}`;
         displayName = matchedEmployeeData.fullname || safeFullname;
         tooltipText = `${toProperCase(matchedEmployeeData.fullname)}\n${toProperCase(matchedEmployeeData.position)}\n${toProperCase(matchedEmployeeData.brand)}`;
       } else if (employee.image) {
-        imageUrl = `${window.location.origin}/public/uploads/user/${employee.image}`; // imageUrl = `../../uploads/user_${currentUserId}/${employee.image}`;
+        imageUrl = `${window.location.origin}/public/uploads/user/${employee.image}`;
         tooltipText = `${safeFullname}\n${safePosition}\n${safeBrand}`;
       }
 
@@ -1902,25 +1927,23 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
       items.push({ display: "Default: ALL", raw: "", special: "all" });
     }
 
-    if (options.noneLabel)
+    if (options.noneLabel) {
       items.push({
         display: options.noneLabel,
         raw: "__none__",
         special: "none",
       });
-    if (options.noneLabel)
       items.push({ display: "──────────", raw: null, special: "divider" });
+    }
 
     const seen = new Map();
     raw
       .map((v) => (v || "").trim())
       .filter((v) => v && v.toLowerCase() !== "none")
-      .filter(
-        (v) => options.showAll || !lower || v.toLowerCase().includes(lower),
-      )
+      .filter((v) => !lower || v.toLowerCase().includes(lower))
       .forEach((v) => {
-        const k = v.toLowerCase();
-        if (!seen.has(k)) seen.set(k, v);
+        const key = v.toLowerCase();
+        if (!seen.has(key)) seen.set(key, v);
       });
 
     [...seen.values()].forEach((v) => {
@@ -1943,15 +1966,15 @@ function setupFieldSuggestions(inputId, listId, getValues, options = {}) {
           return `
             <li data-raw="" data-display=""
               style="padding:4px 12px;font-size:11px;color:#94a3b8;
-                     pointer-events:none;user-select:none;border-bottom:1px solid #f1f5f9;">
-                      ──────────
+                pointer-events:none;user-select:none;border-bottom:1px solid #f1f5f9;">
+                  ──────────
             </li>
           `;
         }
 
         const safeDisplay = escapeHtml(item.display);
         let hl = safeDisplay;
-        if (lower && !item.special && !options.showAll) {
+        if (lower && !item.special) {
           const regex = new RegExp(
             `(${lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
             "gi",

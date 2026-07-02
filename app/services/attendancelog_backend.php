@@ -145,6 +145,10 @@ class AccessLogManager
     $where  = "WHERE 1=1";
     $params = [];
 
+    if (!empty($filters['employee_id'])) {
+      $where .= " AND employee_id = :employee_id";
+      $params[':employee_id']     = $filters['employee_id'];
+    }
     if (!empty($filters['fullname'])) {
       $where .= " AND fullname LIKE :fullname";
       $params[':fullname'] = '%' . $filters['fullname'] . '%';
@@ -217,53 +221,31 @@ class AccessLogManager
     }
 
     // ── Build ORDER BY ────────────────────────────────────────────────
-    $allowed_sort_cols = ['fullname', 'brand', 'shift', 'violation', 'access_timestamp', 'gate_name'];
+    $allowed_sort_cols = ['employee_id', 'fullname', 'brand', 'shift', 'violation', 'access_timestamp', 'gate_name'];
     $sort_col = (isset($filters['sort_col']) && in_array($filters['sort_col'], $allowed_sort_cols, true))
       ? $filters['sort_col'] : 'access_timestamp';
     $sort_dir = (isset($filters['sort_dir']) && strtolower($filters['sort_dir']) === 'asc')
       ? 'ASC' : 'DESC';
 
     $order = $sort_col === 'gate_name'
-      ? "ORDER BY (SELECT first_name FROM " . DB_NAME . ".users WHERE id = l.user_id LIMIT 1) {$sort_dir}"
+      ? "ORDER BY u.first_name {$sort_dir}"
       : "ORDER BY l.{$sort_col} {$sort_dir}";
 
-    if ($page === null) {
-      $order_no_alias = $sort_col === 'gate_name'
-        ? "ORDER BY (SELECT first_name FROM " . DB_NAME . ".users WHERE id = user_id LIMIT 1) {$sort_dir}"
-        : "ORDER BY {$sort_col} {$sort_dir}";
+    $joinUsers = "LEFT JOIN " . DB_NAME . ".users u ON u.id = l.user_id";
 
+    if ($page === null) {
       $stmt = $this->conn->prepare(
-        "SELECT * FROM {$this->logTable} $where $order_no_alias"
+        "SELECT l.*, u.first_name AS gate_name
+         FROM {$this->logTable} l
+         $joinUsers
+         $where
+         $order"
       );
       foreach ($params as $key => $value) {
         $stmt->bindValue($key, $value);
       }
       $stmt->execute();
       $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-      // ── Hydrate gate_name on unpaginated rows ──────────────────────
-      $userIds = array_unique(array_filter(array_column($rows, 'user_id')));
-      $userNameMap = [];
-      if (!empty($userIds)) {
-        try {
-          $mainConn = getMainDBConnection();
-          $ph = implode(',', array_fill(0, count($userIds), '?'));
-          $uStmt = $mainConn->prepare(
-            "SELECT id, first_name FROM users WHERE id IN ($ph)"
-          );
-          $uStmt->execute(array_values($userIds));
-          foreach ($uStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $userNameMap[(int)$row['id']] = $row['first_name'];
-          }
-        } catch (Exception $e) {
-          error_log("Gate name lookup (unpaginated) failed: " . $e->getMessage());
-        }
-      }
-      foreach ($rows as &$row) {
-        $uid = (int)($row['user_id'] ?? 0);
-        $row['gate_name'] = $uid && isset($userNameMap[$uid]) ? $userNameMap[$uid] : null;
-      }
-      unset($row);
 
       return $rows;
     }
@@ -279,7 +261,9 @@ class AccessLogManager
 
     $offset = ($page - 1) * $limit;
     $dataStmt = $this->conn->prepare(
-      "SELECT * FROM {$this->logTable} l
+      "SELECT l.*, u.first_name AS gate_name
+      FROM {$this->logTable} l
+      $joinUsers
       $where
       $order
       LIMIT :limit OFFSET :offset"
@@ -292,36 +276,25 @@ class AccessLogManager
     $dataStmt->execute();
     $logs = $dataStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $userIds      = array_unique(array_filter(array_column($logs, 'user_id')));
-    $userNameMap  = [];
-    if (!empty($userIds)) {
-      try {
-        $mainConn = getMainDBConnection();
-        $ph       = implode(',', array_fill(0, count($userIds), '?'));
-        $uStmt    = $mainConn->prepare(
-          "SELECT id, first_name FROM users WHERE id IN ($ph)"
-        );
-        $uStmt->execute(array_values($userIds));
-        foreach ($uStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-          $userNameMap[(int)$row['id']] = $row['first_name'];
-        }
-      } catch (Exception $e) {
-        error_log("Gate name lookup failed: " . $e->getMessage());
-      }
-    }
-
-    foreach ($logs as &$log) {
-      $uid = (int)($log['user_id'] ?? 0);
-      $log['gate_name'] = $uid && isset($userNameMap[$uid]) ? $userNameMap[$uid] : null;
-    }
-    unset($log);
-
     return ['data' => $logs, 'total' => $total];
   }
 
   // ── FILTER OPTIONS — single query for all distinct dropdown values ─────
   public function getFilterOptions($baseFilters = [])
   {
+    $cacheKey = 'filter_options_' . md5(json_encode([
+      'date_from' => $baseFilters['date_from'] ?? '',
+      'date_to'   => $baseFilters['date_to']   ?? '',
+      'qr_code'   => $baseFilters['qr_code']   ?? '',
+    ]));
+
+    if (
+      isset($_SESSION[$cacheKey]) &&
+      (time() - $_SESSION[$cacheKey]['time']) < 60
+    ) {
+      return $_SESSION[$cacheKey]['data'];
+    }
+
     $where  = "WHERE 1=1";
     $params = [];
 
@@ -340,7 +313,8 @@ class AccessLogManager
 
     $stmt = $this->conn->prepare(
       "SELECT
-            DISTINCT fullname,
+            DISTINCT employee_id,
+            fullname,
             position,
             brand,
             status,
@@ -380,6 +354,8 @@ class AccessLogManager
     }
     unset($row);
 
+    $_SESSION[$cacheKey] = ['data' => $rows, 'time' => time()];
+
     return $rows;
   }
 
@@ -416,22 +392,10 @@ class AccessLogManager
     $stmt->bindParam(':id', $id);
     $result = $stmt->execute();
 
-    if ($result && $log) {
-      $checkStmt = $this->conn->prepare(
-        "DELETE FROM {$this->checkTable}
-       WHERE employee_id = :employee_id
-          OR qr_code     = :qr_code"
-      );
-      $checkStmt->execute([
-        ':employee_id' => $log['employee_id'] ?? null,
-        ':qr_code'     => $log['qr_code']     ?? null,
-      ]);
-    }
-
     if ($result && $this->userId && $log) {
       logSystemAction(
         $this->userId,
-        'ACCESS_LOG_DELETED',
+        'ATTENDANCE_LOG_DELETED',
         "Deleted attendance log entry #{$id} for: " . ($log['fullname'] ?? 'unknown')
       );
     }
@@ -466,7 +430,7 @@ class AccessLogManager
     }
 
     if ($this->userId) {
-      logSystemAction($this->userId, 'ALL_LOGS_DELETED', 'Cleared attedance');
+      logSystemAction($this->userId, 'ALL_LOGS_DELETED', 'Cleared attendance');
     }
 
     return true;
@@ -562,9 +526,9 @@ class FileUploader
   }
 }
 
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 // Main request handler
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 try {
   if (!isset($_SESSION['user_id'])) {
     $response = ['success' => false, 'message' => 'Authentication required. Please log in.'];
@@ -750,6 +714,7 @@ try {
       case 'list':
         $filters = [];
 
+        if (!empty($_GET['employee_id']))       $filters['employee_id']      = sanitizeInput($_GET['employee_id']);
         if (!empty($_GET['fullname']))          $filters['fullname']         = sanitizeInput($_GET['fullname']);
         if (!empty($_GET['position']))          $filters['position']         = sanitizeInput($_GET['position']);
         if (!empty($_GET['position_none']))     $filters['position_none']    = '1';
@@ -789,6 +754,7 @@ try {
           $filterOptions = $logManager->getFilterOptions($filters);
 
           $fieldFilterOptions = [
+            'employee_id'   => [],
             'fullname'      => [],
             'position'      => [],
             'brand'         => [],
