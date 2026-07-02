@@ -119,14 +119,16 @@ function setupEventListeners() {
     "search-empid-suggestions",
     () =>
       [...(fieldFilterOptions.employee_id || allEmployees)]
-        .sort((a, b) => Number(a.employee_id || "") - Number(b.employee_id || ""))
+        .sort(
+          (a, b) => Number(a.employee_id || "") - Number(b.employee_id || ""),
+        )
         .map((e) => String(e.employee_id)),
     {
       showAll: true,
       onSelect: () => searchEmployees(),
     },
   );
-  
+
   setupFieldSuggestions(
     "search_fullname",
     "fullname-suggestions",
@@ -708,19 +710,25 @@ function displayFilterStatus() {
   };
 
   const overrideValues = {
-    "__none__": "None",
-  }
+    __none__: "None",
+  };
 
   Object.entries(filters).forEach(([key, value], index) => {
     if (index > 0) textSpan.appendChild(document.createTextNode(" | "));
     const strong = document.createElement("strong");
-    const properKey = overrideKeys[key] || key
-      .split(/(?=[A-Z])/)
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-      .join(" ");
+    const properKey =
+      overrideKeys[key] ||
+      key
+        .split(/(?=[A-Z])/)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(" ");
     strong.textContent = `${properKey}:`;
     textSpan.appendChild(strong);
-    textSpan.appendChild(document.createTextNode(` ${toProperCase(overrideValues[value] || value)}`));
+    textSpan.appendChild(
+      document.createTextNode(
+        ` ${toProperCase(overrideValues[value] || value)}`,
+      ),
+    );
   });
 
   label.appendChild(textSpan);
@@ -770,6 +778,7 @@ async function buildQRToImageMap() {
     if (emp.qr_code) {
       qrImageMap[emp.qr_code.trim().toLowerCase()] = {
         image: emp.image,
+        image_exists: emp.image_exists,
         id: emp.id,
         fullname: emp.fullname,
         position: emp.position,
@@ -942,7 +951,10 @@ async function renderEmployeeTable() {
 
       const isAboveFold = index < 5;
 
-      const liveImage = matchedEmployeeData?.image || employee.image;
+      const liveImage = (matchedEmployeeData?.image_exists
+        ? matchedEmployeeData.image
+        : null) ||
+          (employee.image_exists ? employee.image : null);
       const safeLiveImage = escapeHtml(liveImage);
       const imgVersion = encodeURIComponent(
         matchedEmployeeData?.updated_at ||
@@ -950,8 +962,10 @@ async function renderEmployeeTable() {
           employee.created_at ||
           Date.now(),
       );
-      const thumbSrc = `${window.location.origin}/../public/uploads/user/${safeImage}?v=${imgVersion}`;
-      const imageSrc = `${window.location.origin}/../public/uploads/user/${safeImage}?v=${imgVersion}`;
+      const thumbSrc = liveImage
+        ? `${window.location.origin}/../public/uploads/user/${safeLiveImage}?v=${imgVersion}`
+        : "";
+      const imageSrc = thumbSrc;
 
       return `
         <tr class="row" data-emp-id="${safeId}">

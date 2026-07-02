@@ -916,7 +916,10 @@ async function renderEmployeeTable() {
 
       const isAboveFold = index < 5;
 
-      const liveImage = matchedEmployeeData?.image || employee.image;
+      const liveImage = (matchedEmployeeData?.image_exists
+        ? matchedEmployeeData.image
+        : null) ||
+          (employee.image_exists ? employee.image : null);
       const safeLiveImage = escapeHtml(liveImage);
       const imgVersion = encodeURIComponent(
         matchedEmployeeData?.updated_at ||
@@ -924,8 +927,10 @@ async function renderEmployeeTable() {
           employee.created_at ||
           Date.now(),
       );
-      const thumbSrc = `${window.location.origin}/public/uploads/user/${safeImage}`;
-      const imageSrc = `${window.location.origin}/public/uploads/user/${safeImage}`;
+      const thumbSrc = liveImage
+        ? `${window.location.origin}/../public/uploads/user/${safeLiveImage}?v=${imgVersion}`
+        : "";
+      const imageSrc = thumbSrc;
 
       return `
         <tr class="row" data-emp-id="${safeId}">

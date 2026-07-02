@@ -5,9 +5,6 @@ let ViolationBackend = null;
 // ── State ────────────────────────────────────────────────────────────
 let deleteTargetId = null;
 
-let currentPage = 1;
-const itemsPerPage = 25;
-let totalPages = 1;
 let totalRecords = 0;
 
 let allVio = [];

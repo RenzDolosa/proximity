@@ -824,6 +824,13 @@ class FileUploader
   {
     return $this->upload_dir . basename($filename);
   }
+
+  public function imageExists($filename)
+  {
+    if (empty($filename)) return false;
+    $filepath = $this->getImagePath($filename);
+    return file_exists($filepath) && is_readable($filepath);
+  }
 }
 
 class QRCodeGenerator
@@ -1561,6 +1568,11 @@ try {
         try {
           $result = $employeeManager->getEmployees($filters, $page, $limit);
           $filterOptions = $employeeManager->getFilterOptions($filters);
+
+          foreach ($filterOptions as &$fo) {
+            $fo['image_exists'] = !empty($fo['image']) && $fileUploader->imageExists($fo['image']);
+          }
+          unset($fo);
 
           $fieldFilterOptions = [
             'id'          => [],

@@ -577,7 +577,7 @@ class FileUploader
 
   public function __construct($userId = null)
   {
-    $this->upload_dir = '/public/uploads/user/';
+    $this->upload_dir = rtrim($_SERVER['DOCUMENT_ROOT'], '/') . '/public/uploads/user/';
 
     if (!is_dir($this->upload_dir)) {
       if (!mkdir($this->upload_dir, 0755, true)) {
