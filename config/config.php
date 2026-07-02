@@ -26,7 +26,7 @@ define('USER_DB_PASS', DB_PASS);
 
 define('MAX_DB_NAME_LENGTH', 64);
 
-define('QR_EMP_CACHE_FILE', __DIR__ . '/../database/seeders/cache/employee_qr_cache.json');
+define('QR_EMP_CACHE_FILE', '/database/seeders/cache/employee_qr_cache.json');
 
 // ── Timezone ──────────────────────────────────────────────────────────────────
 define('APP_TIMEZONE',    'Asia/Manila');

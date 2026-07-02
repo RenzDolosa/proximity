@@ -1091,15 +1091,15 @@ async function pollEmployeeStatuses() {
     return;
 
   try {
-    const res = await fetch(`${EmployeesBackend}?action=get_statuses`, {
+    const response = await fetch(`${EmployeesBackend}?action=get_statuses`, {
       headers: {
         "X-Requested-With": "XMLHttpRequest",
         "X-Silent-Request": "true",
       },
     });
-    if (!res.ok) return;
+    if (!response.ok) return;
 
-    const data = await res.json();
+    const data = await response.json();
     if (!data.success || !Array.isArray(data.statuses)) return;
 
     const statusMap = new Map(
@@ -2514,11 +2514,11 @@ async function _renderStatusTab(container, employeeId) {
   if (!_statusHistoryCache[employeeId]) {
     state.page = 1;
     try {
-      const res = await fetch(
+      const response = await fetch(
         `${EmployeesBackend}?action=get_status_history&id=${encodeURIComponent(employeeId)}`,
         { headers: { "X-Requested-With": "XMLHttpRequest" } },
       );
-      const data = await res.json();
+      const data = await response.json();
       _statusHistoryCache[employeeId] = data.success ? data.history : null;
     } catch (e) {
       _statusHistoryCache[employeeId] = null;
@@ -2628,11 +2628,11 @@ async function _renderRemarksTab(container, employeeId) {
   if (!_remarksCache[employeeId]) {
     state.page = 1;
     try {
-      const res = await fetch(
+      const response = await fetch(
         `${EmployeesBackend}?action=get_violations&id=${encodeURIComponent(employeeId)}`,
         { headers: { "X-Requested-With": "XMLHttpRequest" } },
       );
-      const data = await res.json();
+      const data = await response.json();
       _remarksCache[employeeId] = data.success ? data.violations : null;
     } catch (e) {
       _remarksCache[employeeId] = null;
@@ -2726,11 +2726,11 @@ async function openViolationsModal(employeeId, fullname) {
   modal.style.display = "block";
 
   try {
-    const res = await fetch(
+    const response = await fetch(
       `${EmployeesBackend}?action=get_violations&id=${encodeURIComponent(employeeId)}`,
       { headers: { "X-Requested-With": "XMLHttpRequest" } },
     );
-    const data = await res.json();
+    const data = await response.json();
 
     if (data.success) {
       const rows = data.violations;

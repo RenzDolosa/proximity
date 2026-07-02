@@ -1,5 +1,4 @@
 // sw.js — Offline scan queue service worker
-// Place this file at: /sw.js  (web root, same level as portal.php)
 //
 // Intercepts POST requests to:
 //   /app/services/qr_search_backend.php  (NFC card scans via qr proximity.php)
@@ -72,14 +71,11 @@ self.addEventListener("fetch", (e) => {
 });
 
 async function handleScanRequest(request) {
-  // ── Try the network first ─────────────────────────────────────────────────
   try {
     const response = await fetch(request.clone());
 
-    // Network succeeded — pass through normally
     return response;
   } catch (networkError) {
-    // ── Network failed (server unreachable) — queue the scan ─────────────────
     try {
       const body = await request.text();
       const url = new URL(request.url);
@@ -89,7 +85,6 @@ async function handleScanRequest(request) {
       try {
         payload = JSON.parse(body);
       } catch {
-        // Form-encoded fallback (shouldn't happen for these endpoints, but safe)
         payload = Object.fromEntries(new URLSearchParams(body));
       }
 
@@ -101,7 +96,6 @@ async function handleScanRequest(request) {
         attempts: 0,
       });
 
-      // Notify all open tabs that the queue has new items
       const clients = await self.clients.matchAll({ type: "window" });
       clients.forEach((client) => {
         client.postMessage({
@@ -111,8 +105,6 @@ async function handleScanRequest(request) {
         });
       });
 
-      // Return a synthetic success so the UI doesn't break
-      // The scan will be committed to MySQL when connectivity returns
       return new Response(
         JSON.stringify({
           success: true,
@@ -126,7 +118,6 @@ async function handleScanRequest(request) {
         },
       );
     } catch (queueError) {
-      // Even the queue failed — return a real error
       return new Response(
         JSON.stringify({
           success: false,

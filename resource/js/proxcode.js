@@ -11,9 +11,6 @@ let employeeDataCache = null;
 let qrImageMapCache = null;
 let systemQRCodesCache = null;
 
-let currentPage = 1;
-const itemsPerPage = 25;
-let totalPages = 1;
 let totalRecords = 0;
 
 let activeFilters = {};

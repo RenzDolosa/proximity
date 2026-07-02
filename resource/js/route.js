@@ -97,7 +97,6 @@ document.querySelectorAll("[data-action]").forEach((el) => {
       })
       .then((data) => {
         if (!data?.url) return;
-        // Notify the tab manager (portal.php) if it exists
         if (typeof window.__ptlOpenTab === "function") {
           window.__ptlOpenTab(action, data.url);
         }
