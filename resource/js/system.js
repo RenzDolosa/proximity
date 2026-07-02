@@ -1751,32 +1751,48 @@ async function getCurrentUserId() {
 
 // ── QR copy ───────────────────────────────────────────────────────────────────
 function copyQRCode(code) {
-  const tempTextArea = document.createElement("textarea");
-  tempTextArea.value = code;
-  document.body.appendChild(tempTextArea);
+  if (!code) return;
 
-  tempTextArea.select();
-  tempTextArea.setSelectionRange(0, 99999);
-
-  try {
-    document.execCommand("copy");
-    showAlert("Proximity code copied to clipboard!");
-  } catch (err) {
-    if (navigator.clipboard) {
-      navigator.clipboard
-        .writeText(code)
-        .then(() => showAlert("Proximity code copied to clipboard!"))
-        .catch(() => showAlert("Failed to copy Proximity code"));
-    } else {
-      showAlert("Failed to copy Proximity code");
+  const fallbackCopy = () => {
+    const tempTextArea = document.createElement("textarea");
+    tempTextArea.value = code;
+    tempTextArea.style.position = "fixed";
+    tempTextArea.style.opacity = "0";
+    document.body.appendChild(tempTextArea);
+    tempTextArea.select();
+    tempTextArea.setSelectionRange(0, 99999);
+    try {
+      document.execCommand("copy");
+      showAlert("Proximity code copied to clipboard!");
+    } catch (err) {
+      showAlert("Failed to copy Proximity code", "error");
+    } finally {
+      document.body.removeChild(tempTextArea);
     }
-  }
+  };
 
-  document.body.removeChild(tempTextArea);
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard
+      .writeText(code)
+      .then(() => showAlert("Proximity code copied to clipboard!"))
+      .catch(fallbackCopy);
+  } else {
+    fallbackCopy();
+  }
 }
 
 function copyQRCodeFromCell(td) {
-  copyQRCode(td.dataset.qr);
+  const row = td.closest("tr[data-emp-id]");
+  if (!row) return;
+
+  const empId = row.dataset.empId;
+  const employee = employees.find((e) => String(e.id) === String(empId));
+  if (!employee || !employee.qr_code) {
+    showAlert("Proximity code not available", "error");
+    return;
+  }
+
+  copyQRCode(employee.qr_code);
 }
 
 // ── Search / clear ────────────────────────────────────────────────────────────
