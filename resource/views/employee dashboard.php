@@ -109,6 +109,8 @@ if ($databaseConnected) {
 
     $stmt = $userDb->prepare("
       SELECT el.*,
+            e.image AS emp_image,
+            e.qr_code AS emp_qr_code,
             COALESCE(NULLIF(TRIM(el.fullname), ''), e.fullname, 'Unknown Employee') AS fullname,
             u.first_name AS user_first_name
       FROM employee_access_log el
@@ -451,7 +453,7 @@ if ($databaseConnected) {
             <?php if (!empty($recentLogs)): ?>
               <div class="activity-list">
                 <?php foreach (array_slice($recentLogs, 0, 10) as $log):
-                  $userImage   = $log['profile_image'] ?? $log['image'] ?? null;
+                  $userImage   = !empty($log['emp_image']) ? $log['emp_image'] : ($log['image'] ?? null);
                   $imagePath   = $userImage ? "../../public/uploads/user/" . htmlspecialchars($userImage) : null;
                   $imgSrc      = ($imagePath && file_exists($imagePath)) ? $imagePath : "/config/asset.php?t=cfk4d";
                   $status      = strtolower($log['status'] ?? 'unknown');

@@ -571,6 +571,7 @@ tr {
   width: 40px;
   height: 40px;
   border-radius: 50%;
+  border: 1px solid var(--border);
   object-fit: cover;
 }
 
@@ -580,6 +581,7 @@ tr {
   transform: scale(5);
   background: var(--surface);
   transition: all var(--transition-md);
+  border: none;
   z-index: 999999;
 }
 

@@ -432,20 +432,18 @@ body {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: var(--bg);
   border: 1px solid var(--border);
   object-fit: cover;
-  flex-shrink: 0;
 }
 
 .activity-avatar:hover {
-  position: relative;
-  box-shadow: 0 0 2px rgba(102, 126, 234, 0.2);
+  box-shadow: 0 0 2px var(--img-shadow);
   border-radius: 3%;
-  transform: scale(3.8);
+  transform: scale(4);
   background: var(--surface);
   transition: all var(--transition-md);
   border: none;
+  z-index: 999999;
 }
 
 .activity-info {
