@@ -698,7 +698,7 @@ function displayFilterStatus() {
   textSpan.appendChild(document.createTextNode("Active Filters: "));
 
   const overrideKeys = {
-    id: "EMPID",
+    employee_id: "EMPID",
     violation: "Remarks",
     check_status: "Check Status",
     user_id: "Operator",
