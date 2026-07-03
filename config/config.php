@@ -175,9 +175,9 @@ function createDatabase()
 
 createDatabase();
 
-// ============================================================================
-// DATABASE CONNECTION FUNCTIONS
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+// Database — connection manager
+// ─────────────────────────────────────────────────────────────────────────────
 function getMainDBConnection()
 {
   try {
@@ -190,6 +190,7 @@ function getMainDBConnection()
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
         PDO::ATTR_PERSISTENT => true,
+        PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '" . APP_TIMEZONE_TZ . "'",
       ]
     );
     $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
@@ -223,6 +224,7 @@ function getUserDBConnection($userId)
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
         PDO::ATTR_PERSISTENT => true,
+        PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '" . APP_TIMEZONE_TZ . "'",
       ]
     );
     $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
@@ -626,9 +628,9 @@ function deleteUserDatabase($userId)
   }
 }
 
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 // SESSION AND SECURITY FUNCTIONS
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 if (session_status() === PHP_SESSION_NONE) {
   ini_set('session.cookie_httponly', 1);
   ini_set('session.cookie_secure', 1);
@@ -674,9 +676,9 @@ function customDatabaseExists($dbName)
   }
 }
 
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 // REGISTRATION AND LOGIN FUNCTIONS
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Enhanced User Registration Function

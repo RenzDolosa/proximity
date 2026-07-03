@@ -2066,8 +2066,8 @@ function renderBindRows(array $pages, int $depth = 0): void
           </div>
         </div>
         <div class="modal-actions">
-          <button class="btn btn-cancel" tabindex="-1" onclick="closeModal('userFormModal')">Cancel</button>
-          <button class="btn btn-confirm" id="btnUserFormSubmit" tabindex="-1" onclick="submitUserForm()">
+          <button class="btn btn-cancel" type="button" tabindex="-1" onclick="closeModal('userFormModal')">Cancel</button>
+          <button class="btn btn-confirm" id="btnUserFormSubmit" type="button" tabindex="-1" onclick="submitUserForm()">
             <i class="fas fa-save"></i> Register User
           </button>
         </div>
@@ -2198,8 +2198,8 @@ function renderBindRows(array $pages, int $depth = 0): void
 
       <!-- Footer -->
       <div class="modal-actions" style="padding:14px 24px; justify-content:flex-end;">
-        <button class="btn btn-cancel" tabindex="-1" onclick="closeModal('groupFormModal')">Cancel</button>
-        <button class="btn btn-confirm" id="btnGroupFormSubmit" tabindex="-1" onclick="submitGroupForm()">
+        <button class="btn btn-cancel" type="button" tabindex="-1" onclick="closeModal('groupFormModal')">Cancel</button>
+        <button class="btn btn-confirm" id="btnGroupFormSubmit" type="button" tabindex="-1" onclick="submitGroupForm()">
           <i class="fas fa-save"></i> <span id="gBtnLabel">Create Group</span>
         </button>
       </div>
@@ -2231,7 +2231,7 @@ function renderBindRows(array $pages, int $depth = 0): void
         <table>
           <thead>
             <tr>
-              <th style="width:40px">SN</th>
+              <th class="sn-cell">SN</th>
               <th>User</th>
               <th>Email</th>
             </tr>
@@ -2862,7 +2862,7 @@ function renderBindRows(array $pages, int $depth = 0): void
         errBox.textContent = 'Please select a User Group.';
         return;
       }
-      errBox.style.display = 'none';
+
       const btn = document.getElementById('btnUserFormSubmit');
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span> Saving…';
@@ -3075,7 +3075,7 @@ function renderBindRows(array $pages, int $depth = 0): void
         if (!data.success) throw new Error(data.message);
         document.getElementById('viewGroupUsersBody').innerHTML = data.users.length ?
           data.users.map((u, i) => `<tr>
-              <td style="color:#aaa">${i+1}</td>
+              <td class="sn-cell">${i+1}</td>
               <td><div class="user-cell">
                 <div class="avatar" style="background:${COLORS[(u.id-1)%COLORS.length]}">${(u.username[0]||'?').toUpperCase()}</div>
                 <div>
@@ -3137,7 +3137,7 @@ function renderBindRows(array $pages, int $depth = 0): void
         document.getElementById('gGroupName').value = g.group_name || '';
         document.getElementById('gDescription').value = g.description || '';
         document.getElementById('gIsEnabled').checked = !!+g.is_enabled;
-        // Load saved permissions
+
         let perms = null;
         try {
           perms = g.permissions ? JSON.parse(g.permissions) : null;

@@ -344,12 +344,12 @@ if ($databaseConnected) {
       </div>
     </div>
 
-    <!-- ── Attendance chart ── -->
+    <!-- ── Access log chart ── -->
     <div class="card">
       <div class="card-header">
         <span class="card-title">
           <i class="fas fa-chart-line" style="color:#3b82f6;margin-right:6px;"></i>
-          <span id="chart-title-label">Hourly Attendance</span>
+          <span id="chart-title-label">Hourly Access Log</span>
         </span>
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:11px;color:var(--text-muted);" id="chart-updated"></span>
@@ -425,7 +425,7 @@ if ($databaseConnected) {
               Gate Scanned Statistics
             </span>
           </div>
-          <div class="card-body" style="display:flex;align-items:center;justify-content:center;gap:32px;padding:20px;">
+          <div class="card-body" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:20px;">
             <div style="position:relative;width:180px;height:180px;flex-shrink:0;">
               <canvas id="gateChart"></canvas>
               <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
@@ -647,6 +647,7 @@ if ($databaseConnected) {
 
     let currentChartTab = 'volume';
     let attendanceChart;
+    let chartRequestSeq = 0;
 
     function buildHourlyBuckets(rows) {
       const out = {
@@ -685,54 +686,107 @@ if ($databaseConnected) {
       return out;
     }
 
-    function fetchAttendanceData() {
-      if (!AccessLogBackend) return;
+    // ── Paginated fetch: pulls every page instead of trusting one big `limit` ──
+    function fetchAllAccessLogs(params) {
+      const limit = 9999;
+      const baseParams = {
+        action: 'list',
+        limit,
+        ...params
+      };
 
-      const now = new Date();
-      const yd = new Date(now);
-      yd.setDate(yd.getDate() - 1);
+      function fetchPage(page) {
+        const qs = new URLSearchParams({
+          ...baseParams,
+          page
+        }).toString();
+        return fetch(`${AccessLogBackend}?${qs}`, {
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        }).then(res => res.json());
+      }
 
-      const months = new Set([
-        now.toISOString().slice(0, 7),
-        yd.toISOString().slice(0, 7)
-      ]);
+      return fetchPage(1).then(function(json) {
+        if (!json.success || !Array.isArray(json.data)) return [];
 
-      const todayStr = now.toDateString();
-      const yesterdayStr = yd.toDateString();
+        let allRows = json.data.slice();
+        const totalPages = json.pages || 1;
 
-      const fetches = [...months].map(function(ym) {
-        const url = `${AccessLogBackend}` +
-          '?action=list' +
-          '&access_timestamp=' + encodeURIComponent(ym) +
-          '&limit=9999&page=1';
-        return fetch(url, {
-            headers: {
-              'X-Requested-With': 'XMLHttpRequest'
-            }
-          })
-          .then(function(res) {
-            return res.json();
-          })
-          .then(function(json) {
-            return (json.success && Array.isArray(json.data)) ? json.data : [];
+        if (totalPages <= 1) return allRows;
+
+        const remaining = [];
+        for (let p = 2; p <= totalPages; p++) {
+          remaining.push(fetchPage(p).then(j => (j.success && Array.isArray(j.data)) ? j.data : []));
+        }
+
+        return Promise.all(remaining).then(function(results) {
+          results.forEach(rows => {
+            allRows = allRows.concat(rows);
           });
+          return allRows;
+        });
       });
+    }
 
-      Promise.all(fetches).then(function(results) {
-        const allRows = [].concat.apply([], results);
-        const filtered = allRows.filter(function(r) {
-          const d = new Date(r.access_timestamp);
-          return !isNaN(d) && (d.toDateString() === todayStr || d.toDateString() === yesterdayStr);
+    function fetchAttendanceData() {
+      const requestId = ++chartRequestSeq;
+
+      window.__endpointsReady.then(function() {
+        if (!AccessLogBackend) {
+          AccessLogBackend = window.AccessLogBackend ?? window.AttendanceBackend ?? null;
+        }
+        if (!AccessLogBackend) return;
+
+        const now = new Date();
+        const yd = new Date(now);
+        yd.setDate(yd.getDate() - 1);
+
+        const months = new Set([
+          now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'),
+          yd.getFullYear() + '-' + String(yd.getMonth() + 1).padStart(2, '0')
+        ]);
+
+        const todayStr = now.toDateString();
+        const yesterdayStr = yd.toDateString();
+
+        const fetches = [...months].map(function(ym) {
+          const url = `${AccessLogBackend}` +
+            '?action=list' +
+            '&access_timestamp=' + encodeURIComponent(ym) +
+            '&limit=9999&page=1';
+          return fetch(url, {
+              headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+              }
+            })
+            .then(function(res) {
+              return res.json();
+            })
+            .then(function(json) {
+              return (json.success && Array.isArray(json.data)) ? json.data : [];
+            });
         });
-        chartDatasets = buildHourlyBuckets(filtered);
-        renderChart(currentChartTab);
-        const el = document.getElementById('chart-updated');
-        if (el) el.textContent = 'Updated ' + new Date().toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit'
+
+        Promise.all(fetches).then(function(results) {
+          if (requestId !== chartRequestSeq) return;
+
+          const allRows = [].concat.apply([], results);
+          const filtered = allRows.filter(function(r) {
+            const d = new Date(r.access_timestamp);
+            return !isNaN(d) && (d.toDateString() === todayStr || d.toDateString() === yesterdayStr);
+          });
+          chartDatasets = buildHourlyBuckets(filtered);
+          renderChart(currentChartTab);
+          const el = document.getElementById('chart-updated');
+          if (el) el.textContent = 'Updated ' + new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        }).catch(function(err) {
+          if (requestId !== chartRequestSeq) return;
+          renderChart(currentChartTab);
         });
-      }).catch(function(err) {
-        renderChart(currentChartTab);
       });
     }
 
@@ -880,135 +934,130 @@ if ($databaseConnected) {
     }
 
     function renderDailyChart(days) {
-      if (!AccessLogBackend) return;
+      const requestId = ++chartRequestSeq;
 
-      const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
-      const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
-      const tickColor = isDark ? '#9ca3af' : '#94a3b8';
+      window.__endpointsReady.then(function() {
+        if (!AccessLogBackend) {
+          AccessLogBackend = window.AccessLogBackend ?? window.AttendanceBackend ?? null;
+        }
+        if (!AccessLogBackend) return;
 
-      const ref = new Date();
-      ref.setHours(0, 0, 0, 0);
-      const startDay = new Date(ref);
-      startDay.setDate(startDay.getDate() - (days - 1));
-      const startStr = startDay.toISOString().slice(0, 10);
+        const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+        const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+        const tickColor = isDark ? '#9ca3af' : '#94a3b8';
 
-      const months = new Set();
-      for (let i = 0; i < days; i++) {
-        const d = new Date(ref);
-        d.setDate(d.getDate() - i);
-        months.add(d.toISOString().slice(0, 7));
-      }
+        const ref = new Date();
+        ref.setHours(0, 0, 0, 0);
+        const startDay = new Date(ref);
+        startDay.setDate(startDay.getDate() - (days - 1));
 
-      const fetches = [...months].map(function(ym) {
-        const url = `${AccessLogBackend}` +
-          '?action=list' +
-          '&access_timestamp=' + encodeURIComponent(ym) +
-          '&limit=9999&page=1';
-        return fetch(url, {
-            headers: {
-              'X-Requested-With': 'XMLHttpRequest'
-            }
+        const startStr = startDay.getFullYear() + '-' +
+          String(startDay.getMonth() + 1).padStart(2, '0') + '-' +
+          String(startDay.getDate()).padStart(2, '0');
+        const endStr = ref.getFullYear() + '-' +
+          String(ref.getMonth() + 1).padStart(2, '0') + '-' +
+          String(ref.getDate()).padStart(2, '0');
+
+        fetchAllAccessLogs({
+            date_from: startStr,
+            date_to: endStr
           })
-          .then(function(res) {
-            return res.json();
-          })
-          .then(function(json) {
-            return (json.success && Array.isArray(json.data)) ? json.data : [];
-          });
-      });
+          .then(function(rows) {
+            if (requestId !== chartRequestSeq) return;
 
-      Promise.all(fetches).then(function(results) {
-        const allRows = [].concat.apply([], results);
-        // Discard rows outside the requested window
-        const rows = allRows.filter(function(r) {
-          const ts = new Date(r.access_timestamp);
-          if (isNaN(ts)) return false;
-          return ts.toISOString().slice(0, 10) >= startStr;
-        });
+            const {
+              labels,
+              data
+            } = buildDailyBuckets(rows, days);
 
-        const {
-          labels,
-          data
-        } = buildDailyBuckets(rows, days);
-
-        if (attendanceChart) attendanceChart.destroy();
-        attendanceChart = new Chart(document.getElementById('attendanceChart'), {
-          type: 'line',
-          data: {
-            labels,
-            datasets: [{
-              label: 'Attendance',
-              data,
-              borderColor: '#22c55e',
-              backgroundColor: 'rgba(34,197,94,0.08)',
-              fill: true,
-              borderWidth: 1.5,
-              pointBackgroundColor: 'transparent',
-              pointBorderColor: '#22c55e',
-              pointRadius: 4,
-              pointHoverRadius: 5,
-              tension: 0.3
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-              mode: 'index',
-              intersect: false
-            },
-            plugins: {
-              legend: {
-                display: false
+            if (attendanceChart) attendanceChart.destroy();
+            attendanceChart = new Chart(document.getElementById('attendanceChart'), {
+              type: 'line',
+              data: {
+                labels,
+                datasets: [{
+                  label: 'Attendance',
+                  data,
+                  borderColor: '#22c55e',
+                  backgroundColor: 'rgba(34,197,94,0.08)',
+                  fill: true,
+                  borderWidth: 1.5,
+                  pointBackgroundColor: 'transparent',
+                  pointBorderColor: '#22c55e',
+                  pointRadius: 4,
+                  pointHoverRadius: 5,
+                  tension: 0.3
+                }]
               },
-              tooltip: {
-                backgroundColor: isDark ? '#1e293b' : '#fff',
-                borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
-                borderWidth: 1,
-                titleColor: isDark ? '#f1f5f9' : '#1e293b',
-                bodyColor: isDark ? '#94a3b8' : '#64748b',
-                callbacks: {
-                  label: function(item) {
-                    return ' Total: ' + Math.round(item.parsed.y);
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                  mode: 'index',
+                  intersect: false
+                },
+                plugins: {
+                  legend: {
+                    display: false
+                  },
+                  tooltip: {
+                    backgroundColor: isDark ? '#1e293b' : '#fff',
+                    borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+                    borderWidth: 1,
+                    titleColor: isDark ? '#f1f5f9' : '#1e293b',
+                    bodyColor: isDark ? '#94a3b8' : '#64748b',
+                    callbacks: {
+                      label: function(item) {
+                        return ' Total: ' + Math.round(item.parsed.y);
+                      }
+                    }
+                  }
+                },
+                scales: {
+                  x: {
+                    grid: {
+                      color: gridColor
+                    },
+                    ticks: {
+                      color: tickColor,
+                      font: {
+                        size: 11
+                      },
+                      maxRotation: 0
+                    }
+                  },
+                  y: {
+                    min: 0,
+                    grid: {
+                      color: function(context) {
+                        return context.tick.value % 50 === 0 ?
+                          'rgba(0,0,0,0.15)' :
+                          'transparent';
+                      },
+                      lineWidth: 1.5,
+                      drawBorder: false
+                    },
+                    ticks: {
+                      color: tickColor,
+                      font: {
+                        size: 11
+                      },
+                      stepSize: 500
+                    }
                   }
                 }
               }
-            },
-            scales: {
-              x: {
-                grid: {
-                  color: gridColor
-                },
-                ticks: {
-                  color: tickColor,
-                  font: {
-                    size: 11
-                  },
-                  maxRotation: 0
-                }
-              },
-              y: {
-                min: 0,
-                grid: {
-                  color: function(context) {
-                    return context.tick.value % 50 === 0 ?
-                      'rgba(0,0,0,0.15)' :
-                      'transparent';
-                  },
-                  lineWidth: 1.5,
-                  drawBorder: false
-                },
-                ticks: {
-                  color: tickColor,
-                  font: {
-                    size: 11
-                  },
-                  stepSize: 500
-                }
-              }
-            }
-          }
-        });
+            });
+
+            const el = document.getElementById('chart-updated');
+            if (el) el.textContent = 'Updated ' + new Date().toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
+            });
+          })
+          .catch(function(err) {
+            console.warn('[main] renderDailyChart fetch failed:', err);
+          });
       });
     }
 
@@ -1024,7 +1073,7 @@ if ($databaseConnected) {
       document.getElementById('btn-30').style.color = days === 30 ? '#fff' : 'var(--text-muted)';
       document.getElementById('btn-30').style.fontWeight = days === 30 ? '500' : '400';
       document.getElementById('chart-title-label').textContent =
-        days === 15 ? 'Past 15 Days — Daily Attendance' : 'Recent 30 Days — Daily Attendance';
+        days === 15 ? 'Past 15 Days — Daily Access Log' : 'Recent 30 Days — Daily Access Log';
       document.getElementById('chart-tabs').style.display = 'none';
       document.getElementById('chart-legend').style.display = 'none';
       renderDailyChart(days);
@@ -1033,7 +1082,7 @@ if ($databaseConnected) {
     function setChartTab(tab) {
       document.getElementById('chart-tabs').style.display = 'flex';
       document.getElementById('chart-legend').style.display = 'flex';
-      document.getElementById('chart-title-label').textContent = 'Hourly Attendance';
+      document.getElementById('chart-title-label').textContent = 'Hourly Access Log';
       document.getElementById('btn-today').style.background = 'var(--accent)';
       document.getElementById('btn-today').style.color = '#fff';
       document.getElementById('btn-today').style.fontWeight = '500';
@@ -1059,22 +1108,8 @@ if ($databaseConnected) {
       renderChart(tab);
     }
 
-    renderChart('volume');
-    window.__endpointsReady.then(function() {
-      AccessLogBackend = window.AccessLogBackend ??
-        window.AttendanceBackend ??
-        window.__backends?.AccessLogBackend ??
-        window.__backends?.AttendanceBackend ??
-        null;
-
-      if (!AccessLogBackend) {
-        console.warn('[main] AccessLogBackend not resolved. Available backends:', window.__backends);
-        console.warn('[main] Available window Backend keys:',
-          Object.keys(window).filter(k => k.toLowerCase().includes('backend')));
-        return;
-      }
-      fetchAttendanceData();
-    });
+    setChartTab('volume');
+    fetchAttendanceData();
   </script>
 </body>
 

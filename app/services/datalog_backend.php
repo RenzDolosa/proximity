@@ -859,15 +859,15 @@ try {
         if (!empty($_GET['access_type']))       $filters['access_type']      = sanitizeInput($_GET['access_type']);
         if (!empty($_GET['access_timestamp'])) {
           $d = sanitizeInput($_GET['access_timestamp']);
-          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['access_timestamp'] = $d;
+          if (preg_match('/^\d{4}-\d{2}(-\d{2})?$/', $d)) $filters['access_timestamp'] = $d;
         }
         if (!empty($_GET['date_from'])) {
           $d = sanitizeInput($_GET['date_from']);
-          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_from'] = $d;
+          if (preg_match('/^\d{4}-\d{2}-\d{2}?$/', $d)) $filters['date_from'] = $d;
         }
         if (!empty($_GET['date_to'])) {
           $d = sanitizeInput($_GET['date_to']);
-          if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $filters['date_to'] = $d;
+          if (preg_match('/^\d{4}-\d{2}-\d{2}?$/', $d)) $filters['date_to'] = $d;
         }
         if (!empty($_GET['sort_col'])) $filters['sort_col'] = sanitizeInput($_GET['sort_col']);
         if (!empty($_GET['sort_dir'])) $filters['sort_dir'] = sanitizeInput($_GET['sort_dir']);
