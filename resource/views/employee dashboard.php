@@ -16,12 +16,14 @@ $stats = [
   'inactive_employees'  => 0,
   'total_department'    => 0,
   'total_position'      => 0,
-  'total_scanned'       => 0,
-  'active_scan'         => 0,
-  'inactive_scan'       => 0,
-  'today_attendance'    => 0,
+  'total_access'        => 0,
+  'active_access'       => 0,
+  'inactive_access'     => 0,
+  'today_access'        => 0,
   'today_in'            => 0,
   'today_out'           => 0,
+  'total_in'            => 0,
+  'total_out'           => 0,
   'total_proxcode'      => 0,
   'total_violations'    => 0,
   'total_main_gate'     => 0,
@@ -61,12 +63,18 @@ if ($databaseConnected) {
       'total_violations'    => "SELECT COUNT(*) FROM employees WHERE violation <> ''",
       'total_department'    => "SELECT COUNT(DISTINCT brand) FROM employees WHERE brand IS NOT NULL AND TRIM(brand) != ''",
       'total_position'      => "SELECT COUNT(DISTINCT position) FROM employees WHERE position IS NOT NULL AND TRIM(position) != ''",
-      'total_scanned'       => "SELECT COUNT(*) FROM employee_access_log",
-      'active_scan'         => "SELECT COUNT(*) FROM employee_access_log WHERE status = 'Active'",
-      'inactive_scan'       => "SELECT COUNT(*) FROM employee_access_log WHERE status = 'Inactive'",
-      'today_attendance'    => "SELECT COUNT(*) FROM employee_access_log WHERE DATE(access_timestamp) = CURDATE()",
+      'total_access'        => "SELECT COUNT(*) FROM employee_access_log",
+      'active_access'       => "SELECT COUNT(*) FROM employee_access_log WHERE status = 'Active'",
+      'inactive_access'     => "SELECT COUNT(*) FROM employee_access_log WHERE status = 'Inactive'",
+      'today_access'        => "SELECT COUNT(*) FROM employee_access_log WHERE DATE(access_timestamp) = CURDATE()",
       'today_in'            => "SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'IN' AND DATE(access_timestamp) = CURDATE()",
       'today_out'           => "SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'OUT' AND DATE(access_timestamp) = CURDATE()",
+      'total_in'            => "SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'IN'",
+      'total_out'           => "SELECT COUNT(*) FROM employee_access_log WHERE check_status = 'OUT'",
+      'total_attendance'    => "SELECT COUNT(*) FROM employee_attendance_log",
+      'active_attendance'   => "SELECT COUNT(*) FROM employee_attendance_log WHERE status = 'Active'",
+      'inactive_attendance' => "SELECT COUNT(*) FROM employee_attendance_log WHERE status = 'Inactive'",
+      'today_attendance'    => "SELECT COUNT(*) FROM employee_attendance_log WHERE DATE(access_timestamp) = CURDATE()",
       'total_proxcode'      => "SELECT COUNT(*) FROM code",
       'total_main_gate'     => "SELECT COUNT(*) FROM users WHERE user_group = 'Main Gate'",
     ];
@@ -272,30 +280,68 @@ if ($databaseConnected) {
               <div class="stat-card">
                 <div class="stat-top">
                   <div class="stat-icon-sm" style="color:#3b82f6;"><i class="fas fa-list"></i></div>
-                  <div class="stat-value"><?= number_format($stats['total_scanned']); ?></div>
+                  <div class="stat-value"><?= number_format($stats['total_access']); ?></div>
                 </div>
-                <div class="stat-label">Total Scanned</div>
+                <div class="stat-label">Total Access &nbsp;<span style="font-weight:400;font-size:10px;">IN: <?= $stats['total_in']; ?> OUT: <?= $stats['total_out']; ?></span></div>
               </div>
               <div class="stat-card">
                 <div class="stat-top">
                   <div class="stat-icon-sm" style="color:#22c55e;"><i class="fas fa-check-circle"></i></div>
-                  <div class="stat-value"><?= number_format($stats['active_scan']); ?></div>
+                  <div class="stat-value"><?= number_format($stats['active_access']); ?></div>
                 </div>
-                <div class="stat-label">Active Scans</div>
+                <div class="stat-label">Active Access</div>
               </div>
               <div class="stat-card">
                 <div class="stat-top">
                   <div class="stat-icon-sm" style="color:#ef4444;"><i class="fas fa-times-circle"></i></div>
-                  <div class="stat-value"><?= number_format($stats['inactive_scan']); ?></div>
+                  <div class="stat-value"><?= number_format($stats['inactive_access']); ?></div>
                 </div>
-                <div class="stat-label">Inactive Scans</div>
+                <div class="stat-label">Inactive Access</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#f97316;"><i class="fas fa-calendar-day"></i></div>
+                  <div class="stat-value"><?= number_format($stats['today_access']); ?></div>
+                </div>
+                <div class="stat-label">Today's &nbsp;<span style="font-weight:400;font-size:10px;">IN: <?= $stats['today_in']; ?> OUT: <?= $stats['today_out']; ?></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i class="fas fa-fingerprint" style="color:#f59e0b;margin-right:6px;"></i>Attendance Stats</span>
+          </div>
+          <div class="card-body">
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#3b82f6;"><i class="fas fa-list"></i></div>
+                  <div class="stat-value"><?= number_format($stats['total_attendance']); ?></div>
+                </div>
+                <div class="stat-label">Total Attendance</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#22c55e;"><i class="fas fa-check-circle"></i></div>
+                  <div class="stat-value"><?= number_format($stats['active_attendance']); ?></div>
+                </div>
+                <div class="stat-label">Active Attendance</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-top">
+                  <div class="stat-icon-sm" style="color:#ef4444;"><i class="fas fa-times-circle"></i></div>
+                  <div class="stat-value"><?= number_format($stats['inactive_attendance']); ?></div>
+                </div>
+                <div class="stat-label">Inactive Attendance</div>
               </div>
               <div class="stat-card">
                 <div class="stat-top">
                   <div class="stat-icon-sm" style="color:#f97316;"><i class="fas fa-calendar-day"></i></div>
                   <div class="stat-value"><?= number_format($stats['today_attendance']); ?></div>
                 </div>
-                <div class="stat-label">Today &nbsp;<span style="font-weight:400;font-size:10px;">In:<?= $stats['today_in']; ?> Out:<?= $stats['today_out']; ?></span></div>
+                <div class="stat-label">Today's Attendance</div>
               </div>
             </div>
           </div>
