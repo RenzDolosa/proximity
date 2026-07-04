@@ -291,12 +291,12 @@ if ($databaseConnected) {
                   <div class="sc-label">Account Info</div>
                 </div>
               <?php endif; ?>
-              <?php if ($access['remarks']): ?>
+              <!-- <?php if ($access['remarks']): ?>
                 <div class="sc-card" data-action-app="mainFrame-remarks">
                   <div class="sc-icon"><i class="fas fa-exclamation-triangle"></i></div>
                   <div class="sc-label">Incidents</div>
                 </div>
-              <?php endif; ?>
+              <?php endif; ?> -->
             </div>
           </div>
         </div>
@@ -686,7 +686,6 @@ if ($databaseConnected) {
       return out;
     }
 
-    // ── Paginated fetch: pulls every page instead of trusting one big `limit` ──
     function fetchAllAccessLogs(params) {
       const limit = 9999;
       const baseParams = {
