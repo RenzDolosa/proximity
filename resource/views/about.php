@@ -51,7 +51,7 @@ $access = getMenuAccess();
         <div class="hero-meta">
           <span class="hero-badge">
             <i class="fas fa-code-branch"></i>
-            <span id="about-version">Version 2.3.13</span>
+            <span id="about-version">Version 2.3.16</span>
           </span>
           <span class="hero-badge muted">
             <i class="fas fa-map-marker-alt"></i> Proximity · Philippines
