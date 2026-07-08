@@ -1646,7 +1646,7 @@ try {
         try {
           $conn = getUserDBConnection($_SESSION['user_id']);
           $stmt = $conn->prepare(
-            "SELECT * FROM employee_access_log
+            "SELECT DISTINCT check_status, access_type, user_id, access_timestamp FROM employee_access_log
              WHERE employee_id = :id
              ORDER BY access_timestamp DESC
              LIMIT 1000"
