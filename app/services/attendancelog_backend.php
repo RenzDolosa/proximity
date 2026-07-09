@@ -212,12 +212,12 @@ class AccessLogManager
       $params[':access_timestamp'] = '%' . $filters['access_timestamp'] . '%';
     }
     if (!empty($filters['date_from'])) {
-      $where .= " AND DATE(access_timestamp) >= :date_from";
-      $params[':date_from'] = $filters['date_from'];
+      $where .= " AND access_timestamp >= :date_from";
+      $params[':date_from'] = $filters['date_from'] . ' 00:00:00';
     }
     if (!empty($filters['date_to'])) {
-      $where .= " AND DATE(access_timestamp) <= :date_to";
-      $params[':date_to'] = $filters['date_to'];
+      $where .= " AND access_timestamp < :date_to";
+      $params[':date_to'] = date('Y-m-d', strtotime($filters['date_to'] . ' +1 day')) . ' 00:00:00';
     }
 
     // ── Build ORDER BY ────────────────────────────────────────────────
@@ -299,12 +299,15 @@ class AccessLogManager
     $params = [];
 
     if (!empty($baseFilters['date_from'])) {
-      $where .= " AND DATE(access_timestamp) >= :date_from";
-      $params[':date_from'] = $baseFilters['date_from'];
+      $where .= " AND access_timestamp >= :date_from";
+      $params[':date_from'] = $baseFilters['date_from'] . ' 00:00:00';
     }
     if (!empty($baseFilters['date_to'])) {
-      $where .= " AND DATE(access_timestamp) <= :date_to";
-      $params[':date_to'] = $baseFilters['date_to'];
+      $where .= " AND access_timestamp < :date_to";
+      $params[':date_to'] = date('Y-m-d', strtotime($baseFilters['date_to'] . ' +1 day')) . ' 00:00:00';
+    } elseif (empty($baseFilters['date_from'])) {
+      $where .= " AND access_timestamp >= :default_bound";
+      $params[':default_bound'] = date('Y-m-d', strtotime('-90 days'));
     }
     if (!empty($baseFilters['qr_code'])) {
       $where .= " AND qr_code LIKE :qr_code";
@@ -439,46 +442,70 @@ class AccessLogManager
   // ── STATS ──────────────────────────────────────────────────────────────
   public function getStats()
   {
-    $stats = [];
+    $stats = [
+      'total' => 0,
+      'active' => 0,
+      'inactive' => 0,
+      'by_shift' => [],
+      'by_access_type' => [],
+      'today' => 0,
+    ];
 
-    $stmt = $this->conn->prepare(
-      "SELECT COUNT(*) as total FROM {$this->logTable}"
-    );
-    $stmt->execute();
-    $stats['total'] = (int) $stmt->fetch(PDO::FETCH_ASSOC)['total'];
-
-    $stmt = $this->conn->prepare(
-      "SELECT COUNT(*) as active FROM {$this->logTable} WHERE status = 'Active'"
-    );
-    $stmt->execute();
-    $stats['active']   = (int) $stmt->fetch(PDO::FETCH_ASSOC)['active'];
-    $stats['inactive'] = $stats['total'] - $stats['active'];
-
-    $stmt = $this->conn->prepare(
-      "SELECT shift, COUNT(*) as count FROM {$this->logTable} GROUP BY shift"
-    );
-    $stmt->execute();
-    $shiftData = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    $stats['by_shift'] = [];
-    foreach ($shiftData as $shift) {
-      $stats['by_shift'][$shift['shift']] = $shift['count'];
+    try {
+      $stmt = $this->conn->prepare(
+        "SELECT COUNT(*) AS total, SUM(status = 'Active') AS active FROM {$this->logTable}"
+      );
+      $stmt->execute();
+      $row = $stmt->fetch(PDO::FETCH_ASSOC);
+      $stats['total']    = (int) $row['total'];
+      $stats['active']   = (int) $row['active'];
+      $stats['inactive'] = $stats['total'] - $stats['active'];
+    } catch (Exception $e) {
+      error_log("getStats total/active error: " . $e->getMessage());
     }
 
-    $stmt = $this->conn->prepare(
-      "SELECT access_type, COUNT(*) AS count FROM {$this->logTable} GROUP BY access_type"
-    );
-    $stmt->execute();
-    $accessData = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    $stats['by_access_type'] = [];
-    foreach ($accessData as $access) {
-      $stats['by_access_type'][$access['access_type']] = $access['count'];
+    try {
+      $stmt = $this->conn->prepare(
+        "SELECT shift, COUNT(*) as count FROM {$this->logTable} GROUP BY shift"
+      );
+      $stmt->execute();
+      foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $shift) {
+        $stats['by_shift'][$shift['shift']] = $shift['count'];
+      }
+    } catch (Exception $e) {
+      error_log("getStats by_shift error: " . $e->getMessage());
     }
 
-    $stmt = $this->conn->prepare(
-      "SELECT COUNT(*) AS today FROM {$this->logTable} WHERE DATE(access_timestamp) = CURDATE()"
-    );
-    $stmt->execute();
-    $stats['today'] = (int) $stmt->fetch(PDO::FETCH_ASSOC)['today'];
+    try {
+      $stmt = $this->conn->prepare(
+        "SELECT access_type, COUNT(*) as count FROM {$this->logTable} GROUP BY access_type"
+      );
+      $stmt->execute();
+      foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $access) {
+        $stats['by_access_type'][$access['access_type']] = $access['count'];
+      }
+    } catch (Exception $e) {
+      error_log("getStats by_access_type error: " . $e->getMessage());
+    }
+
+    try {
+      $todayStart = date('Y-m-d');
+      $todayEnd   = date('Y-m-d', strtotime('+1 day'));
+
+      $stmt = $this->conn->prepare(
+        "SELECT
+          SUM(access_timestamp >= :today_start1 AND access_timestamp < :today_end1) AS today
+        FROM {$this->logTable}"
+      );
+      $stmt->execute([
+        ':today_start1' => $todayStart,
+        ':today_end1' => $todayEnd,
+      ]);
+      $row = $stmt->fetch(PDO::FETCH_ASSOC);
+      $stats['today']     = (int) $row['today'];
+    } catch (Exception $e) {
+      error_log("getStats today error: " . $e->getMessage());
+    }
 
     return $stats;
   }
@@ -749,46 +776,69 @@ try {
         $page  = max(1, (int)($_GET['page']  ?? 1));
         $limit = max(1, (int)($_GET['limit'] ?? 25));
 
+        $isSilent = (
+          !empty($_SERVER['HTTP_X_SILENT_REQUEST']) &&
+          strtolower($_SERVER['HTTP_X_SILENT_REQUEST']) === 'true'
+        );
+
         try {
           $result = $logManager->getLogs($filters, $page, $limit);
-          $filterOptions = $logManager->getFilterOptions($filters);
 
-          $fieldFilterOptions = [
-            'employee_id'   => [],
-            'fullname'      => [],
-            'position'      => [],
-            'brand'         => [],
-            'status'        => [],
-            'shift'         => [],
-            'violation'     => [],
-            'user_id'       => [],
-          ];
-          foreach ($filterOptions as $row) {
-            foreach ($fieldFilterOptions as $field => $_) {
-              $val = $row[$field] ?? null;
-              if ($val !== null && $val !== '') {
-                $fieldFilterOptions[$field][] = $row;
+          $response['success'] = true;
+          $response['data']    = $result['data'];
+          $response['total']   = $result['total'];
+          $response['page']    = $page;
+          $response['pages']   = ceil($result['total'] / $limit);
+
+          if (!$isSilent) {
+            $filterOptions = $logManager->getFilterOptions($filters);
+
+            $fieldFilterOptions = [
+              'employee_id'   => [],
+              'fullname'      => [],
+              'position'      => [],
+              'brand'         => [],
+              'status'        => [],
+              'shift'         => [],
+              'violation'     => [],
+              'user_id'       => [],
+            ];
+            foreach ($filterOptions as $row) {
+              foreach ($fieldFilterOptions as $field => $_) {
+                $val = $row[$field] ?? null;
+                if ($val !== null && $val !== '') {
+                  $fieldFilterOptions[$field][] = $row;
+                }
               }
             }
-          }
-          foreach ($fieldFilterOptions as $field => &$bucket) {
-            $seen = [];
-            $bucket = array_values(array_filter($bucket, function ($r) use ($field, &$seen) {
-              $v = $r[$field] ?? '';
-              if (isset($seen[$v])) return false;
-              $seen[$v] = true;
-              return true;
-            }));
-          }
-          unset($bucket);
+            foreach ($fieldFilterOptions as $field => &$bucket) {
+              $seen = [];
+              $bucket = array_values(array_filter($bucket, function ($r) use ($field, &$seen) {
+                $v = $r[$field] ?? '';
+                if (isset($seen[$v])) return false;
+                $seen[$v] = true;
+                return true;
+              }));
+            }
+            unset($bucket);
 
-          $response['success']              = true;
-          $response['data']                 = $result['data'];
-          $response['total']                = $result['total'];
-          $response['page']                 = $page;
-          $response['pages']                = ceil($result['total'] / $limit);
-          $response['filter_options']       = $filterOptions;
-          $response['field_filter_options'] = $fieldFilterOptions;
+            $response['filter_options']       = $filterOptions;
+            $response['field_filter_options'] = $fieldFilterOptions;
+
+            try {
+              $response['stats'] = $logManager->getStats();
+            } catch (Exception $statsError) {
+              error_log("getStats (bundled) error: " . $statsError->getMessage());
+              $response['stats'] = null;
+            }
+          } else {
+            try {
+              $response['stats'] = $logManager->getStats();
+            } catch (Exception $statsError) {
+              error_log("getStats (silent) error: " . $statsError->getMessage());
+              $response['stats'] = null;
+            }
+          }
         } catch (Exception $e) {
           error_log("getLogs error: " . $e->getMessage());
           $response['message'] = 'Error retrieving logs: ' . $e->getMessage();

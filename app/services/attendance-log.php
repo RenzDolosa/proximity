@@ -31,21 +31,26 @@ $settings   = [];
 
 if ($databaseConnected) {
   try {
-    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_attendance_log");
-    $stmt->execute();
-    $stats['total_scanned'] = $stmt->fetchColumn();
+    $todayStart = date('Y-m-d');
+    $todayEnd   = date('Y-m-d', strtotime('+1 day'));
 
-    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_attendance_log WHERE status = 'Active'");
-    $stmt->execute();
-    $stats['active_employees'] = $stmt->fetchColumn();
+    $stmt = $userDb->prepare("
+      SELECT
+        COUNT(*) AS total_scanned,
+        SUM(status = 'Active')   AS active_employees,
+        SUM(status = 'Inactive') AS inactive_employees,
+        SUM(access_timestamp >= :today_start1 AND access_timestamp < :today_end1) AS today_attendance
+      FROM employee_attendance_log
+    ");
+    $stmt->execute([
+      ':today_start1' => $todayStart, ':today_end1' => $todayEnd,
+    ]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_attendance_log WHERE status = 'Inactive'");
-    $stmt->execute();
-    $stats['inactive_employees'] = $stmt->fetchColumn();
-
-    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employee_attendance_log WHERE DATE(access_timestamp) = CURDATE()");
-    $stmt->execute();
-    $stats['today_attendance'] = $stmt->fetchColumn();
+    $stats['total_scanned']      = (int) $row['total_scanned'];
+    $stats['active_employees']   = (int) $row['active_employees'];
+    $stats['inactive_employees'] = (int) $row['inactive_employees'];
+    $stats['today_attendance']   = (int) $row['today_attendance'];
 
     $stmt = $userDb->prepare("
             SELECT el.*, e.fullname

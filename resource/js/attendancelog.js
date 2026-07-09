@@ -15,6 +15,7 @@ let autoUpdateEnabled = false;
 let lastUpdateTimestamp = null;
 let userActivityTimer = null;
 let isUserActive = false;
+let autoUpdateFetching = false;
 
 let totalRecords = 0;
 
@@ -504,6 +505,8 @@ function showAutoUpdateNotification() {
 // ── Auto-update fetch ─────────────────────────────────────────────────────────
 async function loadEmployeesAuto(filters = {}) {
   if (!AttendanceBackend) return;
+  if (autoUpdateFetching) return;
+  autoUpdateFetching = true;
 
   try {
     const filtersToUse =
@@ -536,6 +539,7 @@ async function loadEmployeesAuto(filters = {}) {
     const data = await response.json();
 
     if (data.success && Array.isArray(data.data)) {
+      if (data.stats) applyStats(data.stats);
       const hasChanges = checkForChanges(data.data);
 
       employeeDataCache = null;
@@ -572,6 +576,8 @@ async function loadEmployeesAuto(filters = {}) {
     } else if (error.name === "AbortError") {
       console.warn("Auto-update request was aborted");
     }
+  } finally {
+    autoUpdateFetching = false;
   }
 }
 
@@ -765,6 +771,20 @@ async function buildQRToImageMap() {
   return qrImageMap;
 }
 
+function applyStats(stats) {
+  if (!stats) return;
+
+  const totalEl    = document.getElementById("total_scanned");
+  const activeEl   = document.getElementById("active_employees");
+  const inactiveEl = document.getElementById("inactive_employees");
+  const todayEl    = document.getElementById("today_attendance");
+
+  if (totalEl)    totalEl.textContent = stats.total ?? 0;
+  if (activeEl)   activeEl.textContent = stats.active ?? 0;
+  if (inactiveEl) inactiveEl.textContent = stats.inactive ?? 0;
+  if (todayEl)    todayEl.textContent = stats.today ?? 0;
+}
+
 async function updateStatsPanel() {
   if (!AttendanceBackend) return;
 
@@ -781,17 +801,7 @@ async function updateStatsPanel() {
     const data = await response.json();
     if (!data.success || !data.data) return;
 
-    const stats = data.data;
-
-    const totalEl = document.getElementById("total_scanned");
-    const activeEl = document.getElementById("active_employees");
-    const inactiveEl = document.getElementById("inactive_employees");
-    const todayEl = document.getElementById("today_attendance");
-
-    if (totalEl) totalEl.textContent = stats.total ?? 0;
-    if (activeEl) activeEl.textContent = stats.active ?? 0;
-    if (inactiveEl) inactiveEl.textContent = stats.inactive ?? 0;
-    if (todayEl) todayEl.textContent = stats.today ?? 0;
+    applyStats(data.data);
   } catch (error) {
     console.error("Error updating employee counts", error);
   }
@@ -872,7 +882,6 @@ async function renderEmployeeTable() {
 
   const currentEmployees = employees;
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentUserId = await getCurrentUserId();
   const qrImageMap = await buildQRToImageMap();
 
   tbody.innerHTML = currentEmployees
@@ -1036,7 +1045,6 @@ async function renderEmployeeTable() {
     .join("");
 
   updatePaginationControls();
-  await updateStatsPanel();
 }
 
 // ── Actions panel ─────────────────────────────────────────────────────────────
@@ -1321,6 +1329,8 @@ async function loadEmployees(
       ) {
         fieldFilterOptions = data.field_filter_options;
       }
+      
+      if (data.stats) applyStats(data.stats);
 
       if (Object.keys(filters).length === 0) {
         allEmployees = data.filter_options ?? data.data ?? [];
