@@ -537,7 +537,7 @@ class EmployeeManager
     $result = $stmt->execute();
 
     if ($result && $this->userId && $employee) {
-      logSystemAction($this->userId, 'EMPLOYEE_DELETED', "Deleted employee: " . $employee['qr_code']);
+      logSystemAction($this->userId, 'CODE_DELETED', "Deleted code: " . $employee['qr_code']);
     }
 
     return $result;

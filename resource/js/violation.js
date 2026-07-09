@@ -24,6 +24,21 @@ new IntersectionObserver(([e]) => {
   controls.classList.toggle("is-stuck", !e.isIntersecting);
 }).observe(sentinel);
 
+function forceRefresh() {
+  showLoading(true);
+  isUserActive = true;
+
+  loadViolations()
+    .then(() => {
+      showAlert("Data refreshed", "success");
+      setTimeout(() => {
+        isUserActive = false;
+      }, 2000);
+    })
+    .catch(() => showAlert("Failed to refresh data", "error"))
+    .finally(() => showLoading(false));
+}
+
 // ── Load ─────────────────────────────────────────────────────────────
 async function loadViolations() {
   if (!ViolationBackend) {

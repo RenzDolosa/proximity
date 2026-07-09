@@ -1042,6 +1042,22 @@ function clearSearch() {
   loadEmployees({}, false, true);
 }
 
+function forceRefresh() {
+  showLoading(true);
+  isUserActive = true;
+
+  loadEmployees()
+    .then(() => {
+      showAlert("Data refreshed", "success");
+      setTimeout(() => {
+        isUserActive = false;
+      }, 2000);
+    })
+    .catch(() => showAlert("Failed to refresh data", "error"))
+    .finally(() => showLoading(false));
+}
+
+// ── Load employees from backend ───────────────────────────────────────────────
 async function loadEmployees(
   filters = {},
   preservePage = false,

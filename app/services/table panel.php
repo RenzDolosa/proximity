@@ -148,9 +148,17 @@ if ($requestedTab === 'datalog' && $access['datalog']) {
 
     function reloadActiveTab() {
       const activeFrame = document.querySelector('.tab-frame.active');
-      if (activeFrame) {
-        activeFrame.src = activeFrame.src;
+      if (!activeFrame) return;
+
+      try {
+        if (typeof activeFrame.contentWindow?.forceRefresh === 'function') {
+          activeFrame.contentWindow.forceRefresh();
+          return;
+        }
+      } catch (e) {
       }
+
+      activeFrame.src = activeFrame.src;
     }
 
     document.querySelectorAll('.tab-btn').forEach(btn => {

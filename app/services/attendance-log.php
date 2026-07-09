@@ -203,9 +203,6 @@ if ($databaseConnected) {
             </label>
             <strong id="toggle">OFF</strong>
             <span id="autoUpdateStatus" class="auto-update-status inactive" style="user-select:none;"></span>
-            <button class="fRefresh-btn" onclick="forceRefresh()" disabled style="opacity: 0.4; cursor: not-allowed; padding: 2px; border-radius: 5px; cursor: pointer; user-select:none;">
-              <i class="fas fa-refresh"></i> <small>Refresh Now</small>
-            </button>
             <div class="search-group" style="position:relative;">
               <input type="text" id="updateInterval" placeholder="Every Second"
                 autocomplete="off" readonly disabled style="opacity: 0.5; cursor: not-allowed; width:120px; height: 25px;">
