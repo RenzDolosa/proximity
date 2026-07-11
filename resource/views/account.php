@@ -267,7 +267,14 @@ try {
           <div class="card-body">
 
             <div class="db-block">
-              <img src="/config/asset.php?t=s3t4u" alt="DB">
+              <div class="img">
+                <?php
+                $svgPath = ROOT_PATH . '/resource/assets/icon/database-icon.svg';
+                if (file_exists($svgPath)) {
+                  echo file_get_contents($svgPath);
+                }
+                ?>
+              </div>
               <div>
                 <div class="db-name" style="color:<?= $databaseConnected ? '#16a34a' : '#dc2626' ?>;">
                   <?= htmlspecialchars($myDatabase) ?>

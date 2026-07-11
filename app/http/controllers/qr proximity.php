@@ -70,7 +70,12 @@ try {
 
   <background>
     <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; z-index: 0; pointer-events: none;">
-      <img src="/config/asset.php?t=aur2d" class="background-image" loading="lazy" alt="Proximity Code">
+      <?php
+        $svgPath = ROOT_PATH . '/resource/assets/logo/proximity-logo.svg';
+        if (file_exists($svgPath)) {
+          echo file_get_contents($svgPath);
+        }
+      ?>
     </div>
   </background>
   <div class="side-bar" style="top: 0;">

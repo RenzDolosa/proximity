@@ -200,7 +200,7 @@ function getMainDBConnection()
   }
 }
 
-function getUserDBConnection($userId)
+function getUserDBConnection(int $userId)
 {
   if (!is_numeric($userId) || $userId <= 0) {
     throw new Exception("Invalid user ID");
@@ -235,7 +235,7 @@ function getUserDBConnection($userId)
   }
 }
 
-function userDatabaseExists($userId)
+function userDatabaseExists(int $userId)
 {
   if (!is_numeric($userId) || $userId <= 0) {
     return false;
@@ -261,7 +261,7 @@ function userDatabaseExists($userId)
   }
 }
 
-function createUserDatabase($userId)
+function createUserDatabase(int $userId)
 {
   if (!is_numeric($userId) || $userId <= 0) {
     $errorMsg = "Invalid user ID for database creation: $userId";
@@ -446,7 +446,7 @@ function createUserDatabase($userId)
   }
 }
 
-function ensureUserTablesExist($userId)
+function ensureUserTablesExist(int $userId)
 {
   if (!is_numeric($userId) || $userId <= 0) {
     return false;
@@ -603,7 +603,7 @@ function ensureUserTablesExist($userId)
   }
 }
 
-function deleteUserDatabase($userId)
+function deleteUserDatabase(int $userId)
 {
   if (!is_numeric($userId) || $userId <= 0) {
     return false;
@@ -638,17 +638,27 @@ if (session_status() === PHP_SESSION_NONE) {
   session_start();
 }
 
-function sanitizeInput($data)
-{
-  return htmlspecialchars(strip_tags(trim($data)), ENT_QUOTES, 'UTF-8');
+// ── Safe fallback sanitizeInput() ─────────────────────────────────────────────
+if (!function_exists('sanitizeInput')) {
+  /**
+   * Sanitize input for safe output.
+   *
+   * @param mixed $input
+   * @return string
+   */
+  function sanitizeInput($input): string
+  {
+    if (is_null($input)) return '';
+    return htmlspecialchars(strip_tags(trim((string)$input)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+  }
 }
 
-function isValidEmail($email)
+function isValidEmail(string $email)
 {
   return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
 }
 
-function isValidPassword($password)
+function isValidPassword(string $password)
 {
   return strlen($password) >= 8 &&
     preg_match('/[A-Z]/', $password) &&
@@ -656,7 +666,7 @@ function isValidPassword($password)
     preg_match('/[0-9]/', $password);
 }
 
-function customDatabaseExists($dbName)
+function customDatabaseExists(string $dbName)
 {
   try {
     $pdo = new PDO(
@@ -693,12 +703,13 @@ function customDatabaseExists($dbName)
  * @param string $password - Strong password (8+ chars, uppercase, lowercase, number)
  * @param string $firstName - User's first name
  * @param string $lastName - User's last name
+ * @param string $user_group - User group or role (e.g., 'Administrator', 'User', etc.)
  * @param string|null $myDatabase - Custom database name (stored as metadata)
  * @param string|null $phoneNum - User's phone number
  *
  * @return array - ['success' => bool, 'user_id' => int, 'database_created' => bool, 'database_name' => string, 'message' => string, 'errors' => array]
  */
-function registerUser($username, $email, $password, $firstName, $lastName, $user_group, $myDatabase = null, $phoneNum = null)
+function registerUser(string $username, string $email, string $password, string $firstName, string $lastName, string $user_group, ?string $myDatabase = null, ?string $phoneNum = null)
 {
   $errors = [];
 
@@ -794,7 +805,7 @@ function registerUser($username, $email, $password, $firstName, $lastName, $user
   }
 }
 
-function loginUser($username, $password)
+function loginUser(string $username, string $password)
 {
   try {
     $pdo = getMainDBConnection();
@@ -911,7 +922,7 @@ function createMainTables()
 
 createMainTables();
 
-function logSystemAction($userId, $action, $details = null)
+function logSystemAction(int $userId, string $action, ?string $details = null)
 {
   try {
     $pdo = getMainDBConnection();

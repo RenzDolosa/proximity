@@ -13,7 +13,13 @@ if (!isset($_GET['serve_file']) && !isset($_GET['api_info']) && !isset($_GET['he
 
 // ── Safe fallback sanitizeInput() ─────────────────────────────────────────────
 if (!function_exists('sanitizeInput')) {
-  function sanitizeInput($input)
+  /**
+   * Sanitize input for safe output.
+   *
+   * @param mixed $input
+   * @return string
+   */
+  function sanitizeInput($input): string
   {
     if (is_null($input)) return '';
     return htmlspecialchars(strip_tags(trim((string)$input)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -70,7 +76,7 @@ const MAX_BULK_DELETE    = 5000;
 const MAX_IMPORT_ROWS    = 2000;
 
 // ── MIME-type validation helper ───────────────────────────────────────────────
-function validateImageMime($tmpPath)
+function validateImageMime(string $tmpPath): bool
 {
   $allowed_mimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
 
@@ -89,7 +95,7 @@ function validateImageMime($tmpPath)
 }
 
 // ── Safe json_decode wrapper ──────────────────────────────────────────────────
-function safeJsonDecode($json, $assoc = true, $depth = 32)
+function safeJsonDecode(string $json, bool $assoc = true, int $depth = 32)
 {
   if (!is_string($json) || $json === '') return null;
   try {
@@ -100,7 +106,7 @@ function safeJsonDecode($json, $assoc = true, $depth = 32)
   }
 }
 
-function syncStatusByQR($conn, $employeeId, $qrCode, $changedBy = 'System')
+function syncStatusByQR(PDO $conn, int $employeeId, string $qrCode, string $changedBy = 'System'): string
 {
   $qrTrimmed = trim((string)$qrCode);
 
@@ -154,7 +160,7 @@ function syncStatusByQR($conn, $employeeId, $qrCode, $changedBy = 'System')
   return $newStatus;
 }
 
-function clearCodeReservation($conn, $qrCode)
+function clearCodeReservation(PDO $conn, string $qrCode)
 {
   $qrCode = trim((string)$qrCode);
   if ($qrCode === '') return;
@@ -185,9 +191,9 @@ if (isset($_GET['serve_file'])) {
 // ─────────────────────────────────────────────────────────────────────────────
 class Database
 {
-  private $mainConn;
-  private $userConn;
-  private $currentUserId;
+  private ?PDO $mainConn = null;
+  private ?PDO $userConn = null;
+  private ?int $currentUserId = null;
 
   public function __construct()
   {
@@ -231,11 +237,11 @@ class Database
 
 class EmployeeManager
 {
-  private $conn;
-  private $table = 'employees';
-  private $userId;
+  private ?PDO $conn = null;
+  private string $table = 'employees';
+  private ?int $userId = null;
 
-  public function __construct($db)
+  public function __construct(Database|PDO $db)
   {
     if ($db instanceof Database) {
       $this->conn   = $db->getUserConnection();
@@ -246,7 +252,7 @@ class EmployeeManager
     }
   }
 
-  public function createEmployee($data)
+  public function createEmployee(array $data): mixed
   {
     $query = "INSERT INTO " . $this->table . "
             (id, fullname, position, brand, gender, birth, hired, status, shift, violation, image, qr_code, user_id)
@@ -443,7 +449,7 @@ class EmployeeManager
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
   }
 
-  public function updateEmployee($old_id, $data)
+  public function updateEmployee(int $old_id, array $data)
   {
     $currentEmployee = $this->getEmployee($old_id);
     $new_id = $data['id'];
@@ -540,7 +546,7 @@ class EmployeeManager
     return true;
   }
 
-  public function deleteEmployee($id)
+  public function deleteEmployee(int $id)
   {
     $employee = $this->getEmployee($id);
 
@@ -556,7 +562,7 @@ class EmployeeManager
     return $result;
   }
 
-  public function getEmployee($id)
+  public function getEmployee(int $id)
   {
     $query = "SELECT * FROM " . $this->table . " WHERE id = :id";
     $stmt  = $this->conn->prepare($query);
@@ -565,7 +571,7 @@ class EmployeeManager
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
-  public function getEmployeeByQR($qr_code)
+  public function getEmployeeByQR(string $qr_code)
   {
     $query = "SELECT * FROM " . $this->table . " WHERE qr_code = :qr_code";
     $stmt  = $this->conn->prepare($query);
@@ -574,7 +580,7 @@ class EmployeeManager
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
-  public function logStatusChange($employeeId, $oldStatus, $newStatus, $reason = null)
+  public function logStatusChange(int $employeeId, string $oldStatus, string $newStatus, ?string $reason = null)
   {
     try {
       $query = "INSERT INTO status_history (employee_id, old_status, new_status, changed_by, change_reason, created_at)
@@ -594,7 +600,7 @@ class EmployeeManager
     }
   }
 
-  public function getEmployeeStatusHistory($employeeId)
+  public function getEmployeeStatusHistory(int $employeeId)
   {
     $query = "SELECT * FROM status_history WHERE employee_id = :employee_id ORDER BY created_at DESC";
     $stmt  = $this->conn->prepare($query);
@@ -624,7 +630,7 @@ class EmployeeManager
     }
   }
 
-  public function deleteEmployeesByIds($employeeIds)
+  public function deleteEmployeesByIds(array $employeeIds)
   {
     if (!is_array($employeeIds) || empty($employeeIds)) {
       return 0;
@@ -682,11 +688,11 @@ class EmployeeManager
 
 class FileUploader
 {
-  private $upload_dir;
-  private $allowed_types = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-  private $max_size = 5 * 1024 * 1024;
+  private ?string $upload_dir = null;
+  private array $allowed_types = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+  private int $max_size = 5 * 1024 * 1024;
 
-  public function __construct($userId = null)
+  public function __construct(?int $userId = null)
   {
     $this->upload_dir = '../../public/uploads/user/';
     if (!file_exists($this->upload_dir)) {
@@ -694,7 +700,7 @@ class FileUploader
     }
   }
 
-  public function uploadImage($file, $existingFilename = null)
+  public function uploadImage(array $file, ?string $existingFilename = null)
   {
     if (!isset($file['tmp_name']) || $file['error'] !== UPLOAD_ERR_OK) {
       return false;
@@ -749,7 +755,7 @@ class FileUploader
     return $filename;
   }
 
-  private function convertToWebP($tmpPath, $srcExtension, $destPath, $quality = 82, $maxWidth = 800)
+  private function convertToWebP(string $tmpPath, string $srcExtension, string $destPath, int $quality = 82, int $maxWidth = 800)
   {
     if (!function_exists('imagewebp')) {
       return false;
@@ -799,7 +805,7 @@ class FileUploader
     return $result;
   }
 
-  public function deleteImage($filename)
+  public function deleteImage(?string $filename): bool
   {
     if (!$filename) return false;
 
@@ -820,12 +826,12 @@ class FileUploader
     return $deleted;
   }
 
-  public function getImagePath($filename)
+  public function getImagePath(?string $filename): string
   {
     return $this->upload_dir . basename($filename);
   }
 
-  public function imageExists($filename)
+  public function imageExists(?string $filename): bool
   {
     if (empty($filename)) return false;
     $filepath = $this->getImagePath($filename);
@@ -837,7 +843,7 @@ class QRCodeGenerator
 {
   const QR_CODE_LENGTH = 41;
 
-  public static function generateQRCode($userId = null, $length = self::QR_CODE_LENGTH)
+  public static function generateQRCode(?int $userId = null, int $length = self::QR_CODE_LENGTH)
   {
     $userId = ($userId !== null && $userId !== '' && $userId !== '0' && $userId !== 0)
       ? (string)$userId
@@ -1871,7 +1877,7 @@ try {
 // ─────────────────────────────────────────────────────────────────────────────
 // FILE SERVING
 // ─────────────────────────────────────────────────────────────────────────────
-function serveFile($filepath, $filename = null)
+function serveFile(string $filepath, ?string $filename = null)
 {
   if (!file_exists($filepath)) {
     http_response_code(404);

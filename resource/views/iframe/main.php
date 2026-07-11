@@ -261,8 +261,12 @@ if ($databaseConnected) {
               <?php if ($access['proximity-code']): ?>
                 <div class="sc-card" data-action-app="mainFrame-proximity">
                   <div class="sc-icon">
-                    <img src="/config/asset.php?t=cfk4d" alt="NFC"
-                      class="icon-accent" style="width:18px;height:18px;">
+                    <?php
+                    $svgPath = ROOT_PATH . '/resource/assets/logo/nfc-logo.svg';
+                    if (file_exists($svgPath)) {
+                      echo file_get_contents($svgPath);
+                    }
+                    ?>
                   </div>
                   <div class="sc-label">Proximity Center</div>
                 </div>
@@ -476,7 +480,12 @@ if ($databaseConnected) {
               <?php if ($access['tablePanel']): ?>
                 <div class="menu-card" data-action-app="mainFrame-employees">
                   <div class="mc-icon" style="background:#eff6ff; color:#2563eb;">
-                    <img src="/config/asset.php?t=dfk34" alt="MySQL" style="width:26px;height:26px;object-fit:contain;">
+                    <?php
+                    $svgPath = ROOT_PATH . '/resource/assets/logo/mysql-logo.svg';
+                    if (file_exists($svgPath)) {
+                      echo file_get_contents($svgPath);
+                    }
+                    ?>
                   </div>
                   <div class="mc-info">
                     <div class="mc-title">Employee Management</div>
@@ -489,7 +498,12 @@ if ($databaseConnected) {
               <?php if ($access['scanTest']): ?>
                 <div class="menu-card" data-action-app="mainFrame-scanTest">
                   <div class="mc-icon" style="background:#f0fdf4; color:#16a34a;">
-                    <img src="/config/asset.php?t=gnks2" alt="NFC" style="width:26px;height:26px;object-fit:contain;">
+                    <?php
+                    $svgPath = ROOT_PATH . '/resource/assets/icon/nfc-icon.svg';
+                    if (file_exists($svgPath)) {
+                      echo file_get_contents($svgPath);
+                    }
+                    ?>
                   </div>
                   <div class="mc-info">
                     <div class="mc-title">Test Live Search</div>
@@ -502,7 +516,12 @@ if ($databaseConnected) {
               <?php if ($access['m-i v2']): ?>
                 <div class="menu-card" data-action-app="mainFrame-test">
                   <div class="mc-icon" style="background:#f8fafc; color:#94a3b8;">
-                    <img src="/config/asset.php?t=fgbk4" alt="Coming Soon" style="width:26px;height:26px;object-fit:contain;">
+                    <?php
+                    $svgPath = ROOT_PATH . '/resource/assets/logo/coming-soon.svg';
+                    if (file_exists($svgPath)) {
+                      echo file_get_contents($svgPath);
+                    }
+                    ?>
                   </div>
                   <div class="mc-info">
                     <div class="mc-title">Under Development</div>

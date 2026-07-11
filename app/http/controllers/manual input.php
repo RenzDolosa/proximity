@@ -21,6 +21,12 @@ $access = getMenuAccess();
 
 $userId = $_SESSION['user_id'] ?? null;
 
+$stats = [
+  'total_employees' => 0,
+  'active_employees' => 0,
+  'inactive_employees' => 0,
+];
+
 try {
   if (!$userId) throw new Exception("Not logged in");
 
@@ -37,6 +43,24 @@ try {
   $employeesJson = json_encode([]);
 }
 
+if ($databaseConnected) {
+  try {
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employees");
+    $stmt->execute();
+    $stats['total_employees'] = $stmt->fetchColumn();
+
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employees WHERE status = 'Active'");
+    $stmt->execute();
+    $stats['active_employees'] = $stmt->fetchColumn();
+
+    $stmt = $userDb->prepare("SELECT COUNT(*) FROM employees WHERE status = 'Inactive'");
+    $stmt->execute();
+    $stats['inactive_employees'] = $stmt->fetchColumn();
+  } catch (PDOException $e) {
+    $dbError = "Error fetching dashboard data: " . $e->getMessage();
+    error_log($dbError);
+  }
+}
 ?>
 
 <!DOCTYPE html>
@@ -98,15 +122,15 @@ try {
       <h1>Employee Manual Access</h1>
       <div class="stats-bar">
         <div class="stat-item">
-          <span class="stat-number" id="totalEmployees">0</span>
+          <span class="stat-number" id="total_employees"><?php echo $stats['total_employees']; ?></span>
           <span class="stat-label">Total Employees</span>
         </div>
         <div class="stat-item">
-          <span class="stat-number" id="activeEmployees">0</span>
+          <span class="stat-number" id="active_employees"><?php echo $stats['active_employees']; ?></span>
           <span class="stat-label">Active</span>
         </div>
         <div class="stat-item">
-          <span class="stat-number" id="inactiveEmployees">0</span>
+          <span class="stat-number" id="inactive_employees"><?php echo $stats['inactive_employees']; ?></span>
           <span class="stat-label">Inactive</span>
         </div>
       </div>
@@ -142,7 +166,14 @@ try {
         <div class="form-group" style="position: fixed; left: 1%; top: 1%; opacity: 0;">
           <input type="text" id="search_qr" name="qr_code" placeholder="Proximity Code" style="cursor: default;" autocomplete="off" autofocus inputmode="none" enterkeyhint="done">
         </div>
-        <img src="/config/asset.php?t=gnks2" class="proximity-logo" alt="Proximity" loading="lazy">
+        <div class="proximity-logo">
+          <?php
+          $svgPath = ROOT_PATH . '/resource/assets/logo/proximity-logo.svg';
+          if (file_exists($svgPath)) {
+            echo file_get_contents($svgPath);
+          }
+          ?>
+        </div>
       </form>
     </div>
 
@@ -153,7 +184,14 @@ try {
 
       <div class="employee-grid" id="resultsTable">
         <div class="no-results" id="defaultState">
-          <div class="no-results-icon"><img src="/config/asset.php?t=gnks2" alt="Proximity Code" loading="lazy" style="width: 10%; height: 10%;"></div>
+          <div class="no-results-icon">
+            <?php
+            $svgPath = ROOT_PATH . '/resource/assets/icon/nfc-icon.svg';
+            if (file_exists($svgPath)) {
+              echo file_get_contents($svgPath);
+            }
+            ?>
+          </div>
           <h3>Search for Employees</h3>
           <p>Enter a name or proximity code to find employees</p>
         </div>
@@ -174,6 +212,7 @@ try {
   <script src="/config/asset.php?t=j7k8l"></script>
   <script src="/config/asset.php?t=m9n0o"></script>
   <script>
+    let EmployeesBackend = null;
     let UserIdHelper = null;
     let GlobalAudioBackend = null;
 
@@ -181,6 +220,11 @@ try {
     let hasSearched = false;
 
     let currentAudio = null;
+
+    const noResultsIconSvg = <?php
+                              $svgPath = ROOT_PATH . '/resource/assets/icon/nfc-icon.svg';
+                              echo json_encode(file_exists($svgPath) ? file_get_contents($svgPath) : '');
+                              ?>;
 
     // ── Global-audio endpoint ─────────────────────────────────────────
     const AUDIO_TYPE_MAP = {
@@ -280,14 +324,34 @@ try {
 
     let filteredEmployees = [];
 
-    function updateStats() {
-      const total = employees.length;
-      const active = employees.filter(emp => emp.status === 'Active').length;
-      const inactive = total - active;
+    async function updateStatsPanel() {
+      if (!EmployeesBackend) return;
 
-      document.getElementById('totalEmployees').textContent = total;
-      document.getElementById('activeEmployees').textContent = active;
-      document.getElementById('inactiveEmployees').textContent = inactive;
+      try {
+        const response = await fetch(`${EmployeesBackend}?action=stats`, {
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "X-Silent-Request": "true",
+          },
+        });
+
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+        const data = await response.json();
+        if (data.success && data.data) {
+          const stats = data.data;
+
+          const totalEl = document.getElementById("total_employees");
+          const activeEl = document.getElementById("active_employees");
+          const inactiveEl = document.getElementById("inactive_employees");
+
+          if (totalEl) totalEl.textContent = stats.total ?? 0;
+          if (activeEl) activeEl.textContent = stats.active ?? 0;
+          if (inactiveEl) inactiveEl.textContent = stats.inactive ?? 0;
+        }
+      } catch (error) {
+        console.error("Error updating employee counts", error);
+      }
     }
 
     function getInitials(name) {
@@ -401,7 +465,7 @@ try {
       if (!hasSearched) {
         resultsTable.innerHTML = `
           <div class="no-results" id="defaultState">
-            <div class="no-results-icon"><img src="/config/asset.php?t=gnks2" alt="Proximity Code" loading="lazy" style="width: 10%; height: 10%;"></div>
+            <div class="no-results-icon">${noResultsIconSvg}</div>
             <h3>Search for Employees</h3>
             <p>Enter a name or proximity code to find employees</p>
           </div>
@@ -429,25 +493,25 @@ try {
 
       resultsTable.innerHTML = employeeList
         .map(employee => {
-        let avatarContent;
-        const safeFullname = escapeHtml(employee.fullname.toUpperCase());
-        const safePosition = escapeHtml(employee.position.toUpperCase());
-        const safeBrand = escapeHtml(employee.brand.toUpperCase());
-        const safeStatus = escapeHtml(employee.status.toUpperCase());
-        const safeShift = escapeHtml(employee.shift.toUpperCase());
-        const safeViolation = escapeHtml(employee.violation);
-        const safeQrCode = escapeHtml(employee.qr_code);
-        const safeImage = escapeHtml(employee.image);
-        const safeId = escapeHtml(String(employee.id));
+          let avatarContent;
+          const safeFullname = escapeHtml(employee.fullname.toUpperCase());
+          const safePosition = escapeHtml(employee.position.toUpperCase());
+          const safeBrand = escapeHtml(employee.brand.toUpperCase());
+          const safeStatus = escapeHtml(employee.status.toUpperCase());
+          const safeShift = escapeHtml(employee.shift.toUpperCase());
+          const safeViolation = escapeHtml(employee.violation);
+          const safeQrCode = escapeHtml(employee.qr_code);
+          const safeImage = escapeHtml(employee.image);
+          const safeId = escapeHtml(String(employee.id));
 
-        if (safeImage && safeImage.trim() !== '') {
-          avatarContent = `<img src="/public/uploads/user/${safeImage}" alt="${safeFullname}" class="employee-image" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          if (safeImage && safeImage.trim() !== '') {
+            avatarContent = `<img src="/public/uploads/user/${safeImage}" alt="${safeFullname}" class="employee-image" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                       <div class="avatar-fallback" style="display:none;">${getInitials(safeFullname)}</div>`;
-        } else {
-          avatarContent = `<div class="avatar-fallback">${getInitials(safeFullname)}</div>`;
-        }
+          } else {
+            avatarContent = `<div class="avatar-fallback">${getInitials(safeFullname)}</div>`;
+          }
 
-        return `
+          return `
           <div class="employee-card">
             <div class="qr-code" title="Copy Proximity code" style="cursor:pointer;">
               <svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 512 512">
@@ -492,7 +556,7 @@ try {
             </div>
           </div>
         `;
-      }).join('');
+        }).join('');
 
       showAlert(`Found ${employeeList.length} employee${employeeList.length !== 1 ? 's' : ''}`, 'success');
     }
@@ -722,9 +786,9 @@ try {
       if (!ready) return;
 
       loadGlobalAudio();
-      updateStats();
       setupEventListeners();
       renderEmployees();
+      updateStatsPanel();
     });
   </script>
 </body>

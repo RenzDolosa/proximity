@@ -5,18 +5,17 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
 
 const ASSET_TOKENS = [
   // Images / icons / logo / sounds
-  's3t4u' => '/resource/assets/icon/database-icon.png',
+  's3t4u' => '/resource/assets/icon/database-icon.svg',
   'xpet4' => '/resource/assets/icon/excel.svg',
   'g4ld2' => '/resource/assets/icon/face-id.svg',
   'gnks2' => '/resource/assets/icon/nfc-icon.svg',
   'sszj3' => '/resource/assets/icon/qr-icon.svg',
   'rjr54' => '/resource/assets/icon/scan-icon.svg',
-  'asc4s' => '/resource/assets/icon/scanTest.png',
+  'asc4s' => '/resource/assets/icon/scanTest.svg',
 
   'fgbk4' => '/resource/assets/logo/coming-soon.svg',
   'v5w6x' => '/resource/assets/logo/database.svg',
   't43us' => '/resource/assets/logo/manual.svg',
-  'efjg6' => '/resource/assets/logo/mysql-logo.png',
   'dfk34' => '/resource/assets/logo/mysql-logo.svg',
   'sk4ds' => '/resource/assets/logo/mysql.svg',
   'cfk4d' => '/resource/assets/logo/nfc-logo.svg',

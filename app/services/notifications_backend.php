@@ -58,6 +58,9 @@ if ($since && !preg_match('/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/', $since)) 
 }
 
 // ── DB connections ────────────────────────────────────────────────────────────
+$mainDb = null;
+$userDb = null;
+
 try {
   $mainDb = getMainDBConnection();
 } catch (Exception $e) {
@@ -73,13 +76,10 @@ try {
 $alerts = [];
 
 // ── LATE CHECK-IN DETECTION ───────────────────────────────────────────────────
-// Flags employees who checked IN more than 30 minutes after their shift start.
-// Shift format expected: "07:00 AM - 04:00 PM" or "07:00-16:00"
-// Only looks at today's log to keep queries fast.
-try {
-  $todayStart = date('Y-m-d 00:00:00');
-  $todayEnd   = date('Y-m-d 23:59:59');
+$todayStart = date('Y-m-d 00:00:00');
+$todayEnd   = date('Y-m-d 23:59:59');
 
+try {
   $sinceClause = $since
     ? "AND eal.access_timestamp > :since"
     : "";

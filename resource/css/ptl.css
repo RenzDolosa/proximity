@@ -299,6 +299,7 @@ body {
 .sc-card .sc-icon {
   width: 36px;
   height: 36px;
+  padding: 8px;
   border-radius: 8px;
   background: var(--bg);
   display: flex;
@@ -346,6 +347,7 @@ body {
 .menu-card .mc-icon {
   width: 44px;
   height: 44px;
+  padding: 6px;
   border-radius: 10px;
   background: var(--bg);
   display: flex;
@@ -553,7 +555,8 @@ body {
   margin-bottom: 14px;
 }
 
-.db-block img {
+.db-block img,
+.db-block .img {
   width: 32px;
   height: 32px;
   object-fit: contain;

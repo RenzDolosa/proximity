@@ -10,7 +10,7 @@ if (!isLoggedIn()) {
 }
 
 // ── Ensure global audio table exists ─────────────────────────────────────────
-function ensureGlobalAudioTable($pdo)
+function ensureGlobalAudioTable(?PDO $pdo)
 {
   $pdo->exec("CREATE TABLE IF NOT EXISTS global_audio_settings (
         id              INT AUTO_INCREMENT PRIMARY KEY,

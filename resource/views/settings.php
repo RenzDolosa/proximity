@@ -356,7 +356,14 @@ $audioIconMap = [
           <div class="card-body">
 
             <div class="db-block">
-              <img src="/config/asset.php?t=s3t4u" alt="MySQL">
+              <div class="img">
+                <?php
+                $svgPath = ROOT_PATH . '/resource/assets/icon/database-icon.svg';
+                if (file_exists($svgPath)) {
+                  echo file_get_contents($svgPath);
+                }
+                ?>
+              </div>
               <div>
                 <div class="db-name" style="color:<?= $databaseConnected ? '#16a34a' : '#dc2626' ?>;">
                   <?= htmlspecialchars($myDatabase) ?>
@@ -401,14 +408,14 @@ $audioIconMap = [
                   </button>
                 </div>
                 <div>
-                <button data-action-app="mainFrame-logs" class="btn btn-secondary">
-                  <i class="fas fa-history"></i> System Logs
-                </button>
+                  <button data-action-app="mainFrame-logs" class="btn btn-secondary">
+                    <i class="fas fa-history"></i> System Logs
+                  </button>
                 </div>
                 <div>
-                <button data-action-app="mainFrame-myAdmin" class="btn btn-secondary">
-                  <i class="fas fa-database"></i> PHP MyAdmin
-                </button>
+                  <button data-action-app="mainFrame-myAdmin" class="btn btn-secondary">
+                    <i class="fas fa-database"></i> PHP MyAdmin
+                  </button>
                 </div>
               </div>
             <?php endif; ?>

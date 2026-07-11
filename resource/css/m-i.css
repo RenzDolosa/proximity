@@ -331,10 +331,13 @@ body {
   min-height: 300px;
 }
 
-.no-results-icon {
-  font-size: 4rem;
+.no-results-icon svg {
   margin-bottom: 20px;
   opacity: 0.5;
+  width: 4rem;
+  height: 4rem;
+  display: block;
+  fill: currentColor;
 }
 
 .employee-grid:has(.employee-card) {
@@ -493,10 +496,9 @@ body {
     padding: 30px 10px;
   }
 
-  .no-results-icon {
-    font-size: 2rem;
+  .no-results-icon svg {
     margin-bottom: 10px;
-    opacity: 0.5;
+    width: 2rem;
+    height: 2rem;
   }
-
 }

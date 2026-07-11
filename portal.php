@@ -141,11 +141,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       top: 0;
       z-index: 100;
       overflow: hidden;
-      transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1) 0s;
     }
 
     .sidebar:hover {
-      animation: delayed-side-in 0.3s 0.3s forwards;
+      width: var(--sidebar-expanded);
+      transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1) 0.3s;
     }
 
     @keyframes delayed-side-in {
@@ -159,17 +160,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 0 14px;
+      padding: 0 2px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.07);
       white-space: nowrap;
       flex-shrink: 0;
+      color: var(--accent-light, #ffffff);
     }
 
-    .sidebar-logo img {
-      width: 26px;
-      height: 26px;
-      object-fit: contain;
+    .sidebar-logo svg {
+      width: 48px;
+      height: 48px;
+      display: block;
       flex-shrink: 0;
+      fill: currentColor;
     }
 
     .sidebar-logo-text {
@@ -211,6 +214,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     .nav-item {
       display: flex;
       align-items: center;
+      align-content: center;
+      text-align: center;
       gap: 10px;
       padding: 9px 0;
       padding-left: 12px;
@@ -230,11 +235,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       color: #f1f5f9;
     }
 
-    .nav-item i {
-      width: 16px;
-      text-align: center;
-      font-size: 14px;
+    .nav-item i,
+    .nav-item-icon {
       flex-shrink: 0;
+      min-width: 20px;
+      width: 20px;
+      height: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .nav-item-label {
@@ -266,12 +275,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       justify-content: space-between;
       padding: 0 20px;
       z-index: 150;
-      transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1) 0s;
     }
 
-    .sidebar:hover~.topbar,
-    .sidebar:hover~* .topbar {
-      animation: delayed-top-in 0.3s 0.3s forwards;
+    .sidebar:hover~.topbar {
+      left: var(--sidebar-expanded);
+      transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1) 0.3s;
     }
 
     @keyframes delayed-top-in {
@@ -1210,7 +1219,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-logo">
-      <img src="/config/asset.php?t=sk4ds" alt="Logo" style="color: white; filter: invert(1);">
+      <?php
+      $svgPath = ROOT_PATH . '/resource/assets/logo/mysql.svg';
+      if (file_exists($svgPath)) {
+        echo file_get_contents($svgPath);
+      }
+      ?>
       <span class="sidebar-logo-text"><?= htmlspecialchars($myDatabase ?? 'My Database'); ?></span>
     </div>
 
@@ -1223,13 +1237,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       <?php if ($access['proximity']): ?>
         <div class="nav-item" data-action-dir="portal-proximity">
-          <img src="/config/asset.php?t=gnks2" alt="NFC Icon" loading="lazy" style="width: 20px; filter: invert(0.9);"> <span class="nav-item-label">Proximity</span>
+          <div class="nav-item-icon">
+            <?php
+            $svgPath = ROOT_PATH . '/resource/assets/icon/nfc-icon.svg';
+            if (file_exists($svgPath)) {
+              echo file_get_contents($svgPath);
+            }
+            ?>
+          </div>
+          <span class="nav-item-label">Proximity</span>
         </div>
       <?php endif; ?>
 
       <?php if ($access['facial']): ?>
         <div class="nav-item" data-action-dir="portal-facial">
-          <img src="/config/asset.php?t=g4ld2" alt="Face ID" loading="lazy" style="width: 20px; filter: invert(1);"> <span class="nav-item-label">Facial Identification</span>
+          <div class="nav-item-icon">
+            <?php
+            $svgPath = ROOT_PATH . '/resource/assets/icon/face-id.svg';
+            if (file_exists($svgPath)) {
+              echo file_get_contents($svgPath);
+            }
+            ?>
+          </div>
+          <span class="nav-item-label">Facial Identification</span>
         </div>
       <?php endif; ?>
 

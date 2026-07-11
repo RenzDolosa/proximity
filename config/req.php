@@ -24,7 +24,7 @@ if ($portalAccessGranted) {
   }
 }
 
-function getCurrentUserPasswordHash($userId)
+function getCurrentUserPasswordHash(int $userId)
 {
   try {
     $pdo = getMainDBConnection();

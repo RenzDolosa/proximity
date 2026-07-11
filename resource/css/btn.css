@@ -105,6 +105,14 @@
   font-size: 0.8rem;
 }
 
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
 .tab-bar,
 .tab-nav,
 .shortcut-bar {

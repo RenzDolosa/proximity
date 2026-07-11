@@ -55,11 +55,11 @@ $currentUserId = $_SESSION['user_id'];
 // Employee Log Manager Class (integrates with QR Search Backend)
 class EmployeeLogManager
 {
-  private $conn;
-  private $userId;
-  private $db_name;
+  private ?PDO $conn = null;
+  private ?int $userId = null;
+  private string $db_name;
 
-  public function __construct($userId)
+  public function __construct(int $userId)
   {
     $this->userId = $userId;
     $this->db_name = USER_DB_PREFIX; // USER_DB_PREFIX . $userId;
@@ -170,7 +170,7 @@ class EmployeeLogManager
   }
 
   // Add employee to access log
-  public function addToLog($logData)
+  public function addToLog(array $logData)
   {
     try {
       // Validate required fields
@@ -272,7 +272,7 @@ class EmployeeLogManager
   }
 
   // Get employee from main employees table (for validation)
-  public function getEmployeeByQR($qrCode)
+  public function getEmployeeByQR(string $qrCode)
   {
     try {
       $query = "SELECT * FROM employees WHERE qr_code = :qr_code";
@@ -303,7 +303,7 @@ class EmployeeLogManager
   }
 
   // Update existing log entry
-  public function updateLogEntry($logId, $updateData)
+  public function updateLogEntry(int $logId, array $updateData)
   {
     try {
       $setParts = [];
@@ -352,7 +352,7 @@ class EmployeeLogManager
   }
 
   // Delete log entry
-  public function deleteLogEntry($logId)
+  public function deleteLogEntry(int $logId)
   {
     try {
       $query = "DELETE FROM employee_access_log WHERE id = :id";

@@ -13,7 +13,13 @@ if (!isset($_GET['serve_file']) && !isset($_GET['api_info']) && !isset($_GET['he
 
 // ── Safe fallback sanitizeInput() ─────────────────────────────────────────────
 if (!function_exists('sanitizeInput')) {
-  function sanitizeInput($input)
+  /**
+   * Sanitize input for safe output.
+   *
+   * @param mixed $input
+   * @return string
+   */
+  function sanitizeInput($input): string
   {
     if (is_null($input)) return '';
     return htmlspecialchars(strip_tags(trim((string)$input)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -57,7 +63,7 @@ const ALLOWED_GET_ACTIONS = [
 const RESERVATION_TTL_SECONDS = 300;
 
 // ── Safe json_decode wrapper ──────────────────────────────────────────────────
-function safeJsonDecode($json, $assoc = true, $depth = 32)
+function safeJsonDecode(string $json, bool $assoc = true, int $depth = 32)
 {
   if (!is_string($json) || $json === '') return null;
   try {
@@ -85,9 +91,9 @@ if (isset($_GET['serve_file'])) {
 // ─────────────────────────────────────────────────────────────────────────────
 class Database
 {
-  private $mainConn;
-  private $userConn;
-  private $currentUserId;
+  private ?PDO $mainConn = null;
+  private ?PDO $userConn = null;
+  private ?int $currentUserId = null;
 
   public function __construct()
   {
@@ -133,11 +139,11 @@ class Database
 
 class EmployeeManager
 {
-  private $conn;
-  private $table = 'code';
-  private $userId;
+  private ?PDO $conn = null;
+  private string $table = 'code';
+  private ?int $userId = null;
 
-  public function __construct($db)
+  public function __construct(Database|PDO $db)
   {
     if ($db instanceof Database) {
       $this->conn   = $db->getUserConnection();
@@ -148,7 +154,7 @@ class EmployeeManager
     }
   }
 
-  public function createEmployee($data)
+  public function createEmployee(array $data): mixed
   {
     $query = "INSERT INTO " . $this->table . " 
                       (qr_code, is_active) 
@@ -333,7 +339,7 @@ class EmployeeManager
     ];
   }
 
-  public function updateEmployee($id, $data)
+  public function updateEmployee(int $id, array $data)
   {
     $current = $this->getEmployee($id);
 
@@ -365,7 +371,7 @@ class EmployeeManager
     return $result;
   }
 
-  public function toggleStatus($id)
+  public function toggleStatus(int $id)
   {
     $query = "UPDATE " . $this->table . " 
             SET is_active = NOT is_active, updated_at = :updated_at
@@ -403,7 +409,7 @@ class EmployeeManager
     return false;
   }
 
-  private function syncEmployeeStatusWithCode($qr_code, $codeIsActive)
+  private function syncEmployeeStatusWithCode(string $qr_code, int $codeIsActive)
   {
     try {
       $userConn = getUserDBConnection($this->userId);
@@ -527,7 +533,7 @@ class EmployeeManager
     }
   }
 
-  public function deleteEmployee($id)
+  public function deleteEmployee(int $id)
   {
     $employee = $this->getEmployee($id);
 
@@ -543,7 +549,7 @@ class EmployeeManager
     return $result;
   }
 
-  public function getEmployee($id)
+  public function getEmployee(int $id)
   {
     $query = "SELECT * FROM " . $this->table . " WHERE id = :id";
     $stmt  = $this->conn->prepare($query);
@@ -552,7 +558,7 @@ class EmployeeManager
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
-  public function getEmployeeByQR($qr_code)
+  public function getEmployeeByQR(string $qr_code)
   {
     $query = "SELECT * FROM " . $this->table . " WHERE qr_code = :qr_code";
     $stmt  = $this->conn->prepare($query);
@@ -589,7 +595,7 @@ class EmployeeManager
     }
   }
 
-  public function deleteEmployeesByIds($employeeIds)
+  public function deleteEmployeesByIds(array $employeeIds)
   {
     if (!is_array($employeeIds) || empty($employeeIds)) {
       return 0;
@@ -648,7 +654,7 @@ class EmployeeManager
     $stmt->execute([':stale' => $staleCutoff]);
   }
 
-  public function reserveCode($qr_code, $reservedBy)
+  public function reserveCode(string $qr_code, int $reservedBy)
   {
     $this->clearStaleReservations();
 
@@ -669,7 +675,7 @@ class EmployeeManager
     return $stmt->rowCount() > 0;
   }
 
-  public function releaseCode($qr_code, $reservedBy)
+  public function releaseCode(string $qr_code, int $reservedBy)
   {
     $stmt = $this->conn->prepare(
       "UPDATE " . $this->table . "
@@ -685,19 +691,18 @@ class EmployeeManager
 // ─────────────────────────────────────────────────────────────────────────────
 // FileUploader — only used here for serving/deleting images referenced in logs
 // ─────────────────────────────────────────────────────────────────────────────
-function sanitizeFilename($filename)
+function sanitizeFilename(string $filename)
 {
   return preg_replace('/[^a-zA-Z0-9_\.-]/', '', $filename);
 }
 
 class FileUploader
 {
-  private $upload_dir;
-  private $allowed_types = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-  private $max_size = 5 * 1024 * 1024;
-  private $userId;
+  private string $upload_dir;
+  private array $allowed_types = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+  private int $max_size = 5 * 1024 * 1024;
 
-  public function __construct($userId = null)
+  public function __construct(?int $userId = null)
   {
     $this->userId     = $userId ?? $_SESSION['user_id'] ?? 'default';
     $this->upload_dir = '../../public/uploads/user/';
@@ -707,7 +712,7 @@ class FileUploader
     }
   }
 
-  public function uploadImage($file)
+  public function uploadImage(array $file)
   {
     if (!isset($file['tmp_name']) || $file['error'] !== UPLOAD_ERR_OK) {
       return false;
@@ -733,7 +738,7 @@ class FileUploader
     return false;
   }
 
-  public function deleteImage($filename)
+  public function deleteImage(?string $filename): bool
   {
     if ($filename && file_exists($this->upload_dir . $filename)) {
       return unlink($this->upload_dir . $filename);
@@ -741,7 +746,7 @@ class FileUploader
     return false;
   }
 
-  public function getImagePath($filename)
+  public function getImagePath(?string $filename): string
   {
     return $this->upload_dir . $filename;
   }
@@ -751,7 +756,7 @@ class QRCodeGenerator
 {
   const QR_CODE_LENGTH = 41;
 
-  public static function generateQRCode($userId = null, $length = self::QR_CODE_LENGTH)
+  public static function generateQRCode(?int $userId = null, int $length = self::QR_CODE_LENGTH)
   {
     $userId = $userId ?? $_SESSION['user_id'] ?? '0';
     $chars  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
@@ -1548,7 +1553,7 @@ try {
 // ─────────────────────────────────────────────────────────────────────────────
 // FILE SERVING
 // ─────────────────────────────────────────────────────────────────────────────
-function serveFile($filepath, $filename = null)
+function serveFile(string $filepath, ?string $filename = null)
 {
   if (!file_exists($filepath)) {
     http_response_code(404);

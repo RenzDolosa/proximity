@@ -189,10 +189,10 @@ function invalidateQrEmployeeCache(): void
 // ─────────────────────────────────────────────────────────────────────────────
 class Database
 {
-  private $conn;
-  private $userId;
+  private ?PDO $conn = null;
+  private ?int $userId = null;
 
-  public function __construct($userId)
+  public function __construct(?int $userId)
   {
     $this->userId = $userId;
   }
@@ -262,10 +262,10 @@ class Database
 
 class QueryLogger
 {
-  private $conn;
-  private $userId;
+  private ?PDO $conn = null;
+  private ?int $userId = null;
 
-  public function __construct($conn, $userId)
+  public function __construct(?PDO $conn, ?int $userId)
   {
     $this->conn   = $conn;
     $this->userId = $userId;
@@ -365,7 +365,7 @@ class QueryLogger
     }
   }
 
-  public function logSearchQuery($queryType, $searchTerm, $searchParams, $resultsCount, $auditData, $executionTime, $success, $errorMessage = null): bool
+  public function logSearchQuery(?string $queryType, ?string $searchTerm, array $searchParams, int $resultsCount, array $auditData, int $executionTime, bool $success, ?string $errorMessage = null): bool
   {
     if (!$this->conn) return false;
     try {
@@ -399,11 +399,11 @@ class QueryLogger
 
 class LiveSearchHandler
 {
-  private $conn;
-  private $logger;
-  private $userId;
+  private ?PDO $conn = null;
+  private ?QueryLogger $logger = null;
+  private ?int $userId = null;
 
-  public function __construct($conn, $logger, $userId)
+  public function __construct(?PDO $conn, ?QueryLogger $logger, ?int $userId)
   {
     $this->conn   = $conn;
     $this->logger = $logger;

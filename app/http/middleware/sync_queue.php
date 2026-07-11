@@ -161,7 +161,7 @@ function sanitizeUA(?string $ua): string
  * Convert _queued_at (epoch ms from IndexedDB) to a MySQL DATETIME string.
  * Falls back to NOW() if missing or malformed.
  */
-function queuedAtToDatetime($queuedAt): string
+function queuedAtToDatetime(?float $queuedAt): string
 {
   if ($queuedAt && is_numeric($queuedAt)) {
     $ts = (int) round($queuedAt / 1000);
@@ -193,7 +193,7 @@ function resolveToggleStatus(PDO $pdo, string $qrCode): string
     return ($last === 'IN') ? 'OUT' : 'IN';
   } catch (PDOException $e) {
     error_log('[sync_queue] resolveToggleStatus error: ' . $e->getMessage());
-    return 'IN'; // safe default
+    return 'IN';
   }
 }
 

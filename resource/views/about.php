@@ -37,10 +37,12 @@ $access = getMenuAccess();
     <!-- ── Hero ── -->
     <div class="about-hero">
       <div class="hero-logo">
-        <img
-          src="/config/asset.php?t=aur2d"
-          alt="Proximity 3PL Logo"
-          onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+        <?php
+        $svgPath = ROOT_PATH . '/resource/assets/logo/proximity-logo.svg';
+        if (file_exists($svgPath)) {
+          echo file_get_contents($svgPath);
+        }
+        ?>
         <span class="hero-icon-fallback" style="display:none;">
           <i class="fas fa-satellite-dish"></i>
         </span>

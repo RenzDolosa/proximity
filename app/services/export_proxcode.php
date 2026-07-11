@@ -104,7 +104,6 @@ try {
       'total_pages' => $totalPages,
       'total_records' => $totalRecords,
       'per_page' => $limit,
-      'per_page' => $limit,
       'has_next' => $page < $totalPages,
       'has_prev' => $page > 1
     ]

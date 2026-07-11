@@ -13,7 +13,13 @@ if (!isset($_GET['serve_file']) && !isset($_GET['api_info']) && !isset($_GET['he
 
 // ── Safe fallback sanitizeInput() ─────────────────────────────────────────────
 if (!function_exists('sanitizeInput')) {
-  function sanitizeInput($input)
+  /**
+   * Sanitize input for safe output.
+   *
+   * @param mixed $input
+   * @return string
+   */
+  function sanitizeInput($input): string
   {
     if (is_null($input)) return '';
     return htmlspecialchars(strip_tags(trim((string)$input)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -49,7 +55,7 @@ const ALLOWED_GET_ACTIONS = [
 ];
 
 // ── Safe json_decode wrapper ──────────────────────────────────────────────────
-function safeJsonDecode($json, $assoc = true, $depth = 32)
+function safeJsonDecode(mixed $json, bool $assoc = true, int $depth = 32)
 {
   if (!is_string($json) || $json === '') return null;
   try {
@@ -77,9 +83,9 @@ if (isset($_GET['serve_file'])) {
 // ─────────────────────────────────────────────────────────────────────────────
 class Database
 {
-  private $mainConn;
-  private $userConn;
-  private $currentUserId;
+  private ?PDO $mainConn = null;
+  private ?PDO $userConn = null;
+  private ?int $currentUserId = null;
 
   public function __construct()
   {
@@ -128,12 +134,12 @@ class Database
 // ─────────────────────────────────────────────────────────────────────────────
 class AccessLogManager
 {
-  private $conn;
+  private PDO $conn;
   private $logTable    = 'employee_access_log';
   private $checkTable  = 'check_in_out';
-  private $userId;
+  private ?int $userId = null;
 
-  public function __construct($db)
+  public function __construct(Database|PDO $db)
   {
     if ($db instanceof Database) {
       $this->conn   = $db->getUserConnection();
@@ -373,7 +379,7 @@ class AccessLogManager
   }
 
   // ── Single log entry ───────────────────────────────────────────────────
-  public function getLog($id)
+  public function getLog(int $id)
   {
     $stmt = $this->conn->prepare(
       "SELECT * FROM {$this->logTable} WHERE id = :id"
@@ -384,7 +390,7 @@ class AccessLogManager
   }
 
   // ── Log entry by QR code ───────────────────────────────────────────────
-  public function getLogByQR($qr_code)
+  public function getLogByQR(string $qr_code)
   {
     $stmt = $this->conn->prepare(
       "SELECT * FROM {$this->logTable} WHERE qr_code = :qr_code ORDER BY id DESC LIMIT 1"
@@ -395,7 +401,7 @@ class AccessLogManager
   }
 
   // ── IN/OUT history for one employee from check_in_out ─────────────────
-  public function getCheckInOutHistory($employeeId)
+  public function getCheckInOutHistory(int $employeeId)
   {
     $stmt = $this->conn->prepare(
       "SELECT * FROM {$this->checkTable}
@@ -408,7 +414,7 @@ class AccessLogManager
   }
 
   // ── Current IN/OUT status for one employee (most recent check_in_out row)
-  public function getCurrentCheckStatus($employeeId, $qrCode = null)
+  public function getCurrentCheckStatus(int $employeeId, string $qrCode = null)
   {
     if ($qrCode) {
       $stmt = $this->conn->prepare(
@@ -433,7 +439,7 @@ class AccessLogManager
   }
 
   // ── DELETE: single log entry ───────────────────────────────────────────
-  public function deleteLog($id)
+  public function deleteLog(int $id)
   {
     $log = $this->getLog($id);
 
@@ -592,18 +598,18 @@ class AccessLogManager
 // ─────────────────────────────────────────────────────────────────────────────
 // FileUploader — only used here for serving/deleting images referenced in logs
 // ─────────────────────────────────────────────────────────────────────────────
-function sanitizeFilename($filename)
+function sanitizeFilename(string $filename)
 {
   return preg_replace('/[^a-zA-Z0-9_\.-]/', '', $filename);
 }
 
 class FileUploader
 {
-  private $upload_dir;
-  private $allowed_types = ['jpg', 'jpeg', 'png', 'gif'];
-  private $max_size      = 5 * 1024 * 1024;
+  private string $upload_dir;
+  private array $allowed_types = ['jpg', 'jpeg', 'png', 'gif'];
+  private int $max_size      = 5 * 1024 * 1024;
 
-  public function __construct($userId = null)
+  public function __construct(?int $userId = null)
   {
     $this->upload_dir = rtrim($_SERVER['DOCUMENT_ROOT'], '/') . '/public/uploads/user/';
 
@@ -618,12 +624,12 @@ class FileUploader
     }
   }
 
-  public function getImagePath($filename)
+  public function getImagePath(?string $filename): string
   {
     return $this->upload_dir . basename($filename);
   }
 
-  public function imageExists($filename)
+  public function imageExists(?string $filename): bool
   {
     if (empty($filename)) return false;
     $filepath = $this->getImagePath($filename);
@@ -1117,7 +1123,7 @@ try {
 // ─────────────────────────────────────────────────────────────────────────────
 // File-serving helper (for images referenced in log rows)
 // ─────────────────────────────────────────────────────────────────────────────
-function serveFile($filepath, $filename = null)
+function serveFile(string $filepath, string $filename = null)
 {
   if (!file_exists($filepath)) {
     http_response_code(404);

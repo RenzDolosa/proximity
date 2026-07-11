@@ -39,7 +39,14 @@ if ($page === 'forget') {
 
   <div class="container">
     <div class="header">
-      <div><img src="/config/asset.php?t=v5w6x" alt="My Database Logo" class="logo" loading="lazy"></div>
+      <div class="logo">
+        <?php
+        $svgPath = ROOT_PATH . '/resource/assets/logo/database.svg';
+        if (file_exists($svgPath)) {
+          echo file_get_contents($svgPath);
+        }
+        ?>
+      </div>
       <h2>Proximity Data</h2>
       <p class="subtitle">Sign in to your Proximity Database</p>
     </div>

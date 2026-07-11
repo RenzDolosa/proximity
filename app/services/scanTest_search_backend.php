@@ -44,14 +44,14 @@ $currentUserId = $_SESSION['user_id'];
 
 class Database
 {
-  private $host;
-  private $db_name;
-  private $username;
-  private $password;
-  private $conn;
-  private $userId;
+  private ?string $host = null;
+  private ?string $db_name = null;
+  private ?string $username = null;
+  private ?string $password = null;
+  private ?PDO $conn = null;
+  private ?int $userId = null;
 
-  public function __construct($userId)
+  public function __construct(?int $userId)
   {
     $this->userId   = $userId;
     $this->db_name  = USER_DB_PREFIX;
@@ -94,17 +94,17 @@ class Database
 
 class LiveSearchHandler
 {
-  private $conn;
-  private $table = 'employees';
-  private $userId;
+  private ?PDO $conn = null;
+  private ?string $table = 'employees';
+  private ?int $userId = null;
 
-  public function __construct($db, $userId)
+  public function __construct(Database|PDO $db, ?int $userId)
   {
     $this->conn   = $db;
     $this->userId = $userId;
   }
 
-  public function getEmployeeByQR($qr_code)
+  public function getEmployeeByQR(string $qr_code)
   {
     try {
       $stmt = $this->conn->prepare(
@@ -158,7 +158,7 @@ class LiveSearchHandler
     }
   }
 
-  public function getEmployee($id)
+  public function getEmployee(int $id)
   {
     try {
       $stmt = $this->conn->prepare(

@@ -101,7 +101,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <div class="container">
     <div class="header">
-      <div><img src="/config/asset.php?t=v5w6x" alt="My Database Logo" class="logo" loading="lazy"></div>
+      <div class="logo">
+        <?php
+        $svgPath = ROOT_PATH . '/resource/assets/logo/database.svg';
+        if (file_exists($svgPath)) {
+          echo file_get_contents($svgPath);
+        }
+        ?>
+      </div>
       <h2>Forgot Password</h2>
       <p class="subtitle">Enter your email address and we'll send you instructions to reset your password.</p>
     </div>

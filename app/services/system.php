@@ -142,7 +142,14 @@ if ($databaseConnected) {
             <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; width: 8px; cursor: default;" autocomplete="off" autofocus inputmode="none" enterkeyhint="done">
           </div>
         </div>
-        <img src="/config/asset.php?t=gnks2" alt="Proximity" loading="lazy" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
+        <div style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
+          <?php
+          $svgPath = ROOT_PATH . '/resource/assets/icon/nfc-icon.svg';
+          if (file_exists($svgPath)) {
+            echo file_get_contents($svgPath);
+          }
+          ?>
+        </div>
       </form>
       <div class="form-row-btn">
         <div class="form-row">
@@ -175,7 +182,15 @@ if ($databaseConnected) {
           <?php if (canAccess($permissions, 'export-system')) : ?>
             <div class="dropdown">
               <button class="btn add-dropdown" tabindex="-1" id="exportTrigger" onclick="toggleExportOptions()">
-                <img src="/config/asset.php?t=xpet4" style="height: 20px; filter: invert(1);"> Export Data
+                <div class="btn-icon">
+                  <?php
+                  $svgPath = ROOT_PATH . '/resource/assets/icon/excel.svg';
+                  if (file_exists($svgPath)) {
+                    echo file_get_contents($svgPath);
+                  }
+                  ?>
+                </div>
+                Export Data
                 <span class="add-arrow">▼</span>
               </button>
               <div class="add-options-menu" id="exportOptionsMenu">

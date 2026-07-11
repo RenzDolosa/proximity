@@ -154,7 +154,6 @@ function setupEventListeners() {
   });
 
   searchInput.addEventListener("input", function (e) {
-
     if (isProcessing) return;
 
     clearTimeout(searchTimeout);
@@ -172,7 +171,7 @@ function setupEventListeners() {
     searchTimeout = setTimeout(() => {
       const finalQuery = searchInput.value.trim();
       if (finalQuery !== "") captureAndSearch(finalQuery);
-    }, 400);
+    }, 200);
   });
 
   searchInput.addEventListener("paste", function (e) {
@@ -196,7 +195,7 @@ function setupEventListeners() {
   setTimeout(() => {
     searchInput.value = "";
     searchInput.focus();
-  }, 300);
+  }, 200);
 }
 
 function captureAndSearch(query) {
@@ -348,8 +347,8 @@ async function searchEmployees(query) {
       currentResults = Array.isArray(data.data) ? data.data : [data.data];
 
       if (currentResults.length === 0) {
-        messageEl.innerHTML = `<p class="no-results-message">No results found. 🔍</p>`;
-        playNoResultSound();
+        messageEl.innerHTML = `<p class="no-results-message">Please tap again.</p>`;
+        // playNoResultSound();
         return;
       }
 

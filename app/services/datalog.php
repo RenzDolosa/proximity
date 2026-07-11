@@ -45,9 +45,12 @@ if ($databaseConnected) {
       FROM employee_access_log
     ");
     $stmt->execute([
-      ':today_start1' => $todayStart, ':today_end1' => $todayEnd,
-      ':today_start2' => $todayStart, ':today_end2' => $todayEnd,
-      ':today_start3' => $todayStart, ':today_end3' => $todayEnd,
+      ':today_start1' => $todayStart,
+      ':today_end1' => $todayEnd,
+      ':today_start2' => $todayStart,
+      ':today_end2' => $todayEnd,
+      ':today_start3' => $todayStart,
+      ':today_end3' => $todayEnd,
     ]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -178,7 +181,14 @@ if ($databaseConnected) {
             <input type="text" class="search_qr" id="search_qr" name="qr_code" placeholder="Proximity Code" style="height: 8px; width: 8px; cursor: default;" autocomplete="off" autofocus inputmode="none" enterkeyhint="done">
           </div>
         </div>
-        <img src="/config/asset.php?t=gnks2" alt="Proximity" loading="lazy" style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
+        <div style="position: absolute; right: 24px; bottom: 10%; width: 50px; height: 50px;">
+          <?php
+          $svgPath = ROOT_PATH . '/resource/assets/icon/nfc-icon.svg';
+          if (file_exists($svgPath)) {
+            echo file_get_contents($svgPath);
+          }
+          ?>
+        </div>
       </form>
       <div class="form-row-btn">
         <div class="form-row">
@@ -191,10 +201,17 @@ if ($databaseConnected) {
           <?php if (canAccess($permissions, 'export-datalog')) : ?>
             <div class="dropdown">
               <button class="btn add-dropdown" id="exportTrigger" onclick="toggleExportOptions()">
-                <img src="/config/asset.php?t=xpet4" style="height: 20px; filter: invert(1);"> Export Data
+                <div class="btn-icon">
+                  <?php
+                  $svgPath = ROOT_PATH . '/resource/assets/icon/excel.svg';
+                  if (file_exists($svgPath)) {
+                    echo file_get_contents($svgPath);
+                  }
+                  ?>
+                </div>
+                Export Data
                 <span class="add-arrow">▼</span>
               </button>
-
               <div class="add-options-menu" id="exportOptionsMenu">
                 <button style="display:flex; align-items:center;" onclick="exportAllData(); hideExportOptions();"><img src="/config/asset.php?t=xpet4" style="height: 20px; margin-right: 5px;">Export All Data</button>
                 <button style="display:flex; align-items:center;" onclick="exportFilteredData(); hideExportOptions();"><img src="/config/asset.php?t=xpet4" style="height: 20px; margin-right: 5px;">Export Filtered Data</button>
@@ -255,7 +272,14 @@ if ($databaseConnected) {
             <h3 id="inactive_employees"><?php echo $stats['inactive_employees']; ?></h3>
           </div>
           <div style="display: flex; gap: 10px;">
-            <div class="stat-item"><img src="../../resource/assets/icon/scan-icon.svg" alt="Scan Icon" loading="lazy"></div>
+            <div class="stat-item">
+              <?php
+              $svgPath = ROOT_PATH . '/resource/assets/icon/scan-icon.svg';
+              if (file_exists($svgPath)) {
+                echo file_get_contents($svgPath);
+              }
+              ?>
+            </div>
             <p>Scanned Today</p>
             <h3 id="today_attendance"><?php echo $stats['today_attendance']; ?></h3>
           </div>

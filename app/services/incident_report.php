@@ -12,7 +12,7 @@ if (!isLoggedIn()) {
   }
 }
 
-function ensureCompanySettingsTable($pdo)
+function ensureCompanySettingsTable(?PDO $pdo)
 {
   $pdo->exec("CREATE TABLE IF NOT EXISTS global_company_settings (
         id           INT AUTO_INCREMENT PRIMARY KEY,
