@@ -3107,7 +3107,7 @@ async function handleFormSubmit(e) {
       if (nameData.success && nameData.total > 0) {
         const conflict = nameData.data.find(
           (e) =>
-            e.fullname.toLowerCase().trim() === fullname.toLowerCase().trim() &&
+            (e.fullname || "").toLowerCase().trim() === fullname.toLowerCase().trim() &&
             String(e.id) !== String(originalId),
         );
         if (conflict) {
@@ -3130,7 +3130,7 @@ async function handleFormSubmit(e) {
         )
           return false;
         return (
-          emp.fullname.toLowerCase().trim() === fullname.toLowerCase().trim()
+          (emp.fullname || "").toLowerCase().trim() === fullname.toLowerCase().trim()
         );
       });
       if (isDuplicate) {
