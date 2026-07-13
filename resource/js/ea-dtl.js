@@ -14,7 +14,12 @@
  */
 async function fetchAllEmployeesForExport(filters = {}) {
   try {
-    const params = new URLSearchParams({ action: "get", page: 1, limit: 999999 });
+    const params = new URLSearchParams({
+      action: "get",
+      page: 1,
+      limit: 999999,
+      filter_options: "0"
+    });
 
     for (const [key, value] of Object.entries(filters)) {
       if (key === "position" && value === "__none__") {

@@ -345,38 +345,63 @@ function _ealEsc(str) {
 // CORE FETCH HELPER
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Fetch every row from the backend, bypassing pagination.
+ * Passes an arbitrarily large limit so the server returns everything in one shot.
+ * Optionally forwards active filter params so the server-side WHERE clause matches.
+ *
+ * @param {Object} filters  Key-value filter map (same shape as activeFilters in dtl.js)
+ * @returns {Promise<Array>}
+ */
 async function fetchAllAttendanceForExport(filters = {}) {
-  const params = new URLSearchParams({ action: "get", page: 1, limit: 999999 });
+  try {
+    const params = new URLSearchParams({
+      action: "get",
+      page: 1,
+      limit: 999999,
+    });
 
-  for (const [key, value] of Object.entries(filters)) {
-    const noneMap = [
-      "position",
-      "brand",
-      "status",
-      "shift",
-      "violation",
-      "user_id",
-    ];
-    if (noneMap.includes(key) && value === "__none__") {
-      params.append(key + "_none", "1");
-    } else if (key === "user_id") {
-      params.append("gate_name", value);
-    } else {
-      params.append(key, value);
+    for (const [key, value] of Object.entries(filters)) {
+      const noneMap = [
+        "position",
+        "brand",
+        "status",
+        "shift",
+        "violation",
+        "user_id",
+      ];
+      if (noneMap.includes(key) && value === "__none__") {
+        params.append(key + "_none", "1");
+      } else if (key === "user_id") {
+        params.append("gate_name", value);
+      } else {
+        params.append(key, value);
+      }
     }
+
+    const response = await fetch(`${AttendanceBackend}?${params.toString()}`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.success) {
+      return data.data || [];
+    } else {
+      throw new Error(data.message || "Failed to fetch employee data");
+    }
+  } catch (error) {
+    console.error("Fetch employees error:", error);
+    throw error;
   }
-
-  const response = await fetch(`${AttendanceBackend}?${params}`, {
-    headers: {
-      "Content-Type": "application/json",
-      "X-Requested-With": "XMLHttpRequest",
-    },
-  });
-
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const data = await response.json();
-  if (!data.success) throw new Error(data.message || "Fetch failed");
-  return data.data || [];
 }
 
 // Build a readable filter summary for the log

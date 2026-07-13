@@ -1571,51 +1571,66 @@ try {
         $page  = max(1, (int)($_GET['page']  ?? 1));
         $limit = max(1, (int)($_GET['limit'] ?? 25));
 
+        // ── Only run the expensive DISTINCT filter-options scan when it's
+        //    actually needed: the caller is applying a filter, or explicitly
+        //    asked for it (e.g. first page load, to seed autocomplete lists).
+        //    Plain pagination / sorting / silent polls skip it entirely.
+        $filterFieldKeys  = array_diff(array_keys($filters), ['sort_col', 'sort_dir']);
+        $hasFilterFields  = !empty($filterFieldKeys);
+        $filterOptionsReq = $_GET['filter_options'] ?? null;
+        $wantFilterOptions = $filterOptionsReq === '0'
+          ? false
+          : ($filterOptionsReq === '1' ? true : $hasFilterFields);
+
         try {
           $result = $employeeManager->getEmployees($filters, $page, $limit);
-          $filterOptions = $employeeManager->getFilterOptions($filters);
 
-          foreach ($filterOptions as &$fo) {
-            $fo['image_exists'] = !empty($fo['image']) && $fileUploader->imageExists($fo['image']);
-          }
-          unset($fo);
+          $response['success'] = true;
+          $response['data']    = $result['data'];
+          $response['total']   = $result['total'];
+          $response['page']    = $page;
+          $response['pages']   = ceil($result['total'] / $limit);
 
-          $fieldFilterOptions = [
-            'id'          => [],
-            'fullname'    => [],
-            'position'    => [],
-            'brand'       => [],
-            'status'      => [],
-            'shift'       => [],
-            'violation'   => [],
-            'qr_code'     => [],
-          ];
-          foreach ($filterOptions as $row) {
-            foreach ($fieldFilterOptions as $field => $_) {
-              $val = $row[$field] ?? null;
-              if ($val !== null && $val !== '') {
-                $fieldFilterOptions[$field][] = $row;
+          if ($wantFilterOptions) {
+            $filterOptions = $employeeManager->getFilterOptions($filters);
+
+            foreach ($filterOptions as &$fo) {
+              $fo['image_exists'] = !empty($fo['image']) && $fileUploader->imageExists($fo['image']);
+            }
+            unset($fo);
+
+            $fieldFilterOptions = [
+              'id'          => [],
+              'fullname'    => [],
+              'position'    => [],
+              'brand'       => [],
+              'status'      => [],
+              'shift'       => [],
+              'violation'   => [],
+              'qr_code'     => [],
+            ];
+            foreach ($filterOptions as $row) {
+              foreach ($fieldFilterOptions as $field => $_) {
+                $val = $row[$field] ?? null;
+                if ($val !== null && $val !== '') {
+                  $fieldFilterOptions[$field][] = $row;
+                }
               }
             }
-          }
-          foreach ($fieldFilterOptions as $field => &$bucket) {
-            $seen = [];
-            $bucket = array_values(array_filter($bucket, function ($r) use ($field, &$seen) {
-              $v = $r[$field] ?? '';
-              if (isset($seen[$v])) return false;
-              $seen[$v] = true;
-              return true;
-            }));
-          }
-          unset($bucket);
+            foreach ($fieldFilterOptions as $field => &$bucket) {
+              $seen = [];
+              $bucket = array_values(array_filter($bucket, function ($r) use ($field, &$seen) {
+                $v = $r[$field] ?? '';
+                if (isset($seen[$v])) return false;
+                $seen[$v] = true;
+                return true;
+              }));
+            }
+            unset($bucket);
 
-          $response['success']              = true;
-          $response['data']                 = $result['data'];
-          $response['total']                = $result['total'];
-          $response['page']                 = $page;
-          $response['pages']                = ceil($result['total'] / $limit);
-          $response['filter_options']       = $filterOptions;
-          $response['field_filter_options'] = $fieldFilterOptions;
+            $response['filter_options']       = $filterOptions;
+            $response['field_filter_options'] = $fieldFilterOptions;
+          }
         } catch (Exception $e) {
           error_log("getEmployees error: " . $e->getMessage());
           $response['message'] = 'Error retrieving employees.';

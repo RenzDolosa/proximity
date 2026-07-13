@@ -242,9 +242,9 @@ if ($databaseConnected) {
                   }, (_, i) =>
                   `<tr class="skel-row" style="animation-delay:${i*60}ms;background:white;">
                     <td class="sn-cell" style="padding:10px 8px;height:52px;vertical-align:middle;">${pulse('24px','10px','4px')}</td>
-                    <td class="emp-img" style="padding:10px 8px;height:52px;text-align:center;vertical-align:middle;">${pulse('44px','44px','50%')}</td>
+                    <td class="emp-img" style="padding:10px 8px;height:52px;text-align:center;vertical-align:middle;">${pulse('45px','45px','50%')}</td>
                     <td class="emp-proximity" style="padding:10px 8px;height:52px;text-align:center;vertical-align:middle;">${pulse('28px','28px','50%')}</td>
-                    <td style="padding:10px 8px;vertical-align:middle;">
+                    <td class="emp-remark" style="padding:10px 8px;vertical-align:middle;">
                       <div style="display:flex;flex-direction:column;gap:5px;align-items:center;text-align:center;">${pulse('30%')}${pulse('40%', '10px')}</div>
                     </td>
                     <td style="padding:10px 8px;height:52px;text-align:start;vertical-align:middle;">${pulse('50px','22px','11px')}</td>
@@ -518,6 +518,10 @@ if ($databaseConnected) {
       edit: <?= json_encode(canAccess($permissions, 'edit-proximity')) ?>,
       delete: <?= json_encode(canAccess($permissions, 'delete-single-proximity')) ?>
     };
+    window.NfcIconSVG = <?php
+                        $svgPath = ROOT_PATH . '/resource/assets/icon/nfc-icon.svg';
+                        echo json_encode(file_exists($svgPath) ? file_get_contents($svgPath) : '');
+                        ?>;
   </script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>

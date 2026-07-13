@@ -18,6 +18,7 @@ async function fetchAllEmployeesForExport(filters = {}) {
       action: "get",
       page: 1,
       limit: 999999,
+      filter_options: "0", // exports need full matching rows only, not the distinct scan
     });
 
     for (const [key, value] of Object.entries(filters)) {

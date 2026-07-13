@@ -914,6 +914,17 @@ try {
           strtolower($_SERVER['HTTP_X_SILENT_REQUEST']) === 'true'
         );
 
+        // ── Only run the expensive DISTINCT filter-options scan when it's
+        //    actually needed: the caller is applying a filter, or explicitly
+        //    asked for it (e.g. first page load, to seed the filter dropdowns).
+        //    Plain pagination / sorting / silent auto-update polls skip it.
+        $filterFieldKeys  = array_diff(array_keys($filters), ['sort_col', 'sort_dir']);
+        $hasFilterFields  = !empty($filterFieldKeys);
+        $filterOptionsReq = $_GET['filter_options'] ?? null;
+        $wantFilterOptions = $filterOptionsReq === '0'
+          ? false
+          : ($filterOptionsReq === '1' ? true : ($hasFilterFields && !$isSilent));
+
         try {
           $result = $logManager->getLogs($filters, $page, $limit);
 
@@ -923,7 +934,7 @@ try {
           $response['page']    = $page;
           $response['pages']   = ceil($result['total'] / $limit);
 
-          if (!$isSilent) {
+          if ($wantFilterOptions) {
             $filterOptions = $logManager->getFilterOptions($filters);
 
             $fieldFilterOptions = [
@@ -958,20 +969,13 @@ try {
 
             $response['filter_options']       = $filterOptions;
             $response['field_filter_options'] = $fieldFilterOptions;
+          }
 
-            try {
-              $response['stats'] = $logManager->getStats();
-            } catch (Exception $statsError) {
-              error_log("getStats (bundled) error: " . $statsError->getMessage());
-              $response['stats'] = null;
-            }
-          } else {
-            try {
-              $response['stats'] = $logManager->getStats();
-            } catch (Exception $statsError) {
-              error_log("getStats (silent) error: " . $statsError->getMessage());
-              $response['stats'] = null;
-            }
+          try {
+            $response['stats'] = $logManager->getStats();
+          } catch (Exception $statsError) {
+            error_log("getStats error: " . $statsError->getMessage());
+            $response['stats'] = null;
           }
         } catch (Exception $e) {
           error_log("getLogs error: " . $e->getMessage());

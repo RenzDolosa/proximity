@@ -452,6 +452,10 @@ if ($databaseConnected) {
     window.PERMISSIONS = {
       delete: <?= json_encode(canAccess($permissions, 'delete-single-attendance')) ?>
     };
+    window.NfcIconSVG = <?php
+                        $svgPath = ROOT_PATH . '/resource/assets/icon/nfc-icon.svg';
+                        echo json_encode(file_exists($svgPath) ? file_get_contents($svgPath) : '');
+                        ?>;
   </script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
