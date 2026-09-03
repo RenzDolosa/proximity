@@ -343,6 +343,19 @@ class EmployeeManager
   {
     $current = $this->getEmployee($id);
 
+    // ── Retain the employee link when the physical code value is replaced ──
+    // The `code` table has no employee_id FK; an employee is matched to a row
+    // here purely by qr_code string equality (see EXISTS joins in getEmployees()
+    // and the client-side qrImageMap in proxcode.js). If we only overwrite
+    // qr_code below, any employee who was occupying the OLD code becomes
+    // orphaned mid-edit and EMPID/Fullname/Brand/Shift/Remarks vanish from the
+    // row, even though the admin only meant to relabel/replace the badge.
+    // So: before changing the code, carry the currently-linked employee (if
+    // any) over to the new code value.
+    if ($current && $current['qr_code'] !== $data['qr_code']) {
+      $this->relinkEmployeeToNewCode($current['qr_code'], $data['qr_code']);
+    }
+
     $query = "UPDATE " . $this->table . " 
           SET qr_code = :qr_code, is_active = :is_active, updated_at = :updated_at
           WHERE id = :id";
@@ -369,6 +382,67 @@ class EmployeeManager
     }
 
     return $result;
+  }
+
+  /**
+   * When a code row's qr_code value is replaced, move the employee who was
+   * occupying the OLD value onto the NEW value, so the code<->employee link
+   * (and therefore EMPID/Fullname/Brand/Shift/Remarks on the list) survives
+   * the edit. No-ops if the old code was unassigned ("Available"), or if the
+   * new code already belongs to a *different* employee (avoids silently
+   * stealing someone else's badge — that conflict is left for the admin to
+   * resolve explicitly).
+   */
+  private function relinkEmployeeToNewCode(string $oldQrCode, string $newQrCode): void
+  {
+    try {
+      $find = $this->conn->prepare(
+        "SELECT id, fullname FROM employees
+         WHERE LOWER(TRIM(qr_code)) = LOWER(TRIM(:old_qr))
+         LIMIT 1"
+      );
+      $find->execute([':old_qr' => $oldQrCode]);
+      $employee = $find->fetch(PDO::FETCH_ASSOC);
+
+      if (!$employee) {
+        return; // old code was Available — no employee data to retain
+      }
+
+      $conflict = $this->conn->prepare(
+        "SELECT id FROM employees
+         WHERE LOWER(TRIM(qr_code)) = LOWER(TRIM(:new_qr))
+         AND id != :emp_id
+         LIMIT 1"
+      );
+      $conflict->execute([':new_qr' => $newQrCode, ':emp_id' => $employee['id']]);
+
+      if ($conflict->fetch()) {
+        error_log(
+          "relinkEmployeeToNewCode: new code '{$newQrCode}' already belongs to a different employee; " .
+          "leaving {$employee['fullname']} (ID {$employee['id']}) on the old code to avoid a conflicting reassignment."
+        );
+        return;
+      }
+
+      $upd = $this->conn->prepare(
+        "UPDATE employees SET qr_code = :new_qr, updated_at = :ts WHERE id = :id"
+      );
+      $upd->execute([
+        ':new_qr' => $newQrCode,
+        ':ts'     => date('Y-m-d H:i:s'),
+        ':id'     => $employee['id'],
+      ]);
+
+      if ($this->userId) {
+        logSystemAction(
+          $this->userId,
+          'CODE_REASSIGNED',
+          "Retained {$employee['fullname']} on replaced code (old: {$oldQrCode} \u{2192} new: {$newQrCode})"
+        );
+      }
+    } catch (Exception $e) {
+      error_log("relinkEmployeeToNewCode error: " . $e->getMessage());
+    }
   }
 
   public function toggleStatus(int $id)

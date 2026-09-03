@@ -922,7 +922,7 @@ function createMainTables()
 
 createMainTables();
 
-function logSystemAction(int $userId, string $action, ?string $details = null)
+function logSystemAction(?int $userId, string $action, ?string $details = null)
 {
   try {
     $pdo = getMainDBConnection();
