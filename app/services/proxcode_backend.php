@@ -137,6 +137,16 @@ class Database
   }
 }
 
+/**
+ * Thrown by EmployeeManager::updateEmployee() when a qr_code edit would
+ * reassign a code that's already linked to a different employee. Callers
+ * should catch this specifically and surface $e->getMessage() to the admin
+ * rather than treating it as a generic system error.
+ */
+class QrCodeConflictException extends RuntimeException
+{
+}
+
 class EmployeeManager
 {
   private ?PDO $conn = null;
@@ -352,7 +362,19 @@ class EmployeeManager
     // row, even though the admin only meant to relabel/replace the badge.
     // So: before changing the code, carry the currently-linked employee (if
     // any) over to the new code value.
+    //
+    // IMPORTANT: the conflict check has to happen BEFORE the code-table
+    // UPDATE below runs. Checking only inside relinkEmployeeToNewCode() (i.e.
+    // after this point) meant a conflicting rename still went through on the
+    // `code` row itself — the employee-table link was correctly protected,
+    // but the code row got renamed into a collision anyway, the *other*
+    // employee's Active/Inactive status got silently resynced against a code
+    // they didn't ask about, and the original employee was left pointing at
+    // a qr_code that no longer existed anywhere — with the API reporting
+    // success the whole time. So: fail the entire update, before any writes,
+    // if the new code is already claimed by someone else.
     if ($current && $current['qr_code'] !== $data['qr_code']) {
+      $this->assertNoQrCodeConflict($data['qr_code'], $current['qr_code']);
       $this->relinkEmployeeToNewCode($current['qr_code'], $data['qr_code']);
     }
 
@@ -385,41 +407,68 @@ class EmployeeManager
   }
 
   /**
+   * Guard for updateEmployee(): throws QrCodeConflictException if newQrCode
+   * is already linked to a *different* employee than the one currently on
+   * oldQrCode. Must run before any write in updateEmployee() — see the
+   * comment there for why the old post-hoc check wasn't sufficient.
+   * No-ops (returns normally) if oldQrCode was unassigned, since there's
+   * nothing to protect in that case.
+   */
+  private function assertNoQrCodeConflict(string $newQrCode, string $oldQrCode): void
+  {
+    $employeeOnOldCode = $this->findEmployeeByQrCode($oldQrCode);
+    if (!$employeeOnOldCode) {
+      return; // old code was Available — nothing to protect
+    }
+
+    $employeeOnNewCode = $this->findEmployeeByQrCode($newQrCode);
+    if ($employeeOnNewCode && (int)$employeeOnNewCode['id'] !== (int)$employeeOnOldCode['id']) {
+      throw new QrCodeConflictException(
+        "Can't change this code to \"{$newQrCode}\" — it's already assigned to " .
+        "{$employeeOnNewCode['fullname']}. Reassign or clear that employee's code first."
+      );
+    }
+  }
+
+  private function findEmployeeByQrCode(string $qrCode): ?array
+  {
+    $stmt = $this->conn->prepare(
+      "SELECT id, fullname FROM employees
+       WHERE LOWER(TRIM(qr_code)) = LOWER(TRIM(:qr_code))
+       LIMIT 1"
+    );
+    $stmt->execute([':qr_code' => $qrCode]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ?: null;
+  }
+
+  /**
    * When a code row's qr_code value is replaced, move the employee who was
    * occupying the OLD value onto the NEW value, so the code<->employee link
    * (and therefore EMPID/Fullname/Brand/Shift/Remarks on the list) survives
-   * the edit. No-ops if the old code was unassigned ("Available"), or if the
-   * new code already belongs to a *different* employee (avoids silently
-   * stealing someone else's badge — that conflict is left for the admin to
-   * resolve explicitly).
+   * the edit. No-ops if the old code was unassigned ("Available").
+   *
+   * Callers must run assertNoQrCodeConflict() first — this method still
+   * re-checks defensively (e.g. against a race between the two calls) and
+   * no-ops rather than throws, since by this point it's safer to leave data
+   * untouched than to raise mid-write.
    */
   private function relinkEmployeeToNewCode(string $oldQrCode, string $newQrCode): void
   {
     try {
-      $find = $this->conn->prepare(
-        "SELECT id, fullname FROM employees
-         WHERE LOWER(TRIM(qr_code)) = LOWER(TRIM(:old_qr))
-         LIMIT 1"
-      );
-      $find->execute([':old_qr' => $oldQrCode]);
-      $employee = $find->fetch(PDO::FETCH_ASSOC);
+      $employee = $this->findEmployeeByQrCode($oldQrCode);
 
       if (!$employee) {
         return; // old code was Available — no employee data to retain
       }
 
-      $conflict = $this->conn->prepare(
-        "SELECT id FROM employees
-         WHERE LOWER(TRIM(qr_code)) = LOWER(TRIM(:new_qr))
-         AND id != :emp_id
-         LIMIT 1"
-      );
-      $conflict->execute([':new_qr' => $newQrCode, ':emp_id' => $employee['id']]);
+      $employeeOnNewCode = $this->findEmployeeByQrCode($newQrCode);
 
-      if ($conflict->fetch()) {
+      if ($employeeOnNewCode && (int)$employeeOnNewCode['id'] !== (int)$employee['id']) {
         error_log(
-          "relinkEmployeeToNewCode: new code '{$newQrCode}' already belongs to a different employee; " .
-          "leaving {$employee['fullname']} (ID {$employee['id']}) on the old code to avoid a conflicting reassignment."
+          "relinkEmployeeToNewCode: new code '{$newQrCode}' already belongs to a different employee " .
+          "despite passing assertNoQrCodeConflict — possible race; leaving {$employee['fullname']} " .
+          "(ID {$employee['id']}) on the old code."
         );
         return;
       }
@@ -953,11 +1002,15 @@ try {
           'is_active' => isset($_POST['is_active']) ? (int)$_POST['is_active'] : 1,
         ];
 
-        if ($employeeManager->updateEmployee($employee_id, $employee_data)) {
-          $response['success'] = true;
-          $response['message'] = 'Proximity code updated successfully';
-        } else {
-          $response['message'] = 'Failed to update proximity code';
+        try {
+          if ($employeeManager->updateEmployee($employee_id, $employee_data)) {
+            $response['success'] = true;
+            $response['message'] = 'Proximity code updated successfully';
+          } else {
+            $response['message'] = 'Failed to update proximity code';
+          }
+        } catch (QrCodeConflictException $e) {
+          $response['message'] = $e->getMessage();
         }
         break;
 
