@@ -1,0 +1,49 @@
+// .vscode/settings.json
+
+{
+  "editor.minimap.enabled": false,
+  "files.autoSave": "afterDelay",
+  "php.validate.executablePath": "C:/xampp/php/php.exe",
+  "[css]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "phpserver.phpPath": "C:\\xampp\\php\\php.exe",
+  "phpserver.browser": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "database-client.autoSync": true,
+  "[php]": {
+    "editor.defaultFormatter": "bmewburn.vscode-intelephense-client"
+  },
+  "[html]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "git.enableSmartCommit": true,
+  "git.confirmSync": false,
+  "explorer.confirmDragAndDrop": false,
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "liveServer.settings.donotShowInfoMsg": true,
+  "security.allowedUNCHosts": ["ODT-0126", "ODT-0127", "ODT-0130"],
+  "[sql]": {
+    "editor.defaultFormatter": "inferrinizzard.prettier-sql-vscode"
+  },
+  "[dockercompose]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "editor.accessibilitySupport": "on",
+  "liveServer.settings.port": 3307,
+  "liveServer.settings.host": "localhost",
+  "fiveServer.browser": [
+    [
+      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "--incognito",
+      "--new-window"
+    ]
+  ],
+  "fiveServer.port": 5500,
+  "fiveServer.host": "localhost",
+  "fiveServer.proxy": "http://localhost:3000"
+}

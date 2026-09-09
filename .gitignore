@@ -1,14 +1,8 @@
-.env
-.cursor
-.vscode
-fiveserver.config.js
-public
-backup
-cache
-gadget
 Inventory
+PSP System
 GADGETTRACKER
 GADGETTRACKER.zip
+Proximity.zip
 htdocs.zip
 
 device-ping.php
