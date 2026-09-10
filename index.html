@@ -291,6 +291,8 @@ function toast(msg, type='success'){
 
 function isAdmin(){ return profile?.role === 'admin'; }
 function isAdminOrManager(){ return profile?.role === 'admin' || profile?.role === 'manager'; }
+function canViewEmployeeManager(){ return isAdmin() || profile?.role === 'manager' || ['all','employee_manager'].includes(profile?.access_scope); }
+function canViewScanner(){ return isAdmin() || ['all','scanner'].includes(profile?.access_scope); }
 
 // ---------------------------------------------------------------- auth wiring
 $('#tab-login').addEventListener('click', () => {
@@ -354,6 +356,13 @@ function showShell(){
   $('#who-name').textContent = profile?.full_name || session.user.email;
   $('#who-role').textContent = profile?.role || '—';
   $('#nav-users').classList.toggle('hidden', !isAdmin());
+  $('button[data-route="directory"]').classList.toggle('hidden', !canViewEmployeeManager());
+  $('button[data-route="proximity"]').classList.toggle('hidden', !canViewEmployeeManager());
+  $('button[data-route="scanner"]').classList.toggle('hidden', !canViewScanner());
+  // land on the first route this account is actually allowed to see
+  if (route === 'directory' && !canViewEmployeeManager()) route = canViewScanner() ? 'scanner' : 'users';
+  if (route === 'scanner' && !canViewScanner()) route = canViewEmployeeManager() ? 'directory' : 'users';
+  $$('nav.rail button[data-route]').forEach(b => b.classList.toggle('active', b.dataset.route === route));
   render();
 }
 
@@ -450,8 +459,15 @@ function paintDirectoryTable(filter){
   }));
 }
 
-function openEmployeeModal(emp){
+async function openEmployeeModal(emp){
   const isEdit = !!emp;
+
+  // unassigned, active cards + (when editing) the employee's own current card
+  const { data: allCards } = await supabase.from('proximity_cards').select('id, proximity_code, is_active');
+  const { data: linkedRows } = await supabase.from('employees').select('proximity_card_id');
+  const linkedIds = new Set((linkedRows||[]).map(r => r.proximity_card_id));
+  const availableCards = (allCards||[]).filter(c => c.is_active && (!linkedIds.has(c.id) || c.id === emp?.proximity_card_id));
+
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
   overlay.innerHTML = `
@@ -459,7 +475,7 @@ function openEmployeeModal(emp){
       <h3>${isEdit ? 'Edit employee' : 'Add employee'}</h3>
       <div class="grid-2">
         <div class="field"><label>Full name</label><input id="f-name" value="${esc(emp?.full_name||'')}" /></div>
-        <div class="field"><label>Employee code</label><input id="f-code" value="${esc(emp?.employee_code||'')}" ${isEdit?'':''} /></div>
+        <div class="field"><label>Employee code</label><input id="f-code" value="${esc(emp?.employee_code||'')}" /></div>
         <div class="field"><label>Department</label><input id="f-dept" value="${esc(emp?.department||'')}" /></div>
         <div class="field"><label>Position</label><input id="f-pos" value="${esc(emp?.position||'')}" /></div>
         <div class="field"><label>Email</label><input id="f-email" value="${esc(emp?.email||'')}" /></div>
@@ -470,6 +486,21 @@ function openEmployeeModal(emp){
           ${['active','inactive','suspended'].map(s=>`<option value="${s}" ${emp?.status===s?'selected':''}>${s}</option>`).join('')}
         </select>
       </div>
+      <div class="field">
+        <label>Proximity code <span style="color:var(--text-faint)">(required — every employee needs one)</span></label>
+        <select id="f-card-mode">
+          <option value="existing">Assign an existing unassigned card</option>
+          <option value="new">Issue a brand-new proximity code</option>
+        </select>
+      </div>
+      <div class="field" id="f-card-existing-wrap">
+        <select id="f-card-existing">
+          ${availableCards.length ? availableCards.map(c=>`<option value="${c.id}" ${emp?.proximity_card_id===c.id?'selected':''}>${esc(c.proximity_code)}</option>`).join('') : '<option value="">No unassigned cards available — issue a new one instead</option>'}
+        </select>
+      </div>
+      <div class="field hidden" id="f-card-new-wrap">
+        <input id="f-card-new" class="mono" placeholder="e.g. PRX-00099" />
+      </div>
       <div class="auth-error hidden" id="f-error"></div>
       <div class="actions">
         <button class="ghost" id="f-cancel">Cancel</button>
@@ -479,7 +510,15 @@ function openEmployeeModal(emp){
   `;
   document.body.appendChild(overlay);
   $('#f-cancel', overlay).addEventListener('click', () => overlay.remove());
+  $('#f-card-mode', overlay).addEventListener('change', (e) => {
+    $('#f-card-existing-wrap', overlay).classList.toggle('hidden', e.target.value !== 'existing');
+    $('#f-card-new-wrap', overlay).classList.toggle('hidden', e.target.value !== 'new');
+  });
+  if (!availableCards.length) { $('#f-card-mode', overlay).value = 'new'; $('#f-card-mode', overlay).dispatchEvent(new Event('change')); }
+
   $('#f-save', overlay).addEventListener('click', async () => {
+    const errEl = $('#f-error', overlay);
+    errEl.classList.add('hidden');
     const payload = {
       full_name: $('#f-name', overlay).value.trim(),
       employee_code: $('#f-code', overlay).value.trim(),
@@ -490,10 +529,29 @@ function openEmployeeModal(emp){
       status: $('#f-status', overlay).value,
     };
     if (!payload.full_name || !payload.employee_code) {
-      $('#f-error', overlay).textContent = 'Full name and employee code are required.';
-      $('#f-error', overlay).classList.remove('hidden');
+      errEl.textContent = 'Full name and employee code are required.';
+      errEl.classList.remove('hidden');
       return;
     }
+
+    // resolve the proximity_card_id: reuse existing, or create a new card first
+    const mode = $('#f-card-mode', overlay).value;
+    if (mode === 'new') {
+      const newCode = $('#f-card-new', overlay).value.trim();
+      if (!newCode) { errEl.textContent = 'Enter a proximity code to issue.'; errEl.classList.remove('hidden'); return; }
+      const { data: newCard, error: cardErr } = await supabase
+        .from('proximity_cards')
+        .insert({ proximity_code: newCode, created_by: session.user.id })
+        .select('id')
+        .single();
+      if (cardErr) { errEl.textContent = cardErr.message; errEl.classList.remove('hidden'); return; }
+      payload.proximity_card_id = newCard.id;
+    } else {
+      const chosen = $('#f-card-existing', overlay).value;
+      if (!chosen) { errEl.textContent = 'Pick an available card, or switch to issuing a new one.'; errEl.classList.remove('hidden'); return; }
+      payload.proximity_card_id = chosen;
+    }
+
     let error;
     if (isEdit) {
       payload.updated_by = session.user.id;
@@ -502,7 +560,7 @@ function openEmployeeModal(emp){
       payload.created_by = session.user.id;
       ({ error } = await supabase.from('employees').insert(payload));
     }
-    if (error) { $('#f-error', overlay).textContent = error.message; $('#f-error', overlay).classList.remove('hidden'); return; }
+    if (error) { errEl.textContent = error.message; errEl.classList.remove('hidden'); return; }
     overlay.remove();
     toast(isEdit ? 'Employee updated' : 'Employee added');
     renderDirectory();
@@ -521,29 +579,30 @@ async function renderProximity(){
   `;
   if (isAdminOrManager()) $('#prox-add').addEventListener('click', openCardModal);
 
-  const { data, error } = await supabase
-    .from('proximity_cards')
-    .select('id, proximity_code, is_active, issued_at, revoked_at, employees(id, full_name, employee_code)')
-    .order('issued_at', { ascending: false });
+  const [{ data, error }, { data: emps }] = await Promise.all([
+    supabase.from('proximity_cards').select('id, proximity_code, is_active, issued_at, revoked_at').order('issued_at', { ascending: false }),
+    supabase.from('employees').select('id, full_name, employee_code, proximity_card_id'),
+  ]);
   const wrap = $('#prox-table-wrap');
   if (error) { wrap.innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
-  if (!data.length) { wrap.innerHTML = `<div class="empty-state"><strong>No proximity cards yet</strong>Issue a card and link it to an employee.</div>`; return; }
+  const byCard = new Map((emps||[]).map(e => [e.proximity_card_id, e]));
+  if (!data.length) { wrap.innerHTML = `<div class="empty-state"><strong>No proximity cards yet</strong>Issue a card — it doesn't need to be assigned to anyone right away.</div>`; return; }
   wrap.innerHTML = `
     <table>
-      <thead><tr><th>Proximity code</th><th>Employee</th><th>Status</th><th>Issued</th><th></th></tr></thead>
+      <thead><tr><th>Proximity code</th><th>Assigned to</th><th>Status</th><th>Issued</th><th></th></tr></thead>
       <tbody>
-        ${data.map(c => `
+        ${data.map(c => { const e = byCard.get(c.id); return `
           <tr>
             <td class="mono">${esc(c.proximity_code)}</td>
-            <td>${c.employees ? esc(c.employees.full_name) + ' <span class="emp-meta mono">('+esc(c.employees.employee_code)+')</span>' : '<span style="color:var(--text-faint)">unlinked</span>'}</td>
+            <td>${e ? esc(e.full_name) + ' <span class="emp-meta mono">('+esc(e.employee_code)+')</span>' : '<span style="color:var(--text-faint)">unassigned</span>'}</td>
             <td><span class="badge ${c.is_active ? 'active' : 'inactive'}">${c.is_active ? 'active' : 'revoked'}</span></td>
             <td>${fmtTime(c.issued_at)}</td>
             <td class="row-actions">
               ${isAdminOrManager() && c.is_active ? `<button class="ghost" data-revoke="${c.id}" style="color:var(--warn)">Revoke</button>` : ''}
-              ${isAdmin() ? `<button class="ghost" data-del="${c.id}" style="color:var(--bad)">Delete</button>` : ''}
+              ${isAdmin() && !e ? `<button class="ghost" data-del="${c.id}" style="color:var(--bad)">Delete</button>` : ''}
             </td>
           </tr>
-        `).join('')}
+        `; }).join('')}
       </tbody>
     </table>
   `;
@@ -558,16 +617,13 @@ async function renderProximity(){
   }));
 }
 
-async function openCardModal(){
-  const { data: emps } = await supabase.from('employees').select('id, full_name, employee_code').order('full_name');
+function openCardModal(){
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
   overlay.innerHTML = `
     <div class="modal">
       <h3>Issue proximity card</h3>
-      <div class="field"><label>Employee</label>
-        <select id="c-emp">${(emps||[]).map(e=>`<option value="${e.id}">${esc(e.full_name)} (${esc(e.employee_code)})</option>`).join('')}</select>
-      </div>
+      <p class="sub" style="margin:-4px 0 16px;">Cards can be issued as unassigned inventory — link one to an employee later from Employee Manager.</p>
       <div class="field"><label>Proximity code</label><input id="c-code" class="mono" placeholder="e.g. PRX-00021" /></div>
       <div class="auth-error hidden" id="c-error"></div>
       <div class="actions">
@@ -579,14 +635,13 @@ async function openCardModal(){
   document.body.appendChild(overlay);
   $('#c-cancel', overlay).addEventListener('click', () => overlay.remove());
   $('#c-save', overlay).addEventListener('click', async () => {
-    const employee_id = $('#c-emp', overlay).value;
     const proximity_code = $('#c-code', overlay).value.trim();
-    if (!employee_id || !proximity_code) {
-      $('#c-error', overlay).textContent = 'Pick an employee and enter a proximity code.';
+    if (!proximity_code) {
+      $('#c-error', overlay).textContent = 'Enter a proximity code.';
       $('#c-error', overlay).classList.remove('hidden');
       return;
     }
-    const { error } = await supabase.from('proximity_cards').insert({ employee_id, proximity_code, created_by: session.user.id });
+    const { error } = await supabase.from('proximity_cards').insert({ proximity_code, created_by: session.user.id });
     if (error) { $('#c-error', overlay).textContent = error.message; $('#c-error', overlay).classList.remove('hidden'); return; }
     overlay.remove();
     toast('Proximity card issued');
@@ -686,27 +741,48 @@ async function loadScanFeed(){
 }
 
 // ================================================================ USERS (admin only)
+const scopeLabel = { all: 'All areas', employee_manager: 'Employee Manager only', scanner: 'Scanner only' };
+
+async function callAdminUsers(action, payload){
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session.access_token;
+  const { data, error } = await supabase.functions.invoke('admin-users', {
+    body: { action, ...payload },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (error) return { error: error.message || 'Request failed' };
+  if (data?.error) return { error: data.error };
+  return { data };
+}
+
 async function renderUsers(){
   const content = $('#content');
   if (!isAdmin()) { content.innerHTML = `<div class="empty-state">Admins only.</div>`; return; }
-  content.innerHTML = `<div id="users-table-wrap">Loading…</div>`;
+  content.innerHTML = `
+    <div class="toolbar">
+      <div></div>
+      <button class="primary" id="user-add">+ Add user</button>
+    </div>
+    <div id="users-table-wrap">Loading…</div>
+  `;
+  $('#user-add').addEventListener('click', () => openUserModal(null));
   const { data, error } = await supabase.from('profiles').select('*').order('created_at');
   const wrap = $('#users-table-wrap');
   if (error) { wrap.innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
   wrap.innerHTML = `
     <table>
-      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Account</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access</th><th>Account</th><th></th></tr></thead>
       <tbody>
         ${data.map(u => `
           <tr>
             <td>${esc(u.full_name)}</td>
             <td class="mono">${esc(u.email)}</td>
             <td><span class="badge role-${u.role}">${esc(u.role)}</span></td>
+            <td>${esc(scopeLabel[u.access_scope] || u.access_scope)}</td>
             <td><span class="badge ${u.is_active ? 'active' : 'inactive'}">${u.is_active ? 'active' : 'disabled'}</span></td>
             <td class="row-actions">
-              <select data-role="${u.id}" ${u.id === session.user.id ? 'disabled' : ''} style="width:auto;padding:5px 8px;font-size:12px;">
-                ${['admin','manager','viewer'].map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${r}</option>`).join('')}
-              </select>
+              <button class="ghost" data-edit="${u.id}">Edit</button>
+              <button class="ghost" data-pw="${u.id}">Reset password</button>
               <button class="ghost" data-toggle="${u.id}" ${u.id === session.user.id ? 'disabled' : ''}>${u.is_active ? 'Disable' : 'Enable'}</button>
             </td>
           </tr>
@@ -714,15 +790,99 @@ async function renderUsers(){
       </tbody>
     </table>
   `;
-  $$('select[data-role]', wrap).forEach(s => s.addEventListener('change', async () => {
-    const { error } = await supabase.from('profiles').update({ role: s.value }).eq('id', s.dataset.role);
-    if (error) toast(error.message, 'error'); else toast('Role updated');
+  $$('button[data-edit]', wrap).forEach(b => b.addEventListener('click', () => {
+    openUserModal(data.find(u => u.id === b.dataset.edit));
+  }));
+  $$('button[data-pw]', wrap).forEach(b => b.addEventListener('click', () => {
+    openResetPasswordModal(data.find(u => u.id === b.dataset.pw));
   }));
   $$('button[data-toggle]', wrap).forEach(b => b.addEventListener('click', async () => {
     const row = data.find(u => u.id === b.dataset.toggle);
     const { error } = await supabase.from('profiles').update({ is_active: !row.is_active }).eq('id', row.id);
     if (error) toast(error.message, 'error'); else { toast('Account updated'); renderUsers(); }
   }));
+}
+
+function scopeOptions(selected){
+  return Object.entries(scopeLabel).map(([v,l]) => `<option value="${v}" ${selected===v?'selected':''}>${l}</option>`).join('');
+}
+function roleOptions(selected){
+  return ['admin','manager','viewer'].map(r=>`<option value="${r}" ${selected===r?'selected':''}>${r}</option>`).join('');
+}
+
+function openUserModal(user){
+  const isEdit = !!user;
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <h3>${isEdit ? 'Edit user' : 'Add user'}</h3>
+      <div class="field"><label>Full name</label><input id="u-name" value="${esc(user?.full_name||'')}" /></div>
+      <div class="field"><label>Email</label><input id="u-email" type="email" value="${esc(user?.email||'')}" /></div>
+      ${!isEdit ? `<div class="field"><label>Password</label><input id="u-password" type="password" placeholder="min. 6 characters" /></div>` : ''}
+      <div class="grid-2">
+        <div class="field"><label>Role</label><select id="u-role">${roleOptions(user?.role||'viewer')}</select></div>
+        <div class="field"><label>Access</label><select id="u-scope">${scopeOptions(user?.access_scope||'all')}</select></div>
+      </div>
+      <p class="sub" style="margin-top:-6px;">Access controls which sections this login can open: the full app, Employee Manager + Proximity Cards only, or the Scanner only. Admins always get full access.</p>
+      <div class="auth-error hidden" id="u-error"></div>
+      <div class="actions">
+        <button class="ghost" id="u-cancel">Cancel</button>
+        <button class="primary" id="u-save">${isEdit ? 'Save changes' : 'Create account'}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  $('#u-cancel', overlay).addEventListener('click', () => overlay.remove());
+  $('#u-save', overlay).addEventListener('click', async () => {
+    const errEl = $('#u-error', overlay);
+    errEl.classList.add('hidden');
+    const full_name = $('#u-name', overlay).value.trim();
+    const email = $('#u-email', overlay).value.trim();
+    const role = $('#u-role', overlay).value;
+    const access_scope = $('#u-scope', overlay).value;
+    if (!full_name || !email) { errEl.textContent = 'Full name and email are required.'; errEl.classList.remove('hidden'); return; }
+
+    let result;
+    if (isEdit) {
+      result = await callAdminUsers('update', { user_id: user.id, full_name, email, role, access_scope });
+    } else {
+      const password = $('#u-password', overlay).value;
+      if (!password || password.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.classList.remove('hidden'); return; }
+      result = await callAdminUsers('create', { full_name, email, password, role, access_scope });
+    }
+    if (result.error) { errEl.textContent = result.error; errEl.classList.remove('hidden'); return; }
+    overlay.remove();
+    toast(isEdit ? 'User updated' : 'User created');
+    renderUsers();
+  });
+}
+
+function openResetPasswordModal(user){
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <h3>Reset password — ${esc(user.full_name)}</h3>
+      <div class="field"><label>New password</label><input id="pw-new" type="password" placeholder="min. 6 characters" /></div>
+      <div class="auth-error hidden" id="pw-error"></div>
+      <div class="actions">
+        <button class="ghost" id="pw-cancel">Cancel</button>
+        <button class="primary" id="pw-save">Set new password</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  $('#pw-cancel', overlay).addEventListener('click', () => overlay.remove());
+  $('#pw-save', overlay).addEventListener('click', async () => {
+    const password = $('#pw-new', overlay).value;
+    const errEl = $('#pw-error', overlay);
+    if (!password || password.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.classList.remove('hidden'); return; }
+    const result = await callAdminUsers('reset_password', { user_id: user.id, password });
+    if (result.error) { errEl.textContent = result.error; errEl.classList.remove('hidden'); return; }
+    overlay.remove();
+    toast('Password updated');
+  });
 }
 
 // ---------------------------------------------------------------- boot

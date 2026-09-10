@@ -29,28 +29,45 @@ Project URL: `https://kjwttqmbcjvkivgmwuev.supabase.co`
 
 | Table              | Purpose                                                                 |
 |---------------------|--------------------------------------------------------------------------|
-| `profiles`          | One row per login account (`auth.users` 1:1). `role` = `admin`, `manager`, or `viewer`. Drives every permission in the system. |
-| `employees`          | **Employee Manager.** Master employee record, including `scan_logs jsonb` — an append-only array every scan writes into. |
-| `proximity_cards`    | **Proximity table.** `proximity_code` (the physical/virtual ID) with a foreign key to `employees`. Only one *active* card per code is allowed. |
-| `scan_events`        | **Proximity Scanner log.** Foreign key to `employees`. Every scan attempt is recorded here, matched or not. |
-| `employee_directory` | View: employee + their live proximity code + scan totals, for the Employee Manager grid. |
+| `profiles`          | One row per login account (`auth.users` 1:1). `role` = `admin`, `manager`, or `viewer`. `access_scope` = `all`, `employee_manager`, or `scanner` — which *sections* the account can open at all. Together these two columns drive every permission in the system. |
+| `employees`          | **Employee Manager.** Master employee record. Requires `employee_code` **and** `proximity_card_id` (every employee must have exactly one proximity card — enforced `NOT NULL` + unique). Also holds `scan_logs jsonb`, an append-only array every matched scan writes into. |
+| `proximity_cards`    | **Proximity table.** Standalone inventory of issued `proximity_code`s. **Does not require an employee** — a card can be issued and sit unassigned until linked from Employee Manager. |
+| `scan_events`        | **Proximity Scanner log.** Foreign key to `employees`. Every scan attempt is recorded here — `matched`, `unmatched`, `inactive_card`, `inactive_employee`, or `unassigned_card` (a live card nobody is linked to yet). |
+| `employee_directory` | View: employee joined to their required proximity card + scan totals, for the Employee Manager grid. |
 | `scan_feed`          | View: `scan_events` joined to employee name, for the live activity feed. |
+
+**Relationship direction:** `employees.proximity_card_id → proximity_cards.id`
+(not the other way around). This lets you pre-issue a batch of blank cards
+as inventory, and only requires a link once an employee is actually
+provisioned with one.
 
 ### Permission model
 
+Two independent dimensions:
+- **Role** — what an account is allowed to *edit*.
+- **Access scope** — which *sections* an account can even open.
+
 | Action                          | admin | manager | viewer |
 |----------------------------------|:---:|:---:|:---:|
-| View employees / cards / scans   | ✅ | ✅ | ✅ |
+| View employees / cards / scans (within their scope) | ✅ | ✅ | ✅ |
 | Add / edit employees              | ✅ | ✅ | ❌ |
 | Delete employees                  | ✅ | ❌ | ❌ |
 | Issue / revoke proximity cards    | ✅ | ✅ | ❌ |
-| Delete proximity cards            | ✅ | ❌ | ❌ |
-| Perform a scan                    | ✅ | ✅ | ✅ |
+| Delete an unassigned proximity card | ✅ | ❌ | ❌ |
+| Perform a scan (if scope allows)  | ✅ | ✅ | ✅ |
 | Manage user accounts / roles      | ✅ | ❌ | ❌ |
 
-Enforced with Postgres Row Level Security — not just hidden in the UI. Every
-table has `RLS` on; policies call `is_admin()` / `is_admin_or_manager()`
-helper functions that read the caller's own `profiles.role`.
+| Access scope        | Can open                          |
+|----------------------|-----------------------------------|
+| `all`                | Everything their role permits     |
+| `employee_manager`   | Employee Manager + Proximity Cards only — **no Scanner** |
+| `scanner`            | Scanner only — **no directory, no cards** |
+
+Admins always behave as full-scope regardless of the stored value.
+Enforced with Postgres Row Level Security, not just hidden in the UI — every
+table has RLS on; policies call `is_admin()` / `is_admin_or_manager()` /
+`can_view_employee_manager()` / `can_view_scanner()`, all reading the
+caller's own `profiles` row.
 
 ### How a scan works end-to-end
 
@@ -71,8 +88,24 @@ helper functions that read the caller's own `profiles.role`.
 
 The very first person to sign up automatically becomes `admin`
 (`handle_new_auth_user()` trigger checks if `profiles` is empty). Every
-signup after that defaults to `viewer` — an admin promotes people from the
-**Users & Roles** screen.
+signup after that defaults to `viewer` / scope `all` — an admin adjusts role
+and access from the **Users & Roles** screen.
+
+### Managing users (admin only)
+
+The **Users & Roles** screen supports:
+- **Add user** — name, email, password, role, access scope. Creates a real
+  Supabase Auth account (not self-signup).
+- **Edit** — name, email, role, access scope.
+- **Reset password** — sets a new password for that account directly.
+- **Enable / disable** — soft-locks the account (`profiles.is_active`); wire
+  this into your own login gate if you want disabled accounts fully blocked.
+
+Creating accounts, changing someone else's email, and resetting passwords
+all require the Supabase **service role key** (`auth.admin.*`), which must
+never be shipped to the browser. Those three actions go through the
+`admin-users` Edge Function instead, which re-checks the caller is really an
+admin (via their own JWT) before touching anything.
 
 ## 3. Files
 
@@ -92,6 +125,11 @@ signup after that defaults to `viewer` — an admin promotes people from the
 
   { "proximity_code": "PRX-00021", "scanner_id": "front-door-01" }
   ```
+
+- Edge Function `admin-users` is deployed for the account-management
+  actions above (`create`, `update`, `reset_password`). Called from the UI
+  via `supabase.functions.invoke('admin-users', ...)`; admin-only, enforced
+  server-side.
 
 ## 4. Running it
 
