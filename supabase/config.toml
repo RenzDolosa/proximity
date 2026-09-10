@@ -1,0 +1,7 @@
+# Supabase CLI project config. See:
+# https://supabase.com/docs/guides/local-development/cli/config
+
+project_id = "fayauyuteqfqicgmezkv"
+
+[db]
+major_version = 17
