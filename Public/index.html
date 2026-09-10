@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Proximity — ID &amp; Access Console</title>
+<link rel="icon" type="image/svg+xml" href="Assets/Favicon/favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../CSS/main.css" />
+</head>
+<body>
+<div id="app">
+  <div id="auth-screen">
+    <div class="auth-card">
+      <div class="auth-mark"><div class="dot"></div><span>Proximity</span></div>
+      <div class="auth-toggle">
+        <button id="tab-login" class="active">Sign in</button>
+        <button id="tab-signup">Create account</button>
+      </div>
+      <div id="login-form">
+        <h1>Sign in</h1>
+        <p class="sub">Access the ID &amp; proximity console.</p>
+        <div class="field"><label>Email</label><input id="login-email" type="email" placeholder="you@company.com" /></div>
+        <div class="field"><label>Password</label><input id="login-password" type="password" placeholder="••••••••" /></div>
+        <button class="primary" id="login-submit" style="width:100%">Sign in</button>
+        <div class="auth-error hidden" id="login-error"></div>
+      </div>
+      <div id="signup-form" class="hidden">
+        <h1>Create account</h1>
+        <p class="sub">The very first account created becomes an administrator automatically. Everyone after starts as a viewer until an admin promotes them.</p>
+        <div class="field"><label>Full name</label><input id="signup-name" placeholder="Jordan Cruz" /></div>
+        <div class="field"><label>Email</label><input id="signup-email" type="email" placeholder="you@company.com" /></div>
+        <div class="field"><label>Password</label><input id="signup-password" type="password" placeholder="min. 6 characters" /></div>
+        <button class="primary" id="signup-submit" style="width:100%">Create account</button>
+        <div class="auth-error hidden" id="signup-error"></div>
+      </div>
+      <div class="auth-note">Permission tiers: <strong style="color:var(--text-muted)">admin</strong> (full control incl. user roles), <strong style="color:var(--text-muted)">manager</strong> (edit directory &amp; cards), <strong style="color:var(--text-muted)">viewer</strong> (read + scan).</div>
+    </div>
+  </div>
+
+  <div id="standalone-scanner" class="hidden standalone-scan"></div>
+
+  <div id="shell" class="hidden">
+    <aside id="sidebar">
+      <div class="brand"><div class="dot"></div><span>Proximity</span></div>
+      <nav class="rail">
+        <button data-route="directory" class="active"><span class="ic">▤</span>Employee Manager</button>
+        <button data-route="proximity"><span class="ic">◈</span>Proximity Cards</button>
+        <button data-route="scanner"><span class="ic">▣</span>Scanner <span class="emp-meta" style="margin-left:auto;font-size:11px;">↗</span></button>
+        <button data-route="users" id="nav-users" class="hidden"><span class="ic">⚙</span>Users &amp; Roles</button>
+      </nav>
+      <div class="rail-spacer"></div>
+      <div class="who">
+        <div class="name" id="who-name">—</div>
+        <div class="role" id="who-role">—</div>
+        <button id="btn-signout">Sign out</button>
+      </div>
+    </aside>
+    <div id="main">
+      <div id="topbar">
+        <div><h2 id="page-title">Employee Manager</h2></div>
+        <div class="sub" id="page-sub"></div>
+      </div>
+      <div id="content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Vendored Supabase SDK (see Vendor/README.md) — exposes window.supabase -->
+<script src="Vendor/supabase-js.umd.js"></script>
+<!-- App code — native ES modules, entry point at JS/main.js -->
+<script type="module" src="../JS/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+/* App shell layout: sidebar, topbar, content area. */
+#shell{flex:1;display:flex;min-height:100vh;}
+#sidebar{
+  width:216px;flex:0 0 216px;background:var(--surface);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;padding:18px 0;
+}
+.brand{display:flex;align-items:center;gap:9px;padding:0 18px 20px;border-bottom:1px solid var(--border-soft);margin-bottom:14px;}
+.brand .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);}
+.brand span{font-weight:600;font-size:14.5px;}
+nav.rail{display:flex;flex-direction:column;gap:2px;padding:0 10px;}
+nav.rail button{
+  text-align:left;border:none;background:transparent;color:var(--text-muted);
+  padding:9px 10px;border-radius:var(--radius);font-size:13.5px;font-weight:500;
+  display:flex;align-items:center;gap:9px;
+}
+nav.rail button .ic{width:15px;text-align:center;font-family:var(--mono);color:var(--text-faint);font-size:12px;}
+nav.rail button:hover{background:var(--surface-raised);color:var(--text);}
+nav.rail button.active{background:var(--surface-raised);color:var(--text);}
+nav.rail button.active .ic{color:var(--accent);}
+.rail-spacer{flex:1;}
+.who{padding:12px 18px;border-top:1px solid var(--border-soft);margin-top:auto;}
+.who .name{font-size:13px;font-weight:500;}
+.who .role{font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-top:2px;}
+.who button{width:100%;margin-top:10px;font-size:12px;padding:6px;}
+
+#main{flex:1;min-width:0;display:flex;flex-direction:column;}
+#topbar{
+  height:56px;flex:0 0 56px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;padding:0 24px;
+}
+#topbar h2{font-size:15px;font-weight:600;margin:0;}
+#topbar .sub{color:var(--text-muted);font-size:12.5px;}
+#content{flex:1;padding:24px;overflow:auto;}

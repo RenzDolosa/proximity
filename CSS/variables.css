@@ -1,0 +1,22 @@
+/* Design tokens shared by every other stylesheet. */
+:root{
+  --bg: #10141B;
+  --surface: #171D26;
+  --surface-raised: #1E2530;
+  --border: #2B333F;
+  --border-soft: #232B36;
+  --text: #E7EAEE;
+  --text-muted: #8A93A3;
+  --text-faint: #5C6472;
+  --accent: #5B8DEF;
+  --accent-dim: #345087;
+  --good: #34C77B;
+  --good-dim: #163C2A;
+  --bad: #F0555A;
+  --bad-dim: #3B1E20;
+  --warn: #E0A63E;
+  --warn-dim: #3A2E15;
+  --radius: 3px;
+  --sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', 'SF Mono', monospace;
+}

@@ -1,0 +1,19 @@
+// Pure formatting helpers — no DOM, no state, safe to reuse anywhere.
+
+export const esc = (s) =>
+  (s ?? '').toString().replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+
+export const initials = (name) =>
+  (name || '?').trim().split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+
+export const fmtTime = (iso) => {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
+};
