@@ -194,6 +194,14 @@
   .feed-row .avatar{width:30px;height:30px;font-size:11px;}
   .feed-time{margin-left:auto;color:var(--text-faint);font-size:11.5px;font-family:var(--mono);}
 
+  .search-results{max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);margin-top:6px;}
+  .search-result-item{padding:8px 10px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border-soft);display:flex;align-items:center;gap:8px;}
+  .search-result-item:last-child{border-bottom:none;}
+  .search-result-item:hover{background:var(--surface-raised);}
+  .search-result-item.selected{background:var(--accent-dim);color:#AFC7FA;}
+  .tag-current{margin-left:auto;font-size:10px;text-transform:uppercase;letter-spacing:.3px;color:var(--text-faint);font-family:var(--sans);}
+  .search-empty{padding:12px 10px;font-size:12.5px;color:var(--text-muted);}
+
   .sub-nav{display:flex;gap:6px;margin-bottom:16px;}
   .sub-nav button{padding:6px 12px;font-size:12.5px;}
   .sub-nav button.active{border-color:var(--accent);color:var(--accent);}
@@ -203,6 +211,36 @@
   }
   .toast.error{border-color:var(--bad);color:var(--bad);}
   .toast.success{border-color:var(--good);color:var(--good);}
+
+  /* ---------- standalone scanner (opens in a new tab) ---------- */
+  .standalone-scan{min-height:100vh;display:flex;flex-direction:column;padding:20px 28px 40px;background:radial-gradient(900px 500px at 50% 0%, #17213A 0%, transparent 65%), var(--bg);}
+  .ss-header{width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:14px;border-bottom:1px solid var(--border-soft);}
+  .ss-operator{font-size:12.5px;color:var(--text-muted);}
+  .ss-operator strong{color:var(--text);font-weight:600;}
+  .ss-layout{flex:1;display:grid;grid-template-columns:1fr 260px;gap:28px;align-items:start;max-width:1080px;margin:0 auto;width:100%;}
+  @media (max-width: 760px){.ss-layout{grid-template-columns:1fr;}}
+  .ss-main{display:flex;flex-direction:column;align-items:center;}
+  .ss-topbar{width:100%;max-width:420px;margin-bottom:36px;}
+  .ss-topbar input{font-family:var(--mono);font-size:14px;text-align:center;}
+  .ss-hero{display:flex;flex-direction:column;align-items:center;gap:22px;margin-top:10px;}
+  .ss-ring{position:relative;width:160px;height:160px;display:flex;align-items:center;justify-content:center;}
+  .ss-ring::before,.ss-ring::after{content:'';position:absolute;border-radius:50%;border:2px solid var(--accent-dim);}
+  .ss-ring::before{width:120%;height:120%;animation:ss-pulse 2.4s ease-out infinite;}
+  .ss-ring::after{width:150%;height:150%;animation:ss-pulse 2.4s ease-out infinite .5s;}
+  @keyframes ss-pulse{0%{transform:scale(.75);opacity:.9;}100%{transform:scale(1.15);opacity:0;}}
+  .ss-icon{width:76px;height:76px;border-radius:12px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:34px;z-index:1;}
+  .ss-label{text-align:center;font-weight:700;font-size:26px;letter-spacing:.5px;line-height:1.25;}
+  .ss-label .dim{color:var(--text-muted);font-weight:700;}
+  .ss-result-wrap{width:100%;max-width:420px;margin-top:26px;}
+  .ss-feed-col{position:sticky;top:20px;}
+  .ss-feed-panel{padding:12px 14px;}
+  .ss-feed-title{font-weight:600;margin-bottom:8px;font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;}
+  .ss-feed-panel .feed-row{padding:7px 0;gap:8px;}
+  .ss-feed-panel .feed-row .avatar{width:22px;height:22px;font-size:9px;}
+  .ss-feed-panel .feed-row div > div{font-size:11.5px;}
+  .ss-feed-panel .feed-row .emp-meta{font-size:10px;}
+  .ss-feed-panel .feed-time{font-size:10px;}
+  .ss-feed-panel .badge{font-size:9px;padding:2px 6px;}
 </style>
 </head>
 <body>
@@ -235,13 +273,15 @@
     </div>
   </div>
 
+  <div id="standalone-scanner" class="hidden standalone-scan"></div>
+
   <div id="shell" class="hidden">
     <aside id="sidebar">
       <div class="brand"><div class="dot"></div><span>Proximity</span></div>
       <nav class="rail">
         <button data-route="directory" class="active"><span class="ic">▤</span>Employee Manager</button>
         <button data-route="proximity"><span class="ic">◈</span>Proximity Cards</button>
-        <button data-route="scanner"><span class="ic">▣</span>Scanner</button>
+        <button data-route="scanner"><span class="ic">▣</span>Scanner <span class="emp-meta" style="margin-left:auto;font-size:11px;">↗</span></button>
         <button data-route="users" id="nav-users" class="hidden"><span class="ic">⚙</span>Users &amp; Roles</button>
       </nav>
       <div class="rail-spacer"></div>
@@ -273,6 +313,7 @@ let session = null;
 let profile = null; // { id, full_name, email, role, is_active }
 let route = 'directory';
 let employeesCache = [];
+const isStandaloneScanner = new URLSearchParams(location.search).get('scanner') === '1';
 
 // ---------------------------------------------------------------- utils
 const $ = (sel, root=document) => root.querySelector(sel);
@@ -293,6 +334,7 @@ function isAdmin(){ return profile?.role === 'admin'; }
 function isAdminOrManager(){ return profile?.role === 'admin' || profile?.role === 'manager'; }
 function canViewEmployeeManager(){ return isAdmin() || profile?.role === 'manager' || ['all','employee_manager'].includes(profile?.access_scope); }
 function canViewScanner(){ return isAdmin() || ['all','scanner'].includes(profile?.access_scope); }
+function isScannerOnlyAccount(){ return canViewScanner() && !canViewEmployeeManager() && !isAdmin(); }
 
 // ---------------------------------------------------------------- auth wiring
 $('#tab-login').addEventListener('click', () => {
@@ -333,25 +375,90 @@ supabase.auth.onAuthStateChange(async (_event, s) => {
   session = s;
   if (session) {
     await loadProfile();
-    showShell();
+    if (isStandaloneScanner || isScannerOnlyAccount()) showStandaloneScanner(); else showShell();
   } else {
     profile = null;
     showAuth();
   }
 });
 
+function showAuth(){
+  $('#auth-screen').classList.remove('hidden');
+  $('#shell').classList.add('hidden');
+  $('#standalone-scanner').classList.add('hidden');
+}
+
+function showStandaloneScanner(){
+  $('#auth-screen').classList.add('hidden');
+  $('#shell').classList.add('hidden');
+  const wrap = $('#standalone-scanner');
+  wrap.classList.remove('hidden');
+  if (!canViewScanner()) {
+    wrap.innerHTML = `
+      <div class="empty-state" style="margin:80px auto;max-width:420px;"><strong>No scanner access</strong>Your account doesn't have permission to use the scanner.</div>
+      <div style="text-align:center;margin-top:16px;"><button class="ghost" id="ss-noaccess-signout">Sign out</button></div>
+    `;
+    $('#ss-noaccess-signout').addEventListener('click', async () => { await supabase.auth.signOut(); });
+    return;
+  }
+  renderStandaloneScanner();
+}
+
+function renderStandaloneScanner(){
+  const wrap = $('#standalone-scanner');
+  const operatorName = profile?.full_name || session.user.email;
+  wrap.innerHTML = `
+    <div class="ss-header">
+      <div class="ss-operator">Operator: <strong class="mono">${esc(operatorName)}</strong></div>
+      <button class="ghost" id="ss-signout">Sign out</button>
+    </div>
+    <div class="ss-layout">
+      <div class="ss-main">
+        <div class="ss-topbar">
+          <input id="ss-code" class="mono" placeholder="Live Search — scan or type code…" autocomplete="off" autofocus />
+        </div>
+        <div class="ss-hero">
+          <div class="ss-ring"><div class="ss-icon">▣</div></div>
+          <div class="ss-label"><span class="dim">TAP</span><br/>YOUR CARD</div>
+        </div>
+        <div class="ss-result-wrap" id="ss-result"></div>
+      </div>
+      <div class="ss-feed-col">
+        <div class="panel ss-feed-panel">
+          <div class="ss-feed-title">Recent activity</div>
+          <div id="ss-feed">Loading…</div>
+        </div>
+      </div>
+    </div>
+  `;
+  $('#ss-signout').addEventListener('click', async () => { await supabase.auth.signOut(); });
+  const codeInput = $('#ss-code');
+  const doScan = async () => {
+    const proximity_code = codeInput.value.trim();
+    if (!proximity_code) return;
+    const { data, error } = await supabase.rpc('scan_proximity_code', { p_proximity_code: proximity_code, p_scanner_id: operatorName });
+    const resultWrap = $('#ss-result');
+    if (error) {
+      resultWrap.innerHTML = `<div class="result-card unmatched"><strong style="color:var(--bad)">Scan failed</strong><div class="emp-meta">${esc(error.message)}</div></div>`;
+    } else {
+      resultWrap.innerHTML = renderScanResult(data);
+    }
+    codeInput.value = '';
+    codeInput.focus();
+    loadScanFeed('ss-feed');
+  };
+  codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doScan(); });
+  loadScanFeed('ss-feed');
+}
+
 async function loadProfile(){
   const { data, error } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
   if (!error) profile = data;
 }
 
-function showAuth(){
-  $('#auth-screen').classList.remove('hidden');
-  $('#shell').classList.add('hidden');
-}
-
 function showShell(){
   $('#auth-screen').classList.add('hidden');
+  $('#standalone-scanner').classList.add('hidden');
   $('#shell').classList.remove('hidden');
   $('#who-name').textContent = profile?.full_name || session.user.email;
   $('#who-role').textContent = profile?.role || '—';
@@ -369,6 +476,10 @@ function showShell(){
 // ---------------------------------------------------------------- nav
 $$('nav.rail button[data-route]').forEach(btn => {
   btn.addEventListener('click', () => {
+    if (btn.dataset.route === 'scanner') {
+      window.open(location.pathname + '?scanner=1', '_blank', 'noopener');
+      return;
+    }
     route = btn.dataset.route;
     $$('nav.rail button').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -438,7 +549,7 @@ function paintDirectoryTable(filter){
             <td>${esc(e.position||'—')}</td>
             <td class="mono">${e.active_proximity_code ? esc(e.active_proximity_code) : '<span style="color:var(--text-faint)">unassigned</span>'}</td>
             <td><span class="badge ${e.status}">${esc(e.status)}</span></td>
-            <td class="mono">${e.total_scans ?? 0}</td>
+            <td class="mono"><button class="ghost" data-log="${e.id}" style="padding:3px 8px;">${e.total_scans ?? 0} <span style="text-transform:none;">view</span></button></td>
             <td class="row-actions">
               ${isAdminOrManager() ? `<button class="ghost" data-edit="${e.id}">Edit</button>` : ''}
               ${isAdmin() ? `<button class="ghost" data-del="${e.id}" style="color:var(--bad)">Delete</button>` : ''}
@@ -452,6 +563,7 @@ function paintDirectoryTable(filter){
     const emp = employeesCache.find(e => e.id === b.dataset.edit);
     openEmployeeModal(emp);
   }));
+  $$('button[data-log]', wrap).forEach(b => b.addEventListener('click', () => openScanLogModal(b.dataset.log)));
   $$('button[data-del]', wrap).forEach(b => b.addEventListener('click', async () => {
     if (!confirm('Delete this employee? This also removes their proximity cards.')) return;
     const { error } = await supabase.from('employees').delete().eq('id', b.dataset.del);
@@ -489,14 +601,14 @@ async function openEmployeeModal(emp){
       <div class="field">
         <label>Proximity code <span style="color:var(--text-faint)">(required — every employee needs one)</span></label>
         <select id="f-card-mode">
-          <option value="existing">Assign an existing unassigned card</option>
+          <option value="existing">${isEdit ? 'Assign a different card' : 'Assign an existing unassigned card'}</option>
           <option value="new">Issue a brand-new proximity code</option>
         </select>
       </div>
       <div class="field" id="f-card-existing-wrap">
-        <select id="f-card-existing">
-          ${availableCards.length ? availableCards.map(c=>`<option value="${c.id}" ${emp?.proximity_card_id===c.id?'selected':''}>${esc(c.proximity_code)}</option>`).join('') : '<option value="">No unassigned cards available — issue a new one instead</option>'}
-        </select>
+        ${isEdit && emp?.proximity_card_id ? `<div class="emp-meta" style="margin-bottom:6px;">Currently assigned: <span class="mono" id="f-card-current"></span></div>` : ''}
+        <input id="f-card-search" class="mono" placeholder="Search proximity codes…" autocomplete="off" autofocus />
+        <div id="f-card-results" class="search-results"></div>
       </div>
       <div class="field hidden" id="f-card-new-wrap">
         <input id="f-card-new" class="mono" placeholder="e.g. PRX-00099" />
@@ -515,6 +627,33 @@ async function openEmployeeModal(emp){
     $('#f-card-new-wrap', overlay).classList.toggle('hidden', e.target.value !== 'new');
   });
   if (!availableCards.length) { $('#f-card-mode', overlay).value = 'new'; $('#f-card-mode', overlay).dispatchEvent(new Event('change')); }
+
+  // ---- live-search combobox for proximity card selection ----
+  overlay.dataset.chosenCard = emp?.proximity_card_id || '';
+  const currentCard = availableCards.find(c => c.id === emp?.proximity_card_id);
+  if ($('#f-card-current', overlay) && currentCard) $('#f-card-current', overlay).textContent = currentCard.proximity_code;
+
+  function paintCardResults(filterText){
+    const f = filterText.trim().toLowerCase();
+    const resultsEl = $('#f-card-results', overlay);
+    const matches = availableCards.filter(c => !f || c.proximity_code.toLowerCase().includes(f));
+    if (!matches.length) {
+      resultsEl.innerHTML = `<div class="search-empty">No unassigned cards match — issue a new one instead.</div>`;
+      return;
+    }
+    resultsEl.innerHTML = matches.map(c => `
+      <div class="search-result-item mono ${c.id === overlay.dataset.chosenCard ? 'selected' : ''}" data-card="${c.id}">
+        ${esc(c.proximity_code)}
+        ${c.id === emp?.proximity_card_id ? '<span class="tag-current">current</span>' : ''}
+      </div>
+    `).join('');
+    $$('.search-result-item', resultsEl).forEach(row => row.addEventListener('click', () => {
+      overlay.dataset.chosenCard = row.dataset.card;
+      paintCardResults($('#f-card-search', overlay).value);
+    }));
+  }
+  paintCardResults('');
+  $('#f-card-search', overlay).addEventListener('input', (e) => paintCardResults(e.target.value));
 
   $('#f-save', overlay).addEventListener('click', async () => {
     const errEl = $('#f-error', overlay);
@@ -547,8 +686,8 @@ async function openEmployeeModal(emp){
       if (cardErr) { errEl.textContent = cardErr.message; errEl.classList.remove('hidden'); return; }
       payload.proximity_card_id = newCard.id;
     } else {
-      const chosen = $('#f-card-existing', overlay).value;
-      if (!chosen) { errEl.textContent = 'Pick an available card, or switch to issuing a new one.'; errEl.classList.remove('hidden'); return; }
+      const chosen = overlay.dataset.chosenCard;
+      if (!chosen) { errEl.textContent = 'Search and pick an available card, or switch to issuing a new one.'; errEl.classList.remove('hidden'); return; }
       payload.proximity_card_id = chosen;
     }
 
@@ -565,6 +704,47 @@ async function openEmployeeModal(emp){
     toast(isEdit ? 'Employee updated' : 'Employee added');
     renderDirectory();
   });
+}
+
+async function openScanLogModal(employeeId){
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:520px;">
+      <h3 id="log-title">Scan log</h3>
+      <div id="log-body" class="empty-state">Loading…</div>
+      <div class="actions">
+        <button class="ghost" id="log-close">Close</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  $('#log-close', overlay).addEventListener('click', () => overlay.remove());
+
+  const { data: emp, error } = await supabase.from('employees').select('full_name, scan_logs').eq('id', employeeId).single();
+  const bodyEl = $('#log-body', overlay);
+  if (error) { bodyEl.textContent = error.message; return; }
+  $('#log-title', overlay).textContent = `Scan log — ${emp.full_name}`;
+  const logs = (emp.scan_logs || []).slice().sort((a, b) => new Date(b.scanned_at) - new Date(a.scanned_at));
+  if (!logs.length) {
+    bodyEl.innerHTML = `<div class="empty-state"><strong>No scans yet</strong>This employee hasn't tapped their card at any scanner.</div>`;
+    return;
+  }
+  bodyEl.className = '';
+  bodyEl.innerHTML = `
+    <div style="max-height:360px;overflow-y:auto;">
+      ${logs.map(l => `
+        <div class="feed-row">
+          <span class="badge ${l.direction === 'out' ? 'suspended' : 'active'}">${(l.direction || '—').toUpperCase()}</span>
+          <div>
+            <div style="font-weight:500;">${esc(l.scanner_id || '—')}</div>
+            <div class="emp-meta mono">${esc(l.proximity_code || '')}</div>
+          </div>
+          <div class="feed-time">${fmtTime(l.scanned_at)}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
 
 // ================================================================ PROXIMITY CARDS
@@ -599,6 +779,7 @@ async function renderProximity(){
             <td>${fmtTime(c.issued_at)}</td>
             <td class="row-actions">
               ${isAdminOrManager() && c.is_active ? `<button class="ghost" data-revoke="${c.id}" style="color:var(--warn)">Revoke</button>` : ''}
+              ${isAdminOrManager() && !c.is_active ? `<button class="ghost" data-renew="${c.id}" style="color:var(--good)">Renew</button>` : ''}
               ${isAdmin() && !e ? `<button class="ghost" data-del="${c.id}" style="color:var(--bad)">Delete</button>` : ''}
             </td>
           </tr>
@@ -609,6 +790,10 @@ async function renderProximity(){
   $$('button[data-revoke]', wrap).forEach(b => b.addEventListener('click', async () => {
     const { error } = await supabase.from('proximity_cards').update({ is_active: false, revoked_at: new Date().toISOString() }).eq('id', b.dataset.revoke);
     if (error) toast(error.message, 'error'); else { toast('Card revoked'); renderProximity(); }
+  }));
+  $$('button[data-renew]', wrap).forEach(b => b.addEventListener('click', async () => {
+    const { error } = await supabase.from('proximity_cards').update({ is_active: true, revoked_at: null, issued_at: new Date().toISOString() }).eq('id', b.dataset.renew);
+    if (error) toast(error.message, 'error'); else { toast('Card renewed'); renderProximity(); }
   }));
   $$('button[data-del]', wrap).forEach(b => b.addEventListener('click', async () => {
     if (!confirm('Permanently delete this card record?')) return;
@@ -655,18 +840,12 @@ async function renderScanner(){
   content.innerHTML = `
     <div class="scan-wrap">
       <div>
-        <div class="panel">
-          <label>Proximity code</label>
-          <div class="scan-input-row">
-            <input id="scan-code" class="mono" placeholder="Scan or type ID…" autofocus />
-            <button class="primary" id="scan-go">Scan</button>
-          </div>
-          <div style="margin-top:10px;">
-            <label>Scanner ID</label>
-            <input id="scan-station" class="mono" value="console-01" />
-          </div>
+        <div class="panel" style="text-align:center;padding:36px 24px;">
+          <div style="font-size:32px;margin-bottom:8px;">▣</div>
+          <div style="font-weight:600;font-size:15px;margin-bottom:6px;">The scanner opens in its own tab</div>
+          <div class="emp-meta" style="margin-bottom:18px;">Keeps the console open on one screen while a dedicated tab runs on the reader station.</div>
+          <button class="primary" id="scan-open">Open scanner ↗</button>
         </div>
-        <div id="scan-result"></div>
       </div>
       <div class="panel">
         <div style="font-weight:600;margin-bottom:10px;font-size:13px;">Recent activity</div>
@@ -674,24 +853,7 @@ async function renderScanner(){
       </div>
     </div>
   `;
-  const codeInput = $('#scan-code');
-  const doScan = async () => {
-    const proximity_code = codeInput.value.trim();
-    if (!proximity_code) return;
-    const scanner_id = $('#scan-station').value.trim() || 'console-01';
-    const { data, error } = await supabase.rpc('scan_proximity_code', { p_proximity_code: proximity_code, p_scanner_id: scanner_id });
-    const resultWrap = $('#scan-result');
-    if (error) {
-      resultWrap.innerHTML = `<div class="result-card unmatched"><strong style="color:var(--bad)">Scan failed</strong><div class="emp-meta">${esc(error.message)}</div></div>`;
-    } else {
-      resultWrap.innerHTML = renderScanResult(data);
-    }
-    codeInput.value = '';
-    codeInput.focus();
-    loadScanFeed();
-  };
-  $('#scan-go').addEventListener('click', doScan);
-  codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doScan(); });
+  $('#scan-open').addEventListener('click', () => window.open(location.pathname + '?scanner=1', '_blank', 'noopener'));
   loadScanFeed();
 }
 
@@ -703,6 +865,7 @@ function renderScanResult(data){
     return `
       <div class="result-card matched">
         <span class="badge matched">${esc(labelMap[result])}</span>
+        ${data.direction ? `<span class="badge ${data.direction === 'out' ? 'suspended' : 'active'}" style="margin-left:6px;">${esc(data.direction.toUpperCase())}</span>` : ''}
         <div class="emp-line" style="margin-top:12px;">
           <div class="avatar">${esc(initials(e.full_name))}</div>
           <div>
@@ -721,8 +884,8 @@ function renderScanResult(data){
   `;
 }
 
-async function loadScanFeed(){
-  const feedEl = $('#scan-feed');
+async function loadScanFeed(targetId='scan-feed'){
+  const feedEl = $('#'+targetId);
   if (!feedEl) return;
   const { data, error } = await supabase.from('scan_feed').select('*').limit(25);
   if (error) { feedEl.innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
