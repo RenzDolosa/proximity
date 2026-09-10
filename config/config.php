@@ -7,199 +7,84 @@ require_once __DIR__ . '/paths.php';
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->load();
 
-if ($_ENV['APP_ENV'] === 'local') {
-  define('DB_HOST', '127.0.0.1:3306');
-  define('DB_NAME', 'if0_41430152_proximity3pl');
-  define('DB_USER', 'root');
-  define('DB_PASS', '');
-} else {
-  define('DB_HOST', $_ENV['DB_HOST']);
-  define('DB_NAME', $_ENV['DB_NAME']);
-  define('DB_USER', $_ENV['DB_USER']);
-  define('DB_PASS', $_ENV['DB_PASS']);
-}
-
-define('USER_DB_PREFIX', DB_NAME);
-define('USER_DB_HOST', DB_HOST);
-define('USER_DB_USER', DB_USER);
-define('USER_DB_PASS', DB_PASS);
-
-define('MAX_DB_NAME_LENGTH', 64);
+// -- Database (Postgres / Supabase) ------------------------------------------
+// Formerly MySQL with one physical database created per user (see git
+// history if you need the old logic). Migrated to a single shared Postgres
+// database on Supabase: tenancy is now enforced by a `user_id` column plus
+// Row Level Security on every tenant-scoped table (see
+// supabase/migrations/20260909084355_initial_schema.sql), not by physical
+// database isolation. Schema changes belong in supabase/migrations/ from now
+// on -- NOT in runtime CREATE TABLE / ALTER TABLE calls in this file. The old
+// createDatabase() / createMainTables() bootstrap-on-every-request pattern
+// is gone; if you need a schema change, add a migration and push it (the
+// GitHub -> Supabase integration deploys it automatically on merge to main).
+//
+// Recommended .env values (Supabase Session Pooler -- IPv4-compatible, works
+// from shared/traditional hosts like InfinityFree where a direct IPv6-only
+// connection won't work): grab the exact host from the Supabase dashboard's
+// "Connect" button > Session pooler.
+//   DB_HOST=aws-<region>.pooler.supabase.com
+//   DB_PORT=5432
+//   DB_NAME=postgres
+//   DB_USER=postgres.<project-ref>
+//   DB_PASS=<your database password>
+define('DB_HOST', $_ENV['DB_HOST']);
+define('DB_PORT', $_ENV['DB_PORT'] ?? '5432');
+define('DB_NAME', $_ENV['DB_NAME'] ?? 'postgres');
+define('DB_USER', $_ENV['DB_USER']);
+define('DB_PASS', $_ENV['DB_PASS']);
 
 define('QR_EMP_CACHE_FILE', '/database/seeders/cache/employee_qr_cache.json');
 
-// ── Timezone ──────────────────────────────────────────────────────────────────
+// -- Timezone -----------------------------------------------------------------
 define('APP_TIMEZONE',    'Asia/Manila');
-define('APP_TIMEZONE_TZ', '+08:00');
+define('APP_TIMEZONE_TZ', '+08:00'); // kept for any code still reading the raw offset
 
 date_default_timezone_set(APP_TIMEZONE);
 
-// ── Create main database ──────────────────────────────────────────────────────
-function createDatabase()
+// -----------------------------------------------------------------------------
+// Database -- connection manager (Postgres)
+// -----------------------------------------------------------------------------
+//
+// Deliberately NOT using PDO::ATTR_PERSISTENT here. Row Level Security below
+// depends on a session variable (app.current_user_id) that's set per
+// connection; a persistent connection pool reused across different users'
+// requests could leak a stale user_id into the wrong request if we're not
+// extremely careful. Non-persistent connections cost a bit of latency per
+// request but make that whole class of bug structurally impossible instead
+// of "impossible as long as every call site remembers" -- same philosophy as
+// the qr_code conflict fix in proxcode_backend.php.
+function pgConnect(): PDO
 {
-  $dbName = DB_NAME;
-
-  if (strlen($dbName) > MAX_DB_NAME_LENGTH) {
-    $errorMsg = "Database name exceeds maximum length of " . MAX_DB_NAME_LENGTH . " characters. Generated name: '$dbName' (" . strlen($dbName) . " chars)";
-    return ['success' => false, 'error' => $errorMsg];
-  }
-
-  try {
-    $pdo = new PDO(
-      "mysql:host=" . DB_HOST . ";charset=utf8mb4",
-      DB_USER,
-      DB_PASS,
-      [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-    );
-    $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
-
-    $stmt = $pdo->prepare("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?");
-    $stmt->execute([$dbName]);
-
-    if ($stmt->rowCount() === 0) {
-      $escapedDbName = str_replace("`", "``", $dbName);
-      $pdo->exec("CREATE DATABASE `{$escapedDbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-    }
-
-    $dbPdo = new PDO(
-      "mysql:host=" . DB_HOST . ";dbname=" . $dbName . ";charset=utf8mb4",
-      DB_USER,
-      DB_PASS,
-      [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-    );
-    $dbPdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
-
-    $dbPdo->exec("CREATE TABLE IF NOT EXISTS `users` (
-        `id` int(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        `username` varchar(50) NOT NULL,
-        `email` varchar(100) NOT NULL,
-        `password` varchar(255) NOT NULL,
-        `first_name` varchar(50) NOT NULL,
-        `last_name` varchar(50) NOT NULL,
-        `phone` varchar(20) DEFAULT NULL,
-        `my_database` varchar(50) NOT NULL DEFAULT '',
-        `user_group` varchar(50) NOT NULL DEFAULT '',
-        `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-        `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-        `last_login` timestamp NULL DEFAULT NULL,
-        `session_token` varchar(255) DEFAULT NULL,
-        INDEX idx_username (username),
-        INDEX idx_email (email),
-        INDEX idx_session_token (session_token)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $dbPdo->exec("CREATE TABLE IF NOT EXISTS `user_sessions` (
-        `id` int(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        `user_id` int(11) NOT NULL,
-        `session_token` varchar(255) NOT NULL,
-        `expires_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-        `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-        CONSTRAINT `user_sessions_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $dbPdo->exec("CREATE TABLE IF NOT EXISTS `system_logs` (
-        `id` int(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        `user_id` int(11) DEFAULT NULL,
-        `action` varchar(100) NOT NULL,
-        `details` text DEFAULT NULL,
-        `ip_address` varchar(45) DEFAULT NULL,
-        `user_agent` text DEFAULT NULL,
-        `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $dbPdo->exec("CREATE TABLE IF NOT EXISTS `user_groups` (
-        `id` INT(11) NOT NULL AUTO_INCREMENT,
-        `group_number` VARCHAR(64) NOT NULL UNIQUE,
-        `group_name` VARCHAR(100) NOT NULL UNIQUE,
-        `description` VARCHAR(255) DEFAULT NULL,
-        `is_enabled` TINYINT(1) NOT NULL DEFAULT 1,
-        `permissions` JSON DEFAULT NULL,
-        `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        `updated_at` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (`id`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-    $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `user_group` VARCHAR(50) NOT NULL DEFAULT ''");
-    $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP");
-    $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
-    $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `last_login` TIMESTAMP NULL DEFAULT NULL");
-    $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `session_token` VARCHAR(255) DEFAULT NULL");
-    $dbPdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `my_database` VARCHAR(50) NOT NULL DEFAULT ''");
-
-    $alterStatements = [
-      "ALTER TABLE check_in_out
-          ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL,
-          ADD INDEX IF NOT EXISTS idx_employee_scan (employee_id, scan_timestamp)",
-      "ALTER TABLE employee_access_log
-          ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL,
-          ADD INDEX IF NOT EXISTS idx_timestamp (access_timestamp),
-          ADD INDEX IF NOT EXISTS idx_status (status),
-          ADD INDEX IF NOT EXISTS idx_shift (shift),
-          ADD INDEX IF NOT EXISTS idx_check_status (check_status),
-          ADD INDEX IF NOT EXISTS idx_user_id (user_id),
-          ADD INDEX IF NOT EXISTS idx_status_timestamp (status, access_timestamp),
-          ADD INDEX IF NOT EXISTS idx_qr_ts_id (qr_code, access_timestamp, id)",
-      "ALTER TABLE employees
-          ADD COLUMN IF NOT EXISTS user_id int(11) DEFAULT NULL,
-          ADD COLUMN IF NOT EXISTS gender ENUM('Male','Female') DEFAULT NULL AFTER brand,
-          ADD COLUMN IF NOT EXISTS birth  DATE DEFAULT NULL AFTER gender,
-          ADD COLUMN IF NOT EXISTS hired  DATE DEFAULT NULL AFTER birth",
-      "ALTER TABLE code
-          ADD COLUMN IF NOT EXISTS is_active TINYINT(1) NOT NULL DEFAULT 1,
-          ADD COLUMN IF NOT EXISTS reserved_by VARCHAR(64) NULL DEFAULT NULL,
-          ADD COLUMN IF NOT EXISTS reserved_at DATETIME    NULL DEFAULT NULL",
-    ];
-
-    foreach ($alterStatements as $sql) {
-      try {
-        $dbPdo->exec($sql);
-      } catch (PDOException $e) {
-        error_log("Alter statement failed: " . $e->getMessage() . " | SQL: " . $sql);
-      }
-    }
-    // ──────────────────────────────────────────────────────────────────────
-
-    $adminHash = '$2y$10$/nqdViJv2DWyfjHhfS8ZDOPT.6QwxO3DWK1ocCwDFPUYvEE20Lkga';
-    $dbPdo->exec("INSERT INTO `users` (`id`, `username`, `email`, `password`, `first_name`, `last_name`, `phone`, `my_database`, `user_group`)
-      VALUES (1, 'Admin', 'administrator@gmail.com', '$adminHash', 'Renz', 'Admin', '09196398247', 'AdminServer', 'Administrator')
-      ON DUPLICATE KEY UPDATE id=id");
-
-    $dbPdo->exec("ALTER TABLE `users` MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;");
-
-    return ['success' => true, 'database_name' => $dbName];
-  } catch (PDOException $e) {
-    $errorMsg = "Error in createDatabase(): " . $e->getMessage();
-    return ['success' => false, 'error' => $errorMsg];
-  }
+  $pdo = new PDO(
+    "pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME,
+    DB_USER,
+    DB_PASS,
+    [
+      PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+      PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+      PDO::ATTR_EMULATE_PREPARES => false,
+    ]
+  );
+  $pdo->exec("SET TIME ZONE '" . APP_TIMEZONE . "'");
+  return $pdo;
 }
 
-createDatabase();
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Database — connection manager
-// ─────────────────────────────────────────────────────────────────────────────
 function getMainDBConnection()
 {
   try {
-    $pdo = new PDO(
-      "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
-      DB_USER,
-      DB_PASS,
-      [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES => false,
-        PDO::ATTR_PERSISTENT => true,
-        PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '" . APP_TIMEZONE_TZ . "'",
-      ]
-    );
-    $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
-    return $pdo;
+    return pgConnect();
   } catch (PDOException $e) {
     die("Database connection failed: " . $e->getMessage() . " | Host: " . DB_HOST . " | DB: " . DB_NAME);
   }
 }
 
+// Kept as getUserDBConnection($userId) for compatibility with every service
+// file that already calls it this way. Under the old architecture this
+// pointed at a different physical database per user; now it's the SAME
+// shared database as getMainDBConnection(), but with the Postgres session
+// variable RLS policies check (app.current_user_id) set to $userId, so
+// queries run through this connection only ever see that user's rows.
 function getUserDBConnection(int $userId)
 {
   if (!is_numeric($userId) || $userId <= 0) {
@@ -208,425 +93,57 @@ function getUserDBConnection(int $userId)
 
   static $pool = [];
   $id = (int) $userId;
-  if (isset($pool[$id])) {
-    return $pool[$id];
-  }
-
-  $dbName = DB_NAME; // USER_DB_PREFIX . intval($userId);
 
   try {
-    $pdo = new PDO(
-      "mysql:host=" . USER_DB_HOST . ";dbname=" . $dbName . ";charset=utf8mb4",
-      USER_DB_USER,
-      USER_DB_PASS,
-      [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES => false,
-        PDO::ATTR_PERSISTENT => true,
-        PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '" . APP_TIMEZONE_TZ . "'",
-      ]
-    );
-    $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
-    $pool[$id] = $pdo;
+    if (!isset($pool[$id])) {
+      $pool[$id] = pgConnect();
+    }
+    $pdo = $pool[$id];
+
+    // Re-set on every call, even for a pooled connection -- cheap, and it's
+    // the difference between "correct" and "correct as long as no other
+    // user_id was ever requested earlier in this same request."
+    $stmt = $pdo->prepare("SELECT set_config('app.current_user_id', ?, false)");
+    $stmt->execute([(string) $id]);
+
     return $pdo;
   } catch (PDOException $e) {
     throw new Exception("User database connection failed");
   }
 }
 
+// -----------------------------------------------------------------------------
+// Deprecated compatibility shims
+// -----------------------------------------------------------------------------
+// These used to create/check/destroy an entire physical MySQL database per
+// user. That concept doesn't exist anymore -- schema lives in
+// supabase/migrations/ and is always present. Kept as no-ops purely so the
+// ~8 existing call sites across the service layer (proxcode_backend.php,
+// manpower_backend.php, qr_search_backend.php, device-push.php, etc.) keep
+// working unmodified. TODO: strip these call sites out directly in a
+// follow-up pass -- they're now dead weight, not functional guards.
+
 function userDatabaseExists(int $userId)
 {
-  if (!is_numeric($userId) || $userId <= 0) {
-    return false;
-  }
-
-  $dbName = DB_NAME; // USER_DB_PREFIX . intval($userId);
-
-  try {
-    $pdo = new PDO(
-      "mysql:host=" . USER_DB_HOST . ";charset=utf8mb4",
-      USER_DB_USER,
-      USER_DB_PASS,
-      [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-    );
-    $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
-
-    $stmt = $pdo->prepare("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?");
-    $stmt->execute([$dbName]);
-
-    return $stmt->rowCount() > 0;
-  } catch (PDOException $e) {
-    return false;
-  }
+  return true;
 }
 
 function createUserDatabase(int $userId)
 {
-  if (!is_numeric($userId) || $userId <= 0) {
-    $errorMsg = "Invalid user ID for database creation: $userId";
-    return ['success' => false, 'error' => $errorMsg];
-  }
-
-  $userId = intval($userId);
-  $dbName = DB_NAME; // USER_DB_PREFIX . $userId;
-
-  if (strlen($dbName) > MAX_DB_NAME_LENGTH) {
-    $errorMsg = "Database name exceeds maximum length of " . MAX_DB_NAME_LENGTH . " characters. Generated name: '$dbName' (" . strlen($dbName) . " chars)";
-    return ['success' => false, 'error' => $errorMsg];
-  }
-
-  try {
-    $pdo = new PDO(
-      "mysql:host=" . USER_DB_HOST . ";charset=utf8mb4",
-      USER_DB_USER,
-      USER_DB_PASS,
-      [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-    );
-    $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
-
-    $createDbQuery = "CREATE DATABASE IF NOT EXISTS `" . str_replace("`", "``", $dbName) . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
-    $pdo->exec($createDbQuery);
-
-    $userPdo = new PDO(
-      "mysql:host=" . USER_DB_HOST . ";dbname=" . $dbName . ";charset=utf8mb4",
-      USER_DB_USER,
-      USER_DB_PASS,
-      [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-    );
-    $userPdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS employees (
-        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        user_id int(11) DEFAULT NULL,
-        fullname VARCHAR(100) NOT NULL,
-        position VARCHAR(50) NOT NULL,
-        brand VARCHAR(50) NOT NULL,
-        gender ENUM('Male', 'Female') DEFAULT NULL,
-        birth DATE DEFAULT NULL,
-        hired DATE DEFAULT NULL,
-        status ENUM ('Active', 'Inactive') DEFAULT 'Active',
-        shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') NOT NULL,
-        violation TEXT,
-        image VARCHAR(255),
-        qr_code VARCHAR(100) UNIQUE NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_qr_code (qr_code)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS code (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        is_active TINYINT(1) NOT NULL DEFAULT 1,
-        qr_code VARCHAR(100) UNIQUE,
-        reserved_by VARCHAR(64) NULL DEFAULT NULL,
-        reserved_at DATETIME NULL DEFAULT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS violations (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        employee_id INT NOT NULL,
-        violation_type VARCHAR(100),
-        violation_description TEXT,
-        violation_date DATE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS status_history (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        employee_id INT NOT NULL,
-        old_status VARCHAR(20),
-        new_status VARCHAR(20),
-        changed_by VARCHAR(100),
-        change_reason TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS search_queries (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        query_type VARCHAR(50) NOT NULL,
-        search_term VARCHAR(255) DEFAULT NULL,
-        search_parameters JSON DEFAULT NULL,
-        results_count INT DEFAULT 0,
-        results_data JSON DEFAULT NULL,
-        ip_address VARCHAR(45) DEFAULT NULL,
-        user_agent TEXT DEFAULT NULL,
-        query_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        execution_time_ms DECIMAL(10, 3) DEFAULT NULL,
-        success BOOLEAN DEFAULT FALSE,
-        error_message TEXT DEFAULT NULL,
-        INDEX idx_query_type (query_type),
-        INDEX idx_timestamp (query_timestamp),
-        INDEX idx_success (success)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS employee_access_log (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id int(11) DEFAULT NULL,
-        employee_id INT DEFAULT NULL,
-        fullname VARCHAR(100) DEFAULT NULL,
-        position VARCHAR(50) DEFAULT NULL,
-        brand VARCHAR(50) DEFAULT NULL,
-        status ENUM ('Active', 'Inactive') DEFAULT NULL,
-        shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
-        violation TEXT DEFAULT NULL,
-        image VARCHAR(255) DEFAULT NULL,
-        qr_code VARCHAR(100) DEFAULT NULL,
-        access_type VARCHAR(50) DEFAULT NULL,
-        ip_address VARCHAR(45) DEFAULT NULL,
-        user_agent TEXT DEFAULT NULL,
-        check_status ENUM ('IN', 'OUT') DEFAULT NULL,
-        access_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_employee_id (employee_id),
-        INDEX idx_qr_code (qr_code),
-        INDEX idx_access_timestamp (access_timestamp),
-        INDEX idx_access_type (access_type)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS employee_attendance_log (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id int(11) DEFAULT NULL,
-        employee_id INT DEFAULT NULL,
-        fullname VARCHAR(100) DEFAULT NULL,
-        position VARCHAR(50) DEFAULT NULL,
-        brand VARCHAR(50) DEFAULT NULL,
-        status ENUM ('Active', 'Inactive') DEFAULT NULL,
-        shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
-        violation TEXT DEFAULT NULL,
-        image VARCHAR(255) DEFAULT NULL,
-        qr_code VARCHAR(100) DEFAULT NULL,
-        access_type VARCHAR(50) DEFAULT NULL,
-        ip_address VARCHAR(45) DEFAULT NULL,
-        user_agent TEXT DEFAULT NULL,
-        access_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_employee_id (employee_id),
-        INDEX idx_qr_code (qr_code),
-        INDEX idx_access_timestamp (access_timestamp),
-        INDEX idx_access_type (access_type)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS check_in_out (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id int(11) DEFAULT NULL,
-        employee_id INT NOT NULL,
-        qr_code VARCHAR(255) NOT NULL,
-        fullname VARCHAR(255) NOT NULL,
-        check_type ENUM ('IN', 'OUT') NOT NULL,
-        scan_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        ip_address VARCHAR(45),
-        user_agent TEXT,
-        INDEX idx_employee_id (employee_id),
-        INDEX idx_qr_code (qr_code),
-        INDEX idx_timestamp (scan_timestamp),
-        INDEX idx_employee_scan (employee_id, scan_timestamp)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS user_audio_settings (
-        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-        user_id INT UNSIGNED NOT NULL,
-        success_audio_path VARCHAR(512) DEFAULT NULL,
-        not_found_audio_path VARCHAR(512) DEFAULT NULL,
-        inactive_audio_path VARCHAR(512) DEFAULT NULL,
-        violations_audio_path VARCHAR(512) DEFAULT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (id),
-        UNIQUE KEY uq_user_id (user_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    return ['success' => true, 'database_name' => $dbName];
-  } catch (PDOException $e) {
-    $errorMsg = "Error creating user database for user $userId: " . $e->getMessage();
-    error_log($errorMsg);
-    return ['success' => false, 'error' => $errorMsg];
-  }
+  return ['success' => true, 'database_name' => DB_NAME];
 }
 
 function ensureUserTablesExist(int $userId)
 {
-  if (!is_numeric($userId) || $userId <= 0) {
-    return false;
-  }
-
-  try {
-    $userPdo = getUserDBConnection($userId);
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS employees (
-        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        user_id int(11) DEFAULT NULL,
-        fullname VARCHAR(100) NOT NULL,
-        position VARCHAR(50) NOT NULL,
-        brand VARCHAR(50) NOT NULL,
-        gender ENUM('Male', 'Female') DEFAULT NULL,
-        birth DATE DEFAULT NULL,
-        hired DATE DEFAULT NULL,
-        status ENUM ('Active', 'Inactive') DEFAULT 'Active',
-        shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') NOT NULL,
-        violation TEXT,
-        image VARCHAR(255),
-        qr_code VARCHAR(100) UNIQUE NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_qr_code (qr_code)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS code (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        is_active TINYINT(1) NOT NULL DEFAULT 1,
-        qr_code VARCHAR(100) UNIQUE,
-        reserved_by VARCHAR(64) NULL DEFAULT NULL,
-        reserved_at DATETIME NULL DEFAULT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS violations (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        employee_id INT NOT NULL,
-        violation_type VARCHAR(100),
-        violation_description TEXT,
-        violation_date DATE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS status_history (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        employee_id INT NOT NULL,
-        old_status VARCHAR(20),
-        new_status VARCHAR(20),
-        changed_by VARCHAR(100),
-        change_reason TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS search_queries (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        query_type VARCHAR(50) NOT NULL,
-        search_term VARCHAR(255) DEFAULT NULL,
-        search_parameters JSON DEFAULT NULL,
-        results_count INT DEFAULT 0,
-        results_data JSON DEFAULT NULL,
-        ip_address VARCHAR(45) DEFAULT NULL,
-        user_agent TEXT DEFAULT NULL,
-        query_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        execution_time_ms DECIMAL(10, 3) DEFAULT NULL,
-        success BOOLEAN DEFAULT FALSE,
-        error_message TEXT DEFAULT NULL,
-        INDEX idx_query_type (query_type),
-        INDEX idx_timestamp (query_timestamp),
-        INDEX idx_success (success)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS employee_access_log (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id int(11) DEFAULT NULL,
-        employee_id INT DEFAULT NULL,
-        fullname VARCHAR(100) DEFAULT NULL,
-        position VARCHAR(50) DEFAULT NULL,
-        brand VARCHAR(50) DEFAULT NULL,
-        status ENUM ('Active', 'Inactive') DEFAULT NULL,
-        shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
-        violation TEXT DEFAULT NULL,
-        image VARCHAR(255) DEFAULT NULL,
-        qr_code VARCHAR(100) DEFAULT NULL,
-        access_type VARCHAR(50) DEFAULT NULL,
-        ip_address VARCHAR(45) DEFAULT NULL,
-        user_agent TEXT DEFAULT NULL,
-        check_status ENUM ('IN', 'OUT') DEFAULT NULL,
-        access_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_employee_id (employee_id),
-        INDEX idx_qr_code (qr_code),
-        INDEX idx_access_timestamp (access_timestamp),
-        INDEX idx_access_type (access_type)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS employee_attendance_log (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id int(11) DEFAULT NULL,
-        employee_id INT DEFAULT NULL,
-        fullname VARCHAR(100) DEFAULT NULL,
-        position VARCHAR(50) DEFAULT NULL,
-        brand VARCHAR(50) DEFAULT NULL,
-        status ENUM ('Active', 'Inactive') DEFAULT NULL,
-        shift ENUM ('Day Shift', 'Night Shift', 'Graveyard Shift') DEFAULT NULL,
-        violation TEXT DEFAULT NULL,
-        image VARCHAR(255) DEFAULT NULL,
-        qr_code VARCHAR(100) DEFAULT NULL,
-        access_type VARCHAR(50) DEFAULT NULL,
-        ip_address VARCHAR(45) DEFAULT NULL,
-        user_agent TEXT DEFAULT NULL,
-        access_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_employee_id (employee_id),
-        INDEX idx_qr_code (qr_code),
-        INDEX idx_access_timestamp (access_timestamp),
-        INDEX idx_access_type (access_type)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS check_in_out (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id int(11) DEFAULT NULL,
-        employee_id INT NOT NULL,
-        qr_code VARCHAR(255) NOT NULL,
-        fullname VARCHAR(255) NOT NULL,
-        check_type ENUM ('IN', 'OUT') NOT NULL,
-        scan_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        ip_address VARCHAR(45),
-        user_agent TEXT,
-        INDEX idx_employee_id (employee_id),
-        INDEX idx_qr_code (qr_code),
-        INDEX idx_timestamp (scan_timestamp),
-        INDEX idx_employee_scan (employee_id, scan_timestamp)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    $userPdo->exec("CREATE TABLE IF NOT EXISTS user_audio_settings (
-        id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        user_id INT UNSIGNED NOT NULL,
-        success_audio_path VARCHAR(512) DEFAULT NULL,
-        not_found_audio_path VARCHAR(512) DEFAULT NULL,
-        inactive_audio_path VARCHAR(512) DEFAULT NULL,
-        violations_audio_path VARCHAR(512) DEFAULT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        UNIQUE KEY uq_user_id (user_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-    return true;
-  } catch (PDOException $e) {
-    error_log("Error ensuring user tables exist: " . $e->getMessage());
-    return false;
-  }
+  return true;
 }
 
 function deleteUserDatabase(int $userId)
 {
-  if (!is_numeric($userId) || $userId <= 0) {
-    return false;
-  }
-
-  $userId = intval($userId);
-  $dbName = DB_NAME; // USER_DB_PREFIX . $userId;
-
-  try {
-    $pdo = new PDO(
-      "mysql:host=" . USER_DB_HOST . ";charset=utf8mb4",
-      USER_DB_USER,
-      USER_DB_PASS,
-      [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-    );
-    $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
-
-    $pdo->exec("DROP DATABASE IF EXISTS `" . str_replace("`", "``", $dbName) . "`");
-    return true;
-  } catch (PDOException $e) {
-    return false;
-  }
+  error_log("deleteUserDatabase() called for user $userId -- no-op under the shared-database architecture. Delete the user's row instead (their data cascades via ON DELETE CASCADE).");
+  return true;
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SESSION AND SECURITY FUNCTIONS
@@ -666,24 +183,12 @@ function isValidPassword(string $password)
     preg_match('/[0-9]/', $password);
 }
 
+// Deprecated: MySQL INFORMATION_SCHEMA.SCHEMATA lookup for a per-user
+// database that no longer exists. Not called anywhere else in the codebase
+// (verified) -- kept only in case something external still references it.
 function customDatabaseExists(string $dbName)
 {
-  try {
-    $pdo = new PDO(
-      "mysql:host=" . DB_HOST . ";charset=utf8mb4",
-      DB_USER,
-      DB_PASS,
-      [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-    );
-    $pdo->exec("SET time_zone = '" . APP_TIMEZONE_TZ . "'");
-
-    $stmt = $pdo->prepare("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?");
-    $stmt->execute([$dbName]);
-
-    return $stmt->rowCount() > 0;
-  } catch (PDOException $e) {
-    return true;
-  }
+  return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -691,12 +196,13 @@ function customDatabaseExists(string $dbName)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Enhanced User Registration Function
+ * User Registration Function
  *
- * DATABASE NAMING STRATEGY:
- * - Actual database created: user_{$userId} (e.g., user_1, user_2, user_3)
- * - The 'my_database' field is stored in users table as METADATA ONLY
- * - This ensures clean, predictable database names while preserving user's custom name
+ * Every user's data now lives in the same shared Postgres tables, isolated
+ * by `user_id` + Row Level Security -- there's no per-user database to
+ * create anymore. `my_database` is kept as a plain free-text metadata column
+ * on `users` (admin panel.php and reg.php both read/write it as a display
+ * label) but has no functional effect on where data is stored.
  *
  * @param string $username - Unique username (3+ chars)
  * @param string $email - Valid email address
@@ -704,10 +210,10 @@ function customDatabaseExists(string $dbName)
  * @param string $firstName - User's first name
  * @param string $lastName - User's last name
  * @param string $user_group - User group or role (e.g., 'Administrator', 'User', etc.)
- * @param string|null $myDatabase - Custom database name (stored as metadata)
+ * @param string|null $myDatabase - Free-text display label (metadata only)
  * @param string|null $phoneNum - User's phone number
  *
- * @return array - ['success' => bool, 'user_id' => int, 'database_created' => bool, 'database_name' => string, 'message' => string, 'errors' => array]
+ * @return array - ['success' => bool, 'user_id' => int, 'message' => string, 'errors' => array]
  */
 function registerUser(string $username, string $email, string $password, string $firstName, string $lastName, string $user_group, ?string $myDatabase = null, ?string $phoneNum = null)
 {
@@ -769,29 +275,13 @@ function registerUser(string $username, string $email, string $password, string 
 
     $pdo->commit();
 
-    $dbResult = createUserDatabase($userId);
-
-    if (!$dbResult['success']) {
-      try {
-        $pdo->beginTransaction();
-        $deleteStmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
-        $deleteStmt->execute([$userId]);
-        $pdo->commit();
-      } catch (PDOException $e) {
-      }
-
-      return ['success' => false, 'errors' => [$dbResult['error']]];
-    }
-
-    logSystemAction($userId, 'USER_REGISTERED', "User registered with database: " . $dbResult['database_name'] . " (custom name: $myDatabase)");
+    logSystemAction($userId, 'USER_REGISTERED', "User registered (display label: $myDatabase)");
 
     return [
       'success' => true,
       'user_id' => $userId,
-      'database_created' => true,
-      'database_name' => $dbResult['database_name'],
       'custom_name' => $myDatabase,
-      'message' => 'Registration successful! Your personal database has been created.'
+      'message' => 'Registration successful!'
     ];
   } catch (PDOException $e) {
     try {
@@ -815,15 +305,6 @@ function loginUser(string $username, string $password)
     $user = $stmt->fetch();
 
     if ($user && password_verify($password, $user['password'])) {
-      if (!userDatabaseExists($user['id'])) {
-        $dbResult = createUserDatabase($user['id']);
-        if (!$dbResult['success']) {
-          return ['success' => false, 'errors' => ['Failed to initialize user database: ' . $dbResult['error']]];
-        }
-      } else {
-        ensureUserTablesExist($user['id']);
-      }
-
       $_SESSION['user_id'] = $user['id'];
       $_SESSION['username'] = $user['username'];
       $_SESSION['email'] = $user['email'];
@@ -844,83 +325,10 @@ function loginUser(string $username, string $password)
   }
 }
 
-// Create main system tables
-function createMainTables()
-{
-  try {
-    $pdo = getMainDBConnection();
-
-    $pdo->exec("CREATE TABLE IF NOT EXISTS users (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        email VARCHAR(100) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        first_name VARCHAR(50) NOT NULL,
-        last_name VARCHAR(50) NOT NULL,
-        phone VARCHAR(20),
-        my_database VARCHAR(100),
-        user_group VARCHAR(50),
-        session_token VARCHAR(255) DEFAULT NULL,
-        session_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        last_login TIMESTAMP NULL,
-        INDEX idx_username (username),
-        INDEX idx_email (email),
-        INDEX idx_session_token (session_token)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-    $pdo->exec("CREATE TABLE IF NOT EXISTS user_sessions (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT NOT NULL,
-        session_token VARCHAR(255) NOT NULL,
-        ip_address VARCHAR(45),
-        user_agent TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        is_active BOOLEAN DEFAULT TRUE,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        UNIQUE KEY unique_session (session_token),
-        INDEX idx_user_sessions_user_id (user_id),
-        INDEX idx_user_sessions_token (session_token)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-    $pdo->exec("CREATE TABLE IF NOT EXISTS system_logs (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT,
-        action VARCHAR(100) NOT NULL,
-        details TEXT,
-        ip_address VARCHAR(45),
-        user_agent TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
-        INDEX idx_user_id (user_id),
-        INDEX idx_action (action),
-        INDEX idx_created_at (created_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-    $pdo->exec("CREATE TABLE IF NOT EXISTS `user_groups` (
-        `id` INT(11) NOT NULL AUTO_INCREMENT,
-        `group_number` VARCHAR(64) NOT NULL UNIQUE COMMENT 'Auto-generated unique group number',
-        `group_name` VARCHAR(100) NOT NULL UNIQUE COMMENT 'Human-readable name e.g. Administrator',
-        `description` VARCHAR(255) DEFAULT NULL,
-        `is_enabled` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '1 = enabled, 0 = disabled',
-        `permissions` JSON DEFAULT NULL COMMENT 'JSON object: { order: true, social: false, ... }',
-        `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        `updated_at` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (`id`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-    $pdo->exec("ALTER TABLE `users` ADD COLUMN IF NOT EXISTS `user_group` VARCHAR(50)");
-
-    return true;
-  } catch (PDOException $e) {
-    error_log("createMainTables() failed: " . $e->getMessage());
-    return false;
-  }
-}
-
-createMainTables();
+// Schema (users, user_sessions, system_logs, user_groups, and everything
+// else) now lives entirely in supabase/migrations/ and is applied via the
+// GitHub -> Supabase integration -- no runtime bootstrap call needed or
+// wanted here anymore (see the comment at the top of this file).
 
 function logSystemAction(?int $userId, string $action, ?string $details = null)
 {
