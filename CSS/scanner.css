@@ -1,21 +1,46 @@
-/* Scanner page (inside the shell) and the standalone scanner tab. */
-.scan-wrap{display:grid;grid-template-columns:360px 1fr;gap:20px;align-items:start;}
-@media (max-width: 860px){.scan-wrap{grid-template-columns:1fr;}}
-.scan-input-row{display:flex;gap:8px;}
-.scan-input-row input{font-family:var(--mono);font-size:15px;letter-spacing:.5px;}
+/* Shared result-card styling (used by both the standalone scanner and the
+   in-shell Test Scan page). */
 .result-card{margin-top:16px;border:1px solid var(--border);border-radius:6px;padding:18px;}
 .result-card.matched{border-color:var(--good);background:linear-gradient(180deg, var(--good-dim), transparent 60%);}
 .result-card.unmatched,.result-card.inactive_card,.result-card.inactive_employee{border-color:var(--bad);background:linear-gradient(180deg, var(--bad-dim), transparent 60%);}
 
-/* ---------- standalone scanner (opens in a new tab) ---------- */
-.standalone-scan{min-height:100vh;display:flex;flex-direction:column;padding:20px 28px 40px;background:radial-gradient(900px 500px at 50% 0%, #17213A 0%, transparent 65%), var(--bg);}
+/* ---------- standalone scanner (opens in its own tab, logs every scan) ---------- */
+.standalone-scan{
+  min-height:100dvh;
+  width:100dvw;
+  max-width:100%;
+  display:flex;
+  flex-direction:column;
+  padding:20px clamp(16px, 4dvw, 28px) 40px;
+  background:radial-gradient(900px 500px at 50% 0%, #17213A 0%, transparent 65%), var(--bg);
+  box-sizing:border-box;
+}
 .ss-header{width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:14px;border-bottom:1px solid var(--border-soft);}
 .ss-operator{font-size:12.5px;color:var(--text-muted);}
 .ss-operator strong{color:var(--text);font-weight:600;}
-.ss-layout{flex:1;display:grid;grid-template-columns:1fr 260px;gap:28px;align-items:start;max-width:1080px;margin:0 auto;width:100%;}
-@media (max-width: 760px){.ss-layout{grid-template-columns:1fr;}}
-.ss-main{display:flex;flex-direction:column;align-items:center;}
-.ss-topbar{width:100%;max-width:420px;margin-bottom:36px;}
+
+/* Three-column grid with a spacer column mirroring the feed column's width
+   keeps ss-main (the "TAP YOUR CARD" hero + search box) truly centered on
+   the screen, instead of being pulled left by the feed sidebar. */
+.ss-layout{
+  flex:1;
+  display:grid;
+  grid-template-columns: minmax(0, 280px) minmax(0, 1fr) minmax(0, 280px);
+  gap:28px;
+  align-items:start;
+  width:100%;
+  max-width:100dvw;
+  margin:0 auto;
+  box-sizing:border-box;
+}
+.ss-main{grid-column:2;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;}
+.ss-feed-col{grid-column:3;position:sticky;top:20px;max-height:calc(100dvh - 120px);}
+@media (max-width: 900px){
+  .ss-layout{grid-template-columns:1fr;}
+  .ss-main{grid-column:1;}
+  .ss-feed-col{grid-column:1;position:static;max-height:none;}
+}
+.ss-topbar{width:min(420px, 90dvw);margin:0 auto 36px;}
 .ss-topbar input{font-family:var(--mono);font-size:14px;text-align:center;}
 .ss-hero{display:flex;flex-direction:column;align-items:center;gap:22px;margin-top:10px;}
 .ss-ring{position:relative;width:160px;height:160px;display:flex;align-items:center;justify-content:center;}
@@ -26,13 +51,29 @@
 .ss-icon{width:76px;height:76px;border-radius:12px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:34px;z-index:1;}
 .ss-label{text-align:center;font-weight:700;font-size:26px;letter-spacing:.5px;line-height:1.25;}
 .ss-label .dim{color:var(--text-muted);font-weight:700;}
-.ss-result-wrap{width:100%;max-width:420px;margin-top:26px;}
-.ss-feed-col{position:sticky;top:20px;}
-.ss-feed-panel{padding:12px 14px;}
-.ss-feed-title{font-weight:600;margin-bottom:8px;font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;}
+.ss-result-wrap{width:min(420px, 90dvw);margin:26px auto 0;}
+.ss-feed-panel{padding:12px 14px;display:flex;flex-direction:column;max-height:calc(100dvh - 120px);}
+.ss-feed-title{flex:none;font-weight:600;margin-bottom:8px;font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;}
+#ss-feed{overflow-y:auto;max-height:calc(100dvh - 170px);}
 .ss-feed-panel .feed-row{padding:7px 0;gap:8px;}
 .ss-feed-panel .feed-row .avatar{width:22px;height:22px;font-size:9px;}
 .ss-feed-panel .feed-row div > div{font-size:11.5px;}
 .ss-feed-panel .feed-row .emp-meta{font-size:10px;}
 .ss-feed-panel .feed-time{font-size:10px;}
 .ss-feed-panel .badge{font-size:9px;padding:2px 6px;}
+
+/* ---------- in-shell Test Scan page (same lookup, never logged) ---------- */
+.test-scan-wrap{width:100%;max-width:480px;margin:0 auto;}
+.test-scan-panel{display:flex;flex-direction:column;align-items:center;padding:32px 24px;}
+.test-scan-note{font-size:12px;color:var(--text-muted);text-align:center;margin-bottom:24px;}
+.ts-topbar{width:min(420px, 90dvw);margin:0 auto 32px;}
+.ts-topbar input{font-family:var(--mono);font-size:14px;text-align:center;}
+.ts-hero{display:flex;flex-direction:column;align-items:center;gap:18px;}
+.ts-ring{position:relative;width:120px;height:120px;display:flex;align-items:center;justify-content:center;}
+.ts-ring::before,.ts-ring::after{content:'';position:absolute;border-radius:50%;border:2px solid var(--accent-dim);}
+.ts-ring::before{width:120%;height:120%;animation:ss-pulse 2.4s ease-out infinite;}
+.ts-ring::after{width:150%;height:150%;animation:ss-pulse 2.4s ease-out infinite .5s;}
+.ts-icon{width:58px;height:58px;border-radius:10px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:26px;z-index:1;}
+.ts-label{text-align:center;font-weight:700;font-size:20px;letter-spacing:.5px;line-height:1.25;}
+.ts-label .dim{color:var(--text-muted);font-weight:700;}
+.ts-result-wrap{width:100%;margin-top:22px;}
