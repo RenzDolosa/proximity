@@ -52,7 +52,7 @@
 .ss-label{text-align:center;font-weight:700;font-size:26px;letter-spacing:.5px;line-height:1.25;}
 .ss-label .dim{color:var(--text-muted);font-weight:700;}
 .ss-result-wrap{width:min(420px, 90dvw);margin:26px auto 0;}
-.ss-feed-panel{padding:12px 14px;display:flex;flex-direction:column;max-height:calc(100dvh - 120px);}
+.ss-feed-panel{padding:12px 0px 12px 14px;display:flex;flex-direction:column;max-height:calc(100dvh - 120px);}
 .ss-feed-title{flex:none;font-weight:600;margin-bottom:8px;font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;}
 #ss-feed{overflow-y:auto;max-height:calc(100dvh - 170px);}
 .ss-feed-panel .feed-row{padding:7px 0;gap:8px;}

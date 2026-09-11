@@ -36,6 +36,7 @@ export async function renderUsers() {
               <button class="ghost" data-edit="${u.id}">Edit</button>
               <button class="ghost" data-pw="${u.id}">Reset password</button>
               <button class="ghost" data-toggle="${u.id}" ${u.id === appState.session.user.id ? 'disabled' : ''}>${u.is_active ? 'Disable' : 'Enable'}</button>
+              <button class="ghost danger" data-delete="${u.id}" ${u.id === appState.session.user.id ? 'disabled' : ''}>Delete</button>
             </td>
           </tr>
         `).join('')}
@@ -52,5 +53,15 @@ export async function renderUsers() {
     const row = data.find((u) => u.id === b.dataset.toggle);
     const { error } = await ProfilesModel.toggleActive(row.id, !row.is_active);
     if (error) toast(error.message, 'error'); else { toast('Account updated'); renderUsers(); }
+  }));
+  // Delete is gated three ways: the whole Users & Roles page already checks
+  // isAdmin() above, this button is disabled for the caller's own account,
+  // and the admin-users Edge Function re-checks the caller's role and
+  // rejects self-deletion server-side regardless of what the client sends.
+  $$('button[data-delete]', wrap).forEach((b) => b.addEventListener('click', async () => {
+    const row = data.find((u) => u.id === b.dataset.delete);
+    if (!confirm(`Permanently delete ${row.full_name}'s account (${row.email})? This can't be undone.`)) return;
+    const { error } = await ProfilesModel.deleteUser(row.id);
+    if (error) toast(error, 'error'); else { toast('Account deleted'); renderUsers(); }
   }));
 }

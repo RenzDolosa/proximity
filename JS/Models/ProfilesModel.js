@@ -31,4 +31,11 @@ export const ProfilesModel = {
     if (data?.error) return { error: data.error };
     return { data };
   },
+
+  // Permanently deletes the login account (auth.users row, which cascades
+  // to the profiles row). Server-side action, admin-only — enforced by the
+  // admin-users function itself, not just by hiding the button here.
+  async deleteUser(user_id) {
+    return this.callAdminUsers('delete', { user_id });
+  },
 };

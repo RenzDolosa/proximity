@@ -31,6 +31,7 @@ button.danger{background:transparent;border-color:var(--bad);color:var(--bad);}
 button.danger:hover{background:var(--bad-dim);}
 button.ghost{background:transparent;border-color:transparent;color:var(--text-muted);padding:6px 10px;}
 button.ghost:hover{color:var(--text);background:var(--surface-raised);}
+button.ghost.danger:hover{color:var(--bad);background:var(--bad-dim);}
 input,select{
   background:var(--surface);
   border:1px solid var(--border);
