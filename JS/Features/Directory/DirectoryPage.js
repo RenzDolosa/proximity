@@ -25,7 +25,8 @@ export async function renderDirectory() {
         </div>
       ` : ''}
     </div>
-    <div id="dir-table-wrap">Loading…</div>
+    <div class="table-scroll"><div id="dir-table-wrap">Loading…</div></div>
+    <div id="dir-pagination"></div>
   `;
   $('#dir-search').addEventListener('input', (e) => { page = 1; paintDirectoryTable(e.target.value); });
   if (isAdmin()) {
@@ -105,9 +106,8 @@ function paintDirectoryTable(filter) {
         `).join('')}
       </tbody>
     </table>
-    <div id="dir-pagination"></div>
   `;
-  renderPagination($('#dir-pagination', wrap), {
+  renderPagination($('#dir-pagination'), {
     total: allRows.length, page, pageSize,
     onChange: (next) => { page = next.page; pageSize = next.pageSize; paintDirectoryTable(filter); },
   });

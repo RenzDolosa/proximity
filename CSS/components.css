@@ -36,14 +36,16 @@ thead th{
 }
 tbody td{padding:11px 12px;border-bottom:1px solid var(--border-soft);vertical-align:middle;}
 tbody tr:hover{background:var(--surface);}
-/* The actions column has no header text, so in an auto-layout table the
-   browser was handing it whatever width was left over — stretching a
-   couple of small buttons across a huge gap. width:1% + nowrap makes it
-   (and any other shrink-to-fit column marked the same way) hug its
-   content instead. */
-thead th.col-shrink, tbody td.col-shrink{width:1%;white-space:nowrap;}
-.row-actions{display:flex;gap:6px;justify-content:flex-end;}
-.row-actions button{padding:5px 9px;font-size:12px;}
+/* width:1% + nowrap makes a shrink-to-fit column hug its content instead
+   of stretching across leftover space. padding-left gives it breathing
+   room from whatever sits to its left (a badge, a mono timestamp) so
+   adjacent shrink columns never crowd into each other — and if the
+   viewport genuinely isn't wide enough for all of them, .table-scroll
+   (layout.css) scrolls the table horizontally instead of squeezing them. */
+thead th.col-shrink, tbody td.col-shrink{width:1%;white-space:nowrap;padding-left:20px;}
+.row-actions{display:flex;flex-wrap:nowrap;gap:6px;justify-content:flex-end;}
+.row-actions button{padding:5px 9px;font-size:12px;flex-shrink:0;white-space:nowrap;}
+.badge{flex-shrink:0;}
 .empty-state{
   border:1px dashed var(--border);border-radius:6px;padding:40px 20px;text-align:center;color:var(--text-muted);
 }

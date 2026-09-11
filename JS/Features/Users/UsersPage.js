@@ -20,7 +20,8 @@ export async function renderUsers() {
       <div></div>
       <button class="primary" id="user-add">+ Add user</button>
     </div>
-    <div id="users-table-wrap">Loading…</div>
+    <div class="table-scroll"><div id="users-table-wrap">Loading…</div></div>
+    <div id="users-pagination"></div>
   `;
   $('#user-add').addEventListener('click', () => openUserModal(null, renderUsers));
   const { data, error } = await ProfilesModel.listUsers();
@@ -58,9 +59,8 @@ function paintUsersTable() {
         `).join('')}
       </tbody>
     </table>
-    <div id="users-pagination"></div>
   `;
-  renderPagination($('#users-pagination', wrap), {
+  renderPagination($('#users-pagination'), {
     total: data.length, page, pageSize,
     onChange: (next) => { page = next.page; pageSize = next.pageSize; paintUsersTable(); },
   });

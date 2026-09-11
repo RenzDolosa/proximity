@@ -33,7 +33,8 @@ export async function renderProximity() {
         </div>
       ` : ''}
     </div>
-    <div id="prox-table-wrap">Loading…</div>
+    <div class="table-scroll"><div id="prox-table-wrap">Loading…</div></div>
+    <div id="prox-pagination"></div>
   `;
   $('#prox-search').addEventListener('input', () => { page = 1; paintProximityTable(); });
   $('#prox-filter').addEventListener('change', () => { page = 1; paintProximityTable(); });
@@ -111,9 +112,8 @@ function paintProximityTable() {
         `; }).join('')}
       </tbody>
     </table>
-    <div id="prox-pagination"></div>
   `;
-  renderPagination($('#prox-pagination', wrap), {
+  renderPagination($('#prox-pagination'), {
     total: allRows.length, page, pageSize,
     onChange: (next) => { page = next.page; pageSize = next.pageSize; paintProximityTable(); },
   });
