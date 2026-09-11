@@ -184,7 +184,7 @@ async function importEmployees(records, onProgress) {
     const existing = cardByCode.get(codeKey);
     if (existing) {
       if (linkedCardIds.has(existing.id)) {
-        errors.push({ line, message: `Proximity code "${proximity_code}" is already assigned to another employee.` });
+        errors.push({ line, message: `Proximity code is already assigned to another employee — skipped.` });
         continue;
       }
       if (!existing.is_active) {

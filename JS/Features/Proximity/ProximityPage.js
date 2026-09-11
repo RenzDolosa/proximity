@@ -177,7 +177,7 @@ async function importCards(records, onProgress) {
     if (!proximity_code) { errors.push({ line, message: 'proximity_code is required.' }); return; }
     const key = proximity_code.toLowerCase();
     if (existingCodes.has(key)) { errors.push({ line, message: 'Duplicate proximity card — skipped.' }); return; }
-    if (seen.has(key)) { errors.push({ line, message: `Proximity code "${proximity_code}" is already used by row ${seen.get(key)} in this file.` }); return; }
+    if (seen.has(key)) { errors.push({ line, message: `Proximity code is already used by row ${seen.get(key)} in this file.` }); return; }
     seen.set(key, line);
     rows.push({ line, proximity_code });
   });
