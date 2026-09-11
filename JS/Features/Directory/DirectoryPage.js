@@ -8,8 +8,8 @@ import { openEmployeeModal } from '../../Components/EmployeeModal.js';
 import { openScanLogModal } from '../../Components/ScanLogModal.js';
 import { openRemarksModal } from '../../Components/RemarksModal.js';
 import { openImportModal } from '../../Components/ImportModal.js';
+import { openProgressModal } from '../../Components/ProgressModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
-import { openConfirmModal } from '../../Components/ConfirmModal.js';
 
 let page = 1;
 let pageSize = 50;
@@ -33,16 +33,23 @@ export async function renderDirectory() {
   $('#dir-search').addEventListener('input', (e) => { page = 1; paintDirectoryTable(e.target.value); });
   if (isAdmin()) {
     $('#dir-delete-all').addEventListener('click', async () => {
-      const total = appState.employeesCache.length;
-      if (!total) return;
-      const ok = await openConfirmModal({
-        title: 'Delete all employees?',
-        message: `This permanently deletes all ${total} employee${total === 1 ? '' : 's'} and their scan history. This can't be undone.`,
-        confirmLabel: 'Delete all',
-      });
-      if (!ok) return;
-      const { error } = await EmployeesModel.deleteAll();
-      if (error) toast(error.message, 'error'); else { toast('All employees deleted'); renderDirectory(); }
+      const ids = appState.employeesCache.map((e) => e.id);
+      if (!ids.length) return;
+      if (!confirm(`Permanently delete all ${ids.length} employees? This can't be undone.`)) return;
+      const CHUNK_SIZE = 500;
+      const chunks = chunkArray(ids, CHUNK_SIZE);
+      const progress = openProgressModal(`Deleting ${ids.length} employee${ids.length === 1 ? '' : 's'}…`);
+      let done = 0;
+      progress.update(done, ids.length);
+      for (const chunk of chunks) {
+        const { error } = await EmployeesModel.deleteMany(chunk);
+        if (error) { progress.close(); toast(error.message, 'error'); return; }
+        done += chunk.length;
+        progress.update(done, ids.length);
+      }
+      progress.close();
+      toast('All employees deleted');
+      renderDirectory();
     });
   }
   if (isAdminOrManager()) {
@@ -145,7 +152,7 @@ function paintDirectoryTable(filter) {
 // of chunked bulk inserts. A chunk only falls back to inserting its rows
 // one-by-one if the bulk call itself errors, so we can still say exactly
 // which line caused the problem.
-async function importEmployees(records) {
+async function importEmployees(records, onProgress) {
   const errors = [];
   const CHUNK_SIZE = 200;
 
@@ -238,15 +245,25 @@ async function importEmployees(records) {
     });
 
   let successCount = 0;
+  // Rows that already failed validation (bad proximity code, missing
+  // fields, etc.) are "done" in the sense the bar cares about — they have
+  // a known outcome before this loop even starts.
+  let done = records.length - ready.length;
+  onProgress?.(done, records.length);
   for (const chunk of chunkArray(ready, CHUNK_SIZE)) {
     const { error } = await EmployeesModel.createMany(chunk.map((r) => r.payload));
-    if (!error) { successCount += chunk.length; continue; }
-    // Same fallback: only go row-by-row for a chunk that actually failed.
-    for (const r of chunk) {
-      const { error: singleErr } = await EmployeesModel.createEmployee(r.payload);
-      if (singleErr) errors.push({ line: r.line, message: singleErr.message });
-      else successCount++;
+    if (!error) {
+      successCount += chunk.length;
+    } else {
+      // Same fallback: only go row-by-row for a chunk that actually failed.
+      for (const r of chunk) {
+        const { error: singleErr } = await EmployeesModel.createEmployee(r.payload);
+        if (singleErr) errors.push({ line: r.line, message: singleErr.message });
+        else successCount++;
+      }
     }
+    done += chunk.length;
+    onProgress?.(done, records.length);
   }
 
   errors.sort((a, b) => a.line - b.line);

@@ -9,7 +9,7 @@ import { parseCSV, toCSV } from '../Utils/csv.js';
 import { openModal, closeModal } from './Modal.js';
 
 /**
- * @param {{ title: string, description?: string, columns: {key:string,label:string,required?:boolean}[], sampleRow?: object, onImport: (records:object[]) => Promise<{successCount:number, errors:{line:number,message:string}[]}> }} config
+ * @param {{ title: string, description?: string, columns: {key:string,label:string,required?:boolean}[], sampleRow?: object, onImport: (records:object[], onProgress:(done:number,total:number)=>void) => Promise<{successCount:number, errors:{line:number,message:string}[]}> }} config
  * @param {() => void} [onDone] - called once the import finishes, so the page can refresh its table.
  */
 export function openImportModal({ title, description, columns, sampleRow, onImport }, onDone) {
@@ -25,6 +25,10 @@ export function openImportModal({ title, description, columns, sampleRow, onImpo
     <div class="field"><input type="file" id="im-file" accept=".csv,text/csv" /></div>
     <div id="im-preview"></div>
     <div class="auth-error hidden" id="im-error"></div>
+    <div id="im-progress-wrap" class="hidden">
+      <div class="progress-bar"><div class="progress-bar-fill" id="im-progress-fill"></div></div>
+      <div class="progress-label" id="im-progress-label">Starting…</div>
+    </div>
     <div id="im-summary"></div>
     <div class="actions">
       <button class="ghost" id="im-cancel">Cancel</button>
@@ -85,12 +89,26 @@ export function openImportModal({ title, description, columns, sampleRow, onImpo
     const runBtn = $('#im-run', overlay);
     runBtn.disabled = true;
     runBtn.textContent = 'Importing…';
-    const rowCount = parsedRecords.length;
-    const { successCount, errors } = await onImport(parsedRecords);
-    parsedRecords = null;
-
     $('#im-file', overlay).classList.add('hidden');
     $('#im-preview', overlay).innerHTML = '';
+    const rowCount = parsedRecords.length;
+
+    const progressWrap = $('#im-progress-wrap', overlay);
+    const progressFill = $('#im-progress-fill', overlay);
+    const progressLabel = $('#im-progress-label', overlay);
+    progressWrap.classList.remove('hidden');
+    const onProgress = (done, total) => {
+      const pct = total > 0 ? Math.round((done / total) * 100) : 100;
+      progressFill.style.width = `${pct}%`;
+      progressFill.classList.toggle('done', pct >= 100);
+      progressLabel.textContent = `${done} / ${total} rows`;
+    };
+    onProgress(0, rowCount);
+
+    const { successCount, errors } = await onImport(parsedRecords, onProgress);
+    parsedRecords = null;
+
+    progressWrap.classList.add('hidden');
     runBtn.classList.add('hidden');
     $('#im-cancel', overlay).textContent = 'Close';
     $('#im-summary', overlay).innerHTML = `

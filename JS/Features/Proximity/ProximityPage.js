@@ -6,8 +6,8 @@ import { ProximityCardsModel } from '../../Models/ProximityCardsModel.js';
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { openCardModal } from '../../Components/ProximityCardModal.js';
 import { openImportModal } from '../../Components/ImportModal.js';
+import { openProgressModal } from '../../Components/ProgressModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
-import { openConfirmModal } from '../../Components/ConfirmModal.js';
 
 let cardsCache = [];
 let assignedByCard = new Map();
@@ -46,27 +46,25 @@ export async function renderProximity() {
       const deletable = cardsCache.filter((c) => !assignedByCard.has(c.id));
       if (!deletable.length) { toast('No unassigned cards to delete.', 'error'); return; }
       const skipped = cardsCache.length - deletable.length;
-      const ok = await openConfirmModal({
-        title: 'Delete all unassigned cards?',
-        message: `Permanently delete ${deletable.length} unassigned card${deletable.length === 1 ? '' : 's'}?` +
-          (skipped ? ` ${skipped} assigned card${skipped === 1 ? '' : 's'} will be left untouched.` : '') +
-          ` This can't be undone.`,
-        confirmLabel: 'Delete all',
-      });
-      if (!ok) return;
-      // One .in(...) call per couple hundred ids instead of all of them at
-      // once — with a few hundred+ unassigned cards, a single request's
-      // filter list got long enough to come back as a 400 Bad Request from
-      // the API gateway (same fix as Employee Manager's Delete all).
-      let deletedCount = 0;
-      let failed = false;
-      for (const chunk of chunkArray(deletable.map((c) => c.id), 200)) {
+      const msg = `Permanently delete ${deletable.length} unassigned card${deletable.length === 1 ? '' : 's'}?` +
+        (skipped ? ` (${skipped} assigned card${skipped === 1 ? '' : 's'} will be left untouched.)` : '') +
+        ` This can't be undone.`;
+      if (!confirm(msg)) return;
+      const CHUNK_SIZE = 500;
+      const ids = deletable.map((c) => c.id);
+      const chunks = chunkArray(ids, CHUNK_SIZE);
+      const progress = openProgressModal(`Deleting ${ids.length} card${ids.length === 1 ? '' : 's'}…`);
+      let done = 0;
+      progress.update(done, ids.length);
+      for (const chunk of chunks) {
         const { error } = await ProximityCardsModel.removeMany(chunk);
-        if (error) { toast(error.message, 'error'); failed = true; break; }
-        deletedCount += chunk.length;
+        if (error) { progress.close(); toast(error.message, 'error'); return; }
+        done += chunk.length;
+        progress.update(done, ids.length);
       }
-      if (deletedCount) toast(failed ? `Deleted ${deletedCount} of ${deletable.length} cards before an error occurred` : 'Unassigned cards deleted');
-      if (deletedCount) renderProximity();
+      progress.close();
+      toast('Unassigned cards deleted');
+      renderProximity();
     });
   }
   if (isAdminOrManager()) {
@@ -153,7 +151,7 @@ function paintProximityTable() {
 // time, just done as a couple of chunked bulk inserts instead of one
 // network round-trip per row (see importEmployees in DirectoryPage.js for
 // the same pattern with more detail).
-async function importCards(records) {
+async function importCards(records, onProgress) {
   const errors = [];
   const CHUNK_SIZE = 200;
   const seen = new Map(); // code(lower) -> line, catches duplicates within the file
@@ -170,16 +168,26 @@ async function importCards(records) {
   });
 
   let successCount = 0;
+  // Rows that already failed validation (missing/duplicate code) are
+  // "done" before the loop even starts, so the bar lands exactly on
+  // records.length once the loop finishes.
+  let done = records.length - rows.length;
+  onProgress?.(done, records.length);
   for (const chunk of chunkArray(rows, CHUNK_SIZE)) {
     const { error } = await ProximityCardsModel.issueMany(
       chunk.map((r) => ({ proximity_code: r.proximity_code, created_by: appState.session.user.id }))
     );
-    if (!error) { successCount += chunk.length; continue; }
-    for (const r of chunk) {
-      const { error: singleErr } = await ProximityCardsModel.issue(r.proximity_code, appState.session.user.id);
-      if (singleErr) errors.push({ line: r.line, message: singleErr.message });
-      else successCount++;
+    if (!error) {
+      successCount += chunk.length;
+    } else {
+      for (const r of chunk) {
+        const { error: singleErr } = await ProximityCardsModel.issue(r.proximity_code, appState.session.user.id);
+        if (singleErr) errors.push({ line: r.line, message: singleErr.message });
+        else successCount++;
+      }
     }
+    done += chunk.length;
+    onProgress?.(done, records.length);
   }
 
   errors.sort((a, b) => a.line - b.line);
