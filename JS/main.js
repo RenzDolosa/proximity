@@ -3,6 +3,7 @@ import { appState, isStandaloneScanner, isScannerOnlyAccount, loadProfile } from
 import { showAuth, showShell, showStandaloneScanner } from './Core/screens.js';
 import { initRouter } from './Core/router.js';
 import { initAuthScreen } from './Features/Auth/AuthScreen.js';
+import { toast } from './Utils/toast.js';
 
 initAuthScreen();
 initRouter();
@@ -23,6 +24,19 @@ async function boot(session) {
     return;
   }
   await loadProfile();
+  // A still-valid JWT doesn't mean the account is still valid — deleting a
+  // user (or a still-open tab) doesn't invalidate their already-issued
+  // access token, it just deletes their profiles row (or flips is_active).
+  // Without this check, a deleted/disabled account that refreshes the page
+  // lands on a confusing, permission-less shell (every nav item hidden,
+  // "Admins only." on whatever route it defaults to) instead of being
+  // signed out. Catch that here, once, for every entry point.
+  if (!appState.profile || appState.profile.is_active === false) {
+    appState.profile = null;
+    toast('This account is no longer available. Please contact an administrator.', 'error');
+    await supabase.auth.signOut();
+    return;
+  }
   if (isStandaloneScanner || isScannerOnlyAccount()) showStandaloneScanner();
   else showShell();
 }
