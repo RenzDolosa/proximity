@@ -1,6 +1,7 @@
 /* Sign in / create account screen. */
 #auth-screen{
   flex:1;display:flex;align-items:center;justify-content:center;padding:24px;
+  overflow-y:auto;
   background:
     radial-gradient(1200px 600px at 15% -10%, #17213A 0%, transparent 60%),
     var(--bg);

@@ -1,5 +1,5 @@
 /* App shell layout: sidebar, topbar, content area. */
-#shell{flex:1;display:flex;min-height:0;}
+#shell{flex:1;display:flex;min-height:0;overflow:hidden;}
 #sidebar{
   width:216px;flex:0 0 216px;background:var(--surface);border-right:1px solid var(--border);
   display:flex;flex-direction:column;padding:18px 0;overflow-y:auto;
@@ -58,4 +58,3 @@ nav.rail button.active .ic{color:var(--accent);}
 }
 .table-scroll table{width:100%;}
 .table-scroll thead th{position:sticky;top:0;background:var(--bg);z-index:1;}
-
