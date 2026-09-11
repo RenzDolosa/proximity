@@ -51,6 +51,19 @@ function renderStandaloneScanner() {
   `;
   $('#ss-signout').addEventListener('click', async () => { await supabase.auth.signOut(); });
   const codeInput = $('#ss-code');
+  // The HTML `autofocus` attribute isn't reliably honored when markup is
+  // inserted via innerHTML (as opposed to during initial page parsing) —
+  // that's the "autofocus not working" bug. Focusing it explicitly here
+  // is deterministic. This is a kiosk input a badge reader "types" into,
+  // so it also refocuses itself if focus ever lands on the page background
+  // (e.g. a stray click) — but not if the operator deliberately focused
+  // something else, like the Sign out button.
+  codeInput.focus();
+  codeInput.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (document.activeElement === document.body) codeInput.focus();
+    }, 50);
+  });
   const resultWrap = $('#ss-result');
   let fadeTimer = null;
   let clearTimer = null;

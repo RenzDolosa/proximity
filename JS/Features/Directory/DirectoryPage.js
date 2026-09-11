@@ -9,6 +9,7 @@ import { openScanLogModal } from '../../Components/ScanLogModal.js';
 import { openRemarksModal } from '../../Components/RemarksModal.js';
 import { openImportModal } from '../../Components/ImportModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
+import { openConfirmModal } from '../../Components/ConfirmModal.js';
 
 let page = 1;
 let pageSize = 50;
@@ -32,10 +33,15 @@ export async function renderDirectory() {
   $('#dir-search').addEventListener('input', (e) => { page = 1; paintDirectoryTable(e.target.value); });
   if (isAdmin()) {
     $('#dir-delete-all').addEventListener('click', async () => {
-      const ids = appState.employeesCache.map((e) => e.id);
-      if (!ids.length) return;
-      if (!confirm(`Permanently delete all ${ids.length} employees? This can't be undone.`)) return;
-      const { error } = await EmployeesModel.deleteMany(ids);
+      const total = appState.employeesCache.length;
+      if (!total) return;
+      const ok = await openConfirmModal({
+        title: 'Delete all employees?',
+        message: `This permanently deletes all ${total} employee${total === 1 ? '' : 's'} and their scan history. This can't be undone.`,
+        confirmLabel: 'Delete all',
+      });
+      if (!ok) return;
+      const { error } = await EmployeesModel.deleteAll();
       if (error) toast(error.message, 'error'); else { toast('All employees deleted'); renderDirectory(); }
     });
   }

@@ -1,8 +1,11 @@
 // Remarks/notes log for an employee — same append-only jsonb pattern as
 // scan_logs, but written to by the admin/manager instead of the scanner
 // RPC. Appends go through EmployeesModel.addRemark() (add_employee_remark
-// RPC) so concurrent adds don't clobber each other.
-import { $ } from '../Utils/dom.js';
+// RPC) so concurrent adds don't clobber each other; resolving a remark
+// goes through resolveRemark() (resolve_employee_remark RPC) for the same
+// reason. An unresolved remark also surfaces on the Scanner's result card
+// (see ScanResultCard.js) — resolving it here is what clears that flag.
+import { $, $$ } from '../Utils/dom.js';
 import { esc, fmtTime } from '../Utils/format.js';
 import { openModal, closeModal, startModalOpen, isStaleModalOpen } from './Modal.js';
 import { toast } from '../Utils/toast.js';
@@ -38,9 +41,17 @@ export async function openRemarksModal(employeeId) {
           <div class="feed-row" style="align-items:flex-start;">
             <div style="flex:1;">
               <div>${esc(r.remark)}</div>
-              <div class="emp-meta mono">${esc(r.created_by || 'Unknown')}</div>
+              <div class="emp-meta mono">
+                ${esc(r.created_by || 'Unknown')}
+                ${r.resolved ? `<span class="badge active" style="margin-left:6px;">Resolved${r.resolved_by ? ' · ' + esc(r.resolved_by) : ''}</span>` : `<span class="badge suspended" style="margin-left:6px;">Unresolved</span>`}
+              </div>
             </div>
-            <div class="feed-time">${fmtTime(r.created_at)}</div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
+              <div class="feed-time">${fmtTime(r.created_at)}</div>
+              <button class="ghost" data-resolve="${esc(r.id)}" data-next="${r.resolved ? 'false' : 'true'}" style="padding:3px 9px;font-size:11.5px;">
+                ${r.resolved ? 'Unresolve' : 'Resolve'}
+              </button>
+            </div>
           </div>
         `).join('') : `<div class="empty-state">No remarks yet.</div>`}
       </div>
@@ -57,6 +68,15 @@ export async function openRemarksModal(employeeId) {
       if (addError) { toast(addError.message, 'error'); return; }
       load();
     });
+
+    $$('button[data-resolve]', bodyEl).forEach((btn) => btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const nextResolved = btn.dataset.next === 'true';
+      const { error: resolveError } = await EmployeesModel.resolveRemark(employeeId, btn.dataset.resolve, nextResolved);
+      if (resolveError) { toast(resolveError.message, 'error'); btn.disabled = false; return; }
+      toast(nextResolved ? 'Remark marked resolved' : 'Remark reopened');
+      load();
+    }));
   };
 
   await load();

@@ -7,6 +7,7 @@ import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { openCardModal } from '../../Components/ProximityCardModal.js';
 import { openImportModal } from '../../Components/ImportModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
+import { openConfirmModal } from '../../Components/ConfirmModal.js';
 
 let cardsCache = [];
 let assignedByCard = new Map();
@@ -45,12 +46,27 @@ export async function renderProximity() {
       const deletable = cardsCache.filter((c) => !assignedByCard.has(c.id));
       if (!deletable.length) { toast('No unassigned cards to delete.', 'error'); return; }
       const skipped = cardsCache.length - deletable.length;
-      const msg = `Permanently delete ${deletable.length} unassigned card${deletable.length === 1 ? '' : 's'}?` +
-        (skipped ? ` (${skipped} assigned card${skipped === 1 ? '' : 's'} will be left untouched.)` : '') +
-        ` This can't be undone.`;
-      if (!confirm(msg)) return;
-      const { error } = await ProximityCardsModel.removeMany(deletable.map((c) => c.id));
-      if (error) toast(error.message, 'error'); else { toast('Unassigned cards deleted'); renderProximity(); }
+      const ok = await openConfirmModal({
+        title: 'Delete all unassigned cards?',
+        message: `Permanently delete ${deletable.length} unassigned card${deletable.length === 1 ? '' : 's'}?` +
+          (skipped ? ` ${skipped} assigned card${skipped === 1 ? '' : 's'} will be left untouched.` : '') +
+          ` This can't be undone.`,
+        confirmLabel: 'Delete all',
+      });
+      if (!ok) return;
+      // One .in(...) call per couple hundred ids instead of all of them at
+      // once — with a few hundred+ unassigned cards, a single request's
+      // filter list got long enough to come back as a 400 Bad Request from
+      // the API gateway (same fix as Employee Manager's Delete all).
+      let deletedCount = 0;
+      let failed = false;
+      for (const chunk of chunkArray(deletable.map((c) => c.id), 200)) {
+        const { error } = await ProximityCardsModel.removeMany(chunk);
+        if (error) { toast(error.message, 'error'); failed = true; break; }
+        deletedCount += chunk.length;
+      }
+      if (deletedCount) toast(failed ? `Deleted ${deletedCount} of ${deletable.length} cards before an error occurred` : 'Unassigned cards deleted');
+      if (deletedCount) renderProximity();
     });
   }
   if (isAdminOrManager()) {

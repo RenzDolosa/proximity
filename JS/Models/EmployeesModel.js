@@ -49,6 +49,17 @@ export const EmployeesModel = {
     return supabase.from('employees').delete().in('id', ids);
   },
 
+  // "Delete all" used to collect every employee id and call deleteMany()
+  // with all of them in one .in(...) — fine for a handful of rows, but
+  // with hundreds+ the resulting URL (PostgREST filters are query params,
+  // even for DELETE) blew past the API gateway's URL length limit and
+  // came back as a flat 400 Bad Request with no useful message. A filter
+  // that's true for every row sidesteps building that list entirely — one
+  // request, any table size, same admin-only RLS.
+  async deleteAll() {
+    return supabase.from('employees').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  },
+
   async getScanLogs(employeeId) {
     return supabase.from('employees').select('full_name, scan_logs').eq('id', employeeId).single();
   },
@@ -62,5 +73,11 @@ export const EmployeesModel = {
   // other's entry — same reasoning as the scan_logs append trigger.
   async addRemark(employeeId, remark) {
     return supabase.rpc('add_employee_remark', { p_employee_id: employeeId, p_remark: remark });
+  },
+
+  // Toggles a single remark's resolved flag (also via RPC, same
+  // concurrent-safe reasoning as addRemark).
+  async resolveRemark(employeeId, remarkId, resolved) {
+    return supabase.rpc('resolve_employee_remark', { p_employee_id: employeeId, p_remark_id: remarkId, p_resolved: resolved });
   },
 };
