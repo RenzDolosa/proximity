@@ -49,12 +49,12 @@ function paintUsersTable() {
             <td class="col-shrink"><span class="badge role-${u.role}">${esc(u.role)}</span></td>
             <td class="col-shrink">${esc(scopeLabel[u.access_scope] || u.access_scope)}</td>
             <td class="col-shrink"><span class="badge ${u.is_active ? 'active' : 'inactive'}">${u.is_active ? 'active' : 'disabled'}</span></td>
-            <td class="row-actions col-shrink">
+            <td class="col-shrink"><div class="row-actions">
               <button class="ghost" data-edit="${u.id}">Edit</button>
               <button class="ghost" data-pw="${u.id}">Reset password</button>
               <button class="ghost" data-toggle="${u.id}" ${u.id === appState.session.user.id ? 'disabled' : ''}>${u.is_active ? 'Disable' : 'Enable'}</button>
               <button class="ghost danger" data-delete="${u.id}" ${u.id === appState.session.user.id ? 'disabled' : ''}>Delete</button>
-            </td>
+            </div></td>
           </tr>
         `).join('')}
       </tbody>

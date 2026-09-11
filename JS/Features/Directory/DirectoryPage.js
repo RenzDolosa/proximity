@@ -98,10 +98,10 @@ function paintDirectoryTable(filter) {
             <td class="mono">${e.active_proximity_code ? `<span${e.proximity_card_active ? '' : ' style="color:var(--bad)"'}>${esc(e.active_proximity_code)}</span>` : '<span style="color:var(--text-faint)">unassigned</span>'}</td>
             <td class="col-shrink"><span class="badge ${e.status}">${esc(e.status)}</span></td>
             <td class="mono col-shrink"><button class="ghost" data-log="${e.id}" style="padding:3px 8px;">${e.total_scans ?? 0} <span style="text-transform:none;">view</span></button></td>
-            <td class="row-actions col-shrink">
+            <td class="col-shrink"><div class="row-actions">
               ${isAdminOrManager() ? `<button class="ghost" data-edit="${e.id}">Edit</button>` : ''}
               ${isAdmin() ? `<button class="ghost" data-del="${e.id}" style="color:var(--bad)">Delete</button>` : ''}
-            </td>
+            </div></td>
           </tr>
         `).join('')}
       </tbody>

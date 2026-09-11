@@ -9,7 +9,7 @@ body{
   line-height:1.5;
   -webkit-font-smoothing:antialiased;
 }
-#app{min-height:100vh;display:flex;flex-direction:column;}
+#app{height:100vh;display:flex;flex-direction:column;overflow:hidden;}
 a{color:var(--accent);text-decoration:none;}
 button{
   font-family:var(--sans);

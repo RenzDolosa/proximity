@@ -103,11 +103,11 @@ function paintProximityTable() {
             <td>${e ? esc(e.full_name) + ' <span class="emp-meta mono">(' + esc(e.employee_code) + ')</span>' : '<span style="color:var(--text-faint)">unassigned</span>'}</td>
             <td class="col-shrink"><span class="badge ${c.is_active ? 'active' : 'inactive'}">${c.is_active ? 'active' : 'revoked'}</span></td>
             <td class="col-shrink mono">${fmtTime(c.issued_at)}</td>
-            <td class="row-actions col-shrink">
+            <td class="col-shrink"><div class="row-actions">
               ${isAdminOrManager() && c.is_active ? `<button class="ghost" data-revoke="${c.id}" style="color:var(--warn)">Revoke</button>` : ''}
               ${isAdminOrManager() && !c.is_active ? `<button class="ghost" data-renew="${c.id}" style="color:var(--good)">Renew</button>` : ''}
               ${isAdmin() && !e ? `<button class="ghost" data-del="${c.id}" style="color:var(--bad)">Delete</button>` : ''}
-            </td>
+            </div></td>
           </tr>
         `; }).join('')}
       </tbody>

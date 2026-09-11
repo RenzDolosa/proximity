@@ -43,8 +43,14 @@ tbody tr:hover{background:var(--surface);}
    viewport genuinely isn't wide enough for all of them, .table-scroll
    (layout.css) scrolls the table horizontally instead of squeezing them. */
 thead th.col-shrink, tbody td.col-shrink{width:1%;white-space:nowrap;padding-left:20px;}
-/* .row-actions{display:flex;flex-wrap:nowrap;gap:6px;justify-content:flex-end;} */
+.row-actions{display:flex;flex-wrap:nowrap;gap:6px;justify-content:flex-end;}
 .row-actions button{padding:5px 9px;font-size:12px;flex-shrink:0;white-space:nowrap;}
+/* .row-actions must live on a <div> INSIDE the <td>, never on the <td>
+   itself — display:flex on a table cell takes it out of the table's
+   column grid (it stops behaving like a table-cell for sizing purposes),
+   which is what was causing the actions column to render on top of the
+   column before it instead of beside it. */
+td.row-actions{display:table-cell;}
 .badge{flex-shrink:0;}
 .empty-state{
   border:1px dashed var(--border);border-radius:6px;padding:40px 20px;text-align:center;color:var(--text-muted);
