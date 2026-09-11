@@ -29,6 +29,14 @@ export const EmployeesModel = {
     return supabase.from('employees').insert(payload);
   },
 
+  // Bulk insert used by CSV import — one round-trip per chunk instead of
+  // one per row. Returns the same {data,error} shape as a single insert;
+  // on error the caller falls back to inserting that chunk row-by-row to
+  // find out exactly which row failed.
+  async createMany(payloads) {
+    return supabase.from('employees').insert(payloads).select('id');
+  },
+
   async updateEmployee(id, payload) {
     return supabase.from('employees').update(payload).eq('id', id);
   },

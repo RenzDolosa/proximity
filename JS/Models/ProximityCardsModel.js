@@ -27,6 +27,11 @@ export const ProximityCardsModel = {
     return supabase.from('proximity_cards').insert({ proximity_code, created_by: createdBy }).select('id').single();
   },
 
+  // Bulk insert used by CSV import — see EmployeesModel.createMany for why.
+  async issueMany(rows) {
+    return supabase.from('proximity_cards').insert(rows).select('id, proximity_code');
+  },
+
   async revoke(id) {
     return supabase.from('proximity_cards').update({ is_active: false, revoked_at: new Date().toISOString() }).eq('id', id);
   },

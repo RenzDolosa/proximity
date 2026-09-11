@@ -1,22 +1,25 @@
 import { $, $$ } from '../../Utils/dom.js';
-import { esc, fmtTime } from '../../Utils/format.js';
+import { esc, fmtTime, chunkArray } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
 import { appState, isAdmin, isAdminOrManager } from '../../Core/state.js';
 import { ProximityCardsModel } from '../../Models/ProximityCardsModel.js';
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { openCardModal } from '../../Components/ProximityCardModal.js';
 import { openImportModal } from '../../Components/ImportModal.js';
+import { renderPagination } from '../../Components/Pagination.js';
 
 let cardsCache = [];
 let assignedByCard = new Map();
+let page = 1;
+let pageSize = 50;
 
 export async function renderProximity() {
   const content = $('#content');
   content.innerHTML = `
     <div class="toolbar">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div class="filter-row">
         <input class="search" id="prox-search" placeholder="Search proximity code or assignee…" />
-        <select id="prox-filter" style="max-width:180px;">
+        <select id="prox-filter">
           <option value="all">All statuses</option>
           <option value="active">Active only</option>
           <option value="revoked">Revoked only</option>
@@ -32,8 +35,8 @@ export async function renderProximity() {
     </div>
     <div id="prox-table-wrap">Loading…</div>
   `;
-  $('#prox-search').addEventListener('input', () => paintProximityTable());
-  $('#prox-filter').addEventListener('change', () => paintProximityTable());
+  $('#prox-search').addEventListener('input', () => { page = 1; paintProximityTable(); });
+  $('#prox-filter').addEventListener('change', () => { page = 1; paintProximityTable(); });
   if (isAdmin()) {
     $('#prox-delete-all').addEventListener('click', async () => {
       // Assigned cards can't be deleted (employees.proximity_card_id is a
@@ -67,6 +70,7 @@ export async function renderProximity() {
   if (error) { $('#prox-table-wrap').innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
   cardsCache = data || [];
   assignedByCard = new Map((emps || []).map((e) => [e.proximity_card_id, e]));
+  page = 1;
   paintProximityTable();
 }
 
@@ -74,27 +78,30 @@ function paintProximityTable() {
   const wrap = $('#prox-table-wrap');
   const statusFilter = $('#prox-filter').value;
   const q = $('#prox-search').value.trim().toLowerCase();
-  const rows = cardsCache.filter((c) => {
+  const allRows = cardsCache.filter((c) => {
     if (statusFilter !== 'all' && (statusFilter === 'active') !== c.is_active) return false;
     if (!q) return true;
     const e = assignedByCard.get(c.id);
     return [c.proximity_code, e?.full_name, e?.employee_code].some((v) => (v || '').toLowerCase().includes(q));
   });
   const filtered = statusFilter !== 'all' || q;
-  if (!rows.length) {
+  if (!allRows.length) {
     wrap.innerHTML = `<div class="empty-state"><strong>No proximity cards${filtered ? ' match this filter' : ' yet'}</strong>${filtered ? 'Try a different search or status.' : "Issue a card — it doesn't need to be assigned to anyone right away."}</div>`;
     return;
   }
+  const totalPages = Math.max(1, Math.ceil(allRows.length / pageSize));
+  page = Math.min(Math.max(1, page), totalPages);
+  const rows = allRows.slice((page - 1) * pageSize, page * pageSize);
   wrap.innerHTML = `
     <table>
-      <thead><tr><th>Proximity code</th><th>Assigned to</th><th>Status</th><th>Issued</th><th class="col-shrink"></th></tr></thead>
+      <thead><tr><th>Proximity code</th><th>Assigned to</th><th class="col-shrink">Status</th><th class="col-shrink">Issued</th><th class="col-shrink"></th></tr></thead>
       <tbody>
         ${rows.map((c) => { const e = assignedByCard.get(c.id); return `
           <tr>
             <td class="mono">${esc(c.proximity_code)}</td>
             <td>${e ? esc(e.full_name) + ' <span class="emp-meta mono">(' + esc(e.employee_code) + ')</span>' : '<span style="color:var(--text-faint)">unassigned</span>'}</td>
-            <td><span class="badge ${c.is_active ? 'active' : 'inactive'}">${c.is_active ? 'active' : 'revoked'}</span></td>
-            <td>${fmtTime(c.issued_at)}</td>
+            <td class="col-shrink"><span class="badge ${c.is_active ? 'active' : 'inactive'}">${c.is_active ? 'active' : 'revoked'}</span></td>
+            <td class="col-shrink mono">${fmtTime(c.issued_at)}</td>
             <td class="row-actions col-shrink">
               ${isAdminOrManager() && c.is_active ? `<button class="ghost" data-revoke="${c.id}" style="color:var(--warn)">Revoke</button>` : ''}
               ${isAdminOrManager() && !c.is_active ? `<button class="ghost" data-renew="${c.id}" style="color:var(--good)">Renew</button>` : ''}
@@ -104,7 +111,12 @@ function paintProximityTable() {
         `; }).join('')}
       </tbody>
     </table>
+    <div id="prox-pagination"></div>
   `;
+  renderPagination($('#prox-pagination', wrap), {
+    total: allRows.length, page, pageSize,
+    onChange: (next) => { page = next.page; pageSize = next.pageSize; paintProximityTable(); },
+  });
   $$('button[data-revoke]', wrap).forEach((b) => b.addEventListener('click', async () => {
     const { error } = await ProximityCardsModel.revoke(b.dataset.revoke);
     if (error) toast(error.message, 'error'); else { toast('Card revoked'); renderProximity(); }
@@ -121,17 +133,39 @@ function paintProximityTable() {
 }
 
 // Row shape expected: proximity_code (required). Cards are always issued
-// unassigned — same as clicking "+ Issue proximity card" one row at a time.
+// unassigned — same as clicking "+ Issue proximity card" one row at a
+// time, just done as a couple of chunked bulk inserts instead of one
+// network round-trip per row (see importEmployees in DirectoryPage.js for
+// the same pattern with more detail).
 async function importCards(records) {
   const errors = [];
-  let successCount = 0;
-  for (let i = 0; i < records.length; i++) {
-    const proximity_code = (records[i].proximity_code || '').trim();
+  const CHUNK_SIZE = 200;
+  const seen = new Map(); // code(lower) -> line, catches duplicates within the file
+
+  const rows = [];
+  records.forEach((r, i) => {
     const line = i + 2;
-    if (!proximity_code) { errors.push({ line, message: 'proximity_code is required.' }); continue; }
-    const { error } = await ProximityCardsModel.issue(proximity_code, appState.session.user.id);
-    if (error) errors.push({ line, message: error.message });
-    else successCount++;
+    const proximity_code = (r.proximity_code || '').trim();
+    if (!proximity_code) { errors.push({ line, message: 'proximity_code is required.' }); return; }
+    const key = proximity_code.toLowerCase();
+    if (seen.has(key)) { errors.push({ line, message: `Proximity code "${proximity_code}" is already used by row ${seen.get(key)} in this file.` }); return; }
+    seen.set(key, line);
+    rows.push({ line, proximity_code });
+  });
+
+  let successCount = 0;
+  for (const chunk of chunkArray(rows, CHUNK_SIZE)) {
+    const { error } = await ProximityCardsModel.issueMany(
+      chunk.map((r) => ({ proximity_code: r.proximity_code, created_by: appState.session.user.id }))
+    );
+    if (!error) { successCount += chunk.length; continue; }
+    for (const r of chunk) {
+      const { error: singleErr } = await ProximityCardsModel.issue(r.proximity_code, appState.session.user.id);
+      if (singleErr) errors.push({ line: r.line, message: singleErr.message });
+      else successCount++;
+    }
   }
+
+  errors.sort((a, b) => a.line - b.line);
   return { successCount, errors };
 }

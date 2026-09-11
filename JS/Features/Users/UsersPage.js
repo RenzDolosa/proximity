@@ -5,7 +5,12 @@ import { isAdmin, appState } from '../../Core/state.js';
 import { ProfilesModel } from '../../Models/ProfilesModel.js';
 import { openUserModal } from '../../Components/UserModal.js';
 import { openResetPasswordModal } from '../../Components/ResetPasswordModal.js';
+import { renderPagination } from '../../Components/Pagination.js';
 import { scopeLabel } from './userOptions.js';
+
+let usersCache = [];
+let page = 1;
+let pageSize = 20;
 
 export async function renderUsers() {
   const content = $('#content');
@@ -21,17 +26,28 @@ export async function renderUsers() {
   const { data, error } = await ProfilesModel.listUsers();
   const wrap = $('#users-table-wrap');
   if (error) { wrap.innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
+  usersCache = data || [];
+  page = 1;
+  paintUsersTable();
+}
+
+function paintUsersTable() {
+  const wrap = $('#users-table-wrap');
+  const data = usersCache;
+  const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
+  page = Math.min(Math.max(1, page), totalPages);
+  const rows = data.slice((page - 1) * pageSize, page * pageSize);
   wrap.innerHTML = `
     <table>
-      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access</th><th>Account</th><th class="col-shrink"></th></tr></thead>
+      <thead><tr><th>Name</th><th>Email</th><th class="col-shrink">Role</th><th class="col-shrink">Access</th><th class="col-shrink">Account</th><th class="col-shrink"></th></tr></thead>
       <tbody>
-        ${data.map((u) => `
+        ${rows.map((u) => `
           <tr>
             <td>${esc(u.full_name)}</td>
             <td class="mono">${esc(u.email)}</td>
-            <td><span class="badge role-${u.role}">${esc(u.role)}</span></td>
-            <td>${esc(scopeLabel[u.access_scope] || u.access_scope)}</td>
-            <td><span class="badge ${u.is_active ? 'active' : 'inactive'}">${u.is_active ? 'active' : 'disabled'}</span></td>
+            <td class="col-shrink"><span class="badge role-${u.role}">${esc(u.role)}</span></td>
+            <td class="col-shrink">${esc(scopeLabel[u.access_scope] || u.access_scope)}</td>
+            <td class="col-shrink"><span class="badge ${u.is_active ? 'active' : 'inactive'}">${u.is_active ? 'active' : 'disabled'}</span></td>
             <td class="row-actions col-shrink">
               <button class="ghost" data-edit="${u.id}">Edit</button>
               <button class="ghost" data-pw="${u.id}">Reset password</button>
@@ -42,7 +58,12 @@ export async function renderUsers() {
         `).join('')}
       </tbody>
     </table>
+    <div id="users-pagination"></div>
   `;
+  renderPagination($('#users-pagination', wrap), {
+    total: data.length, page, pageSize,
+    onChange: (next) => { page = next.page; pageSize = next.pageSize; paintUsersTable(); },
+  });
   $$('button[data-edit]', wrap).forEach((b) => b.addEventListener('click', () => {
     openUserModal(data.find((u) => u.id === b.dataset.edit), renderUsers);
   }));
