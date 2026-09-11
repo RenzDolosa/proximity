@@ -43,7 +43,7 @@ tbody tr:hover{background:var(--surface);}
    viewport genuinely isn't wide enough for all of them, .table-scroll
    (layout.css) scrolls the table horizontally instead of squeezing them. */
 thead th.col-shrink, tbody td.col-shrink{width:1%;white-space:nowrap;padding-left:20px;}
-.row-actions{display:flex;flex-wrap:nowrap;gap:6px;justify-content:flex-end;}
+/* .row-actions{display:flex;flex-wrap:nowrap;gap:6px;justify-content:flex-end;} */
 .row-actions button{padding:5px 9px;font-size:12px;flex-shrink:0;white-space:nowrap;}
 .badge{flex-shrink:0;}
 .empty-state{
