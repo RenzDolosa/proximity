@@ -151,10 +151,24 @@ function paintProximityTable() {
 // time, just done as a couple of chunked bulk inserts instead of one
 // network round-trip per row (see importEmployees in DirectoryPage.js for
 // the same pattern with more detail).
+//
+// Duplicates are checked twice, for two different reasons:
+//  - within the file (via `seen`) — two rows can't both claim the same
+//    new code
+//  - against codes that already exist in the DB (via `existingCodes`) —
+//    fetched once up front so a whole re-imported file (a common case:
+//    someone re-runs the same CSV) gets skipped immediately, instead of
+//    every chunk containing one hitting the unique-constraint error and
+//    falling back to inserting that chunk's rows one at a time to find
+//    the culprit. That fallback is what made large duplicate-heavy
+//    imports slow — this avoids triggering it at all for the normal case.
 async function importCards(records, onProgress) {
   const errors = [];
   const CHUNK_SIZE = 200;
   const seen = new Map(); // code(lower) -> line, catches duplicates within the file
+
+  const { data: existingCards } = await ProximityCardsModel.listAll();
+  const existingCodes = new Set((existingCards || []).map((c) => c.proximity_code.toLowerCase()));
 
   const rows = [];
   records.forEach((r, i) => {
@@ -162,6 +176,7 @@ async function importCards(records, onProgress) {
     const proximity_code = (r.proximity_code || '').trim();
     if (!proximity_code) { errors.push({ line, message: 'proximity_code is required.' }); return; }
     const key = proximity_code.toLowerCase();
+    if (existingCodes.has(key)) { errors.push({ line, message: 'Duplicate proximity card — skipped.' }); return; }
     if (seen.has(key)) { errors.push({ line, message: `Proximity code "${proximity_code}" is already used by row ${seen.get(key)} in this file.` }); return; }
     seen.set(key, line);
     rows.push({ line, proximity_code });
@@ -182,7 +197,7 @@ async function importCards(records, onProgress) {
     } else {
       for (const r of chunk) {
         const { error: singleErr } = await ProximityCardsModel.issue(r.proximity_code, appState.session.user.id);
-        if (singleErr) errors.push({ line: r.line, message: singleErr.message });
+        if (singleErr) errors.push({ line: r.line, message: friendlyCardImportError(singleErr.message) });
         else successCount++;
       }
     }
@@ -192,4 +207,16 @@ async function importCards(records, onProgress) {
 
   errors.sort((a, b) => a.line - b.line);
   return { successCount, errors };
+}
+
+// The pre-check above catches duplicates against codes that existed when
+// the import started, but it can't catch a code someone else issues in
+// the moment between that check and this insert — that race still hits
+// Postgres's actual unique constraint, whose raw message
+// ("duplicate key value violates unique constraint
+// \"proximity_cards_proximity_code_key\"") isn't something a non-technical
+// user should have to read.
+function friendlyCardImportError(message) {
+  if (message?.includes('proximity_cards_proximity_code_key')) return 'Duplicate proximity card — skipped.';
+  return message;
 }
