@@ -1,0 +1,333 @@
+diff --git a/CSS/base.css b/CSS/base.css
+index 3d5e8ec..e2bac49 100644
+--- a/CSS/base.css
++++ b/CSS/base.css
+@@ -32,7 +32,7 @@ button.danger:hover{background:var(--bad-dim);}
+ button.ghost{background:transparent;border-color:transparent;color:var(--text-muted);padding:6px 10px;}
+ button.ghost:hover{color:var(--text);background:var(--surface-raised);}
+ button.ghost.danger:hover{color:var(--bad);background:var(--bad-dim);}
+-input,select{
++input,select,textarea{
+   background:var(--surface);
+   border:1px solid var(--border);
+   color:var(--text);
+@@ -42,8 +42,8 @@ input,select{
+   font-size:13px;
+   width:100%;
+ }
+-input::placeholder{color:var(--text-faint);}
+-input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
++input::placeholder,textarea::placeholder{color:var(--text-faint);}
++input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+ label{display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;}
+ .field{margin-bottom:12px;}
+ code, .mono{font-family:var(--mono);}
+diff --git a/CSS/components.css b/CSS/components.css
+index ce1fa28..6f826ec 100644
+--- a/CSS/components.css
++++ b/CSS/components.css
+@@ -7,9 +7,9 @@
+    Children get explicit basis/width here instead of relying on the
+    generic input,select{width:100%} — that rule is what was forcing the
+    dropdown onto its own line before (100% width used up the whole row). */
+-.filter-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+-.filter-row .search{flex:1 1 240px;max-width:320px;width:auto;}
+-.filter-row select{flex:0 0 auto;width:auto;min-width:150px;}
++.filter-row{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;}
++.filter-row .search{flex:1 1 160px;max-width:320px;width:auto;min-width:0;}
++.filter-row select{flex:0 0 auto;width:auto;min-width:130px;}
+ 
+ .pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;flex-wrap:wrap;font-size:12.5px;color:var(--text-muted);}
+ .pagination-controls{display:flex;align-items:center;gap:10px;}
+diff --git a/CSS/scanner.css b/CSS/scanner.css
+index 7b84e25..00a1d3a 100644
+--- a/CSS/scanner.css
++++ b/CSS/scanner.css
+@@ -51,7 +51,8 @@
+ .ss-icon{width:76px;height:76px;border-radius:12px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:34px;z-index:1;}
+ .ss-label{text-align:center;font-weight:700;font-size:26px;letter-spacing:.5px;line-height:1.25;}
+ .ss-label .dim{color:var(--text-muted);font-weight:700;}
+-.ss-result-wrap{width:min(420px, 90dvw);margin:26px auto 0;}
++.ss-result-wrap{width:min(420px, 90dvw);margin:26px auto 0;transition:opacity .4s ease;}
++.ss-result-wrap.fade-out{opacity:0;}
+ .ss-feed-panel{padding:12px 0px 12px 14px;display:flex;flex-direction:column;max-height:calc(100dvh - 120px);}
+ .ss-feed-title{flex:none;font-weight:600;margin-bottom:8px;font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;}
+ #ss-feed{overflow-y:auto;max-height:calc(100dvh - 170px);}
+diff --git a/JS/Components/RemarksModal.js b/JS/Components/RemarksModal.js
+new file mode 100644
+index 0000000..7bc46d6
+--- /dev/null
++++ b/JS/Components/RemarksModal.js
+@@ -0,0 +1,61 @@
++// Remarks/notes log for an employee — same append-only jsonb pattern as
++// scan_logs, but written to by the admin/manager instead of the scanner
++// RPC. Appends go through EmployeesModel.addRemark() (add_employee_remark
++// RPC) so concurrent adds don't clobber each other.
++import { $ } from '../Utils/dom.js';
++import { esc, fmtTime } from '../Utils/format.js';
++import { openModal, closeModal } from './Modal.js';
++import { toast } from '../Utils/toast.js';
++import { EmployeesModel } from '../Models/EmployeesModel.js';
++
++export async function openRemarksModal(employeeId) {
++  const overlay = openModal(`
++    <h3 id="remarks-title">Remarks</h3>
++    <div id="remarks-body" class="empty-state">Loading…</div>
++    <div class="actions">
++      <button class="ghost" id="remarks-close">Close</button>
++    </div>
++  `, { maxWidth: '520px' });
++
++  $('#remarks-close', overlay).addEventListener('click', () => closeModal(overlay));
++
++  const load = async () => {
++    const { data: emp, error } = await EmployeesModel.getRemarks(employeeId);
++    const bodyEl = $('#remarks-body', overlay);
++    if (error) { bodyEl.textContent = error.message; return; }
++    $('#remarks-title', overlay).textContent = `Remarks — ${emp.full_name}`;
++    const remarks = (emp.remarks_log || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
++    bodyEl.className = '';
++    bodyEl.innerHTML = `
++      <div class="field" style="display:flex;gap:8px;align-items:flex-start;margin-bottom:14px;">
++        <textarea id="remark-input" rows="2" placeholder="Add a remark…" style="flex:1;resize:vertical;"></textarea>
++        <button class="primary" id="remark-add" style="flex-shrink:0;">Add</button>
++      </div>
++      <div id="remarks-list" style="max-height:300px;overflow-y:auto;">
++        ${remarks.length ? remarks.map((r) => `
++          <div class="feed-row" style="align-items:flex-start;">
++            <div style="flex:1;">
++              <div>${esc(r.remark)}</div>
++              <div class="emp-meta mono">${esc(r.created_by || 'Unknown')}</div>
++            </div>
++            <div class="feed-time">${fmtTime(r.created_at)}</div>
++          </div>
++        `).join('') : `<div class="empty-state">No remarks yet.</div>`}
++      </div>
++    `;
++
++    $('#remark-add', overlay).addEventListener('click', async () => {
++      const input = $('#remark-input', overlay);
++      const text = input.value.trim();
++      if (!text) return;
++      const btn = $('#remark-add', overlay);
++      btn.disabled = true;
++      const { error: addError } = await EmployeesModel.addRemark(employeeId, text);
++      btn.disabled = false;
++      if (addError) { toast(addError.message, 'error'); return; }
++      load();
++    });
++  };
++
++  await load();
++}
+diff --git a/JS/Components/ScanFeed.js b/JS/Components/ScanFeed.js
+index f281d32..68be661 100644
+--- a/JS/Components/ScanFeed.js
++++ b/JS/Components/ScanFeed.js
+@@ -5,10 +5,10 @@ import { $ } from '../Utils/dom.js';
+ import { esc, initials, fmtTime } from '../Utils/format.js';
+ import { ScanEventsModel } from '../Models/ScanEventsModel.js';
+ 
+-export async function loadScanFeed(targetId = 'scan-feed', limit = 10) {
++export async function loadScanFeed(targetId = 'scan-feed', limit = 10, scannerId = null) {
+   const feedEl = $('#' + targetId);
+   if (!feedEl) return;
+-  const { data, error } = await ScanEventsModel.recentFeed(limit);
++  const { data, error } = await ScanEventsModel.recentFeed(limit, scannerId);
+   if (error) { feedEl.innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
+   if (!data.length) { feedEl.innerHTML = `<div class="empty-state">No scans yet.</div>`; return; }
+   feedEl.innerHTML = data.map((row) => `
+@@ -16,7 +16,7 @@ export async function loadScanFeed(targetId = 'scan-feed', limit = 10) {
+       <div class="avatar">${row.employee_name ? esc(initials(row.employee_name)) : '?'}</div>
+       <div>
+         <div style="font-weight:500;">${row.employee_name ? esc(row.employee_name) : 'Unmatched scan'}</div>
+-        <div class="emp-meta mono">${esc(row.proximity_code)} · ${esc(row.scanner_id)}</div>
++        <div class="emp-meta mono">${esc(row.scanner_id)}</div>
+       </div>
+       <span class="badge ${row.result}" style="margin-left:8px;">${esc(row.result)}</span>
+       <div class="feed-time">${fmtTime(row.scanned_at)}</div>
+diff --git a/JS/Components/ScanLogModal.js b/JS/Components/ScanLogModal.js
+index 6a267ac..8c3ed3f 100644
+--- a/JS/Components/ScanLogModal.js
++++ b/JS/Components/ScanLogModal.js
+@@ -32,7 +32,9 @@ export async function openScanLogModal(employeeId) {
+   bodyEl.className = '';
+   bodyEl.innerHTML = `
+     <div class="toolbar" style="margin-bottom:10px;gap:8px;">
+-      <input type="date" id="log-date" style="max-width:150px;" />
++      <input type="date" id="log-date-from" title="From" style="max-width:150px;" />
++      <span class="emp-meta">to</span>
++      <input type="date" id="log-date-to" title="To" style="max-width:150px;" />
+       <select id="log-scanner" style="max-width:170px;">
+         <option value="all">All scanners</option>
+         ${scanners.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}
+@@ -43,12 +45,15 @@ export async function openScanLogModal(employeeId) {
+   `;
+ 
+   const paintList = () => {
+-    const dateVal = $('#log-date', overlay).value;
++    const fromVal = $('#log-date-from', overlay).value;
++    const toVal = $('#log-date-to', overlay).value;
+     const scannerVal = $('#log-scanner', overlay).value;
+-    const filtered = logs.filter((l) =>
+-      (!dateVal || localDateKey(l.scanned_at) === dateVal) &&
+-      (scannerVal === 'all' || l.scanner_id === scannerVal)
+-    );
++    const filtered = logs.filter((l) => {
++      const key = localDateKey(l.scanned_at);
++      return (!fromVal || key >= fromVal) &&
++        (!toVal || key <= toVal) &&
++        (scannerVal === 'all' || l.scanner_id === scannerVal);
++    });
+     const listEl = $('#log-list', overlay);
+     if (!filtered.length) {
+       listEl.innerHTML = `<div class="empty-state">No scans match this filter.</div>`;
+@@ -66,10 +71,21 @@ export async function openScanLogModal(employeeId) {
+     `).join('');
+   };
+ 
+-  $('#log-date', overlay).addEventListener('change', paintList);
++  $('#log-date-from', overlay).addEventListener('change', () => {
++    // Keep the range sane: don't let "from" land after "to".
++    const toEl = $('#log-date-to', overlay);
++    if (toEl.value && $('#log-date-from', overlay).value > toEl.value) toEl.value = $('#log-date-from', overlay).value;
++    paintList();
++  });
++  $('#log-date-to', overlay).addEventListener('change', () => {
++    const fromEl = $('#log-date-from', overlay);
++    if (fromEl.value && fromEl.value > $('#log-date-to', overlay).value) fromEl.value = $('#log-date-to', overlay).value;
++    paintList();
++  });
+   $('#log-scanner', overlay).addEventListener('change', paintList);
+   $('#log-clear', overlay).addEventListener('click', () => {
+-    $('#log-date', overlay).value = '';
++    $('#log-date-from', overlay).value = '';
++    $('#log-date-to', overlay).value = '';
+     $('#log-scanner', overlay).value = 'all';
+     paintList();
+   });
+diff --git a/JS/Features/Directory/DirectoryPage.js b/JS/Features/Directory/DirectoryPage.js
+index 1551d3e..69c6576 100644
+--- a/JS/Features/Directory/DirectoryPage.js
++++ b/JS/Features/Directory/DirectoryPage.js
+@@ -6,6 +6,7 @@ import { EmployeesModel } from '../../Models/EmployeesModel.js';
+ import { ProximityCardsModel } from '../../Models/ProximityCardsModel.js';
+ import { openEmployeeModal } from '../../Components/EmployeeModal.js';
+ import { openScanLogModal } from '../../Components/ScanLogModal.js';
++import { openRemarksModal } from '../../Components/RemarksModal.js';
+ import { openImportModal } from '../../Components/ImportModal.js';
+ import { renderPagination } from '../../Components/Pagination.js';
+ 
+@@ -100,6 +101,7 @@ function paintDirectoryTable(filter) {
+             <td class="mono col-shrink"><button class="ghost" data-log="${e.id}" style="padding:3px 8px;">${e.total_scans ?? 0} <span style="text-transform:none;">view</span></button></td>
+             <td class="col-shrink"><div class="row-actions">
+               ${isAdminOrManager() ? `<button class="ghost" data-edit="${e.id}">Edit</button>` : ''}
++              <button class="ghost" data-remarks="${e.id}">Remarks</button>
+               ${isAdmin() ? `<button class="ghost" data-del="${e.id}" style="color:var(--bad)">Delete</button>` : ''}
+             </div></td>
+           </tr>
+@@ -116,8 +118,9 @@ function paintDirectoryTable(filter) {
+     openEmployeeModal(emp, renderDirectory);
+   }));
+   $$('button[data-log]', wrap).forEach((b) => b.addEventListener('click', () => openScanLogModal(b.dataset.log)));
++  $$('button[data-remarks]', wrap).forEach((b) => b.addEventListener('click', () => openRemarksModal(b.dataset.remarks)));
+   $$('button[data-del]', wrap).forEach((b) => b.addEventListener('click', async () => {
+-    if (!confirm('Delete this employee? This also removes their proximity cards.')) return;
++    if (!confirm("Delete this employee? Their proximity card will be unassigned and their scan history will be permanently deleted.")) return;
+     const { error } = await EmployeesModel.deleteEmployee(b.dataset.del);
+     if (error) toast(error.message, 'error'); else { toast('Employee deleted'); renderDirectory(); }
+   }));
+diff --git a/JS/Features/Scanner/StandaloneScanner.js b/JS/Features/Scanner/StandaloneScanner.js
+index 7d675e9..9f93e2d 100644
+--- a/JS/Features/Scanner/StandaloneScanner.js
++++ b/JS/Features/Scanner/StandaloneScanner.js
+@@ -51,20 +51,41 @@ function renderStandaloneScanner() {
+   `;
+   $('#ss-signout').addEventListener('click', async () => { await supabase.auth.signOut(); });
+   const codeInput = $('#ss-code');
++  const resultWrap = $('#ss-result');
++  let fadeTimer = null;
++  let clearTimer = null;
++  const RESULT_LIFETIME_MS = 10000;
++  const FADE_DURATION_MS = 400;
++  const scheduleResultFade = () => {
++    clearTimeout(fadeTimer);
++    clearTimeout(clearTimer);
++    fadeTimer = setTimeout(() => {
++      resultWrap.classList.add('fade-out');
++      clearTimer = setTimeout(() => {
++        resultWrap.innerHTML = '';
++        resultWrap.classList.remove('fade-out');
++      }, FADE_DURATION_MS);
++    }, RESULT_LIFETIME_MS);
++  };
+   const doScan = async () => {
+     const proximity_code = codeInput.value.trim();
+     if (!proximity_code) return;
+     const { data, error } = await ScanEventsModel.scan(proximity_code, operatorName);
+-    const resultWrap = $('#ss-result');
++    clearTimeout(fadeTimer);
++    clearTimeout(clearTimer);
++    resultWrap.classList.remove('fade-out');
+     if (error) {
+       resultWrap.innerHTML = `<div class="result-card unmatched"><strong style="color:var(--bad)">Scan failed</strong><div class="emp-meta">${esc(error.message)}</div></div>`;
+     } else {
+       resultWrap.innerHTML = renderScanResult(data);
+     }
++    scheduleResultFade();
+     codeInput.value = '';
+     codeInput.focus();
+-    loadScanFeed('ss-feed');
++    // Only this operator's own scans, per kiosk — see get_scan_feed's
++    // p_scanner_id filter.
++    loadScanFeed('ss-feed', 10, operatorName);
+   };
+   codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doScan(); });
+-  loadScanFeed('ss-feed');
++  loadScanFeed('ss-feed', 10, operatorName);
+ }
+diff --git a/JS/Models/EmployeesModel.js b/JS/Models/EmployeesModel.js
+index b83fec4..602642f 100644
+--- a/JS/Models/EmployeesModel.js
++++ b/JS/Models/EmployeesModel.js
+@@ -52,4 +52,15 @@ export const EmployeesModel = {
+   async getScanLogs(employeeId) {
+     return supabase.from('employees').select('full_name, scan_logs').eq('id', employeeId).single();
+   },
++
++  async getRemarks(employeeId) {
++    return supabase.from('employees').select('full_name, remarks_log').eq('id', employeeId).single();
++  },
++
++  // Appends via the add_employee_remark() RPC (not a plain update) so two
++  // people adding a remark to the same employee at once can't clobber each
++  // other's entry — same reasoning as the scan_logs append trigger.
++  async addRemark(employeeId, remark) {
++    return supabase.rpc('add_employee_remark', { p_employee_id: employeeId, p_remark: remark });
++  },
+ };
+diff --git a/JS/Models/ScanEventsModel.js b/JS/Models/ScanEventsModel.js
+index f6ff17a..91392e2 100644
+--- a/JS/Models/ScanEventsModel.js
++++ b/JS/Models/ScanEventsModel.js
+@@ -3,14 +3,18 @@
+ import { supabase } from '../Core/supabaseClient.js';
+ 
+ export const ScanEventsModel = {
+-  async recentFeed(limit = 10) {
++  // scannerId, when passed, scopes the feed to scans made by that operator
++  // only (scanner_id doubles as the operator name — see scan() below). The
++  // standalone kiosk uses this so "Recent activity" only shows the signed-in
++  // operator's own scans, not every operator's system-wide.
++  async recentFeed(limit = 10, scannerId = null) {
+     // get_scan_feed() is SECURITY DEFINER so the employee join always
+     // resolves regardless of the caller's RLS scope (see scan_proximity_code
+     // below) — querying the old `scan_feed` view directly as the caller
+     // meant scanner-only accounts saw every matched scan's employee_name
+     // come back null, since RLS on `employees` silently dropped the joined
+     // row for them.
+-    return supabase.rpc('get_scan_feed', { p_limit: limit });
++    return supabase.rpc('get_scan_feed', { p_limit: limit, p_scanner_id: scannerId });
+   },
+ 
+   async scan(proximity_code, scanner_id) {
