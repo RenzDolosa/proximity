@@ -6,6 +6,7 @@ import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { ProximityCardsModel } from '../../Models/ProximityCardsModel.js';
 import { openEmployeeModal } from '../../Components/EmployeeModal.js';
 import { openScanLogModal } from '../../Components/ScanLogModal.js';
+import { openRemarksModal } from '../../Components/RemarksModal.js';
 import { openImportModal } from '../../Components/ImportModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
 
@@ -100,6 +101,7 @@ function paintDirectoryTable(filter) {
             <td class="mono col-shrink"><button class="ghost" data-log="${e.id}" style="padding:3px 8px;">${e.total_scans ?? 0} <span style="text-transform:none;">view</span></button></td>
             <td class="col-shrink"><div class="row-actions">
               ${isAdminOrManager() ? `<button class="ghost" data-edit="${e.id}">Edit</button>` : ''}
+              <button class="ghost" data-remarks="${e.id}">Remarks</button>
               ${isAdmin() ? `<button class="ghost" data-del="${e.id}" style="color:var(--bad)">Delete</button>` : ''}
             </div></td>
           </tr>
@@ -116,8 +118,9 @@ function paintDirectoryTable(filter) {
     openEmployeeModal(emp, renderDirectory);
   }));
   $$('button[data-log]', wrap).forEach((b) => b.addEventListener('click', () => openScanLogModal(b.dataset.log)));
+  $$('button[data-remarks]', wrap).forEach((b) => b.addEventListener('click', () => openRemarksModal(b.dataset.remarks)));
   $$('button[data-del]', wrap).forEach((b) => b.addEventListener('click', async () => {
-    if (!confirm('Delete this employee? This also removes their proximity cards.')) return;
+    if (!confirm("Delete this employee? Their proximity card will be unassigned and their scan history will be permanently deleted.")) return;
     const { error } = await EmployeesModel.deleteEmployee(b.dataset.del);
     if (error) toast(error.message, 'error'); else { toast('Employee deleted'); renderDirectory(); }
   }));

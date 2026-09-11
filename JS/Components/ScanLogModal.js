@@ -32,7 +32,9 @@ export async function openScanLogModal(employeeId) {
   bodyEl.className = '';
   bodyEl.innerHTML = `
     <div class="toolbar" style="margin-bottom:10px;gap:8px;">
-      <input type="date" id="log-date" style="max-width:150px;" />
+      <input type="date" id="log-date-from" title="From" style="max-width:150px;" />
+      <span class="emp-meta">to</span>
+      <input type="date" id="log-date-to" title="To" style="max-width:150px;" />
       <select id="log-scanner" style="max-width:170px;">
         <option value="all">All scanners</option>
         ${scanners.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}
@@ -43,12 +45,15 @@ export async function openScanLogModal(employeeId) {
   `;
 
   const paintList = () => {
-    const dateVal = $('#log-date', overlay).value;
+    const fromVal = $('#log-date-from', overlay).value;
+    const toVal = $('#log-date-to', overlay).value;
     const scannerVal = $('#log-scanner', overlay).value;
-    const filtered = logs.filter((l) =>
-      (!dateVal || localDateKey(l.scanned_at) === dateVal) &&
-      (scannerVal === 'all' || l.scanner_id === scannerVal)
-    );
+    const filtered = logs.filter((l) => {
+      const key = localDateKey(l.scanned_at);
+      return (!fromVal || key >= fromVal) &&
+        (!toVal || key <= toVal) &&
+        (scannerVal === 'all' || l.scanner_id === scannerVal);
+    });
     const listEl = $('#log-list', overlay);
     if (!filtered.length) {
       listEl.innerHTML = `<div class="empty-state">No scans match this filter.</div>`;
@@ -66,10 +71,21 @@ export async function openScanLogModal(employeeId) {
     `).join('');
   };
 
-  $('#log-date', overlay).addEventListener('change', paintList);
+  $('#log-date-from', overlay).addEventListener('change', () => {
+    // Keep the range sane: don't let "from" land after "to".
+    const toEl = $('#log-date-to', overlay);
+    if (toEl.value && $('#log-date-from', overlay).value > toEl.value) toEl.value = $('#log-date-from', overlay).value;
+    paintList();
+  });
+  $('#log-date-to', overlay).addEventListener('change', () => {
+    const fromEl = $('#log-date-from', overlay);
+    if (fromEl.value && fromEl.value > $('#log-date-to', overlay).value) fromEl.value = $('#log-date-to', overlay).value;
+    paintList();
+  });
   $('#log-scanner', overlay).addEventListener('change', paintList);
   $('#log-clear', overlay).addEventListener('click', () => {
-    $('#log-date', overlay).value = '';
+    $('#log-date-from', overlay).value = '';
+    $('#log-date-to', overlay).value = '';
     $('#log-scanner', overlay).value = 'all';
     paintList();
   });

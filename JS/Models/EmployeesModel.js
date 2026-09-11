@@ -52,4 +52,15 @@ export const EmployeesModel = {
   async getScanLogs(employeeId) {
     return supabase.from('employees').select('full_name, scan_logs').eq('id', employeeId).single();
   },
+
+  async getRemarks(employeeId) {
+    return supabase.from('employees').select('full_name, remarks_log').eq('id', employeeId).single();
+  },
+
+  // Appends via the add_employee_remark() RPC (not a plain update) so two
+  // people adding a remark to the same employee at once can't clobber each
+  // other's entry — same reasoning as the scan_logs append trigger.
+  async addRemark(employeeId, remark) {
+    return supabase.rpc('add_employee_remark', { p_employee_id: employeeId, p_remark: remark });
+  },
 };

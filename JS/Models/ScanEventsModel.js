@@ -3,14 +3,18 @@
 import { supabase } from '../Core/supabaseClient.js';
 
 export const ScanEventsModel = {
-  async recentFeed(limit = 10) {
+  // scannerId, when passed, scopes the feed to scans made by that operator
+  // only (scanner_id doubles as the operator name — see scan() below). The
+  // standalone kiosk uses this so "Recent activity" only shows the signed-in
+  // operator's own scans, not every operator's system-wide.
+  async recentFeed(limit = 10, scannerId = null) {
     // get_scan_feed() is SECURITY DEFINER so the employee join always
     // resolves regardless of the caller's RLS scope (see scan_proximity_code
     // below) — querying the old `scan_feed` view directly as the caller
     // meant scanner-only accounts saw every matched scan's employee_name
     // come back null, since RLS on `employees` silently dropped the joined
     // row for them.
-    return supabase.rpc('get_scan_feed', { p_limit: limit });
+    return supabase.rpc('get_scan_feed', { p_limit: limit, p_scanner_id: scannerId });
   },
 
   async scan(proximity_code, scanner_id) {

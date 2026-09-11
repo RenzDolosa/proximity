@@ -51,20 +51,41 @@ function renderStandaloneScanner() {
   `;
   $('#ss-signout').addEventListener('click', async () => { await supabase.auth.signOut(); });
   const codeInput = $('#ss-code');
+  const resultWrap = $('#ss-result');
+  let fadeTimer = null;
+  let clearTimer = null;
+  const RESULT_LIFETIME_MS = 10000;
+  const FADE_DURATION_MS = 400;
+  const scheduleResultFade = () => {
+    clearTimeout(fadeTimer);
+    clearTimeout(clearTimer);
+    fadeTimer = setTimeout(() => {
+      resultWrap.classList.add('fade-out');
+      clearTimer = setTimeout(() => {
+        resultWrap.innerHTML = '';
+        resultWrap.classList.remove('fade-out');
+      }, FADE_DURATION_MS);
+    }, RESULT_LIFETIME_MS);
+  };
   const doScan = async () => {
     const proximity_code = codeInput.value.trim();
     if (!proximity_code) return;
     const { data, error } = await ScanEventsModel.scan(proximity_code, operatorName);
-    const resultWrap = $('#ss-result');
+    clearTimeout(fadeTimer);
+    clearTimeout(clearTimer);
+    resultWrap.classList.remove('fade-out');
     if (error) {
       resultWrap.innerHTML = `<div class="result-card unmatched"><strong style="color:var(--bad)">Scan failed</strong><div class="emp-meta">${esc(error.message)}</div></div>`;
     } else {
       resultWrap.innerHTML = renderScanResult(data);
     }
+    scheduleResultFade();
     codeInput.value = '';
     codeInput.focus();
-    loadScanFeed('ss-feed');
+    // Only this operator's own scans, per kiosk — see get_scan_feed's
+    // p_scanner_id filter.
+    loadScanFeed('ss-feed', 10, operatorName);
   };
   codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doScan(); });
-  loadScanFeed('ss-feed');
+  loadScanFeed('ss-feed', 10, operatorName);
 }
