@@ -4,11 +4,12 @@
 // RPC) so concurrent adds don't clobber each other.
 import { $ } from '../Utils/dom.js';
 import { esc, fmtTime } from '../Utils/format.js';
-import { openModal, closeModal } from './Modal.js';
+import { openModal, closeModal, startModalOpen, isStaleModalOpen } from './Modal.js';
 import { toast } from '../Utils/toast.js';
 import { EmployeesModel } from '../Models/EmployeesModel.js';
 
 export async function openRemarksModal(employeeId) {
+  const token = startModalOpen();
   const overlay = openModal(`
     <h3 id="remarks-title">Remarks</h3>
     <div id="remarks-body" class="empty-state">Loading…</div>
@@ -21,6 +22,7 @@ export async function openRemarksModal(employeeId) {
 
   const load = async () => {
     const { data: emp, error } = await EmployeesModel.getRemarks(employeeId);
+    if (isStaleModalOpen(token)) return; // superseded by a newer click before this resolved
     const bodyEl = $('#remarks-body', overlay);
     if (error) { bodyEl.textContent = error.message; return; }
     $('#remarks-title', overlay).textContent = `Remarks — ${emp.full_name}`;

@@ -12,17 +12,47 @@
  *   `closeModal` when the user cancels/saves, and use `$('selector', overlay)`
  *   to scope lookups to this modal instance.
  */
+let activeOverlay = null;
+
 export function openModal(innerHTML, { maxWidth } = {}) {
+  // Only one modal at a time, app-wide. Several openers (EmployeeModal in
+  // particular) do an async prefetch before rendering, so a rapid double
+  // or triple click on the triggering button used to fire that many
+  // concurrent openModal() calls and stack that many overlays. Tearing
+  // down any existing overlay first means the DOM never has more than one,
+  // no matter how many opens are in flight.
+  if (activeOverlay) activeOverlay.remove();
+
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
   const style = maxWidth ? ` style="max-width:${maxWidth};"` : '';
   overlay.innerHTML = `<div class="modal"${style}>${innerHTML}</div>`;
   document.body.appendChild(overlay);
+  activeOverlay = overlay;
   return overlay;
 }
 
 export function closeModal(overlay) {
   overlay.remove();
+  if (activeOverlay === overlay) activeOverlay = null;
+}
+
+let openSeq = 0;
+
+// For modals that await something (a prefetch) before their first
+// openModal() call — EmployeeModal, ScanLogModal, RemarksModal. Grab a
+// token before the awaits; if a newer open has started by the time they
+// resolve (another rapid click, possibly on a different row), bail out
+// instead of rendering a stale modal that then gets torn down anyway by
+// openModal()'s single-overlay guard — without this, whichever fetch
+// happens to resolve last wins, which isn't necessarily the last thing
+// the user clicked.
+export function startModalOpen() {
+  return ++openSeq;
+}
+
+export function isStaleModalOpen(token) {
+  return token !== openSeq;
 }
 
 export function showModalError(overlay, selector, message) {

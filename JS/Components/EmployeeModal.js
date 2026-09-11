@@ -1,17 +1,19 @@
 import { $, $$ } from '../Utils/dom.js';
 import { esc } from '../Utils/format.js';
 import { toast } from '../Utils/toast.js';
-import { openModal, closeModal, showModalError } from './Modal.js';
+import { openModal, closeModal, showModalError, startModalOpen, isStaleModalOpen } from './Modal.js';
 import { appState } from '../Core/state.js';
 import { EmployeesModel } from '../Models/EmployeesModel.js';
 import { ProximityCardsModel } from '../Models/ProximityCardsModel.js';
 
 export async function openEmployeeModal(emp, onSaved) {
   const isEdit = !!emp;
+  const token = startModalOpen();
 
   // unassigned, active cards + (when editing) the employee's own current card
   const { data: allCards } = await ProximityCardsModel.listAll();
   const { data: linkedRows } = await EmployeesModel.listCardLinks();
+  if (isStaleModalOpen(token)) return; // superseded by a newer click before this resolved
   const linkedIds = new Set((linkedRows || []).map((r) => r.proximity_card_id));
   const availableCards = (allCards || []).filter((c) => c.is_active && (!linkedIds.has(c.id) || c.id === emp?.proximity_card_id));
 

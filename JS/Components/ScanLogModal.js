@@ -1,6 +1,6 @@
 import { $ } from '../Utils/dom.js';
 import { esc, fmtTime } from '../Utils/format.js';
-import { openModal, closeModal } from './Modal.js';
+import { openModal, closeModal, startModalOpen, isStaleModalOpen } from './Modal.js';
 import { EmployeesModel } from '../Models/EmployeesModel.js';
 
 // Local (not UTC) yyyy-mm-dd, so it lines up with what fmtTime() displays
@@ -8,6 +8,7 @@ import { EmployeesModel } from '../Models/EmployeesModel.js';
 const localDateKey = (iso) => new Date(iso).toLocaleDateString('en-CA');
 
 export async function openScanLogModal(employeeId) {
+  const token = startModalOpen();
   const overlay = openModal(`
     <h3 id="log-title">Scan log</h3>
     <div id="log-body" class="empty-state">Loading…</div>
@@ -19,6 +20,7 @@ export async function openScanLogModal(employeeId) {
   $('#log-close', overlay).addEventListener('click', () => closeModal(overlay));
 
   const { data: emp, error } = await EmployeesModel.getScanLogs(employeeId);
+  if (isStaleModalOpen(token)) return; // superseded by a newer click before this resolved
   const bodyEl = $('#log-body', overlay);
   if (error) { bodyEl.textContent = error.message; return; }
   $('#log-title', overlay).textContent = `Scan log — ${emp.full_name}`;

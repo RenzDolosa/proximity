@@ -18,8 +18,10 @@ export async function loadScanFeed(targetId = 'scan-feed', limit = 10, scannerId
         <div style="font-weight:500;">${row.employee_name ? esc(row.employee_name) : 'Unmatched scan'}</div>
         <div class="emp-meta mono">${esc(row.scanner_id)}</div>
       </div>
-      <span class="badge ${row.result}" style="margin-left:8px;">${esc(row.result)}</span>
-      <div class="feed-time">${fmtTime(row.scanned_at)}</div>
+      <div>
+        <span class="badge ${row.result}" style="margin-left:8px;">${esc(row.result)}</span>
+        <div class="feed-time">${fmtTime(row.scanned_at)}</div>
+      </div>
     </div>
   `).join('');
 }
