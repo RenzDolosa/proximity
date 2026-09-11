@@ -13,6 +13,13 @@ const titles = {
 };
 
 export function render() {
+  // Keep the hash in sync even when the route changed programmatically
+  // (e.g. showShell() bouncing an account off a route it can't view) so a
+  // reload always lands back on whatever's actually on screen.
+  if (location.hash.replace('#', '') !== appState.route) {
+    history.replaceState(null, '', `#${appState.route}`);
+  }
+  $$('nav.rail button[data-route]').forEach((b) => b.classList.toggle('active', b.dataset.route === appState.route));
   const [title, sub] = titles[appState.route];
   $('#page-title').textContent = title;
   $('#page-sub').textContent = sub;
@@ -26,8 +33,6 @@ export function initRouter() {
   $$('nav.rail button[data-route]').forEach((btn) => {
     btn.addEventListener('click', () => {
       appState.route = btn.dataset.route;
-      $$('nav.rail button').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
       render();
     });
   });

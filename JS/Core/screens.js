@@ -1,7 +1,7 @@
 // The app has exactly three top-level "screens" (#auth-screen, #shell,
 // #standalone-scanner) and only one is ever visible at a time. This module
 // owns that switch so main.js's auth-state handler stays a one-liner.
-import { $, $$ } from '../Utils/dom.js';
+import { $ } from '../Utils/dom.js';
 import { appState, isAdmin, canViewEmployeeManager, canViewScanner } from './state.js';
 import { render } from './router.js';
 
@@ -24,7 +24,6 @@ export function showShell() {
   // land on the first route this account is actually allowed to see
   if (appState.route === 'directory' && !canViewEmployeeManager()) appState.route = canViewScanner() ? 'scanner' : 'users';
   if (appState.route === 'scanner' && !canViewScanner()) appState.route = canViewEmployeeManager() ? 'directory' : 'users';
-  $$('nav.rail button[data-route]').forEach((b) => b.classList.toggle('active', b.dataset.route === appState.route));
   render();
 }
 

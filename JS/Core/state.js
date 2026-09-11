@@ -4,10 +4,16 @@
 // UI code never has to know how permissions or session data are derived.
 import { supabase } from './supabaseClient.js';
 
+const VALID_ROUTES = ['directory', 'proximity', 'scanner', 'users'];
+const hashRoute = location.hash.replace('#', '');
+
 export const appState = {
   session: null,
   profile: null, // { id, full_name, email, role, is_active, access_scope }
-  route: 'directory',
+  // Seeded from the URL hash (e.g. reloading on #scanner keeps you on Test
+  // Scan) instead of always defaulting to Employee Manager. showShell()
+  // still redirects away from this if the account can't actually view it.
+  route: VALID_ROUTES.includes(hashRoute) ? hashRoute : 'directory',
   employeesCache: [],
 };
 
