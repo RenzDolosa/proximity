@@ -1,0 +1,303 @@
+From 2920c25e498abef06e3c4e88262ead54684fc60d Mon Sep 17 00:00:00 2001
+From: RenzDolosa <renz@example.com>
+Date: Thu, 10 Sep 2026 09:14:02 +0000
+Subject: [PATCH] Fix Scanner Recent Activity showing Unmatched despite a
+ matched scan
+
+Root cause: the scan_feed view's LEFT JOIN to employees ran under the
+querying user's RLS, so scanner-only accounts (access_scope='scanner')
+could never see the joined employee row, even for result='matched'
+scans. Replaced it with a SECURITY DEFINER RPC (get_scan_feed) gated by
+the same permission check scan_proximity_code() already uses.
+
+Also:
+- Add test_scan_proximity_code(): same matching logic/permission gate
+  as the real scanner, but never inserts into scan_events, so it never
+  touches Recent Activity, an employee's scan_logs, or the Scans count.
+- Replace the Employee Manager sidebar's 'Scanner' item with 'Test
+  Scan', rendered in-shell (no more window.open on click) using the
+  new non-logging RPC. The real, logging scanner is still reachable via
+  an 'Open live scanner' link on that page.
+- scanner.css: use 100dvh/100dvw for the standalone scanner, a
+  3-column grid (spacer/main/feed) so the tap-card hero and search box
+  are actually centered on screen instead of skewed left by the feed
+  sidebar, and cap Recent Activity to calc(100dvh - ...) with
+  overflow-y:auto instead of growing unbounded.
+---
+ CSS/scanner.css                     | 71 +++++++++++++++++++++++------
+ JS/Core/router.js                   | 10 ++--
+ JS/Features/Scanner/ScannerPage.js  | 24 ----------
+ JS/Features/Scanner/TestScanPage.js | 51 +++++++++++++++++++++
+ JS/Models/ScanEventsModel.js        | 15 +++++-
+ Public/index.html                   |  2 +-
+ 6 files changed, 125 insertions(+), 48 deletions(-)
+ delete mode 100644 JS/Features/Scanner/ScannerPage.js
+ create mode 100644 JS/Features/Scanner/TestScanPage.js
+
+diff --git a/CSS/scanner.css b/CSS/scanner.css
+index e5d8bec..37d42f7 100644
+--- a/CSS/scanner.css
++++ b/CSS/scanner.css
+@@ -1,21 +1,46 @@
+-/* Scanner page (inside the shell) and the standalone scanner tab. */
+-.scan-wrap{display:grid;grid-template-columns:360px 1fr;gap:20px;align-items:start;}
+-@media (max-width: 860px){.scan-wrap{grid-template-columns:1fr;}}
+-.scan-input-row{display:flex;gap:8px;}
+-.scan-input-row input{font-family:var(--mono);font-size:15px;letter-spacing:.5px;}
++/* Shared result-card styling (used by both the standalone scanner and the
++   in-shell Test Scan page). */
+ .result-card{margin-top:16px;border:1px solid var(--border);border-radius:6px;padding:18px;}
+ .result-card.matched{border-color:var(--good);background:linear-gradient(180deg, var(--good-dim), transparent 60%);}
+ .result-card.unmatched,.result-card.inactive_card,.result-card.inactive_employee{border-color:var(--bad);background:linear-gradient(180deg, var(--bad-dim), transparent 60%);}
+ 
+-/* ---------- standalone scanner (opens in a new tab) ---------- */
+-.standalone-scan{min-height:100vh;display:flex;flex-direction:column;padding:20px 28px 40px;background:radial-gradient(900px 500px at 50% 0%, #17213A 0%, transparent 65%), var(--bg);}
++/* ---------- standalone scanner (opens in its own tab, logs every scan) ---------- */
++.standalone-scan{
++  min-height:100dvh;
++  width:100dvw;
++  max-width:100%;
++  display:flex;
++  flex-direction:column;
++  padding:20px clamp(16px, 4dvw, 28px) 40px;
++  background:radial-gradient(900px 500px at 50% 0%, #17213A 0%, transparent 65%), var(--bg);
++  box-sizing:border-box;
++}
+ .ss-header{width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:14px;border-bottom:1px solid var(--border-soft);}
+ .ss-operator{font-size:12.5px;color:var(--text-muted);}
+ .ss-operator strong{color:var(--text);font-weight:600;}
+-.ss-layout{flex:1;display:grid;grid-template-columns:1fr 260px;gap:28px;align-items:start;max-width:1080px;margin:0 auto;width:100%;}
+-@media (max-width: 760px){.ss-layout{grid-template-columns:1fr;}}
+-.ss-main{display:flex;flex-direction:column;align-items:center;}
+-.ss-topbar{width:100%;max-width:420px;margin-bottom:36px;}
++
++/* Three-column grid with a spacer column mirroring the feed column's width
++   keeps ss-main (the "TAP YOUR CARD" hero + search box) truly centered on
++   the screen, instead of being pulled left by the feed sidebar. */
++.ss-layout{
++  flex:1;
++  display:grid;
++  grid-template-columns: minmax(0, 280px) minmax(0, 1fr) minmax(0, 280px);
++  gap:28px;
++  align-items:start;
++  width:100%;
++  max-width:100dvw;
++  margin:0 auto;
++  box-sizing:border-box;
++}
++.ss-main{grid-column:2;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;}
++.ss-feed-col{grid-column:3;position:sticky;top:20px;max-height:calc(100dvh - 120px);}
++@media (max-width: 900px){
++  .ss-layout{grid-template-columns:1fr;}
++  .ss-main{grid-column:1;}
++  .ss-feed-col{grid-column:1;position:static;max-height:none;}
++}
++.ss-topbar{width:min(420px, 90dvw);margin:0 auto 36px;}
+ .ss-topbar input{font-family:var(--mono);font-size:14px;text-align:center;}
+ .ss-hero{display:flex;flex-direction:column;align-items:center;gap:22px;margin-top:10px;}
+ .ss-ring{position:relative;width:160px;height:160px;display:flex;align-items:center;justify-content:center;}
+@@ -26,13 +51,29 @@
+ .ss-icon{width:76px;height:76px;border-radius:12px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:34px;z-index:1;}
+ .ss-label{text-align:center;font-weight:700;font-size:26px;letter-spacing:.5px;line-height:1.25;}
+ .ss-label .dim{color:var(--text-muted);font-weight:700;}
+-.ss-result-wrap{width:100%;max-width:420px;margin-top:26px;}
+-.ss-feed-col{position:sticky;top:20px;}
+-.ss-feed-panel{padding:12px 14px;}
+-.ss-feed-title{font-weight:600;margin-bottom:8px;font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;}
++.ss-result-wrap{width:min(420px, 90dvw);margin:26px auto 0;}
++.ss-feed-panel{padding:12px 14px;display:flex;flex-direction:column;max-height:calc(100dvh - 120px);}
++.ss-feed-title{flex:none;font-weight:600;margin-bottom:8px;font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;}
++#ss-feed{overflow-y:auto;max-height:calc(100dvh - 170px);}
+ .ss-feed-panel .feed-row{padding:7px 0;gap:8px;}
+ .ss-feed-panel .feed-row .avatar{width:22px;height:22px;font-size:9px;}
+ .ss-feed-panel .feed-row div > div{font-size:11.5px;}
+ .ss-feed-panel .feed-row .emp-meta{font-size:10px;}
+ .ss-feed-panel .feed-time{font-size:10px;}
+ .ss-feed-panel .badge{font-size:9px;padding:2px 6px;}
++
++/* ---------- in-shell Test Scan page (same lookup, never logged) ---------- */
++.test-scan-wrap{width:100%;max-width:480px;margin:0 auto;}
++.test-scan-panel{display:flex;flex-direction:column;align-items:center;padding:32px 24px;}
++.test-scan-note{font-size:12px;color:var(--text-muted);text-align:center;margin-bottom:24px;}
++.ts-topbar{width:min(420px, 90dvw);margin:0 auto 32px;}
++.ts-topbar input{font-family:var(--mono);font-size:14px;text-align:center;}
++.ts-hero{display:flex;flex-direction:column;align-items:center;gap:18px;}
++.ts-ring{position:relative;width:120px;height:120px;display:flex;align-items:center;justify-content:center;}
++.ts-ring::before,.ts-ring::after{content:'';position:absolute;border-radius:50%;border:2px solid var(--accent-dim);}
++.ts-ring::before{width:120%;height:120%;animation:ss-pulse 2.4s ease-out infinite;}
++.ts-ring::after{width:150%;height:150%;animation:ss-pulse 2.4s ease-out infinite .5s;}
++.ts-icon{width:58px;height:58px;border-radius:10px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:26px;z-index:1;}
++.ts-label{text-align:center;font-weight:700;font-size:20px;letter-spacing:.5px;line-height:1.25;}
++.ts-label .dim{color:var(--text-muted);font-weight:700;}
++.ts-result-wrap{width:100%;margin-top:22px;}
+diff --git a/JS/Core/router.js b/JS/Core/router.js
+index e1df200..2995408 100644
+--- a/JS/Core/router.js
++++ b/JS/Core/router.js
+@@ -2,13 +2,13 @@ import { $, $$ } from '../Utils/dom.js';
+ import { appState } from './state.js';
+ import { renderDirectory } from '../Features/Directory/DirectoryPage.js';
+ import { renderProximity } from '../Features/Proximity/ProximityPage.js';
+-import { renderScanner } from '../Features/Scanner/ScannerPage.js';
++import { renderTestScan } from '../Features/Scanner/TestScanPage.js';
+ import { renderUsers } from '../Features/Users/UsersPage.js';
+ 
+ const titles = {
+   directory: ['Employee Manager', 'View and edit the employee directory'],
+   proximity: ['Proximity Cards', 'Issue and revoke proximity IDs, linked to employees'],
+-  scanner: ['Proximity Scanner', 'Scan a proximity ID to identify an employee and log the event'],
++  scanner: ['Test Scan', 'Try a proximity ID against the live directory — results here are not logged'],
+   users: ['Users & Roles', 'Manage login accounts and permission tiers'],
+ };
+ 
+@@ -18,17 +18,13 @@ export function render() {
+   $('#page-sub').textContent = sub;
+   if (appState.route === 'directory') renderDirectory();
+   if (appState.route === 'proximity') renderProximity();
+-  if (appState.route === 'scanner') renderScanner();
++  if (appState.route === 'scanner') renderTestScan();
+   if (appState.route === 'users') renderUsers();
+ }
+ 
+ export function initRouter() {
+   $$('nav.rail button[data-route]').forEach((btn) => {
+     btn.addEventListener('click', () => {
+-      if (btn.dataset.route === 'scanner') {
+-        window.open(location.pathname + '?scanner=1', '_blank', 'noopener');
+-        return;
+-      }
+       appState.route = btn.dataset.route;
+       $$('nav.rail button').forEach((b) => b.classList.remove('active'));
+       btn.classList.add('active');
+diff --git a/JS/Features/Scanner/ScannerPage.js b/JS/Features/Scanner/ScannerPage.js
+deleted file mode 100644
+index f20226e..0000000
+--- a/JS/Features/Scanner/ScannerPage.js
++++ /dev/null
+@@ -1,24 +0,0 @@
+-import { $ } from '../../Utils/dom.js';
+-import { loadScanFeed } from '../../Components/ScanFeed.js';
+-
+-export async function renderScanner() {
+-  const content = $('#content');
+-  content.innerHTML = `
+-    <div class="scan-wrap">
+-      <div>
+-        <div class="panel" style="text-align:center;padding:36px 24px;">
+-          <div style="font-size:32px;margin-bottom:8px;">▣</div>
+-          <div style="font-weight:600;font-size:15px;margin-bottom:6px;">The scanner opens in its own tab</div>
+-          <div class="emp-meta" style="margin-bottom:18px;">Keeps the console open on one screen while a dedicated tab runs on the reader station.</div>
+-          <button class="primary" id="scan-open">Open scanner ↗</button>
+-        </div>
+-      </div>
+-      <div class="panel">
+-        <div style="font-weight:600;margin-bottom:10px;font-size:13px;">Recent activity</div>
+-        <div id="scan-feed">Loading…</div>
+-      </div>
+-    </div>
+-  `;
+-  $('#scan-open').addEventListener('click', () => window.open(location.pathname + '?scanner=1', '_blank', 'noopener'));
+-  loadScanFeed();
+-}
+diff --git a/JS/Features/Scanner/TestScanPage.js b/JS/Features/Scanner/TestScanPage.js
+new file mode 100644
+index 0000000..70808aa
+--- /dev/null
++++ b/JS/Features/Scanner/TestScanPage.js
+@@ -0,0 +1,51 @@
++// In-shell "Test Scan" page. Same lookup logic and result UI as the real,
++// door-facing standalone scanner, but calls test_scan_proximity_code()
++// instead of scan_proximity_code() — nothing is written to scan_events, so
++// a test scan never shows up in Recent Activity, an employee's scan_logs,
++// or Employee Manager's "Scans" count. Use the "Open live scanner ↗" link
++// to launch the real, logging scanner for a reader station.
++import { $ } from '../../Utils/dom.js';
++import { esc } from '../../Utils/format.js';
++import { ScanEventsModel } from '../../Models/ScanEventsModel.js';
++import { renderScanResult } from '../../Components/ScanResultCard.js';
++
++export async function renderTestScan() {
++  const content = $('#content');
++  content.innerHTML = `
++    <div class="test-scan-wrap">
++      <div class="panel test-scan-panel">
++        <div class="test-scan-note">Results here are not logged — nothing is written to Recent Activity, scan history, or Employee Manager.</div>
++        <div class="ts-topbar">
++          <input id="ts-code" class="mono" placeholder="Live Search — scan or type code…" autocomplete="off" autofocus />
++        </div>
++        <div class="ts-hero">
++          <div class="ts-ring"><div class="ts-icon">▣</div></div>
++          <div class="ts-label"><span class="dim">TAP</span><br/>YOUR CARD</div>
++        </div>
++        <div class="ts-result-wrap" id="ts-result"></div>
++      </div>
++      <div style="text-align:center;margin-top:18px;">
++        <a href="#" id="ts-open-live" class="emp-meta">Open live scanner (logs to Recent Activity) ↗</a>
++      </div>
++    </div>
++  `;
++  const codeInput = $('#ts-code');
++  const doScan = async () => {
++    const proximity_code = codeInput.value.trim();
++    if (!proximity_code) return;
++    const { data, error } = await ScanEventsModel.testScan(proximity_code);
++    const resultWrap = $('#ts-result');
++    if (error) {
++      resultWrap.innerHTML = `<div class="result-card unmatched"><strong style="color:var(--bad)">Scan failed</strong><div class="emp-meta">${esc(error.message)}</div></div>`;
++    } else {
++      resultWrap.innerHTML = renderScanResult(data);
++    }
++    codeInput.value = '';
++    codeInput.focus();
++  };
++  codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doScan(); });
++  $('#ts-open-live').addEventListener('click', (e) => {
++    e.preventDefault();
++    window.open(location.pathname + '?scanner=1', '_blank', 'noopener');
++  });
++}
+diff --git a/JS/Models/ScanEventsModel.js b/JS/Models/ScanEventsModel.js
+index 867466c..e0e94f5 100644
+--- a/JS/Models/ScanEventsModel.js
++++ b/JS/Models/ScanEventsModel.js
+@@ -4,10 +4,23 @@ import { supabase } from '../Core/supabaseClient.js';
+ 
+ export const ScanEventsModel = {
+   async recentFeed(limit = 25) {
+-    return supabase.from('scan_feed').select('*').limit(limit);
++    // get_scan_feed() is SECURITY DEFINER so the employee join always
++    // resolves regardless of the caller's RLS scope (see scan_proximity_code
++    // below) — querying the old `scan_feed` view directly as the caller
++    // meant scanner-only accounts saw every matched scan's employee_name
++    // come back null, since RLS on `employees` silently dropped the joined
++    // row for them.
++    return supabase.rpc('get_scan_feed', { p_limit: limit });
+   },
+ 
+   async scan(proximity_code, scanner_id) {
+     return supabase.rpc('scan_proximity_code', { p_proximity_code: proximity_code, p_scanner_id: scanner_id });
+   },
++
++  // Same matching logic and permission gate as scan(), but never inserts
++  // into scan_events — no Recent Activity entry, no scan_logs on the
++  // employee, no change to Employee Manager's "Scans" count.
++  async testScan(proximity_code) {
++    return supabase.rpc('test_scan_proximity_code', { p_proximity_code: proximity_code });
++  },
+ };
+diff --git a/Public/index.html b/Public/index.html
+index 9ba7a74..c676712 100644
+--- a/Public/index.html
++++ b/Public/index.html
+@@ -48,7 +48,7 @@
+       <nav class="rail">
+         <button data-route="directory" class="active"><span class="ic">▤</span>Employee Manager</button>
+         <button data-route="proximity"><span class="ic">◈</span>Proximity Cards</button>
+-        <button data-route="scanner"><span class="ic">▣</span>Scanner <span class="emp-meta" style="margin-left:auto;font-size:11px;">↗</span></button>
++        <button data-route="scanner"><span class="ic">▣</span>Test Scan</button>
+         <button data-route="users" id="nav-users" class="hidden"><span class="ic">⚙</span>Users &amp; Roles</button>
+       </nav>
+       <div class="rail-spacer"></div>
+-- 
+2.43.0
+
