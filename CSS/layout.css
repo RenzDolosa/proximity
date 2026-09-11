@@ -18,16 +18,26 @@ nav.rail button:hover{background:var(--surface-raised);color:var(--text);}
 nav.rail button.active{background:var(--surface-raised);color:var(--text);}
 nav.rail button.active .ic{color:var(--accent);}
 .rail-spacer{flex:1;}
-.who{padding:12px 18px;border-top:1px solid var(--border-soft);margin-top:auto;}
-.who .name{font-size:13px;font-weight:500;}
-.who .role{font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-top:2px;}
-.who button{width:100%;margin-top:10px;font-size:12px;padding:6px;}
 
 #main{flex:1;min-width:0;display:flex;flex-direction:column;}
 #topbar{
-  height:56px;flex:0 0 56px;border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-between;padding:0 24px;
+  min-height:56px;flex:0 0 auto;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:10px 24px;flex-wrap:wrap;
 }
+.topbar-title{min-width:0;}
 #topbar h2{font-size:15px;font-weight:600;margin:0;}
 #topbar .sub{color:var(--text-muted);font-size:12.5px;}
+
+/* who — account name/role + sign out, top right of the header. */
+.who{display:flex;align-items:center;gap:10px;flex-shrink:0;margin-left:auto;}
+.who-text{text-align:right;}
+.who .name{font-size:13px;font-weight:500;line-height:1.3;}
+.who .role{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;}
+.who button{font-size:12px;padding:6px 12px;flex-shrink:0;}
+@media (max-width: 560px){
+  .topbar-title .sub{display:none;}
+  .who-text{display:none;}
+}
+
 #content{flex:1;padding:24px;overflow:auto;}

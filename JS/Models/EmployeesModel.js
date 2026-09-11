@@ -37,6 +37,10 @@ export const EmployeesModel = {
     return supabase.from('employees').delete().eq('id', id);
   },
 
+  async deleteMany(ids) {
+    return supabase.from('employees').delete().in('id', ids);
+  },
+
   async getScanLogs(employeeId) {
     return supabase.from('employees').select('full_name, scan_logs').eq('id', employeeId).single();
   },

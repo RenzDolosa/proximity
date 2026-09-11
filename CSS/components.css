@@ -21,6 +21,12 @@ thead th{
 }
 tbody td{padding:11px 12px;border-bottom:1px solid var(--border-soft);vertical-align:middle;}
 tbody tr:hover{background:var(--surface);}
+/* The actions column has no header text, so in an auto-layout table the
+   browser was handing it whatever width was left over — stretching a
+   couple of small buttons across a huge gap. width:1% + nowrap makes it
+   (and any other shrink-to-fit column marked the same way) hug its
+   content instead. */
+thead th.col-shrink, tbody td.col-shrink{width:1%;white-space:nowrap;}
 .row-actions{display:flex;gap:6px;justify-content:flex-end;}
 .row-actions button{padding:5px 9px;font-size:12px;}
 .empty-state{

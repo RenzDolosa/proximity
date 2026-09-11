@@ -38,4 +38,8 @@ export const ProximityCardsModel = {
   async remove(id) {
     return supabase.from('proximity_cards').delete().eq('id', id);
   },
+
+  async removeMany(ids) {
+    return supabase.from('proximity_cards').delete().in('id', ids);
+  },
 };

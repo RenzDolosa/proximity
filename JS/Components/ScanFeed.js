@@ -5,10 +5,10 @@ import { $ } from '../Utils/dom.js';
 import { esc, initials, fmtTime } from '../Utils/format.js';
 import { ScanEventsModel } from '../Models/ScanEventsModel.js';
 
-export async function loadScanFeed(targetId = 'scan-feed') {
+export async function loadScanFeed(targetId = 'scan-feed', limit = 10) {
   const feedEl = $('#' + targetId);
   if (!feedEl) return;
-  const { data, error } = await ScanEventsModel.recentFeed(25);
+  const { data, error } = await ScanEventsModel.recentFeed(limit);
   if (error) { feedEl.innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
   if (!data.length) { feedEl.innerHTML = `<div class="empty-state">No scans yet.</div>`; return; }
   feedEl.innerHTML = data.map((row) => `

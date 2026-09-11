@@ -3,7 +3,7 @@
 import { supabase } from '../Core/supabaseClient.js';
 
 export const ScanEventsModel = {
-  async recentFeed(limit = 25) {
+  async recentFeed(limit = 10) {
     // get_scan_feed() is SECURITY DEFINER so the employee join always
     // resolves regardless of the caller's RLS scope (see scan_proximity_code
     // below) — querying the old `scan_feed` view directly as the caller

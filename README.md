@@ -41,19 +41,26 @@ JS/
     ResetPasswordModal.js
     ScanLogModal.js
     ScanResultCard.js
-    ScanFeed.js
+    ScanFeed.js                  Recent Activity list (shows the last 10 scans)
+    ImportModal.js                CSV bulk-import dialog — Employee Manager
+                                  and Proximity Cards both build on this,
+                                  differing only in required columns + what
+                                  each row does with the data (see the
+                                  importEmployees/importCards handlers in
+                                  their respective Feature page)
   Features/                   one folder per screen/area of the app
     Auth/AuthScreen.js
     Directory/DirectoryPage.js       (Employee Manager)
     Proximity/ProximityPage.js       (Proximity Cards)
-    Scanner/ScannerPage.js           (in-shell launcher + activity)
-    Scanner/StandaloneScanner.js     (the ?scanner=1 tab)
+    Scanner/TestScanPage.js          (in-shell "Test Scan" — same lookup, never logged)
+    Scanner/StandaloneScanner.js     (the real, logging ?scanner=1 tab)
     Users/UsersPage.js               (Users & Roles, admin-only)
     Users/userOptions.js             (shared role/access-scope option lists)
   Utils/                      pure helpers, no state, no DOM assumptions
     dom.js                       $ / $$
     format.js                    esc / initials / fmtTime
     toast.js                     toast notifications
+    csv.js                       parseCSV / toCSV, used by ImportModal.js
 
 Public/
   index.html                  the app shell (static markup only — all

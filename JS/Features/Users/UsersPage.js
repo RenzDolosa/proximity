@@ -23,7 +23,7 @@ export async function renderUsers() {
   if (error) { wrap.innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
   wrap.innerHTML = `
     <table>
-      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access</th><th>Account</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access</th><th>Account</th><th class="col-shrink"></th></tr></thead>
       <tbody>
         ${data.map((u) => `
           <tr>
@@ -32,7 +32,7 @@ export async function renderUsers() {
             <td><span class="badge role-${u.role}">${esc(u.role)}</span></td>
             <td>${esc(scopeLabel[u.access_scope] || u.access_scope)}</td>
             <td><span class="badge ${u.is_active ? 'active' : 'inactive'}">${u.is_active ? 'active' : 'disabled'}</span></td>
-            <td class="row-actions">
+            <td class="row-actions col-shrink">
               <button class="ghost" data-edit="${u.id}">Edit</button>
               <button class="ghost" data-pw="${u.id}">Reset password</button>
               <button class="ghost" data-toggle="${u.id}" ${u.id === appState.session.user.id ? 'disabled' : ''}>${u.is_active ? 'Disable' : 'Enable'}</button>

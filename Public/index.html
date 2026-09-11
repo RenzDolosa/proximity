@@ -52,16 +52,20 @@
         <button data-route="users" id="nav-users" class="hidden"><span class="ic">⚙</span>Users &amp; Roles</button>
       </nav>
       <div class="rail-spacer"></div>
-      <div class="who">
-        <div class="name" id="who-name">—</div>
-        <div class="role" id="who-role">—</div>
-        <button id="btn-signout">Sign out</button>
-      </div>
     </aside>
     <div id="main">
       <div id="topbar">
-        <div><h2 id="page-title">Employee Manager</h2></div>
-        <div class="sub" id="page-sub"></div>
+        <div class="topbar-title">
+          <h2 id="page-title">Employee Manager</h2>
+          <div class="sub" id="page-sub"></div>
+        </div>
+        <div class="who">
+          <div class="who-text">
+            <div class="name" id="who-name">—</div>
+            <div class="role" id="who-role">—</div>
+          </div>
+          <button class="ghost" id="btn-signout">Sign out</button>
+        </div>
       </div>
       <div id="content"></div>
     </div>
