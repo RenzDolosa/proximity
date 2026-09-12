@@ -1,40 +1,46 @@
-// Shared pagination bar: a page-size select (20/50/100/500) + prev/next.
-// Every table page keeps its own {page, pageSize} in module state, slices
-// its already-fetched rows before rendering, and calls this after the
-// table to draw the controls and wire them back to a repaint.
+// Reusable pagination bar for any server-paginated table. Renders the
+// markup and wires prev/next/page-size — the caller just supplies the
+// current { page, pageSize, total } and a callback for when either changes.
 import { $ } from '../Utils/dom.js';
 
-export const PAGE_SIZES = [20, 50, 100, 500];
+export const PAGE_SIZE_OPTIONS = [20, 50, 100, 500];
 
-/**
- * @param {HTMLElement} el - container to render the pagination bar into.
- * @param {{ total:number, page:number, pageSize:number, onChange:(next:{page:number,pageSize:number})=>void }} opts
- * @returns {number} the clamped current page, in case total shrank under it.
- */
-export function renderPagination(el, { total, page, pageSize, onChange }) {
+export function paginationBar({ page, pageSize, total }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const current = Math.min(Math.max(1, page), totalPages);
-  const start = total === 0 ? 0 : (current - 1) * pageSize + 1;
-  const end = Math.min(current * pageSize, total);
-
-  el.innerHTML = `
+  const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end = Math.min(total, page * pageSize);
+  return `
     <div class="pagination">
-      <div class="pagination-info">${total === 0 ? 'No results' : `${start}–${end} of ${total}`}</div>
+      <div class="pagination-info">${total === 0 ? 'No results' : `Showing ${start}\u2013${end} of ${total}`}</div>
       <div class="pagination-controls">
-        <label class="pagination-size">
-          Show
-          <select id="pg-size">
-            ${PAGE_SIZES.map((s) => `<option value="${s}" ${s === pageSize ? 'selected' : ''}>${s}</option>`).join('')}
-          </select>
-        </label>
-        <button class="ghost" id="pg-prev" ${current <= 1 ? 'disabled' : ''}>‹ Prev</button>
-        <span class="pagination-page">Page ${current} / ${totalPages}</span>
-        <button class="ghost" id="pg-next" ${current >= totalPages ? 'disabled' : ''}>Next ›</button>
+        <select id="pg-size">
+          ${PAGE_SIZE_OPTIONS.map((n) => `<option value="${n}" ${n === pageSize ? 'selected' : ''}>${n} / page</option>`).join('')}
+        </select>
+        <button class="ghost" id="pg-prev" ${page <= 1 ? 'disabled' : ''}>‹ Prev</button>
+        <span class="pagination-page">Page ${page} of ${totalPages}</span>
+        <button class="ghost" id="pg-next" ${page >= totalPages ? 'disabled' : ''}>Next ›</button>
       </div>
     </div>
   `;
-  $('#pg-size', el).addEventListener('change', (e) => onChange({ page: 1, pageSize: Number(e.target.value) }));
-  $('#pg-prev', el).addEventListener('click', () => onChange({ page: current - 1, pageSize }));
-  $('#pg-next', el).addEventListener('click', () => onChange({ page: current + 1, pageSize }));
-  return current;
+}
+
+/**
+ * Wire up a pagination bar that was just rendered into `root`.
+ * @param {HTMLElement} root - container the pagination markup was rendered into
+ * @param {{page:number,pageSize:number,total:number}} state - current state (mutated in place)
+ * @param {() => void} onChange - called after `state.page`/`state.pageSize` changes; re-fetch + re-render here
+ */
+export function wirePagination(root, state, onChange) {
+  const totalPages = Math.max(1, Math.ceil(state.total / state.pageSize));
+  $('#pg-size', root).addEventListener('change', (e) => {
+    state.pageSize = Number(e.target.value);
+    state.page = 1; // page size changed — start back at the top rather than landing mid-list
+    onChange();
+  });
+  $('#pg-prev', root).addEventListener('click', () => {
+    if (state.page > 1) { state.page -= 1; onChange(); }
+  });
+  $('#pg-next', root).addEventListener('click', () => {
+    if (state.page < totalPages) { state.page += 1; onChange(); }
+  });
 }

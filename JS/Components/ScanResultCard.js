@@ -1,7 +1,6 @@
-// Renders the outcome of one scan_proximity_code()/test_scan_proximity_code()
-// RPC call. Shared by the standalone scanner tab and Test Scan; kept as a
-// pure function so it's trivial to reuse anywhere else a scan result needs
-// to be shown.
+// Renders the outcome of one scan_proximity_code() RPC call. Shared by the
+// standalone scanner tab; kept as a pure function so it's trivial to reuse
+// anywhere else a scan result needs to be shown.
 import { esc, initials } from '../Utils/format.js';
 
 const LABELS = {
@@ -15,10 +14,6 @@ export function renderScanResult(data) {
   const result = data.result;
   if (result === 'matched' && data.employee) {
     const e = data.employee;
-    // Both scan RPCs return the full employee row (via to_jsonb), so
-    // remarks_log rides along on every matched scan — no extra fetch
-    // needed to flag it right here at the point of contact.
-    const unresolved = (e.remarks_log || []).filter((r) => !r.resolved);
     return `
       <div class="result-card matched">
         <span class="badge matched">${esc(LABELS[result])}</span>
@@ -30,12 +25,6 @@ export function renderScanResult(data) {
             <div class="emp-meta">${esc(e.department || '—')} · ${esc(e.position || '—')} · <span class="mono">${esc(e.employee_code)}</span></div>
           </div>
         </div>
-        ${unresolved.length ? `
-          <div class="remark-flag">
-            <div class="remark-flag-title">⚠ Unresolved remark${unresolved.length > 1 ? 's' : ''} (${unresolved.length})</div>
-            ${unresolved.map((r) => `<div class="remark-flag-item">${esc(r.remark)}</div>`).join('')}
-          </div>
-        ` : ''}
       </div>
     `;
   }
