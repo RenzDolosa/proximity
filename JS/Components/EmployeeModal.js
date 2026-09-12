@@ -1,18 +1,22 @@
 import { $, $$ } from '../Utils/dom.js';
 import { esc } from '../Utils/format.js';
 import { toast } from '../Utils/toast.js';
-import { openModal, closeModal, showModalError } from './Modal.js';
+import { openModal, closeModal, showModalError, startModalOpen, isStaleModalOpen } from './Modal.js';
 import { appState } from '../Core/state.js';
 import { EmployeesModel } from '../Models/EmployeesModel.js';
 import { ProximityCardsModel } from '../Models/ProximityCardsModel.js';
 
-export function openEmployeeModal(emp, onSaved) {
+export async function openEmployeeModal(emp, onSaved) {
   const isEdit = !!emp;
+  const token = startModalOpen();
 
-  // Open the modal immediately — don't make the person wait on a network
-  // round trip just to see the form. The card picker starts in a loading
-  // state and fills in as soon as ProximityCardsModel#listAvailable
-  // resolves, a moment later.
+  // unassigned, active cards + (when editing) the employee's own current card
+  const { data: allCards } = await ProximityCardsModel.listAll();
+  const { data: linkedRows } = await EmployeesModel.listCardLinks();
+  if (isStaleModalOpen(token)) return; // superseded by a newer click before this resolved
+  const linkedIds = new Set((linkedRows || []).map((r) => r.proximity_card_id));
+  const availableCards = (allCards || []).filter((c) => c.is_active && (!linkedIds.has(c.id) || c.id === emp?.proximity_card_id));
+
   const overlay = openModal(`
     <h3>${isEdit ? 'Edit employee' : 'Add employee'}</h3>
     <div class="grid-2">
@@ -30,15 +34,15 @@ export function openEmployeeModal(emp, onSaved) {
     </div>
     <div class="field">
       <label>Proximity code <span style="color:var(--text-faint)">(required — every employee needs one)</span></label>
-      <select id="f-card-mode" disabled>
+      <select id="f-card-mode">
         <option value="existing">${isEdit ? 'Assign a different card' : 'Assign an existing unassigned card'}</option>
         <option value="new">Issue a brand-new proximity code</option>
       </select>
     </div>
     <div class="field" id="f-card-existing-wrap">
-      ${isEdit && emp?.proximity_card_id ? `<div class="emp-meta" style="margin-bottom:6px;">Currently assigned: <span class="mono" id="f-card-current">${esc(emp?.active_proximity_code || '…')}</span></div>` : ''}
-      <input id="f-card-search" class="mono" placeholder="Loading available cards…" autocomplete="off" autofocus disabled />
-      <div id="f-card-results" class="search-results"><div class="search-empty">Loading available cards…</div></div>
+      ${isEdit && emp?.proximity_card_id ? `<div class="emp-meta" style="margin-bottom:6px;">Currently assigned: <span class="mono" id="f-card-current"></span></div>` : ''}
+      <input id="f-card-search" class="mono" placeholder="Search proximity codes…" autocomplete="off" autofocus />
+      <div id="f-card-results" class="search-results hidden"></div>
     </div>
     <div class="field hidden" id="f-card-new-wrap">
       <input id="f-card-new" class="mono" placeholder="e.g. PRX-00099" />
@@ -55,10 +59,12 @@ export function openEmployeeModal(emp, onSaved) {
     $('#f-card-existing-wrap', overlay).classList.toggle('hidden', e.target.value !== 'existing');
     $('#f-card-new-wrap', overlay).classList.toggle('hidden', e.target.value !== 'new');
   });
+  if (!availableCards.length) { $('#f-card-mode', overlay).value = 'new'; $('#f-card-mode', overlay).dispatchEvent(new Event('change')); }
 
-  // ---- card picker: fetched async so it never blocks the modal opening ----
-  let availableCards = [];
+  // ---- live-search combobox for proximity card selection ----
   overlay.dataset.chosenCard = emp?.proximity_card_id || '';
+  const currentCard = availableCards.find((c) => c.id === emp?.proximity_card_id);
+  if ($('#f-card-current', overlay) && currentCard) $('#f-card-current', overlay).textContent = currentCard.proximity_code;
 
   function paintCardResults(filterText) {
     const f = filterText.trim().toLowerCase();
@@ -79,19 +85,19 @@ export function openEmployeeModal(emp, onSaved) {
       paintCardResults($('#f-card-search', overlay).value);
     }));
   }
-
-  ProximityCardsModel.listAvailable(emp?.proximity_card_id).then(({ data }) => {
-    if (!overlay.isConnected) return; // modal was closed before this resolved
-    availableCards = data || [];
-    const modeSelect = $('#f-card-mode', overlay);
-    const searchInput = $('#f-card-search', overlay);
-    modeSelect.disabled = false;
-    searchInput.disabled = false;
-    searchInput.placeholder = 'Search proximity codes…';
-    if (!availableCards.length) { modeSelect.value = 'new'; modeSelect.dispatchEvent(new Event('change')); }
-    paintCardResults('');
-    searchInput.addEventListener('input', (e) => paintCardResults(e.target.value));
+  paintCardResults('');
+  // Results only show while the search field is actually focused — it
+  // used to render open by default, listing every unassigned card even
+  // before you'd interacted with it. The timeout on blur (rather than
+  // hiding immediately) gives a click on a result item time to register;
+  // that item is a plain non-focusable <div>, so clicking it doesn't blur
+  // the input in the first place, but this stays as a safety margin.
+  const cardResultsEl = $('#f-card-results', overlay);
+  $('#f-card-search', overlay).addEventListener('focus', () => cardResultsEl.classList.remove('hidden'));
+  $('#f-card-search', overlay).addEventListener('blur', () => {
+    setTimeout(() => cardResultsEl.classList.add('hidden'), 120);
   });
+  $('#f-card-search', overlay).addEventListener('input', (e) => paintCardResults(e.target.value));
 
   $('#f-save', overlay).addEventListener('click', async () => {
     const errSel = '#f-error';

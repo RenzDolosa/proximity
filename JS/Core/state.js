@@ -14,6 +14,7 @@ export const appState = {
   // Scan) instead of always defaulting to Employee Manager. showShell()
   // still redirects away from this if the account can't actually view it.
   route: VALID_ROUTES.includes(hashRoute) ? hashRoute : 'directory',
+  employeesCache: [],
 };
 
 export const isStandaloneScanner = new URLSearchParams(location.search).get('scanner') === '1';

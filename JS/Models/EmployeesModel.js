@@ -3,7 +3,6 @@
 // and the lookups the Employee modal needs to offer available cards.
 import { supabase } from '../Core/supabaseClient.js';
 import { createModel } from './BaseModel.js';
-import { sanitizeSearchTerm } from '../Utils/search.js';
 
 const base = createModel('employees');
 
@@ -11,22 +10,8 @@ export const EmployeesModel = {
   ...base,
 
   // Employee Manager grid — denormalized view with card + scan totals.
-  // Paginated + searched server-side: at 700+ employees, pulling every row
-  // on every load (the old listDirectory()) is the single biggest cause of
-  // slow page loads. This fetches only the current page, and asks Postgres
-  // for the total count in the same round trip so the UI can show
-  // "Showing 1–20 of 710" and compute page count without a second query.
-  async listDirectoryPage({ page = 1, pageSize = 20, search = '' } = {}) {
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    let query = supabase.from('employee_directory').select('*', { count: 'exact' });
-    const term = sanitizeSearchTerm(search);
-    if (term) {
-      query = query.or(
-        `full_name.ilike.%${term}%,employee_code.ilike.%${term}%,department.ilike.%${term}%,position.ilike.%${term}%,active_proximity_code.ilike.%${term}%`
-      );
-    }
-    return query.order('full_name').range(from, to);
+  async listDirectory() {
+    return supabase.from('employee_directory').select('*').order('full_name');
   },
 
   // employee_id -> proximity_card_id lookups (used to filter out cards
@@ -44,10 +29,12 @@ export const EmployeesModel = {
     return supabase.from('employees').insert(payload);
   },
 
-  // Bulk insert for CSV import — one round trip per chunk instead of one
-  // per row. Returns the inserted rows so the caller can report counts.
+  // Bulk insert used by CSV import — one round-trip per chunk instead of
+  // one per row. Returns the same {data,error} shape as a single insert;
+  // on error the caller falls back to inserting that chunk row-by-row to
+  // find out exactly which row failed.
   async createMany(payloads) {
-    return supabase.from('employees').insert(payloads).select('id, employee_code');
+    return supabase.from('employees').insert(payloads).select('id');
   },
 
   async updateEmployee(id, payload) {
@@ -62,22 +49,34 @@ export const EmployeesModel = {
     return supabase.from('employees').delete().in('id', ids);
   },
 
+  // "Delete all" used to collect every employee id and call deleteMany()
+  // with all of them in one .in(...) — fine for a handful of rows, but
+  // with hundreds+ the resulting URL (PostgREST filters are query params,
+  // even for DELETE) blew past the API gateway's URL length limit and
+  // came back as a flat 400 Bad Request with no useful message. A filter
+  // that's true for every row sidesteps building that list entirely — one
+  // request, any table size, same admin-only RLS.
+  async deleteAll() {
+    return supabase.from('employees').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  },
+
   async getScanLogs(employeeId) {
     return supabase.from('employees').select('full_name, scan_logs').eq('id', employeeId).single();
   },
 
-  // Remarks (employees.remarks_log) — general-purpose notes on an employee,
-  // including the ones revoke_proximity_card() writes automatically. Each
-  // entry: { id, remark, created_by, created_by_id, created_at, resolved,
-  // resolved_by?, resolved_at? }.
   async getRemarks(employeeId) {
     return supabase.from('employees').select('full_name, remarks_log').eq('id', employeeId).single();
   },
 
+  // Appends via the add_employee_remark() RPC (not a plain update) so two
+  // people adding a remark to the same employee at once can't clobber each
+  // other's entry — same reasoning as the scan_logs append trigger.
   async addRemark(employeeId, remark) {
     return supabase.rpc('add_employee_remark', { p_employee_id: employeeId, p_remark: remark });
   },
 
+  // Toggles a single remark's resolved flag (also via RPC, same
+  // concurrent-safe reasoning as addRemark).
   async resolveRemark(employeeId, remarkId, resolved) {
     return supabase.rpc('resolve_employee_remark', { p_employee_id: employeeId, p_remark_id: remarkId, p_resolved: resolved });
   },
