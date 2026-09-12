@@ -173,12 +173,12 @@ async function importEmployees(records, onProgress) {
     const employee_code = (r.employee_code || '').trim();
     const proximity_code = (r.proximity_code || '').trim();
     if (!full_name || !employee_code || !proximity_code) {
-      errors.push({ line, message: 'full_name, employee_code, and proximity_code are all required.' });
+      errors.push({ line, message: 'Fullname, Employee Code, and Proximity Code are all required.' });
       continue;
     }
     const codeKey = proximity_code.toLowerCase();
     if (claimedCodes.has(codeKey)) {
-      errors.push({ line, message: `Proximity code "${proximity_code}" is already used by row ${claimedCodes.get(codeKey)} in this file.` });
+      errors.push({ line, message: `Proximity code is already used by row ${claimedCodes.get(codeKey)} in this file.` });
       continue;
     }
     const existing = cardByCode.get(codeKey);
@@ -188,7 +188,7 @@ async function importEmployees(records, onProgress) {
         continue;
       }
       if (!existing.is_active) {
-        errors.push({ line, message: `Proximity code "${proximity_code}" has been revoked — renew it first or use a different code.` });
+        errors.push({ line, message: `Proximity code has been revoked — renew it first or use a different code.` });
         continue;
       }
     } else {
