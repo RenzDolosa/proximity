@@ -1,0 +1,45 @@
+diff --git a/JS/Features/Scanner/StandaloneScanner.js b/JS/Features/Scanner/StandaloneScanner.js
+index 4248211..7cdc599 100644
+--- a/JS/Features/Scanner/StandaloneScanner.js
++++ b/JS/Features/Scanner/StandaloneScanner.js
+@@ -88,6 +88,11 @@ function renderStandaloneScanner() {
+     if (!proximity_code) return;
+     scanBusy = true;
+     clearTimeout(autoSubmitTimer);
++    // Lock the input the instant a scan starts, before the network
++    // round-trip — a tap that lands mid-request would otherwise append
++    // onto whatever's left in the field (or onto nothing, invisibly, if
++    // it's already been cleared) instead of being read as its own scan.
++    codeInput.disabled = true;
+     const { data, error } = await ScanEventsModel.scan(proximity_code, operatorName);
+     clearTimeout(fadeTimer);
+     clearTimeout(clearTimer);
+@@ -99,6 +104,7 @@ function renderStandaloneScanner() {
+     }
+     scheduleResultFade();
+     codeInput.value = '';
++    codeInput.disabled = false;
+     codeInput.focus();
+     scanBusy = false;
+     // Only this operator's own scans, per kiosk — see get_scan_feed's
+diff --git a/JS/Features/Scanner/TestScanPage.js b/JS/Features/Scanner/TestScanPage.js
+index 839f1c2..4548f2e 100644
+--- a/JS/Features/Scanner/TestScanPage.js
++++ b/JS/Features/Scanner/TestScanPage.js
+@@ -51,6 +51,8 @@ export async function renderTestScan() {
+     if (!proximity_code) return;
+     scanBusy = true;
+     clearTimeout(autoSubmitTimer);
++    // Lock the input the instant a scan starts — see StandaloneScanner.js.
++    codeInput.disabled = true;
+     const { data, error } = await ScanEventsModel.testScan(proximity_code);
+     const resultWrap = $('#ts-result');
+     if (error) {
+@@ -59,6 +61,7 @@ export async function renderTestScan() {
+       resultWrap.innerHTML = renderScanResult(data);
+     }
+     codeInput.value = '';
++    codeInput.disabled = false;
+     codeInput.focus();
+     scanBusy = false;
+   };

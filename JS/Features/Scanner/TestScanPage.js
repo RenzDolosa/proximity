@@ -51,6 +51,8 @@ export async function renderTestScan() {
     if (!proximity_code) return;
     scanBusy = true;
     clearTimeout(autoSubmitTimer);
+    // Lock the input the instant a scan starts — see StandaloneScanner.js.
+    codeInput.disabled = true;
     const { data, error } = await ScanEventsModel.testScan(proximity_code);
     const resultWrap = $('#ts-result');
     if (error) {
@@ -59,6 +61,7 @@ export async function renderTestScan() {
       resultWrap.innerHTML = renderScanResult(data);
     }
     codeInput.value = '';
+    codeInput.disabled = false;
     codeInput.focus();
     scanBusy = false;
   };

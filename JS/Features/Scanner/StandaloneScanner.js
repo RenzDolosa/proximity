@@ -88,6 +88,11 @@ function renderStandaloneScanner() {
     if (!proximity_code) return;
     scanBusy = true;
     clearTimeout(autoSubmitTimer);
+    // Lock the input the instant a scan starts, before the network
+    // round-trip — a tap that lands mid-request would otherwise append
+    // onto whatever's left in the field (or onto nothing, invisibly, if
+    // it's already been cleared) instead of being read as its own scan.
+    codeInput.disabled = true;
     const { data, error } = await ScanEventsModel.scan(proximity_code, operatorName);
     clearTimeout(fadeTimer);
     clearTimeout(clearTimer);
@@ -99,6 +104,7 @@ function renderStandaloneScanner() {
     }
     scheduleResultFade();
     codeInput.value = '';
+    codeInput.disabled = false;
     codeInput.focus();
     scanBusy = false;
     // Only this operator's own scans, per kiosk — see get_scan_feed's
