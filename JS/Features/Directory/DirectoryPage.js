@@ -193,9 +193,12 @@ function paintDirectoryTable(filter) {
 // of chunked bulk inserts. A chunk only falls back to inserting its rows
 // one-by-one if the bulk call itself errors, so we can still say exactly
 // which line caused the problem.
-async function importEmployees(records) {
+async function importEmployees(records, onProgress) {
   const errors = [];
+  let skippedCount = 0;
   const CHUNK_SIZE = 200;
+  const report = (done, total) => onProgress?.(done, total);
+  report(0, records.length);
 
   const [{ data: existingCards }, { data: linkedRows }] = await Promise.all([
     ProximityCardsModel.listAll(),
@@ -205,6 +208,15 @@ async function importEmployees(records) {
   const linkedCardIds = new Set((linkedRows || []).map((r) => r.proximity_card_id));
   const claimedCodes = new Map(); // code(lower) -> the line that already claimed it
   const codesNeedingNewCard = new Map(); // code(lower) -> original-case code
+
+  // Existing employee_codes (DB + within-file) — employee_code is a unique
+  // column, so a repeat is always a duplicate, not just a validation error.
+  // Those are counted separately as "skipped" rather than lumped in with
+  // the error rows, since there's nothing wrong with the row itself.
+  const existingEmployeeCodes = new Set(
+    (appState.employeesCache || []).map((e) => (e.employee_code || '').trim().toLowerCase())
+  );
+  const claimedEmployeeCodes = new Map(); // employee_code(lower) -> line that already claimed it
 
   const pending = [];
   for (let i = 0; i < records.length; i++) {
@@ -217,6 +229,15 @@ async function importEmployees(records) {
       errors.push({ line, message: 'full_name, employee_code, and proximity_code are all required.' });
       continue;
     }
+    const empCodeKey = employee_code.toLowerCase();
+    if (existingEmployeeCodes.has(empCodeKey)) {
+      skippedCount++;
+      continue; // already an employee on file — duplicate, silently skipped
+    }
+    if (claimedEmployeeCodes.has(empCodeKey)) {
+      skippedCount++;
+      continue; // duplicate employee_code earlier in this same file
+    }
     const codeKey = proximity_code.toLowerCase();
     if (claimedCodes.has(codeKey)) {
       errors.push({ line, message: `Proximity code "${proximity_code}" is already used by row ${claimedCodes.get(codeKey)} in this file.` });
@@ -225,7 +246,7 @@ async function importEmployees(records) {
     const existing = cardByCode.get(codeKey);
     if (existing) {
       if (linkedCardIds.has(existing.id)) {
-        errors.push({ line, message: 'Proximity code is already assigned to another employee - skipped.' });
+        skippedCount++; // proximity code already assigned to someone else — duplicate, skipped
         continue;
       }
       if (!existing.is_active) {
@@ -236,6 +257,7 @@ async function importEmployees(records) {
       codesNeedingNewCard.set(codeKey, proximity_code);
     }
     claimedCodes.set(codeKey, line);
+    claimedEmployeeCodes.set(empCodeKey, line);
     const status = ['active', 'inactive', 'suspended'].includes((r.status || '').trim()) ? r.status.trim() : 'active';
     pending.push({
       line, codeKey, proximity_code,
@@ -286,17 +308,24 @@ async function importEmployees(records) {
     });
 
   let successCount = 0;
+  let processed = records.length - pending.length; // rows already resolved as skipped/errored above
+  report(processed, records.length);
   for (const chunk of chunkArray(ready, CHUNK_SIZE)) {
     const { error } = await EmployeesModel.createMany(chunk.map((r) => r.payload));
-    if (!error) { successCount += chunk.length; continue; }
-    // Same fallback: only go row-by-row for a chunk that actually failed.
-    for (const r of chunk) {
-      const { error: singleErr } = await EmployeesModel.createEmployee(r.payload);
-      if (singleErr) errors.push({ line: r.line, message: singleErr.message });
-      else successCount++;
+    if (!error) {
+      successCount += chunk.length;
+    } else {
+      // Same fallback: only go row-by-row for a chunk that actually failed.
+      for (const r of chunk) {
+        const { error: singleErr } = await EmployeesModel.createEmployee(r.payload);
+        if (singleErr) errors.push({ line: r.line, message: singleErr.message });
+        else successCount++;
+      }
     }
+    processed += chunk.length;
+    report(processed, records.length);
   }
 
   errors.sort((a, b) => a.line - b.line);
-  return { successCount, errors };
+  return { successCount, skippedCount, errors };
 }

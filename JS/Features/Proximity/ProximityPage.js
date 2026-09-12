@@ -180,10 +180,16 @@ function paintProximityTable() {
 // time, just done as a couple of chunked bulk inserts instead of one
 // network round-trip per row (see importEmployees in DirectoryPage.js for
 // the same pattern with more detail).
-async function importCards(records) {
+async function importCards(records, onProgress) {
   const errors = [];
+  let skippedCount = 0;
   const CHUNK_SIZE = 200;
+  const report = (done, total) => onProgress?.(done, total);
+  report(0, records.length);
+
   const seen = new Map(); // code(lower) -> line, catches duplicates within the file
+  const { data: existingCards } = await ProximityCardsModel.listAll();
+  const existingCodes = new Set((existingCards || []).map((c) => c.proximity_code.toLowerCase()));
 
   const rows = [];
   records.forEach((r, i) => {
@@ -191,24 +197,32 @@ async function importCards(records) {
     const proximity_code = (r.proximity_code || '').trim();
     if (!proximity_code) { errors.push({ line, message: 'proximity_code is required.' }); return; }
     const key = proximity_code.toLowerCase();
-    if (seen.has(key)) { errors.push({ line, message: `Proximity code "${proximity_code}" is already used by row ${seen.get(key)} in this file.` }); return; }
+    if (existingCodes.has(key)) { skippedCount++; return; } // already issued — duplicate, skipped
+    if (seen.has(key)) { skippedCount++; return; } // duplicate within this file — skipped
     seen.set(key, line);
     rows.push({ line, proximity_code });
   });
 
   let successCount = 0;
+  let processed = records.length - rows.length;
+  report(processed, records.length);
   for (const chunk of chunkArray(rows, CHUNK_SIZE)) {
     const { error } = await ProximityCardsModel.issueMany(
       chunk.map((r) => ({ proximity_code: r.proximity_code, created_by: appState.session.user.id }))
     );
-    if (!error) { successCount += chunk.length; continue; }
-    for (const r of chunk) {
-      const { error: singleErr } = await ProximityCardsModel.issue(r.proximity_code, appState.session.user.id);
-      if (singleErr) errors.push({ line: r.line, message: singleErr.message });
-      else successCount++;
+    if (!error) {
+      successCount += chunk.length;
+    } else {
+      for (const r of chunk) {
+        const { error: singleErr } = await ProximityCardsModel.issue(r.proximity_code, appState.session.user.id);
+        if (singleErr) errors.push({ line: r.line, message: singleErr.message });
+        else successCount++;
+      }
     }
+    processed += chunk.length;
+    report(processed, records.length);
   }
 
   errors.sort((a, b) => a.line - b.line);
-  return { successCount, errors };
+  return { successCount, skippedCount, errors };
 }

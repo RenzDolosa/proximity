@@ -10,7 +10,11 @@ export function openUserModal(user, onSaved) {
   const overlay = openModal(`
     <h3>${isEdit ? 'Edit user' : 'Add user'}</h3>
     <div class="field"><label>Full name</label><input id="u-name" value="${esc(user?.full_name || '')}" /></div>
-    <div class="field"><label>Email</label><input id="u-email" type="email" value="${esc(user?.email || '')}" /></div>
+    <div class="field">
+      <label>Email</label>
+      <input id="u-email" type="email" value="${esc(user?.email || '')}" ${isEdit ? 'disabled' : ''} />
+      ${isEdit ? '<p class="sub" style="margin:4px 0 0;">Email can\'t be changed here.</p>' : ''}
+    </div>
     ${!isEdit ? `<div class="field"><label>Password</label><input id="u-password" type="password" placeholder="min. 6 characters" /></div>` : ''}
     <div class="grid-2">
       <div class="field"><label>Role</label><select id="u-role">${roleOptions(user?.role || 'viewer')}</select></div>

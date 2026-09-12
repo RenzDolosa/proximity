@@ -9,7 +9,7 @@ import { parseCSV, toCSV } from '../Utils/csv.js';
 import { openModal, closeModal, setModalLocked } from './Modal.js';
 
 /**
- * @param {{ title: string, description?: string, columns: {key:string,label:string,required?:boolean}[], sampleRow?: object, onImport: (records:object[]) => Promise<{successCount:number, errors:{line:number,message:string}[]}> }} config
+ * @param {{ title: string, description?: string, columns: {key:string,label:string,required?:boolean}[], sampleRow?: object, onImport: (records:object[], onProgress:(done:number,total:number)=>void) => Promise<{successCount:number, skippedCount?:number, errors:{line:number,message:string}[]}> }} config
  * @param {() => void} [onDone] - called once the import finishes, so the page can refresh its table.
  */
 export function openImportModal({ title, description, columns, sampleRow, onImport }, onDone) {
@@ -83,20 +83,41 @@ export function openImportModal({ title, description, columns, sampleRow, onImpo
   $('#im-run', overlay).addEventListener('click', async () => {
     if (!parsedRecords) return;
     const runBtn = $('#im-run', overlay);
-    runBtn.disabled = true;
-    runBtn.textContent = 'Importing…';
     const rowCount = parsedRecords.length;
     setModalLocked(overlay, true);
-    const { successCount, errors } = await onImport(parsedRecords);
+
+    // Swap the file picker/preview for a live progress bar — same morph
+    // pattern as ConfirmModal's progress step — so a few-hundred-row
+    // import doesn't just sit on a disabled button with no feedback.
+    $('#im-file', overlay).classList.add('hidden');
+    $('#im-preview', overlay).innerHTML = `
+      <div class="progress">
+        <div class="progress-label" id="im-progress-label">Starting…</div>
+        <div class="progress-track"><div class="progress-fill" id="im-progress-fill"></div></div>
+      </div>
+    `;
+    runBtn.disabled = true;
+    runBtn.textContent = 'Importing…';
+
+    const onProgress = (done, total) => {
+      const fillEl = $('#im-progress-fill', overlay);
+      const labelEl = $('#im-progress-label', overlay);
+      if (fillEl) fillEl.style.width = `${total ? Math.min(100, Math.round((done / total) * 100)) : 100}%`;
+      if (labelEl) labelEl.textContent = total ? `Imported ${done} of ${total} row${total === 1 ? '' : 's'}…` : 'Working…';
+    };
+
+    const { successCount, skippedCount = 0, errors } = await onImport(parsedRecords, onProgress);
     setModalLocked(overlay, false);
     parsedRecords = null;
 
-    $('#im-file', overlay).classList.add('hidden');
     $('#im-preview', overlay).innerHTML = '';
     runBtn.classList.add('hidden');
     $('#im-cancel', overlay).textContent = 'Close';
     $('#im-summary', overlay).innerHTML = `
-      <div class="emp-meta">Imported <strong style="color:var(--good)">${successCount}</strong> of ${rowCount} row${rowCount === 1 ? '' : 's'}.</div>
+      <div class="emp-meta">
+        Imported <strong style="color:var(--good)">${successCount}</strong> of ${rowCount} row${rowCount === 1 ? '' : 's'}.
+        ${skippedCount ? ` Skipped <strong>${skippedCount}</strong> duplicate${skippedCount === 1 ? '' : 's'}.` : ''}
+      </div>
       ${errors.length ? `
         <div class="search-results" style="max-height:180px;margin-top:8px;">
           ${errors.map((e) => `<div class="search-result-item" style="cursor:default;"><span class="mono" style="color:var(--bad);flex-shrink:0;">Row ${e.line}</span>${esc(e.message)}</div>`).join('')}
