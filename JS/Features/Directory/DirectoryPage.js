@@ -8,11 +8,12 @@ import { openEmployeeModal } from '../../Components/EmployeeModal.js';
 import { openScanLogModal } from '../../Components/ScanLogModal.js';
 import { openRemarksModal } from '../../Components/RemarksModal.js';
 import { openImportModal } from '../../Components/ImportModal.js';
-import { openProgressModal } from '../../Components/ProgressModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
+import { openConfirmModal, openConfirmProgressModal } from '../../Components/ConfirmModal.js';
 
 let page = 1;
 let pageSize = 50;
+let loaded = false; // distinguishes "never fetched yet" from "fetched, zero rows"
 
 export async function renderDirectory() {
   const content = $('#content');
@@ -27,29 +28,27 @@ export async function renderDirectory() {
         </div>
       ` : ''}
     </div>
-    <div class="table-scroll"><div id="dir-table-wrap">Loading…</div></div>
+    <div class="table-scroll"><div id="dir-table-wrap">${loaded ? '' : 'Loading…'}</div></div>
     <div id="dir-pagination"></div>
   `;
   $('#dir-search').addEventListener('input', (e) => { page = 1; paintDirectoryTable(e.target.value); });
   if (isAdmin()) {
     $('#dir-delete-all').addEventListener('click', async () => {
-      const ids = appState.employeesCache.map((e) => e.id);
-      if (!ids.length) return;
-      if (!confirm(`Permanently delete all ${ids.length} employees? This can't be undone.`)) return;
-      const CHUNK_SIZE = 500;
-      const chunks = chunkArray(ids, CHUNK_SIZE);
-      const progress = openProgressModal(`Deleting ${ids.length} employee${ids.length === 1 ? '' : 's'}…`);
-      let done = 0;
-      progress.update(done, ids.length);
-      for (const chunk of chunks) {
-        const { error } = await EmployeesModel.deleteMany(chunk);
-        if (error) { progress.close(); toast(error.message, 'error'); return; }
-        done += chunk.length;
-        progress.update(done, ids.length);
-      }
-      progress.close();
-      toast('All employees deleted');
-      renderDirectory();
+      const total = appState.employeesCache.length;
+      if (!total) return;
+      const { confirmed, result } = await openConfirmProgressModal({
+        title: 'Delete all employees?',
+        message: `This permanently deletes all ${total} employee${total === 1 ? '' : 's'} and their scan history. This can't be undone.`,
+        confirmLabel: 'Delete all',
+        task: async (onProgress) => {
+          onProgress(0, 1);
+          const { error } = await EmployeesModel.deleteAll();
+          onProgress(1, 1);
+          return { error };
+        },
+      });
+      if (!confirmed) return;
+      if (result.error) toast(result.error.message, 'error'); else { toast('All employees deleted'); renderDirectory(); }
     });
   }
   if (isAdminOrManager()) {
@@ -75,11 +74,19 @@ export async function renderDirectory() {
     }, renderDirectory));
   }
 
+  // Stale-while-revalidate: if we've already loaded this table once this
+  // session, paint immediately from the cache (no "Loading…" flash) while
+  // the fresh fetch runs in the background — this is what made every
+  // sidebar click, even back to a page you'd just been on, flash blank
+  // first.
+  if (loaded) paintDirectoryTable('');
+
   const { data, error } = await EmployeesModel.listDirectory();
   if (error) { $('#dir-table-wrap').innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
   appState.employeesCache = data || [];
+  loaded = true;
   page = 1;
-  paintDirectoryTable('');
+  paintDirectoryTable($('#dir-search')?.value || '');
 }
 
 function paintDirectoryTable(filter) {
@@ -133,9 +140,18 @@ function paintDirectoryTable(filter) {
   $$('button[data-log]', wrap).forEach((b) => b.addEventListener('click', () => openScanLogModal(b.dataset.log)));
   $$('button[data-remarks]', wrap).forEach((b) => b.addEventListener('click', () => openRemarksModal(b.dataset.remarks)));
   $$('button[data-del]', wrap).forEach((b) => b.addEventListener('click', async () => {
-    if (!confirm("Delete this employee? Their proximity card will be unassigned and their scan history will be permanently deleted.")) return;
+    const emp = appState.employeesCache.find((e) => e.id === b.dataset.del);
+    const ok = await openConfirmModal({
+      title: 'Delete this employee?',
+      message: `Delete ${emp?.full_name || 'this employee'}? Their proximity card will be unassigned and their scan history will be permanently deleted. This can't be undone.`,
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
     const { error } = await EmployeesModel.deleteEmployee(b.dataset.del);
-    if (error) toast(error.message, 'error'); else { toast('Employee deleted'); renderDirectory(); }
+    if (error) { toast(error.message, 'error'); return; }
+    appState.employeesCache = appState.employeesCache.filter((e) => e.id !== b.dataset.del);
+    toast('Employee deleted');
+    paintDirectoryTable($('#dir-search').value);
   }));
 }
 
@@ -152,7 +168,7 @@ function paintDirectoryTable(filter) {
 // of chunked bulk inserts. A chunk only falls back to inserting its rows
 // one-by-one if the bulk call itself errors, so we can still say exactly
 // which line caused the problem.
-async function importEmployees(records, onProgress) {
+async function importEmployees(records) {
   const errors = [];
   const CHUNK_SIZE = 200;
 
@@ -173,22 +189,22 @@ async function importEmployees(records, onProgress) {
     const employee_code = (r.employee_code || '').trim();
     const proximity_code = (r.proximity_code || '').trim();
     if (!full_name || !employee_code || !proximity_code) {
-      errors.push({ line, message: 'Fullname, Employee Code, and Proximity Code are all required.' });
+      errors.push({ line, message: 'full_name, employee_code, and proximity_code are all required.' });
       continue;
     }
     const codeKey = proximity_code.toLowerCase();
     if (claimedCodes.has(codeKey)) {
-      errors.push({ line, message: `Proximity code is already used by row ${claimedCodes.get(codeKey)} in this file.` });
+      errors.push({ line, message: `Proximity code "${proximity_code}" is already used by row ${claimedCodes.get(codeKey)} in this file.` });
       continue;
     }
     const existing = cardByCode.get(codeKey);
     if (existing) {
       if (linkedCardIds.has(existing.id)) {
-        errors.push({ line, message: `Proximity code is already assigned to another employee — skipped.` });
+        errors.push({ line, message: `Proximity code "${proximity_code}" is already assigned to another employee.` });
         continue;
       }
       if (!existing.is_active) {
-        errors.push({ line, message: `Proximity code has been revoked — renew it first or use a different code.` });
+        errors.push({ line, message: `Proximity code "${proximity_code}" has been revoked — renew it first or use a different code.` });
         continue;
       }
     } else {
@@ -245,25 +261,15 @@ async function importEmployees(records, onProgress) {
     });
 
   let successCount = 0;
-  // Rows that already failed validation (bad proximity code, missing
-  // fields, etc.) are "done" in the sense the bar cares about — they have
-  // a known outcome before this loop even starts.
-  let done = records.length - ready.length;
-  onProgress?.(done, records.length);
   for (const chunk of chunkArray(ready, CHUNK_SIZE)) {
     const { error } = await EmployeesModel.createMany(chunk.map((r) => r.payload));
-    if (!error) {
-      successCount += chunk.length;
-    } else {
-      // Same fallback: only go row-by-row for a chunk that actually failed.
-      for (const r of chunk) {
-        const { error: singleErr } = await EmployeesModel.createEmployee(r.payload);
-        if (singleErr) errors.push({ line: r.line, message: singleErr.message });
-        else successCount++;
-      }
+    if (!error) { successCount += chunk.length; continue; }
+    // Same fallback: only go row-by-row for a chunk that actually failed.
+    for (const r of chunk) {
+      const { error: singleErr } = await EmployeesModel.createEmployee(r.payload);
+      if (singleErr) errors.push({ line: r.line, message: singleErr.message });
+      else successCount++;
     }
-    done += chunk.length;
-    onProgress?.(done, records.length);
   }
 
   errors.sort((a, b) => a.line - b.line);

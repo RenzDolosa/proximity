@@ -42,7 +42,7 @@ export async function openEmployeeModal(emp, onSaved) {
     <div class="field" id="f-card-existing-wrap">
       ${isEdit && emp?.proximity_card_id ? `<div class="emp-meta" style="margin-bottom:6px;">Currently assigned: <span class="mono" id="f-card-current"></span></div>` : ''}
       <input id="f-card-search" class="mono" placeholder="Search proximity codes…" autocomplete="off" autofocus />
-      <div id="f-card-results" class="search-results"></div>
+      <div id="f-card-results" class="search-results hidden"></div>
     </div>
     <div class="field hidden" id="f-card-new-wrap">
       <input id="f-card-new" class="mono" placeholder="e.g. PRX-00099" />
@@ -86,6 +86,17 @@ export async function openEmployeeModal(emp, onSaved) {
     }));
   }
   paintCardResults('');
+  // Results only show while the search field is actually focused — it
+  // used to render open by default, listing every unassigned card even
+  // before you'd interacted with it. The timeout on blur (rather than
+  // hiding immediately) gives a click on a result item time to register;
+  // that item is a plain non-focusable <div>, so clicking it doesn't blur
+  // the input in the first place, but this stays as a safety margin.
+  const cardResultsEl = $('#f-card-results', overlay);
+  $('#f-card-search', overlay).addEventListener('focus', () => cardResultsEl.classList.remove('hidden'));
+  $('#f-card-search', overlay).addEventListener('blur', () => {
+    setTimeout(() => cardResultsEl.classList.add('hidden'), 120);
+  });
   $('#f-card-search', overlay).addEventListener('input', (e) => paintCardResults(e.target.value));
 
   $('#f-save', overlay).addEventListener('click', async () => {

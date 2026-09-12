@@ -48,6 +48,18 @@ supabase.auth.onAuthStateChange((event, session) => {
   // getSession() call and this listener only reacts to real transitions
   // (SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, USER_UPDATED, ...).
   if (event === 'INITIAL_SESSION') return;
+  if (event === 'TOKEN_REFRESHED') {
+    // A silent background token renewal — supabase-js does this
+    // automatically, including right after the tab regains focus, since
+    // it checks the session on visibility change. Only the JWT string
+    // changed, not who's signed in, so just keep it current for future API
+    // calls. This used to fall through to the same boot() as a real
+    // sign-in below, which re-fetched and fully re-rendered whatever page
+    // was open — the "table is loading" flash on every Alt-Tab back into
+    // the app.
+    appState.session = session;
+    return;
+  }
   boot(session);
 });
 

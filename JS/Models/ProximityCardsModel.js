@@ -47,4 +47,11 @@ export const ProximityCardsModel = {
   async removeMany(ids) {
     return supabase.from('proximity_cards').delete().in('id', ids);
   },
+
+  // Single server-side statement instead of fetching every unassigned id
+  // and deleting in client-side chunks — see the delete_unassigned_proximity_cards
+  // migration for why. Returns the number of cards actually deleted.
+  async deleteAllUnassigned() {
+    return supabase.rpc('delete_unassigned_proximity_cards');
+  },
 };

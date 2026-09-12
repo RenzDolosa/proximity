@@ -6,13 +6,14 @@ import { ProximityCardsModel } from '../../Models/ProximityCardsModel.js';
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { openCardModal } from '../../Components/ProximityCardModal.js';
 import { openImportModal } from '../../Components/ImportModal.js';
-import { openProgressModal } from '../../Components/ProgressModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
+import { openConfirmModal, openConfirmProgressModal } from '../../Components/ConfirmModal.js';
 
 let cardsCache = [];
 let assignedByCard = new Map();
 let page = 1;
 let pageSize = 50;
+let loaded = false; // distinguishes "never fetched yet" from "fetched, zero rows"
 
 export async function renderProximity() {
   const content = $('#content');
@@ -34,7 +35,7 @@ export async function renderProximity() {
         </div>
       ` : ''}
     </div>
-    <div class="table-scroll"><div id="prox-table-wrap">Loading…</div></div>
+    <div class="table-scroll"><div id="prox-table-wrap">${loaded ? '' : 'Loading…'}</div></div>
     <div id="prox-pagination"></div>
   `;
   $('#prox-search').addEventListener('input', () => { page = 1; paintProximityTable(); });
@@ -43,28 +44,25 @@ export async function renderProximity() {
     $('#prox-delete-all').addEventListener('click', async () => {
       // Assigned cards can't be deleted (employees.proximity_card_id is a
       // required FK) — same rule the per-row Delete button already follows.
-      const deletable = cardsCache.filter((c) => !assignedByCard.has(c.id));
-      if (!deletable.length) { toast('No unassigned cards to delete.', 'error'); return; }
-      const skipped = cardsCache.length - deletable.length;
-      const msg = `Permanently delete ${deletable.length} unassigned card${deletable.length === 1 ? '' : 's'}?` +
-        (skipped ? ` (${skipped} assigned card${skipped === 1 ? '' : 's'} will be left untouched.)` : '') +
-        ` This can't be undone.`;
-      if (!confirm(msg)) return;
-      const CHUNK_SIZE = 500;
-      const ids = deletable.map((c) => c.id);
-      const chunks = chunkArray(ids, CHUNK_SIZE);
-      const progress = openProgressModal(`Deleting ${ids.length} card${ids.length === 1 ? '' : 's'}…`);
-      let done = 0;
-      progress.update(done, ids.length);
-      for (const chunk of chunks) {
-        const { error } = await ProximityCardsModel.removeMany(chunk);
-        if (error) { progress.close(); toast(error.message, 'error'); return; }
-        done += chunk.length;
-        progress.update(done, ids.length);
-      }
-      progress.close();
-      toast('Unassigned cards deleted');
-      renderProximity();
+      const deletableCount = cardsCache.filter((c) => !assignedByCard.has(c.id)).length;
+      if (!deletableCount) { toast('No unassigned cards to delete.', 'error'); return; }
+      const skipped = cardsCache.length - deletableCount;
+      const { confirmed, result } = await openConfirmProgressModal({
+        title: 'Delete all unassigned cards?',
+        message: `Permanently delete ${deletableCount} unassigned card${deletableCount === 1 ? '' : 's'}?` +
+          (skipped ? ` ${skipped} assigned card${skipped === 1 ? '' : 's'} will be left untouched.` : '') +
+          ` This can't be undone.`,
+        confirmLabel: 'Delete all',
+        task: async (onProgress) => {
+          onProgress(0, 1);
+          const { data, error } = await ProximityCardsModel.deleteAllUnassigned();
+          onProgress(1, 1);
+          return { error, count: data };
+        },
+      });
+      if (!confirmed) return;
+      if (result.error) toast(result.error.message, 'error');
+      else { toast(`Deleted ${result.count} unassigned card${result.count === 1 ? '' : 's'}`); renderProximity(); }
     });
   }
   if (isAdminOrManager()) {
@@ -78,6 +76,10 @@ export async function renderProximity() {
     }, renderProximity));
   }
 
+  // Stale-while-revalidate: paint from cache immediately (no "Loading…"
+  // flash) while the fresh fetch runs, if we've already loaded once.
+  if (loaded) paintProximityTable();
+
   const [{ data, error }, { data: emps }] = await Promise.all([
     ProximityCardsModel.listForTable(),
     EmployeesModel.listForCardAssignment(),
@@ -85,6 +87,7 @@ export async function renderProximity() {
   if (error) { $('#prox-table-wrap').innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
   cardsCache = data || [];
   assignedByCard = new Map((emps || []).map((e) => [e.proximity_card_id, e]));
+  loaded = true;
   page = 1;
   paintProximityTable();
 }
@@ -131,18 +134,41 @@ function paintProximityTable() {
     total: allRows.length, page, pageSize,
     onChange: (next) => { page = next.page; pageSize = next.pageSize; paintProximityTable(); },
   });
+  // Revoke/renew update the one row that changed in place, instead of
+  // calling renderProximity() (which wiped the whole page back to
+  // "Loading…" and re-fetched both tables just to flip one badge).
   $$('button[data-revoke]', wrap).forEach((b) => b.addEventListener('click', async () => {
-    const { error } = await ProximityCardsModel.revoke(b.dataset.revoke);
-    if (error) toast(error.message, 'error'); else { toast('Card revoked'); renderProximity(); }
+    const id = b.dataset.revoke;
+    const { error } = await ProximityCardsModel.revoke(id);
+    if (error) { toast(error.message, 'error'); return; }
+    const card = cardsCache.find((c) => c.id === id);
+    if (card) { card.is_active = false; card.revoked_at = new Date().toISOString(); }
+    toast('Card revoked');
+    paintProximityTable();
   }));
   $$('button[data-renew]', wrap).forEach((b) => b.addEventListener('click', async () => {
-    const { error } = await ProximityCardsModel.renew(b.dataset.renew);
-    if (error) toast(error.message, 'error'); else { toast('Card renewed'); renderProximity(); }
+    const id = b.dataset.renew;
+    const { error } = await ProximityCardsModel.renew(id);
+    if (error) { toast(error.message, 'error'); return; }
+    const card = cardsCache.find((c) => c.id === id);
+    if (card) { card.is_active = true; card.revoked_at = null; card.issued_at = new Date().toISOString(); }
+    toast('Card renewed');
+    paintProximityTable();
   }));
   $$('button[data-del]', wrap).forEach((b) => b.addEventListener('click', async () => {
-    if (!confirm('Permanently delete this card record?')) return;
-    const { error } = await ProximityCardsModel.remove(b.dataset.del);
-    if (error) toast(error.message, 'error'); else { toast('Card deleted'); renderProximity(); }
+    const id = b.dataset.del;
+    const card = cardsCache.find((c) => c.id === id);
+    const ok = await openConfirmModal({
+      title: 'Delete this card?',
+      message: `Permanently delete proximity card ${card?.proximity_code || ''}? This can't be undone.`,
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+    const { error } = await ProximityCardsModel.remove(id);
+    if (error) { toast(error.message, 'error'); return; }
+    cardsCache = cardsCache.filter((c) => c.id !== id);
+    toast('Card deleted');
+    paintProximityTable();
   }));
 }
 
@@ -151,24 +177,10 @@ function paintProximityTable() {
 // time, just done as a couple of chunked bulk inserts instead of one
 // network round-trip per row (see importEmployees in DirectoryPage.js for
 // the same pattern with more detail).
-//
-// Duplicates are checked twice, for two different reasons:
-//  - within the file (via `seen`) — two rows can't both claim the same
-//    new code
-//  - against codes that already exist in the DB (via `existingCodes`) —
-//    fetched once up front so a whole re-imported file (a common case:
-//    someone re-runs the same CSV) gets skipped immediately, instead of
-//    every chunk containing one hitting the unique-constraint error and
-//    falling back to inserting that chunk's rows one at a time to find
-//    the culprit. That fallback is what made large duplicate-heavy
-//    imports slow — this avoids triggering it at all for the normal case.
-async function importCards(records, onProgress) {
+async function importCards(records) {
   const errors = [];
   const CHUNK_SIZE = 200;
   const seen = new Map(); // code(lower) -> line, catches duplicates within the file
-
-  const { data: existingCards } = await ProximityCardsModel.listAll();
-  const existingCodes = new Set((existingCards || []).map((c) => c.proximity_code.toLowerCase()));
 
   const rows = [];
   records.forEach((r, i) => {
@@ -176,47 +188,24 @@ async function importCards(records, onProgress) {
     const proximity_code = (r.proximity_code || '').trim();
     if (!proximity_code) { errors.push({ line, message: 'proximity_code is required.' }); return; }
     const key = proximity_code.toLowerCase();
-    if (existingCodes.has(key)) { errors.push({ line, message: 'Duplicate proximity card — skipped.' }); return; }
-    if (seen.has(key)) { errors.push({ line, message: `Proximity code is already used by row ${seen.get(key)} in this file.` }); return; }
+    if (seen.has(key)) { errors.push({ line, message: `Proximity code "${proximity_code}" is already used by row ${seen.get(key)} in this file.` }); return; }
     seen.set(key, line);
     rows.push({ line, proximity_code });
   });
 
   let successCount = 0;
-  // Rows that already failed validation (missing/duplicate code) are
-  // "done" before the loop even starts, so the bar lands exactly on
-  // records.length once the loop finishes.
-  let done = records.length - rows.length;
-  onProgress?.(done, records.length);
   for (const chunk of chunkArray(rows, CHUNK_SIZE)) {
     const { error } = await ProximityCardsModel.issueMany(
       chunk.map((r) => ({ proximity_code: r.proximity_code, created_by: appState.session.user.id }))
     );
-    if (!error) {
-      successCount += chunk.length;
-    } else {
-      for (const r of chunk) {
-        const { error: singleErr } = await ProximityCardsModel.issue(r.proximity_code, appState.session.user.id);
-        if (singleErr) errors.push({ line: r.line, message: friendlyCardImportError(singleErr.message) });
-        else successCount++;
-      }
+    if (!error) { successCount += chunk.length; continue; }
+    for (const r of chunk) {
+      const { error: singleErr } = await ProximityCardsModel.issue(r.proximity_code, appState.session.user.id);
+      if (singleErr) errors.push({ line: r.line, message: singleErr.message });
+      else successCount++;
     }
-    done += chunk.length;
-    onProgress?.(done, records.length);
   }
 
   errors.sort((a, b) => a.line - b.line);
   return { successCount, errors };
-}
-
-// The pre-check above catches duplicates against codes that existed when
-// the import started, but it can't catch a code someone else issues in
-// the moment between that check and this insert — that race still hits
-// Postgres's actual unique constraint, whose raw message
-// ("duplicate key value violates unique constraint
-// \"proximity_cards_proximity_code_key\"") isn't something a non-technical
-// user should have to read.
-function friendlyCardImportError(message) {
-  if (message?.includes('proximity_cards_proximity_code_key')) return 'Duplicate proximity card — skipped.';
-  return message;
 }

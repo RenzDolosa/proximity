@@ -18,6 +18,14 @@
 .pagination-page{font-family:var(--mono);font-size:12px;}
 .pagination-controls button{padding:5px 10px;font-size:12px;}
 
+/* Progress bar — used by ImportModal (row-by-row) and the Delete all
+   confirm-then-run flow (ConfirmModal's openConfirmProgressModal), so both
+   long-running and effectively-instant operations get the same visual. */
+.progress{margin:4px 0;}
+.progress-label{font-size:12px;color:var(--text-muted);margin-bottom:6px;font-family:var(--mono);}
+.progress-track{height:6px;border-radius:999px;background:var(--surface);border:1px solid var(--border);overflow:hidden;}
+.progress-fill{height:100%;width:0;background:var(--accent);border-radius:999px;transition:width .15s ease;}
+
 .badge{
   display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
   padding:3px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.3px;
@@ -66,11 +74,6 @@ td.row-actions{display:table-cell;}
 .modal{width:100%;max-width:440px;background:var(--surface-raised);border:1px solid var(--border);border-radius:6px;padding:22px;}
 .modal h3{margin:0 0 16px;font-size:15px;font-weight:600;}
 .modal .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;}
-
-.progress-bar{width:100%;height:8px;background:var(--surface);border:1px solid var(--border);border-radius:99px;overflow:hidden;margin:16px 0 8px;}
-.progress-bar-fill{height:100%;background:var(--accent);border-radius:99px;width:0%;transition:width .2s ease;}
-.progress-bar-fill.done{background:var(--good);}
-.progress-label{font-size:12px;color:var(--text-muted);text-align:center;}
 
 .avatar{
   width:44px;height:44px;border-radius:50%;background:var(--surface);border:1px solid var(--border);
