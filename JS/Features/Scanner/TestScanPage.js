@@ -32,8 +32,17 @@ export async function renderTestScan() {
   const codeInput = $('#ts-code');
   // See StandaloneScanner.js — autofocus via the HTML attribute isn't
   // reliable when the markup is inserted through innerHTML, so it's set
-  // explicitly here too.
+  // explicitly here too. Same reasoning for the blur/refocus safety net:
+  // this is a kiosk-style input a badge reader "types" into, so it should
+  // stay ready for the next scan without the operator needing to click
+  // back into it — mirrors StandaloneScanner.js so Test Scan behaves the
+  // same way testers will see at the real door.
   codeInput.focus();
+  codeInput.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (document.activeElement === document.body) codeInput.focus();
+    }, 50);
+  });
   const doScan = async () => {
     const proximity_code = codeInput.value.trim();
     if (!proximity_code) return;
