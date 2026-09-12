@@ -22,8 +22,8 @@ export async function openEmployeeModal(emp, onSaved) {
   const overlay = openModal(`
     <h3>${isEdit ? 'Edit employee' : 'Add employee'}</h3>
     <div class="grid-2">
-      <div class="field"><label>Full name</label><input id="f-name" value="${esc(emp?.full_name || '')}" /></div>
-      <div class="field"><label>Employee code</label><input id="f-code" value="${esc(emp?.employee_code || '')}" /></div>
+      <div class="field"><label>Full name <span style="color:red;">*</span></label><input id="f-name" value="${esc(emp?.full_name || '')}" /></div>
+      <div class="field"><label>Employee code <span style="color:red;">*</span></label><input id="f-code" value="${esc(emp?.employee_code || '')}" /></div>
       <div class="field"><label>Department</label><input id="f-dept" value="${esc(emp?.department || '')}" /></div>
       <div class="field"><label>Position</label><input id="f-pos" value="${esc(emp?.position || '')}" /></div>
       <div class="field"><label>Email</label><input id="f-email" value="${esc(emp?.email || '')}" /></div>
@@ -35,7 +35,7 @@ export async function openEmployeeModal(emp, onSaved) {
       </select>
     </div>
     <div class="field">
-      <label>Proximity code <span style="color:var(--text-faint)">(required — every employee needs one)</span></label>
+      <label>Proximity code <span style="color:red;">*</span> <span style="color:var(--text-faint)">(required — every employee needs one)</span></label>
       <select id="f-card-mode">
         <option value="existing">${isEdit ? 'Assign a different card' : 'Assign an existing unassigned card'}</option>
         <option value="new">Issue a brand-new proximity code</option>
