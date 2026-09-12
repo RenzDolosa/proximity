@@ -32,6 +32,14 @@ button.danger:hover{background:var(--bad-dim);}
 button.ghost{background:transparent;border-color:transparent;color:var(--text-muted);padding:6px 10px;}
 button.ghost:hover{color:var(--text);background:var(--surface-raised);}
 button.ghost.danger:hover{color:var(--bad);background:var(--bad-dim);}
+/* Toolbar toggle filters (e.g. Directory's "Unresolved remarks" button) —
+   same shape as .sub-nav button.active, reused here since this isn't a
+   sub-nav but still needs an obvious pressed/unpressed state. */
+button.ghost.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}
+/* Small unresolved-remarks indicator dot on a row's Remarks button —
+   deliberately tiny/non-alarming (a plain badge would compete with the
+   Status badge in the same row), just enough to scan the list quickly. */
+.remark-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--warn);margin-left:4px;vertical-align:middle;}
 input,select,textarea{
   background:var(--surface);
   border:1px solid var(--border);

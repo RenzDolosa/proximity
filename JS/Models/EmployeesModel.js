@@ -80,4 +80,39 @@ export const EmployeesModel = {
   async resolveRemark(employeeId, remarkId, resolved) {
     return supabase.rpc('resolve_employee_remark', { p_employee_id: employeeId, p_remark_id: remarkId, p_resolved: resolved });
   },
+
+  // Uploads an already-converted .webp Blob (see Utils/image.js) to Google
+  // Drive via the upload-employee-photo Edge Function. Sent as base64 JSON
+  // rather than multipart/form-data — matches the admin-users/proximity-scan
+  // pattern of a plain functions.invoke() call, and the function itself
+  // needs the whole file in memory anyway to hand to the Drive API.
+  // old_file_id (optional): the Drive file id being replaced, so the
+  // function can best-effort delete it after the new upload succeeds.
+  async uploadPhoto({ base64, filename, oldFileId }) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session.access_token;
+    const { data, error } = await supabase.functions.invoke('upload-employee-photo', {
+      body: { action: 'upload', image_base64: base64, filename, old_file_id: oldFileId || null },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) return { error: error.message || 'Photo upload failed' };
+    if (data?.error) return { error: data.error };
+    return { data }; // { url, file_id }
+  },
+
+  // Best-effort delete of a Drive file — used when a photo is removed
+  // without being replaced by a new one. Failure here is non-fatal (an
+  // orphaned Drive file costs nothing functionally), so callers may ignore
+  // the error.
+  async deletePhoto(fileId) {
+    if (!fileId) return { data: true };
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session.access_token;
+    const { data, error } = await supabase.functions.invoke('upload-employee-photo', {
+      body: { action: 'delete', old_file_id: fileId },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) return { error: error.message || 'Photo delete failed' };
+    return { data };
+  },
 };

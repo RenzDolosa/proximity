@@ -16,12 +16,16 @@ let page = 1;
 let pageSize = 50;
 let loaded = false; // distinguishes "never fetched yet" from "fetched, zero rows"
 let scanChannel = null; // created once, kept alive for the rest of the session — see below
+let unresolvedOnly = false; // toolbar toggle — resets to off each fresh page load, same as `page`
 
 export async function renderDirectory() {
   const content = $('#content');
   content.innerHTML = `
     <div class="toolbar">
-      <input class="search" id="dir-search" placeholder="Search name, code, department…" />
+      <div style="display:flex;gap:8px;align-items:center;flex:1;min-width:0;">
+        <input class="search" id="dir-search" placeholder="Search name, code, department…" />
+        <button class="ghost${unresolvedOnly ? ' active' : ''}" id="dir-unresolved-toggle" title="Show only employees with unresolved remarks">Unresolved remarks</button>
+      </div>
       ${isAdminOrManager() ? `
         <div style="display:flex;gap:8px;">
           ${isAdmin() ? '<button class="ghost danger" id="dir-delete-all">Delete all</button>' : ''}
@@ -34,6 +38,12 @@ export async function renderDirectory() {
     <div id="dir-pagination"></div>
   `;
   $('#dir-search').addEventListener('input', (e) => { page = 1; paintDirectoryTable(e.target.value); });
+  $('#dir-unresolved-toggle').addEventListener('click', (e) => {
+    unresolvedOnly = !unresolvedOnly;
+    e.target.classList.toggle('active', unresolvedOnly);
+    page = 1;
+    paintDirectoryTable($('#dir-search')?.value || '');
+  });
   if (isAdmin()) {
     $('#dir-delete-all').addEventListener('click', async () => {
       const total = appState.employeesCache.length;
@@ -117,12 +127,16 @@ function subscribeToScans() {
 function paintDirectoryTable(filter) {
   const wrap = $('#dir-table-wrap');
   const f = filter.trim().toLowerCase();
-  const allRows = appState.employeesCache.filter((e) =>
-    !f || [e.full_name, e.employee_code, e.department, e.position, e.active_proximity_code]
-      .some((v) => (v || '').toLowerCase().includes(f))
-  );
+  const allRows = appState.employeesCache.filter((e) => {
+    if (unresolvedOnly && !(e.open_remarks > 0)) return false;
+    return !f || [e.full_name, e.employee_code, e.department, e.position, e.active_proximity_code]
+      .some((v) => (v || '').toLowerCase().includes(f));
+  });
   if (!allRows.length) {
-    wrap.innerHTML = `<div class="empty-state"><strong>No employees found</strong>${isAdminOrManager() ? 'Add your first employee to get started.' : 'Nothing matches your search.'}</div>`;
+    const emptyReason = unresolvedOnly
+      ? 'No employees have unresolved remarks right now.'
+      : (isAdminOrManager() ? 'Add your first employee to get started.' : 'Nothing matches your search.');
+    wrap.innerHTML = `<div class="empty-state"><strong>No employees found</strong>${emptyReason}</div>`;
     return;
   }
   const totalPages = Math.max(1, Math.ceil(allRows.length / pageSize));
@@ -137,7 +151,7 @@ function paintDirectoryTable(filter) {
       <tbody>
         ${rows.map((e) => `
           <tr>
-            <td><div class="emp-line"><div class="avatar">${esc(initials(e.full_name))}</div><div><div style="font-weight:600">${esc(e.full_name)}</div><div class="emp-meta">${esc(e.email || '')}</div></div></div></td>
+            <td><div class="emp-line"><div class="avatar">${e.photo_url ? `<img src="${esc(e.photo_url)}" alt="" />` : esc(initials(e.full_name))}</div><div><div style="font-weight:600">${esc(e.full_name)}</div><div class="emp-meta">${esc(e.email || '')}</div></div></div></td>
             <td class="mono">${esc(e.employee_code)}</td>
             <td>${esc(e.department || '—')}</td>
             <td>${esc(e.position || '—')}</td>
@@ -146,7 +160,7 @@ function paintDirectoryTable(filter) {
             <td class="mono col-shrink"><button class="ghost" data-log="${e.id}" style="padding:3px 8px;">${e.total_scans ?? 0} <span style="text-transform:none;">view</span></button></td>
             <td class="col-shrink"><div class="row-actions">
               ${isAdminOrManager() ? `<button class="ghost" data-edit="${e.id}">Edit</button>` : ''}
-              <button class="ghost" data-remarks="${e.id}">Remarks</button>
+              <button class="ghost" data-remarks="${e.id}">Remarks${e.open_remarks > 0 ? ' <span class="remark-dot" title="Unresolved remarks"></span>' : ''}</button>
               ${isAdmin() ? `<button class="ghost" data-del="${e.id}" style="color:var(--bad)">Delete</button>` : ''}
             </div></td>
           </tr>

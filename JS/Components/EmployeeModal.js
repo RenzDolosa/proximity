@@ -1,10 +1,11 @@
 import { $, $$ } from '../Utils/dom.js';
-import { esc } from '../Utils/format.js';
+import { esc, initials } from '../Utils/format.js';
 import { toast } from '../Utils/toast.js';
 import { openModal, closeModal, showModalError, startModalOpen, isStaleModalOpen } from './Modal.js';
 import { appState } from '../Core/state.js';
 import { EmployeesModel } from '../Models/EmployeesModel.js';
 import { ProximityCardsModel } from '../Models/ProximityCardsModel.js';
+import { fileToWebp, blobToBase64 } from '../Utils/image.js';
 
 // Opens instantly — the two network calls this needs (unassigned cards +
 // who's linked to what) load in the background *after* the modal is
@@ -21,6 +22,21 @@ export async function openEmployeeModal(emp, onSaved) {
 
   const overlay = openModal(`
     <h3>${isEdit ? 'Edit employee' : 'Add employee'}</h3>
+    <div class="field" style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
+      <div class="avatar" id="f-photo-avatar" style="width:64px;height:64px;font-size:20px;overflow:hidden;">
+        ${emp?.photo_url
+          ? `<img style="width:100%;height:100%;object-fit:cover;" src="${esc(emp.photo_url)}" />`
+          : `<span>${esc(initials(emp?.full_name || ''))}</span>`}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;flex:1;min-width:0;">
+        <label style="margin:0;">Photo</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="file" id="f-photo-file" accept="image/*" />
+          <button type="button" class="ghost" id="f-photo-remove" ${emp?.photo_url ? '' : 'style="display:none;"'}>Remove</button>
+        </div>
+        <div class="emp-meta" id="f-photo-status" style="min-height:14px;"></div>
+      </div>
+    </div>
     <div class="grid-2">
       <div class="field"><label>Full name <span style="color:red;">*</span></label><input id="f-name" value="${esc(emp?.full_name || '')}" /></div>
       <div class="field"><label>Employee code <span style="color:red;">*</span></label><input id="f-code" value="${esc(emp?.employee_code || '')}" /></div>
@@ -60,6 +76,47 @@ export async function openEmployeeModal(emp, onSaved) {
   $('#f-card-mode', overlay).addEventListener('change', (e) => {
     $('#f-card-existing-wrap', overlay).classList.toggle('hidden', e.target.value !== 'existing');
     $('#f-card-new-wrap', overlay).classList.toggle('hidden', e.target.value !== 'new');
+  });
+
+  // ---- photo upload: pick -> convert to .webp client-side -> preview.
+  // The actual Drive upload is deferred until Save (below), so picking a
+  // photo and then cancelling the modal never uploads anything.
+  let pendingPhotoBlob = null; // converted .webp Blob awaiting upload, or null
+  let photoRemoved = false; // true if the existing photo should be cleared on save
+  const photoAvatar = $('#f-photo-avatar', overlay);
+  const photoStatus = $('#f-photo-status', overlay);
+  const photoRemoveBtn = $('#f-photo-remove', overlay);
+
+  function setAvatarPreview(url) {
+    photoAvatar.innerHTML = url
+      ? `<img style="width:100%;height:100%;object-fit:cover;" src="${esc(url)}" />`
+      : `<span>${esc(initials($('#f-name', overlay).value || emp?.full_name || ''))}</span>`;
+  }
+
+  $('#f-photo-file', overlay).addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    photoStatus.textContent = 'Converting to .webp…';
+    try {
+      const { blob, previewUrl } = await fileToWebp(file);
+      pendingPhotoBlob = blob;
+      photoRemoved = false;
+      setAvatarPreview(previewUrl);
+      photoRemoveBtn.style.display = '';
+      photoStatus.textContent = `Ready — ${Math.round(blob.size / 1024)} KB .webp, uploads on Save.`;
+    } catch (err) {
+      photoStatus.textContent = err.message;
+      e.target.value = '';
+    }
+  });
+
+  photoRemoveBtn.addEventListener('click', () => {
+    pendingPhotoBlob = null;
+    photoRemoved = true;
+    $('#f-photo-file', overlay).value = '';
+    setAvatarPreview(null);
+    photoRemoveBtn.style.display = 'none';
+    photoStatus.textContent = 'Photo will be removed on save.';
   });
 
   // ---- live-search combobox for proximity card selection ----
@@ -139,17 +196,45 @@ export async function openEmployeeModal(emp, onSaved) {
       return;
     }
 
+    const saveBtn = $('#f-save', overlay);
+    saveBtn.disabled = true;
+
+    // Photo goes to Drive before the employee row is written, so
+    // photo_url/photo_file_id are ready to include in the same insert/update
+    // as everything else rather than a separate follow-up write.
+    if (pendingPhotoBlob) {
+      photoStatus.textContent = 'Uploading photo…';
+      const base64 = await blobToBase64(pendingPhotoBlob);
+      const { data: uploaded, error: photoErr } = await EmployeesModel.uploadPhoto({
+        base64,
+        filename: payload.employee_code,
+        oldFileId: emp?.photo_file_id || null,
+      });
+      if (photoErr) {
+        saveBtn.disabled = false;
+        photoStatus.textContent = '';
+        showModalError(overlay, errSel, `Photo upload failed: ${photoErr}`);
+        return;
+      }
+      payload.photo_url = uploaded.url;
+      payload.photo_file_id = uploaded.file_id;
+    } else if (photoRemoved) {
+      payload.photo_url = null;
+      payload.photo_file_id = null;
+      if (emp?.photo_file_id) EmployeesModel.deletePhoto(emp.photo_file_id); // best-effort, don't block save on it
+    }
+
     // resolve the proximity_card_id: reuse existing, or create a new card first
     const mode = $('#f-card-mode', overlay).value;
     if (mode === 'new') {
       const newCode = $('#f-card-new', overlay).value.trim();
-      if (!newCode) { showModalError(overlay, errSel, 'Enter a proximity code to issue.'); return; }
+      if (!newCode) { saveBtn.disabled = false; showModalError(overlay, errSel, 'Enter a proximity code to issue.'); return; }
       const { data: newCard, error: cardErr } = await ProximityCardsModel.issueAndReturnId(newCode, appState.session.user.id);
-      if (cardErr) { showModalError(overlay, errSel, cardErr.message); return; }
+      if (cardErr) { saveBtn.disabled = false; showModalError(overlay, errSel, cardErr.message); return; }
       payload.proximity_card_id = newCard.id;
     } else {
       const chosen = overlay.dataset.chosenCard;
-      if (!chosen) { showModalError(overlay, errSel, 'Search and pick an available card, or switch to issuing a new one.'); return; }
+      if (!chosen) { saveBtn.disabled = false; showModalError(overlay, errSel, 'Search and pick an available card, or switch to issuing a new one.'); return; }
       payload.proximity_card_id = chosen;
     }
 
@@ -161,7 +246,7 @@ export async function openEmployeeModal(emp, onSaved) {
       payload.created_by = appState.session.user.id;
       ({ error } = await EmployeesModel.createEmployee(payload));
     }
-    if (error) { showModalError(overlay, errSel, error.message); return; }
+    if (error) { saveBtn.disabled = false; showModalError(overlay, errSel, error.message); return; }
     closeModal(overlay);
     toast(isEdit ? 'Employee updated' : 'Employee added');
     onSaved?.();
