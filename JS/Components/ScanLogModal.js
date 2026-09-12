@@ -16,7 +16,7 @@ export async function openScanLogModal(employeeId) {
     <div class="actions">
       <button class="ghost" id="log-close">Close</button>
     </div>
-  `, { maxWidth: '520px' });
+  `, { maxWidth: '580px' });
 
   $('#log-close', overlay).addEventListener('click', () => closeModal(overlay));
 
@@ -71,15 +71,15 @@ export async function openScanLogModal(employeeId) {
 
     bodyEl.className = '';
     bodyEl.innerHTML = `
-      <div class="toolbar" style="margin-bottom:10px;gap:8px;">
-        <input type="date" id="log-date-from" title="From" style="max-width:150px;" value="${esc(prevFrom)}" />
-        <span class="emp-meta">to</span>
-        <input type="date" id="log-date-to" title="To" style="max-width:150px;" value="${esc(prevTo)}" />
-        <select id="log-scanner" style="max-width:170px;">
+      <div class="filter-row" id="log-filter-row" style="margin-bottom:10px;">
+        <input type="date" id="log-date-from" title="From" value="${esc(prevFrom)}" />
+        <span class="emp-meta" style="flex:0 0 auto;">to</span>
+        <input type="date" id="log-date-to" title="To" value="${esc(prevTo)}" />
+        <select id="log-scanner">
           <option value="all">All scanners</option>
           ${scanners.map((s) => `<option value="${esc(s)}" ${s === prevScanner ? 'selected' : ''}>${esc(s)}</option>`).join('')}
         </select>
-        <button class="ghost" id="log-clear" style="padding:7px 10px;">Clear</button>
+        <button class="ghost" id="log-clear" style="flex:0 0 auto;padding:7px 10px;">Clear</button>
       </div>
       <div id="log-list" style="max-height:340px;overflow-y:auto;"></div>
     `;

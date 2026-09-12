@@ -6,7 +6,7 @@
 import { $ } from '../Utils/dom.js';
 import { esc } from '../Utils/format.js';
 import { parseCSV, toCSV } from '../Utils/csv.js';
-import { openModal, closeModal } from './Modal.js';
+import { openModal, closeModal, setModalLocked } from './Modal.js';
 
 /**
  * @param {{ title: string, description?: string, columns: {key:string,label:string,required?:boolean}[], sampleRow?: object, onImport: (records:object[]) => Promise<{successCount:number, errors:{line:number,message:string}[]}> }} config
@@ -86,7 +86,9 @@ export function openImportModal({ title, description, columns, sampleRow, onImpo
     runBtn.disabled = true;
     runBtn.textContent = 'Importing…';
     const rowCount = parsedRecords.length;
+    setModalLocked(overlay, true);
     const { successCount, errors } = await onImport(parsedRecords);
+    setModalLocked(overlay, false);
     parsedRecords = null;
 
     $('#im-file', overlay).classList.add('hidden');

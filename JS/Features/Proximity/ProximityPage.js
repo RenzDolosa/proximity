@@ -5,6 +5,7 @@ import { appState, isAdmin, isAdminOrManager } from '../../Core/state.js';
 import { ProximityCardsModel } from '../../Models/ProximityCardsModel.js';
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { openCardModal } from '../../Components/ProximityCardModal.js';
+import { openRevokeCardModal } from '../../Components/RevokeCardModal.js';
 import { openImportModal } from '../../Components/ImportModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
 import { openConfirmModal, openConfirmProgressModal } from '../../Components/ConfirmModal.js';
@@ -139,9 +140,11 @@ function paintProximityTable() {
   // "Loading…" and re-fetched both tables just to flip one badge).
   $$('button[data-revoke]', wrap).forEach((b) => b.addEventListener('click', async () => {
     const id = b.dataset.revoke;
-    const { error } = await ProximityCardsModel.revoke(id);
-    if (error) { toast(error.message, 'error'); return; }
     const card = cardsCache.find((c) => c.id === id);
+    const employee = assignedByCard.get(id);
+    const { confirmed, error } = await openRevokeCardModal(card, employee);
+    if (!confirmed) return;
+    if (error) { toast(error.message, 'error'); return; }
     if (card) { card.is_active = false; card.revoked_at = new Date().toISOString(); }
     toast('Card revoked');
     paintProximityTable();

@@ -5,7 +5,7 @@
 // openModal/closeModal scaffold every other dialog uses.
 import { $ } from '../Utils/dom.js';
 import { esc } from '../Utils/format.js';
-import { openModal, closeModal, onModalClose } from './Modal.js';
+import { openModal, closeModal, onModalClose, setModalLocked } from './Modal.js';
 
 /**
  * @param {{ title: string, message: string, confirmLabel?: string, cancelLabel?: string }} config
@@ -70,6 +70,7 @@ export function openConfirmProgressModal({ title, message, confirmLabel = 'Delet
           <div class="progress-track"><div class="progress-fill" id="cp-progress-fill"></div></div>
         </div>
       `;
+      setModalLocked(overlay, true);
       const onProgress = (done, total) => {
         const fillEl = $('#cp-progress-fill', overlay);
         const labelEl = $('#cp-progress-label', overlay);
