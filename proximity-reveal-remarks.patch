@@ -1,0 +1,13 @@
+diff --git a/JS/Components/ScanResultCard.js b/JS/Components/ScanResultCard.js
+index 6ab6de3..c80b6c5 100644
+--- a/JS/Components/ScanResultCard.js
++++ b/JS/Components/ScanResultCard.js
+@@ -33,7 +33,7 @@ export function renderScanResult(data) {
+         ${unresolved.length ? `
+           <div class="remark-flag">
+             <div class="remark-flag-title">⚠ Unresolved remark${unresolved.length > 1 ? 's' : ''} (${unresolved.length})</div>
+-            <div class="remark-flag-item">See Employee Manager for details.</div>
++            ${unresolved.map((r) => `<div class="remark-flag-item">${esc(r.remark)}</div>`).join('')}
+           </div>
+         ` : ''}
+       </div>
