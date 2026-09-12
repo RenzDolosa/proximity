@@ -43,6 +43,12 @@ input,select,textarea{
   width:100%;
 }
 input::placeholder,textarea::placeholder{color:var(--text-faint);}
+/* Some browsers (legacy Edge, some IME setups) add their own reveal/clear
+   icon to type="password" fields — used for the Scanner/Test Scan code
+   input so the proximity code isn't readable over someone's shoulder.
+   Suppress the built-in icon so it doesn't defeat the point or clash with
+   the app's own styling. */
+input[type="password"]::-ms-reveal,input[type="password"]::-ms-clear{display:none;}
 input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
 label{display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;}
 .field{margin-bottom:12px;}

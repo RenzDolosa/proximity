@@ -33,7 +33,7 @@ function renderStandaloneScanner() {
     <div class="ss-layout">
       <div class="ss-main">
         <div class="ss-topbar">
-          <input id="ss-code" class="mono" placeholder="Live Search — scan or type code…" autocomplete="off" autofocus />
+          <input id="ss-code" type="password" class="mono" placeholder="Live Search — scan or type code…" autocomplete="off" autofocus />
         </div>
         <div class="ss-hero">
           <div class="ss-ring"><div class="ss-icon">▣</div></div>

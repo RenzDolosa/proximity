@@ -16,7 +16,7 @@ export async function renderTestScan() {
       <div class="panel test-scan-panel">
         <div class="test-scan-note">Results here are not logged — nothing is written to Recent Activity, scan history, or Employee Manager.</div>
         <div class="ts-topbar">
-          <input id="ts-code" class="mono" placeholder="Live Search — scan or type code…" autocomplete="off" autofocus />
+          <input id="ts-code" type="password" class="mono" placeholder="Live Search — scan or type code…" autocomplete="off" autofocus />
         </div>
         <div class="ts-hero">
           <div class="ts-ring"><div class="ts-icon">▣</div></div>

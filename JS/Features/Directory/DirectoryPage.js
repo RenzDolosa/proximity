@@ -2,6 +2,7 @@ import { $, $$ } from '../../Utils/dom.js';
 import { esc, initials, chunkArray } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
 import { appState, isAdmin, isAdminOrManager } from '../../Core/state.js';
+import { supabase } from '../../Core/supabaseClient.js';
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { ProximityCardsModel } from '../../Models/ProximityCardsModel.js';
 import { openEmployeeModal } from '../../Components/EmployeeModal.js';
@@ -14,6 +15,7 @@ import { openConfirmModal, openConfirmProgressModal } from '../../Components/Con
 let page = 1;
 let pageSize = 50;
 let loaded = false; // distinguishes "never fetched yet" from "fetched, zero rows"
+let scanChannel = null; // created once, kept alive for the rest of the session — see below
 
 export async function renderDirectory() {
   const content = $('#content');
@@ -87,6 +89,29 @@ export async function renderDirectory() {
   loaded = true;
   page = 1;
   paintDirectoryTable($('#dir-search')?.value || '');
+  subscribeToScans();
+}
+
+// Keeps the Scans column current without needing to leave and come back
+// to this page. scan_events is only ever inserted by the real scanner
+// (scan_proximity_code) — Test Scan never touches it — so, same reasoning
+// as ScanLogModal's live-refresh, this only fires for genuine scans.
+// Subscribed once for the whole session (renderDirectory() runs on every
+// sidebar click) rather than per-visit, since re-subscribing on every
+// visit would pile up duplicate channels all incrementing the same count.
+function subscribeToScans() {
+  if (scanChannel) return;
+  scanChannel = supabase
+    .channel('directory-scan-events')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'scan_events' }, (payload) => {
+      const row = payload.new;
+      if (row.result !== 'matched' || !row.employee_id) return;
+      const emp = appState.employeesCache.find((e) => e.id === row.employee_id);
+      if (!emp) return; // not on this page / not loaded — the count will just be right next time it's fetched
+      emp.total_scans = (emp.total_scans || 0) + 1;
+      if (appState.route === 'directory') paintDirectoryTable($('#dir-search')?.value || '');
+    })
+    .subscribe();
 }
 
 function paintDirectoryTable(filter) {
