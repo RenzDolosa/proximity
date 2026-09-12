@@ -160,7 +160,7 @@ function paintProximityTable() {
     const card = cardsCache.find((c) => c.id === id);
     const ok = await openConfirmModal({
       title: 'Delete this card?',
-      message: `Permanently delete proximity card ${card?.proximity_code || ''}? This can't be undone.`,
+      message: `Permanently delete proximity card? This can't be undone.`,
       confirmLabel: 'Delete',
     });
     if (!ok) return;
