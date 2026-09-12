@@ -6,6 +6,26 @@ import { createModel } from './BaseModel.js';
 
 const base = createModel('employees');
 
+// supabase-js's functions.invoke() only gives a generic "Edge Function
+// returned a non-2xx status code" message for FunctionsHttpError — the
+// actual { error: "..." } JSON body the function sent back is on
+// error.context (the raw fetch Response), not surfaced automatically. This
+// pulls the real message out so upload/delete failures (missing Google
+// Drive secrets, permission denied, etc.) show something the user can
+// actually act on instead of the generic wrapper text.
+async function readFunctionError(error) {
+  if (!error) return null;
+  try {
+    if (error.context && typeof error.context.clone === 'function') {
+      const body = await error.context.clone().json();
+      if (body?.error) return body.error;
+    }
+  } catch {
+    // response body wasn't JSON (or already consumed) — fall through to the generic message
+  }
+  return error.message || 'Request failed';
+}
+
 export const EmployeesModel = {
   ...base,
 
@@ -95,7 +115,7 @@ export const EmployeesModel = {
       body: { action: 'upload', image_base64: base64, filename, old_file_id: oldFileId || null },
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (error) return { error: error.message || 'Photo upload failed' };
+    if (error) return { error: await readFunctionError(error) };
     if (data?.error) return { error: data.error };
     return { data }; // { url, file_id }
   },
@@ -112,7 +132,7 @@ export const EmployeesModel = {
       body: { action: 'delete', old_file_id: fileId },
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (error) return { error: error.message || 'Photo delete failed' };
+    if (error) return { error: await readFunctionError(error) };
     return { data };
   },
 };
