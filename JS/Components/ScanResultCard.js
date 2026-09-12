@@ -33,7 +33,7 @@ export function renderScanResult(data) {
         ${unresolved.length ? `
           <div class="remark-flag">
             <div class="remark-flag-title">⚠ Unresolved remark${unresolved.length > 1 ? 's' : ''} (${unresolved.length})</div>
-            ${unresolved.map((r) => `<div class="remark-flag-item">${esc(r.remark)}</div>`).join('')}
+            <div class="remark-flag-item">See Employee Manager for details.</div>
           </div>
         ` : ''}
       </div>

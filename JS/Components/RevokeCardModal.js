@@ -58,7 +58,12 @@ export function openRevokeCardModal(card, employee) {
         // here (extremely unlikely given the permission check above
         // already matches what let them revoke in the first place)
         // shouldn't make the revoke itself look like it failed.
-        await EmployeesModel.addRemark(employee.id, `Proximity card ${card.proximity_code} revoked: ${reason}`);
+        // Note: the reason is stored without the card's proximity_code —
+        // this remark can later surface on the Scanner's result card (see
+        // ScanResultCard.js) as an "unresolved remark" flag, and that
+        // screen is watched at a physical door, so a raw code has no
+        // business ending up there.
+        await EmployeesModel.addRemark(employee.id, `Proximity card revoked: ${reason}`);
       }
       finish({ confirmed: !error, error });
       closeModal(overlay);
