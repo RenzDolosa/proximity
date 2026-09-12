@@ -67,6 +67,8 @@ function renderStandaloneScanner() {
   const resultWrap = $('#ss-result');
   let fadeTimer = null;
   let clearTimer = null;
+  let autoSubmitTimer = null;
+  let scanBusy = false;
   const RESULT_LIFETIME_MS = 10000;
   const FADE_DURATION_MS = 400;
   const scheduleResultFade = () => {
@@ -81,8 +83,11 @@ function renderStandaloneScanner() {
     }, RESULT_LIFETIME_MS);
   };
   const doScan = async () => {
+    if (scanBusy) return; // a scan is already in flight — the debounce timer below can otherwise double-fire while awaiting the previous one
     const proximity_code = codeInput.value.trim();
     if (!proximity_code) return;
+    scanBusy = true;
+    clearTimeout(autoSubmitTimer);
     const { data, error } = await ScanEventsModel.scan(proximity_code, operatorName);
     clearTimeout(fadeTimer);
     clearTimeout(clearTimer);
@@ -95,10 +100,24 @@ function renderStandaloneScanner() {
     scheduleResultFade();
     codeInput.value = '';
     codeInput.focus();
+    scanBusy = false;
     // Only this operator's own scans, per kiosk — see get_scan_feed's
     // p_scanner_id filter.
     loadScanFeed('ss-feed', 10, operatorName);
   };
   codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doScan(); });
+  // Most badge readers act as a keyboard wedge that just "types" the code
+  // character-by-character with no trailing Enter — so waiting for a
+  // keydown Enter alone leaves the code just sitting in the field after a
+  // tap. Instead, auto-submit a short pause after the last keystroke: a
+  // reader's burst of characters arrives in a few milliseconds, so a
+  // 300ms gap with no further typing means the read is done. Manual Enter
+  // (above) still submits instantly without waiting for that pause.
+  const AUTO_SUBMIT_DELAY_MS = 300;
+  codeInput.addEventListener('input', () => {
+    clearTimeout(autoSubmitTimer);
+    if (!codeInput.value.trim()) return;
+    autoSubmitTimer = setTimeout(doScan, AUTO_SUBMIT_DELAY_MS);
+  });
   loadScanFeed('ss-feed', 10, operatorName);
 }

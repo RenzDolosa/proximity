@@ -43,9 +43,14 @@ export async function renderTestScan() {
       if (document.activeElement === document.body) codeInput.focus();
     }, 50);
   });
+  let autoSubmitTimer = null;
+  let scanBusy = false;
   const doScan = async () => {
+    if (scanBusy) return; // a scan is already in flight — the debounce timer below can otherwise double-fire while awaiting the previous one
     const proximity_code = codeInput.value.trim();
     if (!proximity_code) return;
+    scanBusy = true;
+    clearTimeout(autoSubmitTimer);
     const { data, error } = await ScanEventsModel.testScan(proximity_code);
     const resultWrap = $('#ts-result');
     if (error) {
@@ -55,8 +60,19 @@ export async function renderTestScan() {
     }
     codeInput.value = '';
     codeInput.focus();
+    scanBusy = false;
   };
   codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doScan(); });
+  // See StandaloneScanner.js — most badge readers just "type" the code
+  // with no trailing Enter, so auto-submit a short pause after the last
+  // keystroke instead of waiting on one. Manual Enter above still submits
+  // instantly.
+  const AUTO_SUBMIT_DELAY_MS = 300;
+  codeInput.addEventListener('input', () => {
+    clearTimeout(autoSubmitTimer);
+    if (!codeInput.value.trim()) return;
+    autoSubmitTimer = setTimeout(doScan, AUTO_SUBMIT_DELAY_MS);
+  });
   $('#ts-open-live').addEventListener('click', (e) => {
     e.preventDefault();
     window.open(location.pathname + '?scanner=1', '_blank', 'noopener');
