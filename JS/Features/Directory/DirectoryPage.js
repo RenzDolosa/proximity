@@ -1,5 +1,5 @@
 import { $, $$ } from '../../Utils/dom.js';
-import { esc, initials, chunkArray } from '../../Utils/format.js';
+import { esc, avatarHTML, chunkArray } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
 import { appState, isAdmin, isAdminOrManager } from '../../Core/state.js';
 import { supabase } from '../../Core/supabaseClient.js';
@@ -16,16 +16,12 @@ let page = 1;
 let pageSize = 50;
 let loaded = false; // distinguishes "never fetched yet" from "fetched, zero rows"
 let scanChannel = null; // created once, kept alive for the rest of the session — see below
-let unresolvedOnly = false; // toolbar toggle — resets to off each fresh page load, same as `page`
 
 export async function renderDirectory() {
   const content = $('#content');
   content.innerHTML = `
     <div class="toolbar">
-      <div style="display:flex;gap:8px;align-items:center;flex:1;min-width:0;">
-        <input class="search" id="dir-search" placeholder="Search name, code, department…" />
-        <button class="ghost${unresolvedOnly ? ' active' : ''}" id="dir-unresolved-toggle" title="Show only employees with unresolved remarks">Unresolved remarks</button>
-      </div>
+      <input class="search" id="dir-search" placeholder="Search name, code, department…" />
       ${isAdminOrManager() ? `
         <div style="display:flex;gap:8px;">
           ${isAdmin() ? '<button class="ghost danger" id="dir-delete-all">Delete all</button>' : ''}
@@ -38,12 +34,6 @@ export async function renderDirectory() {
     <div id="dir-pagination"></div>
   `;
   $('#dir-search').addEventListener('input', (e) => { page = 1; paintDirectoryTable(e.target.value); });
-  $('#dir-unresolved-toggle').addEventListener('click', (e) => {
-    unresolvedOnly = !unresolvedOnly;
-    e.target.classList.toggle('active', unresolvedOnly);
-    page = 1;
-    paintDirectoryTable($('#dir-search')?.value || '');
-  });
   if (isAdmin()) {
     $('#dir-delete-all').addEventListener('click', async () => {
       const total = appState.employeesCache.length;
@@ -127,16 +117,12 @@ function subscribeToScans() {
 function paintDirectoryTable(filter) {
   const wrap = $('#dir-table-wrap');
   const f = filter.trim().toLowerCase();
-  const allRows = appState.employeesCache.filter((e) => {
-    if (unresolvedOnly && !(e.open_remarks > 0)) return false;
-    return !f || [e.full_name, e.employee_code, e.department, e.position, e.active_proximity_code]
-      .some((v) => (v || '').toLowerCase().includes(f));
-  });
+  const allRows = appState.employeesCache.filter((e) =>
+    !f || [e.full_name, e.employee_code, e.department, e.position, e.active_proximity_code]
+      .some((v) => (v || '').toLowerCase().includes(f))
+  );
   if (!allRows.length) {
-    const emptyReason = unresolvedOnly
-      ? 'No employees have unresolved remarks right now.'
-      : (isAdminOrManager() ? 'Add your first employee to get started.' : 'Nothing matches your search.');
-    wrap.innerHTML = `<div class="empty-state"><strong>No employees found</strong>${emptyReason}</div>`;
+    wrap.innerHTML = `<div class="empty-state"><strong>No employees found</strong>${isAdminOrManager() ? 'Add your first employee to get started.' : 'Nothing matches your search.'}</div>`;
     return;
   }
   const totalPages = Math.max(1, Math.ceil(allRows.length / pageSize));
@@ -151,7 +137,7 @@ function paintDirectoryTable(filter) {
       <tbody>
         ${rows.map((e) => `
           <tr>
-            <td><div class="emp-line"><div class="avatar">${e.photo_url ? `<img src="${esc(e.photo_url)}" alt="" />` : esc(initials(e.full_name))}</div><div><div style="font-weight:600">${esc(e.full_name)}</div><div class="emp-meta">${esc(e.email || '')}</div></div></div></td>
+            <td><div class="emp-line"><div class="avatar">${avatarHTML(e.full_name, e.photo_url, e.updated_at)}</div><div><div style="font-weight:600">${esc(e.full_name)}</div><div class="emp-meta">${esc(e.email || '')}</div></div></div></td>
             <td class="mono">${esc(e.employee_code)}</td>
             <td>${esc(e.department || '—')}</td>
             <td>${esc(e.position || '—')}</td>
@@ -160,7 +146,7 @@ function paintDirectoryTable(filter) {
             <td class="mono col-shrink"><button class="ghost" data-log="${e.id}" style="padding:3px 8px;">${e.total_scans ?? 0} <span style="text-transform:none;">view</span></button></td>
             <td class="col-shrink"><div class="row-actions">
               ${isAdminOrManager() ? `<button class="ghost" data-edit="${e.id}">Edit</button>` : ''}
-              <button class="ghost" data-remarks="${e.id}">Remarks${e.open_remarks > 0 ? ' <span class="remark-dot" title="Unresolved remarks"></span>' : ''}</button>
+              <button class="ghost" data-remarks="${e.id}">Remarks</button>
               ${isAdmin() ? `<button class="ghost" data-del="${e.id}" style="color:var(--bad)">Delete</button>` : ''}
             </div></td>
           </tr>
@@ -207,12 +193,9 @@ function paintDirectoryTable(filter) {
 // of chunked bulk inserts. A chunk only falls back to inserting its rows
 // one-by-one if the bulk call itself errors, so we can still say exactly
 // which line caused the problem.
-async function importEmployees(records, onProgress) {
+async function importEmployees(records) {
   const errors = [];
-  let skippedCount = 0;
   const CHUNK_SIZE = 200;
-  const report = (done, total) => onProgress?.(done, total);
-  report(0, records.length);
 
   const [{ data: existingCards }, { data: linkedRows }] = await Promise.all([
     ProximityCardsModel.listAll(),
@@ -223,15 +206,6 @@ async function importEmployees(records, onProgress) {
   const claimedCodes = new Map(); // code(lower) -> the line that already claimed it
   const codesNeedingNewCard = new Map(); // code(lower) -> original-case code
 
-  // Existing employee_codes (DB + within-file) — employee_code is a unique
-  // column, so a repeat is always a duplicate, not just a validation error.
-  // Those are counted separately as "skipped" rather than lumped in with
-  // the error rows, since there's nothing wrong with the row itself.
-  const existingEmployeeCodes = new Set(
-    (appState.employeesCache || []).map((e) => (e.employee_code || '').trim().toLowerCase())
-  );
-  const claimedEmployeeCodes = new Map(); // employee_code(lower) -> line that already claimed it
-
   const pending = [];
   for (let i = 0; i < records.length; i++) {
     const r = records[i];
@@ -240,38 +214,28 @@ async function importEmployees(records, onProgress) {
     const employee_code = (r.employee_code || '').trim();
     const proximity_code = (r.proximity_code || '').trim();
     if (!full_name || !employee_code || !proximity_code) {
-      errors.push({ line, message: 'Fullname, Employee Code, and Proximity Code are all required.' });
+      errors.push({ line, message: 'full_name, employee_code, and proximity_code are all required.' });
       continue;
-    }
-    const empCodeKey = employee_code.toLowerCase();
-    if (existingEmployeeCodes.has(empCodeKey)) {
-      skippedCount++;
-      continue; // already an employee on file — duplicate, silently skipped
-    }
-    if (claimedEmployeeCodes.has(empCodeKey)) {
-      skippedCount++;
-      continue; // duplicate employee_code earlier in this same file
     }
     const codeKey = proximity_code.toLowerCase();
     if (claimedCodes.has(codeKey)) {
-      errors.push({ line, message: `Proximity code is already used by row ${claimedCodes.get(codeKey)} in this file.` });
+      errors.push({ line, message: `Proximity code "${proximity_code}" is already used by row ${claimedCodes.get(codeKey)} in this file.` });
       continue;
     }
     const existing = cardByCode.get(codeKey);
     if (existing) {
       if (linkedCardIds.has(existing.id)) {
-        skippedCount++; // proximity code already assigned to someone else — duplicate, skipped
+        errors.push({ line, message: 'Proximity code is already assigned to another employee - skipped.' });
         continue;
       }
       if (!existing.is_active) {
-        errors.push({ line, message: `Proximity code has been revoked — renew it first or use a different code.` });
+        errors.push({ line, message: `Proximity code "${proximity_code}" has been revoked — renew it first or use a different code.` });
         continue;
       }
     } else {
       codesNeedingNewCard.set(codeKey, proximity_code);
     }
     claimedCodes.set(codeKey, line);
-    claimedEmployeeCodes.set(empCodeKey, line);
     const status = ['active', 'inactive', 'suspended'].includes((r.status || '').trim()) ? r.status.trim() : 'active';
     pending.push({
       line, codeKey, proximity_code,
@@ -322,24 +286,17 @@ async function importEmployees(records, onProgress) {
     });
 
   let successCount = 0;
-  let processed = records.length - pending.length; // rows already resolved as skipped/errored above
-  report(processed, records.length);
   for (const chunk of chunkArray(ready, CHUNK_SIZE)) {
     const { error } = await EmployeesModel.createMany(chunk.map((r) => r.payload));
-    if (!error) {
-      successCount += chunk.length;
-    } else {
-      // Same fallback: only go row-by-row for a chunk that actually failed.
-      for (const r of chunk) {
-        const { error: singleErr } = await EmployeesModel.createEmployee(r.payload);
-        if (singleErr) errors.push({ line: r.line, message: singleErr.message });
-        else successCount++;
-      }
+    if (!error) { successCount += chunk.length; continue; }
+    // Same fallback: only go row-by-row for a chunk that actually failed.
+    for (const r of chunk) {
+      const { error: singleErr } = await EmployeesModel.createEmployee(r.payload);
+      if (singleErr) errors.push({ line: r.line, message: singleErr.message });
+      else successCount++;
     }
-    processed += chunk.length;
-    report(processed, records.length);
   }
 
   errors.sort((a, b) => a.line - b.line);
-  return { successCount, skippedCount, errors };
+  return { successCount, errors };
 }
