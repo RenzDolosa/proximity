@@ -40,6 +40,11 @@ button.ghost.active{border-color:var(--accent);color:var(--accent);background:va
    deliberately tiny/non-alarming (a plain badge would compete with the
    Status badge in the same row), just enough to scan the list quickly. */
 .remark-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--warn);margin-left:4px;vertical-align:middle;}
+/* Count badge on the Directory toolbar's "Unresolved remarks" toggle —
+   empty/hidden when the count is 0 (paintDirectoryTable sets textContent
+   to '' in that case, which collapses this via :empty). */
+.count-pill{display:inline-block;min-width:16px;margin-left:6px;padding:1px 6px;border-radius:999px;background:var(--warn-dim);color:var(--warn);font-size:11px;font-weight:600;text-align:center;vertical-align:middle;}
+.count-pill:empty{display:none;}
 input,select,textarea{
   background:var(--surface);
   border:1px solid var(--border);

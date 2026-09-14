@@ -24,7 +24,7 @@ export async function renderDirectory() {
     <div class="toolbar">
       <div style="display:flex;gap:8px;align-items:center;flex:1;min-width:0;">
         <input class="search" id="dir-search" placeholder="Search name, code, department…" />
-        <button class="ghost${unresolvedOnly ? ' active' : ''}" id="dir-unresolved-toggle" title="Show only employees with unresolved remarks">Unresolved remarks</button>
+        <button class="ghost${unresolvedOnly ? ' active' : ''}" id="dir-unresolved-toggle" title="Show only employees with unresolved remarks">Unresolved remarks<span class="count-pill" id="dir-unresolved-count"></span></button>
       </div>
       ${isAdminOrManager() ? `
         <div style="display:flex;gap:8px;">
@@ -127,6 +127,13 @@ function subscribeToScans() {
 function paintDirectoryTable(filter) {
   const wrap = $('#dir-table-wrap');
   const f = filter.trim().toLowerCase();
+  // Total unresolved-remarks count for the toolbar toggle's badge — always
+  // computed from the full cache (not the search/filter-narrowed `allRows`
+  // below), so it reads as "how many need attention overall", not "how
+  // many match what I'm currently typing".
+  const unresolvedCount = appState.employeesCache.filter((e) => e.open_remarks > 0).length;
+  const countEl = $('#dir-unresolved-count');
+  if (countEl) countEl.textContent = unresolvedCount || '';
   const allRows = appState.employeesCache.filter((e) => {
     if (unresolvedOnly && !(e.open_remarks > 0)) return false;
     return !f || [e.full_name, e.employee_code, e.department, e.position, e.active_proximity_code]
