@@ -5,7 +5,7 @@ import { openModal, closeModal, showModalError, startModalOpen, isStaleModalOpen
 import { appState } from '../Core/state.js';
 import { EmployeesModel } from '../Models/EmployeesModel.js';
 import { ProximityCardsModel } from '../Models/ProximityCardsModel.js';
-import { fileToWebp, blobToBase64 } from '../Utils/image.js';
+import { fileToWebp, blobToBase64, extensionForMime } from '../Utils/image.js';
 
 // Opens instantly — the two network calls this needs (unassigned cards +
 // who's linked to what) load in the background *after* the modal is
@@ -81,10 +81,11 @@ export async function openEmployeeModal(emp, onSaved) {
     $('#f-card-new-wrap', overlay).classList.toggle('hidden', e.target.value !== 'new');
   });
 
-  // ---- photo upload: pick -> convert to .webp client-side -> preview.
+  // ---- photo upload: pick -> convert (usually to .webp) client-side -> preview.
   // The actual Drive upload is deferred until Save (below), so picking a
   // photo and then cancelling the modal never uploads anything.
-  let pendingPhotoBlob = null; // converted .webp Blob awaiting upload, or null
+  let pendingPhotoBlob = null; // converted Blob awaiting upload, or null
+  let pendingPhotoMime = null; // the blob's ACTUAL type — see Utils/image.js for why this can't be assumed to be webp
   let photoRemoved = false; // true if the existing photo should be cleared on save
   const photoAvatar = $('#f-photo-avatar', overlay);
   const photoStatus = $('#f-photo-status', overlay);
@@ -99,14 +100,16 @@ export async function openEmployeeModal(emp, onSaved) {
   $('#f-photo-file', overlay).addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    photoStatus.textContent = 'Converting to .webp…';
+    photoStatus.textContent = 'Converting…';
     try {
-      const { blob, previewUrl } = await fileToWebp(file);
+      const { blob, previewUrl, mimeType } = await fileToWebp(file);
       pendingPhotoBlob = blob;
+      pendingPhotoMime = mimeType;
       photoRemoved = false;
       setAvatarPreview(previewUrl);
       photoRemoveBtn.style.display = '';
-      photoStatus.textContent = `Ready — ${Math.round(blob.size / 1024)} KB .webp, uploads on Save.`;
+      const ext = extensionForMime(mimeType);
+      photoStatus.textContent = `Ready — ${Math.round(blob.size / 1024)} KB .${ext}, uploads on Save.`;
     } catch (err) {
       photoStatus.textContent = err.message;
       e.target.value = '';
@@ -115,6 +118,7 @@ export async function openEmployeeModal(emp, onSaved) {
 
   photoRemoveBtn.addEventListener('click', () => {
     pendingPhotoBlob = null;
+    pendingPhotoMime = null;
     photoRemoved = true;
     $('#f-photo-file', overlay).value = '';
     setAvatarPreview(null);
@@ -218,16 +222,31 @@ export async function openEmployeeModal(emp, onSaved) {
       const { data: uploaded, error: photoErr } = await EmployeesModel.uploadPhoto({
         base64,
         filename: payload.employee_code,
+        mimeType: pendingPhotoMime,
         oldFileId: emp?.photo_file_id || null,
         onProgress: (loaded, total) => {
           const pct = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 100;
           progressFill.style.width = `${pct}%`;
-          photoStatus.textContent = `Uploading photo… ${pct}%`;
+          if (pct >= 100) {
+            // The bytes have all reached OUR server at this point, but the
+            // response hasn't come back yet — the server still has to talk
+            // to Google Drive (upload + make public, and delete the old
+            // photo if replacing one), which the client can't see progress
+            // on. Switching to an indeterminate state here instead of
+            // leaving the bar frozen at "100%" is what actually fixes the
+            // "looks stuck" complaint — the real fix for the underlying
+            // latency is on the Edge Function side (see upload-employee-photo).
+            progressFill.classList.add('indeterminate');
+            photoStatus.textContent = 'Finishing up…';
+          } else {
+            photoStatus.textContent = `Uploading photo… ${pct}%`;
+          }
         },
       });
       fileInput.disabled = false;
       photoRemoveBtn.disabled = false;
       progressWrap.classList.add('hidden');
+      progressFill.classList.remove('indeterminate');
       if (photoErr) {
         saveBtn.disabled = false;
         photoStatus.textContent = '';

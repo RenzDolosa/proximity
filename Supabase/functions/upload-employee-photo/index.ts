@@ -1,9 +1,15 @@
 // upload-employee-photo Edge Function
 //
-// POST { action: "upload", image_base64: string, filename: string, old_file_id?: string|null }
+// POST { action: "upload", image_base64: string, filename: string, mime_type?: string, old_file_id?: string|null }
 //   -> { url: string, file_id: string }
 // POST { action: "delete", old_file_id: string }
 //   -> { ok: true }
+//
+// mime_type should be the ACTUAL type of the bytes in image_base64 (e.g.
+// what Blob.type reported after client-side conversion) — canvas.toBlob()
+// can silently fall back to a different format than requested, so the
+// client can't assume it always produced .webp, and neither can this
+// function. Falls back to image/webp only if the caller omits mime_type.
 //
 // Auth: caller must be a signed-in admin or manager. The platform verifies
 // the JWT itself (verify_jwt: true); this function additionally re-checks
@@ -39,6 +45,17 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
 const DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
+
+// Keep in sync with JS/Utils/image.js's EXTENSION_BY_MIME — the client
+// converts to whichever of these the browser's canvas encoder actually
+// produced (usually webp, but not guaranteed) and tells us which one via
+// mime_type; this is just the server-side mirror for picking a filename
+// extension + Content-Type that actually matches those bytes.
+const EXTENSION_BY_MIME: Record<string, string> = {
+  "image/webp": "webp",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+};
 
 Deno.serve(async (req: Request) => {
   const cors = {
@@ -85,7 +102,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "upload") {
-      const { image_base64, filename, old_file_id } = body;
+      const { image_base64, filename, mime_type, old_file_id } = body;
       if (!image_base64 || typeof image_base64 !== "string") {
         return json({ error: "image_base64 is required" }, 400, cors);
       }
@@ -94,13 +111,36 @@ Deno.serve(async (req: Request) => {
         return json({ error: "Photo is too large (max 8MB)." }, 400, cors);
       }
 
-      const safeName = (filename || "employee-photo").replace(/[^a-zA-Z0-9._-]/g, "_");
-      const fileId = await uploadToDrive(bytes, `${safeName}.webp`, folderId, accessToken);
-      await makeFilePublic(fileId, accessToken); // "anyone with the link can view"
+      // Trust whatever mime type the client actually produced (canvas.toBlob
+      // can silently fall back to a different format than requested — see
+      // Utils/image.js) rather than assuming .webp. Falls back to webp only
+      // if an older client doesn't send mime_type at all.
+      const contentType = typeof mime_type === "string" && EXTENSION_BY_MIME[mime_type] ? mime_type : "image/webp";
+      const ext = EXTENSION_BY_MIME[contentType];
 
-      if (old_file_id && old_file_id !== fileId) {
-        await deleteDriveFile(old_file_id, accessToken); // best-effort, replacing an old photo
+      const safeName = (filename || "employee-photo").replace(/[^a-zA-Z0-9._-]/g, "_");
+
+      // Deleting the OLD photo (when replacing one) doesn't depend on the
+      // NEW upload finishing — both only need accessToken. Running it
+      // concurrently instead of after the upload+make-public sequence saves
+      // a full Google API round trip off the critical path. It's already
+      // best-effort (errors swallowed), so it doesn't need to block the
+      // response at all: kick it off, let it finish in the background via
+      // EdgeRuntime.waitUntil (falls back to a bounded await if that global
+      // isn't available in this runtime).
+      let deleteOldPromise: Promise<void> = Promise.resolve();
+      if (old_file_id) {
+        deleteOldPromise = deleteDriveFile(old_file_id, accessToken);
+        const bg = (globalThis as unknown as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime;
+        if (bg?.waitUntil) {
+          bg.waitUntil(deleteOldPromise);
+          deleteOldPromise = Promise.resolve(); // already handed off — don't also await it below
+        }
       }
+
+      const fileId = await uploadToDrive(bytes, `${safeName}.${ext}`, contentType, folderId, accessToken);
+      await makeFilePublic(fileId, accessToken); // "anyone with the link can view"
+      await deleteOldPromise; // no-op if EdgeRuntime.waitUntil already took it, otherwise waits for the best-effort delete
 
       // Directly embeddable (not just "open in Drive") image URL.
       const url = `https://drive.google.com/uc?export=view&id=${fileId}`;
@@ -144,13 +184,13 @@ async function getGoogleAccessToken(clientId: string, clientSecret: string, refr
 
 // ---- Drive API ----
 
-async function uploadToDrive(bytes: Uint8Array, name: string, folderId: string, accessToken: string): Promise<string> {
+async function uploadToDrive(bytes: Uint8Array, name: string, contentType: string, folderId: string, accessToken: string): Promise<string> {
   const boundary = "proximity-photo-" + crypto.randomUUID();
   const metadata = JSON.stringify({ name, parents: [folderId] });
   const encoder = new TextEncoder();
   const parts = [
     encoder.encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`),
-    encoder.encode(`--${boundary}\r\nContent-Type: image/webp\r\n\r\n`),
+    encoder.encode(`--${boundary}\r\nContent-Type: ${contentType}\r\n\r\n`),
     bytes,
     encoder.encode(`\r\n--${boundary}--`),
   ];

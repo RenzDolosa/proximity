@@ -1,0 +1,310 @@
+diff --git a/CSS/components.css b/CSS/components.css
+index dfbf4f8..d46ac63 100644
+--- a/CSS/components.css
++++ b/CSS/components.css
+@@ -26,6 +26,20 @@
+ .progress-label{font-size:12px;color:var(--text-muted);margin-bottom:6px;font-family:var(--mono);}
+ .progress-track{height:6px;border-radius:999px;background:var(--surface);border:1px solid var(--border);overflow:hidden;}
+ .progress-fill{height:100%;width:0;background:var(--accent);border-radius:999px;transition:width .15s ease;}
++/* Shown once client-side upload bytes hit 100% but the server hasn't
++   responded yet (e.g. upload-employee-photo still talking to Google
++   Drive) — a shimmer instead of a bar frozen at "100%" with nothing
++   happening, which is what actually reads as "stuck". */
++.progress-fill.indeterminate{
++  width:100% !important;
++  background:linear-gradient(90deg, var(--accent-dim) 0%, var(--accent) 50%, var(--accent-dim) 100%);
++  background-size:200% 100%;
++  animation:progress-shimmer 1.1s ease-in-out infinite;
++}
++@keyframes progress-shimmer{
++  0%{background-position:200% 0;}
++  100%{background-position:-200% 0;}
++}
+ 
+ .badge{
+   display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
+diff --git a/JS/Components/EmployeeModal.js b/JS/Components/EmployeeModal.js
+index 8f1d49f..562352b 100644
+--- a/JS/Components/EmployeeModal.js
++++ b/JS/Components/EmployeeModal.js
+@@ -5,7 +5,7 @@ import { openModal, closeModal, showModalError, startModalOpen, isStaleModalOpen
+ import { appState } from '../Core/state.js';
+ import { EmployeesModel } from '../Models/EmployeesModel.js';
+ import { ProximityCardsModel } from '../Models/ProximityCardsModel.js';
+-import { fileToWebp, blobToBase64 } from '../Utils/image.js';
++import { fileToWebp, blobToBase64, extensionForMime } from '../Utils/image.js';
+ 
+ // Opens instantly — the two network calls this needs (unassigned cards +
+ // who's linked to what) load in the background *after* the modal is
+@@ -81,10 +81,11 @@ export async function openEmployeeModal(emp, onSaved) {
+     $('#f-card-new-wrap', overlay).classList.toggle('hidden', e.target.value !== 'new');
+   });
+ 
+-  // ---- photo upload: pick -> convert to .webp client-side -> preview.
++  // ---- photo upload: pick -> convert (usually to .webp) client-side -> preview.
+   // The actual Drive upload is deferred until Save (below), so picking a
+   // photo and then cancelling the modal never uploads anything.
+-  let pendingPhotoBlob = null; // converted .webp Blob awaiting upload, or null
++  let pendingPhotoBlob = null; // converted Blob awaiting upload, or null
++  let pendingPhotoMime = null; // the blob's ACTUAL type — see Utils/image.js for why this can't be assumed to be webp
+   let photoRemoved = false; // true if the existing photo should be cleared on save
+   const photoAvatar = $('#f-photo-avatar', overlay);
+   const photoStatus = $('#f-photo-status', overlay);
+@@ -99,14 +100,16 @@ export async function openEmployeeModal(emp, onSaved) {
+   $('#f-photo-file', overlay).addEventListener('change', async (e) => {
+     const file = e.target.files[0];
+     if (!file) return;
+-    photoStatus.textContent = 'Converting to .webp…';
++    photoStatus.textContent = 'Converting…';
+     try {
+-      const { blob, previewUrl } = await fileToWebp(file);
++      const { blob, previewUrl, mimeType } = await fileToWebp(file);
+       pendingPhotoBlob = blob;
++      pendingPhotoMime = mimeType;
+       photoRemoved = false;
+       setAvatarPreview(previewUrl);
+       photoRemoveBtn.style.display = '';
+-      photoStatus.textContent = `Ready — ${Math.round(blob.size / 1024)} KB .webp, uploads on Save.`;
++      const ext = extensionForMime(mimeType);
++      photoStatus.textContent = `Ready — ${Math.round(blob.size / 1024)} KB .${ext}, uploads on Save.`;
+     } catch (err) {
+       photoStatus.textContent = err.message;
+       e.target.value = '';
+@@ -115,6 +118,7 @@ export async function openEmployeeModal(emp, onSaved) {
+ 
+   photoRemoveBtn.addEventListener('click', () => {
+     pendingPhotoBlob = null;
++    pendingPhotoMime = null;
+     photoRemoved = true;
+     $('#f-photo-file', overlay).value = '';
+     setAvatarPreview(null);
+@@ -218,16 +222,31 @@ export async function openEmployeeModal(emp, onSaved) {
+       const { data: uploaded, error: photoErr } = await EmployeesModel.uploadPhoto({
+         base64,
+         filename: payload.employee_code,
++        mimeType: pendingPhotoMime,
+         oldFileId: emp?.photo_file_id || null,
+         onProgress: (loaded, total) => {
+           const pct = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 100;
+           progressFill.style.width = `${pct}%`;
+-          photoStatus.textContent = `Uploading photo… ${pct}%`;
++          if (pct >= 100) {
++            // The bytes have all reached OUR server at this point, but the
++            // response hasn't come back yet — the server still has to talk
++            // to Google Drive (upload + make public, and delete the old
++            // photo if replacing one), which the client can't see progress
++            // on. Switching to an indeterminate state here instead of
++            // leaving the bar frozen at "100%" is what actually fixes the
++            // "looks stuck" complaint — the real fix for the underlying
++            // latency is on the Edge Function side (see upload-employee-photo).
++            progressFill.classList.add('indeterminate');
++            photoStatus.textContent = 'Finishing up…';
++          } else {
++            photoStatus.textContent = `Uploading photo… ${pct}%`;
++          }
+         },
+       });
+       fileInput.disabled = false;
+       photoRemoveBtn.disabled = false;
+       progressWrap.classList.add('hidden');
++      progressFill.classList.remove('indeterminate');
+       if (photoErr) {
+         saveBtn.disabled = false;
+         photoStatus.textContent = '';
+diff --git a/JS/Models/EmployeesModel.js b/JS/Models/EmployeesModel.js
+index 81dd007..c691aca 100644
+--- a/JS/Models/EmployeesModel.js
++++ b/JS/Models/EmployeesModel.js
+@@ -110,7 +110,7 @@ export const EmployeesModel = {
+   // back to firing 0% then 100% if XHR is somehow unavailable.
+   // old_file_id (optional): the Drive file id being replaced, so the
+   // function can best-effort delete it after the new upload succeeds.
+-  async uploadPhoto({ base64, filename, oldFileId, onProgress }) {
++  async uploadPhoto({ base64, filename, mimeType, oldFileId, onProgress }) {
+     const { data: sessionData } = await supabase.auth.getSession();
+     const token = sessionData.session.access_token;
+ 
+@@ -139,7 +139,7 @@ export const EmployeesModel = {
+         }
+       };
+       xhr.onerror = () => resolve({ error: 'Network error while uploading the photo.' });
+-      xhr.send(JSON.stringify({ action: 'upload', image_base64: base64, filename, old_file_id: oldFileId || null }));
++      xhr.send(JSON.stringify({ action: 'upload', image_base64: base64, filename, mime_type: mimeType || null, old_file_id: oldFileId || null }));
+     });
+   },
+ 
+diff --git a/JS/Utils/image.js b/JS/Utils/image.js
+index 334e752..8f2fc1c 100644
+--- a/JS/Utils/image.js
++++ b/JS/Utils/image.js
+@@ -1,8 +1,19 @@
+ // Converts any browser-decodable image (jpg, png, gif, bmp, and already
+-// -webp) into a resized .webp Blob entirely client-side via <canvas> —
+-// used by EmployeeModal's photo upload so every photo lands in Drive as
+-// .webp regardless of what the user picked, and so a phone-camera photo
+-// (often several MB) doesn't get uploaded at full resolution.
++// -webp) into a resized Blob entirely client-side via <canvas> — used by
++// EmployeeModal's photo upload so a phone-camera photo (often several MB)
++// doesn't get uploaded at full resolution.
++//
++// Preferred output is .webp, but canvas.toBlob() silently falls back to a
++// different format (historically PNG, JPEG on some Android/WebView
++// builds) on browsers that can't encode WebP — it does NOT throw or warn,
++// it just gives back whatever it actually produced. Earlier code assumed
++// the result was always .webp and hardcoded that filename/Content-Type
++// all the way to the Edge Function, which is why some uploads showed up
++// in Drive named "*.webp" while actually containing JPEG bytes. Fix:
++// never assume — always read the real `blob.type` back and propagate
++// *that* end-to-end (Utils/image.js -> EmployeeModal.js -> EmployeesModel
++// -> upload-employee-photo Edge Function), so the filename/Content-Type
++// Drive receives always matches the bytes actually being sent.
+ //
+ // Note: HEIC/HEIF (the default format on iPhones) is NOT decodable by
+ // <canvas> in most browsers today — those files will fail here with a
+@@ -12,14 +23,26 @@
+ const MAX_DIMENSION = 800; // px, longest side — plenty for a directory/ID photo
+ const WEBP_QUALITY = 0.85;
+ 
++export const EXTENSION_BY_MIME = {
++  'image/webp': 'webp',
++  'image/jpeg': 'jpg',
++  'image/png': 'png',
++};
++
++export function extensionForMime(mime) {
++  return EXTENSION_BY_MIME[mime] || 'jpg';
++}
++
+ export function isImageFile(file) {
+   return !!file && file.type.startsWith('image/');
+ }
+ 
+ /**
+  * @param {File} file - the raw file the user picked
+- * @returns {Promise<{ blob: Blob, previewUrl: string }>}
+- *   blob: the converted .webp image, ready to upload
++ * @returns {Promise<{ blob: Blob, previewUrl: string, mimeType: string }>}
++ *   blob: the converted image, ready to upload — usually .webp, but check
++ *   `mimeType` (== blob.type) rather than assuming, since the browser may
++ *   have silently produced a different format.
+  *   previewUrl: an object URL for immediate <img> preview — caller should
+  *   URL.revokeObjectURL(previewUrl) when it's no longer shown
+  */
+@@ -46,7 +69,9 @@ export async function fileToWebp(file) {
+     );
+   });
+ 
+-  return { blob, previewUrl: URL.createObjectURL(blob) };
++  // blob.type is the ACTUAL format the browser produced — trust this, not
++  // the 'image/webp' we requested above.
++  return { blob, previewUrl: URL.createObjectURL(blob), mimeType: blob.type || 'image/webp' };
+ }
+ 
+ async function loadBitmap(file) {
+diff --git a/Supabase/functions/upload-employee-photo/index.ts b/Supabase/functions/upload-employee-photo/index.ts
+index 50f0b21..56c0904 100644
+--- a/Supabase/functions/upload-employee-photo/index.ts
++++ b/Supabase/functions/upload-employee-photo/index.ts
+@@ -1,10 +1,16 @@
+ // upload-employee-photo Edge Function
+ //
+-// POST { action: "upload", image_base64: string, filename: string, old_file_id?: string|null }
++// POST { action: "upload", image_base64: string, filename: string, mime_type?: string, old_file_id?: string|null }
+ //   -> { url: string, file_id: string }
+ // POST { action: "delete", old_file_id: string }
+ //   -> { ok: true }
+ //
++// mime_type should be the ACTUAL type of the bytes in image_base64 (e.g.
++// what Blob.type reported after client-side conversion) — canvas.toBlob()
++// can silently fall back to a different format than requested, so the
++// client can't assume it always produced .webp, and neither can this
++// function. Falls back to image/webp only if the caller omits mime_type.
++//
+ // Auth: caller must be a signed-in admin or manager. The platform verifies
+ // the JWT itself (verify_jwt: true); this function additionally re-checks
+ // role server-side via is_admin_or_manager() using a client scoped to the
+@@ -40,6 +46,17 @@ const DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files?uploa
+ const DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files";
+ const TOKEN_URL = "https://oauth2.googleapis.com/token";
+ 
++// Keep in sync with JS/Utils/image.js's EXTENSION_BY_MIME — the client
++// converts to whichever of these the browser's canvas encoder actually
++// produced (usually webp, but not guaranteed) and tells us which one via
++// mime_type; this is just the server-side mirror for picking a filename
++// extension + Content-Type that actually matches those bytes.
++const EXTENSION_BY_MIME: Record<string, string> = {
++  "image/webp": "webp",
++  "image/jpeg": "jpg",
++  "image/png": "png",
++};
++
+ Deno.serve(async (req: Request) => {
+   const cors = {
+     "Access-Control-Allow-Origin": "*",
+@@ -85,7 +102,7 @@ Deno.serve(async (req: Request) => {
+     }
+ 
+     if (action === "upload") {
+-      const { image_base64, filename, old_file_id } = body;
++      const { image_base64, filename, mime_type, old_file_id } = body;
+       if (!image_base64 || typeof image_base64 !== "string") {
+         return json({ error: "image_base64 is required" }, 400, cors);
+       }
+@@ -94,14 +111,37 @@ Deno.serve(async (req: Request) => {
+         return json({ error: "Photo is too large (max 8MB)." }, 400, cors);
+       }
+ 
++      // Trust whatever mime type the client actually produced (canvas.toBlob
++      // can silently fall back to a different format than requested — see
++      // Utils/image.js) rather than assuming .webp. Falls back to webp only
++      // if an older client doesn't send mime_type at all.
++      const contentType = typeof mime_type === "string" && EXTENSION_BY_MIME[mime_type] ? mime_type : "image/webp";
++      const ext = EXTENSION_BY_MIME[contentType];
++
+       const safeName = (filename || "employee-photo").replace(/[^a-zA-Z0-9._-]/g, "_");
+-      const fileId = await uploadToDrive(bytes, `${safeName}.webp`, folderId, accessToken);
+-      await makeFilePublic(fileId, accessToken); // "anyone with the link can view"
+ 
+-      if (old_file_id && old_file_id !== fileId) {
+-        await deleteDriveFile(old_file_id, accessToken); // best-effort, replacing an old photo
++      // Deleting the OLD photo (when replacing one) doesn't depend on the
++      // NEW upload finishing — both only need accessToken. Running it
++      // concurrently instead of after the upload+make-public sequence saves
++      // a full Google API round trip off the critical path. It's already
++      // best-effort (errors swallowed), so it doesn't need to block the
++      // response at all: kick it off, let it finish in the background via
++      // EdgeRuntime.waitUntil (falls back to a bounded await if that global
++      // isn't available in this runtime).
++      let deleteOldPromise: Promise<void> = Promise.resolve();
++      if (old_file_id) {
++        deleteOldPromise = deleteDriveFile(old_file_id, accessToken);
++        const bg = (globalThis as unknown as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime;
++        if (bg?.waitUntil) {
++          bg.waitUntil(deleteOldPromise);
++          deleteOldPromise = Promise.resolve(); // already handed off — don't also await it below
++        }
+       }
+ 
++      const fileId = await uploadToDrive(bytes, `${safeName}.${ext}`, contentType, folderId, accessToken);
++      await makeFilePublic(fileId, accessToken); // "anyone with the link can view"
++      await deleteOldPromise; // no-op if EdgeRuntime.waitUntil already took it, otherwise waits for the best-effort delete
++
+       // Directly embeddable (not just "open in Drive") image URL.
+       const url = `https://drive.google.com/uc?export=view&id=${fileId}`;
+       return json({ url, file_id: fileId }, 200, cors);
+@@ -144,13 +184,13 @@ async function getGoogleAccessToken(clientId: string, clientSecret: string, refr
+ 
+ // ---- Drive API ----
+ 
+-async function uploadToDrive(bytes: Uint8Array, name: string, folderId: string, accessToken: string): Promise<string> {
++async function uploadToDrive(bytes: Uint8Array, name: string, contentType: string, folderId: string, accessToken: string): Promise<string> {
+   const boundary = "proximity-photo-" + crypto.randomUUID();
+   const metadata = JSON.stringify({ name, parents: [folderId] });
+   const encoder = new TextEncoder();
+   const parts = [
+     encoder.encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`),
+-    encoder.encode(`--${boundary}\r\nContent-Type: image/webp\r\n\r\n`),
++    encoder.encode(`--${boundary}\r\nContent-Type: ${contentType}\r\n\r\n`),
+     bytes,
+     encoder.encode(`\r\n--${boundary}--`),
+   ];

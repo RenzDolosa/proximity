@@ -110,7 +110,7 @@ export const EmployeesModel = {
   // back to firing 0% then 100% if XHR is somehow unavailable.
   // old_file_id (optional): the Drive file id being replaced, so the
   // function can best-effort delete it after the new upload succeeds.
-  async uploadPhoto({ base64, filename, oldFileId, onProgress }) {
+  async uploadPhoto({ base64, filename, mimeType, oldFileId, onProgress }) {
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData.session.access_token;
 
@@ -139,7 +139,7 @@ export const EmployeesModel = {
         }
       };
       xhr.onerror = () => resolve({ error: 'Network error while uploading the photo.' });
-      xhr.send(JSON.stringify({ action: 'upload', image_base64: base64, filename, old_file_id: oldFileId || null }));
+      xhr.send(JSON.stringify({ action: 'upload', image_base64: base64, filename, mime_type: mimeType || null, old_file_id: oldFileId || null }));
     });
   },
 

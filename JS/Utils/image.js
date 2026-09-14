@@ -1,8 +1,19 @@
 // Converts any browser-decodable image (jpg, png, gif, bmp, and already
-// -webp) into a resized .webp Blob entirely client-side via <canvas> —
-// used by EmployeeModal's photo upload so every photo lands in Drive as
-// .webp regardless of what the user picked, and so a phone-camera photo
-// (often several MB) doesn't get uploaded at full resolution.
+// -webp) into a resized Blob entirely client-side via <canvas> — used by
+// EmployeeModal's photo upload so a phone-camera photo (often several MB)
+// doesn't get uploaded at full resolution.
+//
+// Preferred output is .webp, but canvas.toBlob() silently falls back to a
+// different format (historically PNG, JPEG on some Android/WebView
+// builds) on browsers that can't encode WebP — it does NOT throw or warn,
+// it just gives back whatever it actually produced. Earlier code assumed
+// the result was always .webp and hardcoded that filename/Content-Type
+// all the way to the Edge Function, which is why some uploads showed up
+// in Drive named "*.webp" while actually containing JPEG bytes. Fix:
+// never assume — always read the real `blob.type` back and propagate
+// *that* end-to-end (Utils/image.js -> EmployeeModal.js -> EmployeesModel
+// -> upload-employee-photo Edge Function), so the filename/Content-Type
+// Drive receives always matches the bytes actually being sent.
 //
 // Note: HEIC/HEIF (the default format on iPhones) is NOT decodable by
 // <canvas> in most browsers today — those files will fail here with a
@@ -12,14 +23,26 @@
 const MAX_DIMENSION = 800; // px, longest side — plenty for a directory/ID photo
 const WEBP_QUALITY = 0.85;
 
+export const EXTENSION_BY_MIME = {
+  'image/webp': 'webp',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+};
+
+export function extensionForMime(mime) {
+  return EXTENSION_BY_MIME[mime] || 'jpg';
+}
+
 export function isImageFile(file) {
   return !!file && file.type.startsWith('image/');
 }
 
 /**
  * @param {File} file - the raw file the user picked
- * @returns {Promise<{ blob: Blob, previewUrl: string }>}
- *   blob: the converted .webp image, ready to upload
+ * @returns {Promise<{ blob: Blob, previewUrl: string, mimeType: string }>}
+ *   blob: the converted image, ready to upload — usually .webp, but check
+ *   `mimeType` (== blob.type) rather than assuming, since the browser may
+ *   have silently produced a different format.
  *   previewUrl: an object URL for immediate <img> preview — caller should
  *   URL.revokeObjectURL(previewUrl) when it's no longer shown
  */
@@ -46,7 +69,9 @@ export async function fileToWebp(file) {
     );
   });
 
-  return { blob, previewUrl: URL.createObjectURL(blob) };
+  // blob.type is the ACTUAL format the browser produced — trust this, not
+  // the 'image/webp' we requested above.
+  return { blob, previewUrl: URL.createObjectURL(blob), mimeType: blob.type || 'image/webp' };
 }
 
 async function loadBitmap(file) {
