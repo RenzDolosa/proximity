@@ -12,28 +12,31 @@
 // valid session still can't upload/delete photos even though they're
 // authenticated.
 //
-// Storage: Google Drive, via a Google Cloud service account (not Supabase
-// Storage) — the image never touches the service-role key or a public
-// bucket. The service account authenticates itself with a signed JWT
-// (RS256, Web Crypto — Deno's edge runtime has no Node `crypto` module) and
-// exchanges it for a short-lived OAuth access token, then talks to the
-// Drive v3 API directly.
+// Storage: Google Drive, authenticated as a real Google account via OAuth
+// (NOT a service account). Google service accounts have zero storage quota
+// of their own — they can only write into Shared Drives or act via
+// domain-wide delegation, both of which require a paid Google Workspace
+// account. For a personal Gmail account, the only way for server-side code
+// to write into "My Drive" is to act as that real account, so this function
+// holds a long-lived OAuth refresh token for that account and exchanges it
+// for a short-lived access token on each call.
 //
 // Required Edge Function secrets (set via `supabase secrets set` or the
 // Dashboard, NOT committed to the repo):
-//   GOOGLE_SERVICE_ACCOUNT_EMAIL   the service account's client_email
-//   GOOGLE_PRIVATE_KEY             its private_key, PEM format (\n's ok as
-//                                  literal escaped newlines — see below)
-//   GOOGLE_DRIVE_FOLDER_ID         the Drive folder to upload into; that
-//                                  folder must be shared with the service
-//                                  account email as an Editor
+//   GOOGLE_OAUTH_CLIENT_ID       OAuth 2.0 Client ID (Web application type)
+//   GOOGLE_OAUTH_CLIENT_SECRET   its client secret
+//   GOOGLE_OAUTH_REFRESH_TOKEN   a refresh token obtained once for the
+//                                Google account that owns the target folder
+//   GOOGLE_DRIVE_FOLDER_ID       the Drive folder to upload into (must be
+//                                owned by, or shared as Editor with, that
+//                                same account)
 //
 // See Supabase/functions/upload-employee-photo/README.md for the full
-// one-time Google Cloud setup.
+// one-time Google Cloud + OAuth Playground setup to get the refresh token.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true";
+const DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
 const DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 
@@ -67,13 +70,14 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const action = body.action;
 
-    const clientEmail = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
-    const privateKey = Deno.env.get("GOOGLE_PRIVATE_KEY");
+    const clientId = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID");
+    const clientSecret = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET");
+    const refreshToken = Deno.env.get("GOOGLE_OAUTH_REFRESH_TOKEN");
     const folderId = Deno.env.get("GOOGLE_DRIVE_FOLDER_ID");
-    if (!clientEmail || !privateKey || !folderId) {
-      return json({ error: "Google Drive isn't configured yet — GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY, and GOOGLE_DRIVE_FOLDER_ID must be set as Edge Function secrets." }, 500, cors);
+    if (!clientId || !clientSecret || !refreshToken || !folderId) {
+      return json({ error: "Google Drive isn't configured yet — GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_OAUTH_REFRESH_TOKEN, and GOOGLE_DRIVE_FOLDER_ID must be set as Edge Function secrets." }, 500, cors);
     }
-    const accessToken = await getGoogleAccessToken(clientEmail, privateKey);
+    const accessToken = await getGoogleAccessToken(clientId, clientSecret, refreshToken);
 
     if (action === "delete") {
       if (body.old_file_id) await deleteDriveFile(body.old_file_id, accessToken); // best-effort
@@ -113,44 +117,29 @@ function json(body: unknown, status: number, cors: Record<string, string>) {
   return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 }
 
-// ---- Google service-account auth (JWT Bearer flow) ----
+// ---- Google OAuth (refresh token -> short-lived access token) ----
+// Much simpler than the service-account JWT-signing flow it replaces: no
+// RS256/Web Crypto involved, just a single token-refresh POST.
 
-async function getGoogleAccessToken(clientEmail: string, privateKeyPem: string): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  const header = { alg: "RS256", typ: "JWT" };
-  const claim = {
-    iss: clientEmail,
-    scope: "https://www.googleapis.com/auth/drive",
-    aud: TOKEN_URL,
-    iat: now,
-    exp: now + 3600,
-  };
-  const unsigned = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(claim))}`;
-  const key = await importPrivateKey(privateKeyPem);
-  const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(unsigned));
-  const jwt = `${unsigned}.${base64urlFromBytes(new Uint8Array(signature))}`;
-
+async function getGoogleAccessToken(clientId: string, clientSecret: string, refreshToken: string): Promise<string> {
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=${encodeURIComponent("urn:ietf:params:oauth:grant-type:jwt-bearer")}&assertion=${jwt}`,
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error_description || data.error || "Google authentication failed — check the service account secrets.");
+  if (!res.ok) {
+    // A revoked/expired refresh token (e.g. the OAuth consent screen was
+    // left in "Testing" mode, which caps tokens at 7 days — see README)
+    // shows up here as invalid_grant.
+    throw new Error(data.error_description || data.error || "Google authentication failed — the refresh token may be invalid or revoked.");
+  }
   return data.access_token;
-}
-
-// Accepts the private key either as a raw PEM block (with real newlines)
-// or with literal "\n" escapes, which is how it typically ends up after
-// being pasted into a Dashboard/CLI secret value.
-async function importPrivateKey(pem: string): Promise<CryptoKey> {
-  const normalized = pem.includes("\\n") ? pem.replace(/\\n/g, "\n") : pem;
-  const b64 = normalized
-    .replace(/-----BEGIN PRIVATE KEY-----/, "")
-    .replace(/-----END PRIVATE KEY-----/, "")
-    .replace(/\s/g, "");
-  const der = base64ToBytes(b64);
-  return crypto.subtle.importKey("pkcs8", der, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
 }
 
 // ---- Drive API ----
@@ -181,7 +170,7 @@ async function uploadToDrive(bytes: Uint8Array, name: string, folderId: string, 
 }
 
 async function makeFilePublic(fileId: string, accessToken: string) {
-  const res = await fetch(`${DRIVE_FILES_URL}/${fileId}/permissions?supportsAllDrives=true`, {
+  const res = await fetch(`${DRIVE_FILES_URL}/${fileId}/permissions`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({ role: "reader", type: "anyone" }),
@@ -194,7 +183,7 @@ async function makeFilePublic(fileId: string, accessToken: string) {
 
 async function deleteDriveFile(fileId: string, accessToken: string) {
   try {
-    await fetch(`${DRIVE_FILES_URL}/${fileId}?supportsAllDrives=true`, {
+    await fetch(`${DRIVE_FILES_URL}/${fileId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${accessToken}` },
     });
@@ -204,23 +193,13 @@ async function deleteDriveFile(fileId: string, accessToken: string) {
   }
 }
 
-// ---- base64 helpers (Deno has no Buffer) ----
+// ---- base64 helper (Deno has no Buffer) ----
 
 function base64ToBytes(b64: string): Uint8Array {
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes;
-}
-
-function base64url(str: string): string {
-  return base64urlFromBytes(new TextEncoder().encode(str));
-}
-
-function base64urlFromBytes(bytes: Uint8Array): string {
-  let bin = "";
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 function concatBytes(parts: Uint8Array[]): Uint8Array {
