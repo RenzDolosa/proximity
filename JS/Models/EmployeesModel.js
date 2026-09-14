@@ -35,7 +35,7 @@ export const EmployeesModel = {
   // org ever needs more than 1000 employees visible at once, this should
   // move to server-side search + range() paging instead of raising the cap.
   async listDirectory() {
-    return supabase.from('employee_directory').select('*').order('full_name').limit(1000);
+    return supabase.from('employee_directory').select('*').order('full_name').limit(5000);
   },
 
   // employee_id -> proximity_card_id lookups (used to filter out cards

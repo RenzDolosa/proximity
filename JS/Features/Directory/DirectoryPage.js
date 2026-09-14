@@ -244,6 +244,18 @@ async function importEmployees(records, onProgress) {
   );
   const claimedEmployeeCodes = new Map(); // employee_code(lower) -> line that already claimed it
 
+  // full_name isn't a unique DB column (unlike employee_code), so nothing
+  // stops two rows for the same person under different codes from both
+  // going through silently — which is exactly how a file re-imported with
+  // regenerated codes ends up duplicating the whole roster. This is an
+  // error (not a silent skip like employee_code) since, unlike an exact
+  // employee_code rematch, a name collision might also be two different
+  // people who happen to share a name — worth a human's attention either way.
+  const existingEmployeeNames = new Map(
+    (appState.employeesCache || []).map((e) => [(e.full_name || '').trim().toLowerCase(), e])
+  );
+  const claimedEmployeeNames = new Map(); // full_name(lower) -> line that already claimed it
+
   const pending = [];
   for (let i = 0; i < records.length; i++) {
     const r = records[i];
@@ -253,6 +265,16 @@ async function importEmployees(records, onProgress) {
     const proximity_code = (r.proximity_code || '').trim();
     if (!full_name || !employee_code || !proximity_code) {
       errors.push({ line, message: 'Fullname, Employee Code, and Proximity Code are all required.' });
+      continue;
+    }
+    const nameKey = full_name.toLowerCase();
+    const existingByName = existingEmployeeNames.get(nameKey);
+    if (existingByName) {
+      errors.push({ line, message: `An employee named "${full_name}" already exists (code ${existingByName.employee_code}). If this is a different person, adjust the name; otherwise remove this row.` });
+      continue;
+    }
+    if (claimedEmployeeNames.has(nameKey)) {
+      errors.push({ line, message: `"${full_name}" is already used by row ${claimedEmployeeNames.get(nameKey)} in this file.` });
       continue;
     }
     const empCodeKey = employee_code.toLowerCase();
@@ -284,6 +306,7 @@ async function importEmployees(records, onProgress) {
     }
     claimedCodes.set(codeKey, line);
     claimedEmployeeCodes.set(empCodeKey, line);
+    claimedEmployeeNames.set(nameKey, line);
     const status = ['active', 'inactive', 'suspended'].includes((r.status || '').trim()) ? r.status.trim() : 'active';
     pending.push({
       line, codeKey, proximity_code,

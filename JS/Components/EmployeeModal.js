@@ -5,7 +5,7 @@ import { openModal, closeModal, showModalError, startModalOpen, isStaleModalOpen
 import { appState } from '../Core/state.js';
 import { EmployeesModel } from '../Models/EmployeesModel.js';
 import { ProximityCardsModel } from '../Models/ProximityCardsModel.js';
-import { fileToWebp, blobToBase64, extensionForMime } from '../Utils/image.js';
+import { fileToWebp, blobToBase64 } from '../Utils/image.js';
 
 // Opens instantly — the two network calls this needs (unassigned cards +
 // who's linked to what) load in the background *after* the modal is
@@ -33,9 +33,6 @@ export async function openEmployeeModal(emp, onSaved) {
         <div style="display:flex;gap:8px;align-items:center;">
           <input type="file" id="f-photo-file" accept="image/*" />
           <button type="button" class="ghost" id="f-photo-remove" ${emp?.photo_url ? '' : 'style="display:none;"'}>Remove</button>
-        </div>
-        <div class="progress hidden" id="f-photo-progress" style="margin:2px 0 0;">
-          <div class="progress-track"><div class="progress-fill" id="f-photo-progress-fill"></div></div>
         </div>
         <div class="emp-meta" id="f-photo-status" style="min-height:14px;"></div>
       </div>
@@ -81,11 +78,10 @@ export async function openEmployeeModal(emp, onSaved) {
     $('#f-card-new-wrap', overlay).classList.toggle('hidden', e.target.value !== 'new');
   });
 
-  // ---- photo upload: pick -> convert (usually to .webp) client-side -> preview.
+  // ---- photo upload: pick -> convert to .webp client-side -> preview.
   // The actual Drive upload is deferred until Save (below), so picking a
   // photo and then cancelling the modal never uploads anything.
-  let pendingPhotoBlob = null; // converted Blob awaiting upload, or null
-  let pendingPhotoMime = null; // the blob's ACTUAL type — see Utils/image.js for why this can't be assumed to be webp
+  let pendingPhotoBlob = null; // converted .webp Blob awaiting upload, or null
   let photoRemoved = false; // true if the existing photo should be cleared on save
   const photoAvatar = $('#f-photo-avatar', overlay);
   const photoStatus = $('#f-photo-status', overlay);
@@ -100,16 +96,14 @@ export async function openEmployeeModal(emp, onSaved) {
   $('#f-photo-file', overlay).addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    photoStatus.textContent = 'Converting…';
+    photoStatus.textContent = 'Converting to .webp…';
     try {
-      const { blob, previewUrl, mimeType } = await fileToWebp(file);
+      const { blob, previewUrl } = await fileToWebp(file);
       pendingPhotoBlob = blob;
-      pendingPhotoMime = mimeType;
       photoRemoved = false;
       setAvatarPreview(previewUrl);
       photoRemoveBtn.style.display = '';
-      const ext = extensionForMime(mimeType);
-      photoStatus.textContent = `Ready — ${Math.round(blob.size / 1024)} KB .${ext}, uploads on Save.`;
+      photoStatus.textContent = `Ready — ${Math.round(blob.size / 1024)} KB .webp, uploads on Save.`;
     } catch (err) {
       photoStatus.textContent = err.message;
       e.target.value = '';
@@ -118,7 +112,6 @@ export async function openEmployeeModal(emp, onSaved) {
 
   photoRemoveBtn.addEventListener('click', () => {
     pendingPhotoBlob = null;
-    pendingPhotoMime = null;
     photoRemoved = true;
     $('#f-photo-file', overlay).value = '';
     setAvatarPreview(null);
@@ -202,6 +195,19 @@ export async function openEmployeeModal(emp, onSaved) {
       showModalError(overlay, errSel, 'Full name and employee code are required.');
       return;
     }
+    // Guard against accidentally adding the same person twice (or renaming
+    // someone into a collision with someone else) — full_name isn't a
+    // unique DB column, so nothing else stops this. Excludes the record
+    // being edited itself, so saving an employee without changing their
+    // name doesn't trip over their own existing row.
+    const nameKey = payload.full_name.toLowerCase();
+    const nameCollision = (appState.employeesCache || []).find(
+      (e) => e.id !== emp?.id && (e.full_name || '').trim().toLowerCase() === nameKey
+    );
+    if (nameCollision) {
+      showModalError(overlay, errSel, `An employee named "${payload.full_name}" already exists (code ${nameCollision.employee_code}). If this is a different person, adjust the name slightly to tell them apart.`);
+      return;
+    }
 
     const saveBtn = $('#f-save', overlay);
     saveBtn.disabled = true;
@@ -210,50 +216,19 @@ export async function openEmployeeModal(emp, onSaved) {
     // photo_url/photo_file_id are ready to include in the same insert/update
     // as everything else rather than a separate follow-up write.
     if (pendingPhotoBlob) {
-      const progressWrap = $('#f-photo-progress', overlay);
-      const progressFill = $('#f-photo-progress-fill', overlay);
-      const fileInput = $('#f-photo-file', overlay);
-      fileInput.disabled = true;
-      photoRemoveBtn.disabled = true;
-      progressWrap.classList.remove('hidden');
-      progressFill.style.width = '0%';
-      photoStatus.textContent = 'Uploading photo… 0%';
+      photoStatus.textContent = 'Uploading photo…';
       const base64 = await blobToBase64(pendingPhotoBlob);
       const { data: uploaded, error: photoErr } = await EmployeesModel.uploadPhoto({
         base64,
         filename: payload.employee_code,
-        mimeType: pendingPhotoMime,
         oldFileId: emp?.photo_file_id || null,
-        onProgress: (loaded, total) => {
-          const pct = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 100;
-          progressFill.style.width = `${pct}%`;
-          if (pct >= 100) {
-            // The bytes have all reached OUR server at this point, but the
-            // response hasn't come back yet — the server still has to talk
-            // to Google Drive (upload + make public, and delete the old
-            // photo if replacing one), which the client can't see progress
-            // on. Switching to an indeterminate state here instead of
-            // leaving the bar frozen at "100%" is what actually fixes the
-            // "looks stuck" complaint — the real fix for the underlying
-            // latency is on the Edge Function side (see upload-employee-photo).
-            progressFill.classList.add('indeterminate');
-            photoStatus.textContent = 'Finishing up…';
-          } else {
-            photoStatus.textContent = `Uploading photo… ${pct}%`;
-          }
-        },
       });
-      fileInput.disabled = false;
-      photoRemoveBtn.disabled = false;
-      progressWrap.classList.add('hidden');
-      progressFill.classList.remove('indeterminate');
       if (photoErr) {
         saveBtn.disabled = false;
         photoStatus.textContent = '';
         showModalError(overlay, errSel, `Photo upload failed: ${photoErr}`);
         return;
       }
-      photoStatus.textContent = 'Upload complete.';
       payload.photo_url = uploaded.url;
       payload.photo_file_id = uploaded.file_id;
     } else if (photoRemoved) {
