@@ -35,6 +35,9 @@ export async function openEmployeeModal(emp, onSaved) {
           <button type="button" class="ghost" id="f-photo-remove" ${emp?.photo_url ? '' : 'style="display:none;"'}>Remove</button>
         </div>
         <div class="emp-meta" id="f-photo-status" style="min-height:14px;"></div>
+        <div class="progress hidden" id="f-photo-progress" style="margin:0;">
+          <div class="progress-track"><div class="progress-fill" id="f-photo-progress-fill"></div></div>
+        </div>
       </div>
     </div>
     <div class="grid-2">
@@ -216,19 +219,42 @@ export async function openEmployeeModal(emp, onSaved) {
     // photo_url/photo_file_id are ready to include in the same insert/update
     // as everything else rather than a separate follow-up write.
     if (pendingPhotoBlob) {
-      photoStatus.textContent = 'Uploading photo…';
+      const progressWrap = $('#f-photo-progress', overlay);
+      const progressFill = $('#f-photo-progress-fill', overlay);
+      progressWrap.classList.remove('hidden');
+      progressFill.classList.remove('indeterminate');
+      progressFill.style.width = '0%';
+      photoStatus.textContent = 'Uploading photo… 0%';
+
       const base64 = await blobToBase64(pendingPhotoBlob);
       const { data: uploaded, error: photoErr } = await EmployeesModel.uploadPhoto({
         base64,
         filename: payload.employee_code,
         oldFileId: emp?.photo_file_id || null,
+        onProgress: (pct) => {
+          if (pct >= 100) {
+            // Bytes are fully sent, but the function is still round-tripping
+            // to Google Drive server-side — an indeterminate shimmer reads
+            // as "still working" instead of a bar frozen at 100% with
+            // nothing happening.
+            progressFill.classList.add('indeterminate');
+            photoStatus.textContent = 'Finishing upload…';
+          } else {
+            progressFill.style.width = `${pct}%`;
+            photoStatus.textContent = `Uploading photo… ${pct}%`;
+          }
+        },
       });
+
+      progressWrap.classList.add('hidden');
+      progressFill.classList.remove('indeterminate');
       if (photoErr) {
         saveBtn.disabled = false;
         photoStatus.textContent = '';
         showModalError(overlay, errSel, `Photo upload failed: ${photoErr}`);
         return;
       }
+      photoStatus.textContent = 'Upload complete.';
       payload.photo_url = uploaded.url;
       payload.photo_file_id = uploaded.file_id;
     } else if (photoRemoved) {

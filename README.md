@@ -38,6 +38,8 @@ JS/
     ProfilesModel.js              callAdminUsers() invokes the admin-users Edge Function
     ScanEventsModel.js            scan() calls scan_proximity_code() RPC;
                                    recentFeed() reads get_scan_feed()
+                                   (EmployeesModel.uploadPhoto() below uses raw XHR, not
+                                   supabase.functions.invoke(), specifically for upload progress)
   Components/                 reusable UI pieces used by more than one feature
     Modal.js                     shared openModal/closeModal scaffold — every
                                   dialog below is built on this
@@ -54,7 +56,10 @@ JS/
   Features/                   one folder per screen/area of the app
     Auth/AuthScreen.js
     Directory/DirectoryPage.js       (Employee Manager — avatarHTML() helper,
-                                       cache-busted via updated_at)
+                                       cache-busted via updated_at; the Edit/Add
+                                       modal's photo picker shows a real upload
+                                       progress bar, incl. an indeterminate
+                                       shimmer while the function talks to Drive)
     Proximity/ProximityPage.js       (Proximity Cards)
     Scanner/TestScanPage.js          (in-shell "Test Scan" — calls the
                                        non-logging test_scan_proximity_code() RPC)

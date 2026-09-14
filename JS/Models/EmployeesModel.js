@@ -1,7 +1,7 @@
 // All employee-related reads/writes: the directory view (for the grid),
 // the underlying `employees` table (for create/update/delete + scan logs),
 // and the lookups the Employee modal needs to offer available cards.
-import { supabase } from '../Core/supabaseClient.js';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '../Core/supabaseClient.js';
 import { createModel } from './BaseModel.js';
 import { fetchAllRows } from '../Utils/fetchAllRows.js';
 
@@ -107,29 +107,69 @@ export const EmployeesModel = {
     return supabase.rpc('resolve_employee_remark', { p_employee_id: employeeId, p_remark_id: remarkId, p_resolved: resolved });
   },
 
-  // Uploads an already-converted .webp Blob (see Utils/image.js) to Google
-  // Drive via the upload-employee-photo Edge Function. Sent as base64 JSON
-  // rather than multipart/form-data — matches the admin-users/proximity-scan
-  // pattern of a plain functions.invoke() call, and the function itself
-  // needs the whole file in memory anyway to hand to the Drive API.
+  // Uploads an already-converted .webp (or fallback jpg/png — see
+  // Utils/image.js) Blob to Google Drive via the upload-employee-photo
+  // Edge Function.
+  //
+  // Deliberately raw XMLHttpRequest instead of supabase.functions.invoke():
+  // invoke() is fetch()-based under the hood, and fetch has no upload
+  // progress event — it only resolves once the *whole* request/response
+  // round-trip is done. That's fine for tiny payloads (admin-users,
+  // proximity-scan) but a base64-encoded photo is large enough that
+  // "nothing happens for a few seconds" reads as broken. XHR's
+  // `upload.onprogress` gives real byte-level progress during the send,
+  // which onProgress(pct) below surfaces to the Employee Manager's photo
+  // picker as an actual moving progress bar.
+  //
   // old_file_id (optional): the Drive file id being replaced, so the
   // function can best-effort delete it after the new upload succeeds.
-  async uploadPhoto({ base64, filename, oldFileId }) {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData.session.access_token;
-    const { data, error } = await supabase.functions.invoke('upload-employee-photo', {
-      body: { action: 'upload', image_base64: base64, filename, old_file_id: oldFileId || null },
-      headers: { Authorization: `Bearer ${token}` },
+  // onProgress (optional): (pct:number) => void, 0–100, called as the
+  // browser pushes bytes to Supabase. pct reaching 100 only means the
+  // upload finished sending — the function may still be talking to Google
+  // Drive server-side, which the caller should represent as an
+  // indeterminate/"finishing" state rather than treating 100% as done.
+  uploadPhoto({ base64, filename, oldFileId, onProgress }) {
+    return new Promise(async (resolve) => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) {
+        resolve({ error: 'Your session has expired — please sign in again.' });
+        return;
+      }
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${SUPABASE_URL}/functions/v1/upload-employee-photo`);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.setRequestHeader('apikey', SUPABASE_ANON_KEY);
+
+      xhr.upload.onprogress = (e) => {
+        if (!e.lengthComputable || !onProgress) return;
+        onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)));
+      };
+
+      xhr.onload = () => {
+        let body = null;
+        try { body = JSON.parse(xhr.responseText); } catch {
+          // non-JSON response (e.g. a gateway error page) — body stays null, handled below
+        }
+        if (xhr.status >= 200 && xhr.status < 300 && body && !body.error) {
+          resolve({ data: body }); // { url, file_id }
+        } else {
+          resolve({ error: body?.error || `Upload failed (HTTP ${xhr.status})` });
+        }
+      };
+      xhr.onerror = () => resolve({ error: 'Network error while uploading the photo. Check your connection and try again.' });
+      xhr.onabort = () => resolve({ error: 'Upload cancelled.' });
+
+      xhr.send(JSON.stringify({ action: 'upload', image_base64: base64, filename, old_file_id: oldFileId || null }));
     });
-    if (error) return { error: await readFunctionError(error) };
-    if (data?.error) return { error: data.error };
-    return { data }; // { url, file_id }
   },
 
   // Best-effort delete of a Drive file — used when a photo is removed
-  // without being replaced by a new one. Failure here is non-fatal (an
-  // orphaned Drive file costs nothing functionally), so callers may ignore
-  // the error.
+  // without being replaced by a new one. Tiny request/response, no
+  // meaningful upload progress to show, so this stays on invoke() rather
+  // than duplicating the XHR plumbing above.
   async deletePhoto(fileId) {
     if (!fileId) return { data: true };
     const { data: sessionData } = await supabase.auth.getSession();

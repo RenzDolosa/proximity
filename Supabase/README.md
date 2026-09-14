@@ -80,6 +80,12 @@ table a restricted role can't see directly.
   Always writes the file under a **new UUID filename** rather than
   overwriting the previous one in place — Google's thumbnail CDN caches by
   file ID, so an in-place update kept serving the stale photo. `verify_jwt: true`.
+  Request/response contract is unchanged, but the client
+  (`JS/Models/EmployeesModel.js#uploadPhoto`) now POSTs via a raw
+  `XMLHttpRequest` instead of `supabase.functions.invoke()`, purely to get
+  real `upload.onprogress` events for the Employee Manager's photo
+  progress bar — `invoke()` is `fetch()`-based and only resolves once the
+  whole round trip finishes, same limitation noted for CSV import.
 
 See `functions/proximity-scan/README.md`, `functions/admin-users/README.md`,
 and `functions/upload-employee-photo/README.md` for the request/response
