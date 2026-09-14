@@ -10,7 +10,9 @@ export const ProfilesModel = {
   ...base,
 
   async listUsers() {
-    return supabase.from('profiles').select('*').order('created_at');
+    // Capped at 1000 — see EmployeesModel.listDirectory for the same
+    // reasoning (bounded UI, not meant as true pagination).
+    return supabase.from('profiles').select('*').order('created_at').limit(1000);
   },
 
   async toggleActive(id, isActive) {

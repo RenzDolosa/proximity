@@ -8,15 +8,22 @@ const base = createModel('proximity_cards');
 export const ProximityCardsModel = {
   ...base,
 
+  // Capped at 1000 rows — this list backs the Employee modal's card-search
+  // combobox and (via listForTable) the Proximity Cards page. Both are
+  // simple client-paginated/filtered lists, not built for tens of
+  // thousands of rows; the cap keeps the initial fetch + render bounded.
+  // If the org ever has more than 1000 cards, listForTable's UI should
+  // move to server-side search/paging rather than raising this number.
   async listAll() {
-    return supabase.from('proximity_cards').select('id, proximity_code, is_active');
+    return supabase.from('proximity_cards').select('id, proximity_code, is_active').limit(1000);
   },
 
   async listForTable() {
     return supabase
       .from('proximity_cards')
       .select('id, proximity_code, is_active, issued_at, revoked_at')
-      .order('issued_at', { ascending: false });
+      .order('issued_at', { ascending: false })
+      .limit(1000);
   },
 
   async issue(proximity_code, createdBy) {

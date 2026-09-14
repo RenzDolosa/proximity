@@ -8,6 +8,16 @@ import { EmployeesModel } from '../Models/EmployeesModel.js';
 // and with the value an <input type="date"> gives back.
 const localDateKey = (iso) => new Date(iso).toLocaleDateString('en-CA');
 
+// scan_logs is an unbounded jsonb array on the employee row — some
+// employees accumulate 1000+ entries over time. Rendering all of them as
+// DOM nodes in one innerHTML pass is what causes the brief hang on
+// open/close for those employees; capping how many rows actually get
+// painted keeps this modal responsive regardless of how large the
+// underlying array grows. `logs` itself still holds the full filtered set
+// (needed for the scanner dropdown and for date filtering), only the
+// painted list is capped.
+const RENDER_CAP = 300;
+
 export async function openScanLogModal(employeeId) {
   const token = startModalOpen();
   const overlay = openModal(`
@@ -37,7 +47,13 @@ export async function openScanLogModal(employeeId) {
       listEl.innerHTML = `<div class="empty-state">No scans match this filter.</div>`;
       return;
     }
-    listEl.innerHTML = filtered.map((l) => `
+    // logs is already sorted newest-first, so the first RENDER_CAP entries
+    // of `filtered` are exactly the most recent matching scans.
+    const capped = filtered.slice(0, RENDER_CAP);
+    const notice = filtered.length > RENDER_CAP
+      ? `<div class="emp-meta" style="padding:6px 2px;">Showing the most recent ${RENDER_CAP} of ${filtered.length} matching scans — narrow the date range or scanner filter to see others.</div>`
+      : '';
+    listEl.innerHTML = notice + capped.map((l) => `
       <div class="feed-row">
         <span class="badge ${l.direction === 'out' ? 'suspended' : 'active'}">${(l.direction || '—').toUpperCase()}</span>
         <div>

@@ -115,11 +115,13 @@ function renderStandaloneScanner() {
   // Most badge readers act as a keyboard wedge that just "types" the code
   // character-by-character with no trailing Enter — so waiting for a
   // keydown Enter alone leaves the code just sitting in the field after a
-  // tap. Instead, auto-submit a short pause after the last keystroke: a
-  // reader's burst of characters arrives in a few milliseconds, so a
-  // 300ms gap with no further typing means the read is done. Manual Enter
-  // (above) still submits instantly without waiting for that pause.
-  const AUTO_SUBMIT_DELAY_MS = 300;
+  // tap. Instead, auto-submit after a pause once typing stops. 2s (up from
+  // an earlier 300ms) also doubles as the effective "input blocked"
+  // window: it comfortably outlasts a reader's few-millisecond keystroke
+  // burst, and a second stray/bouncing tap landing within that window just
+  // resets this same timer rather than triggering a second scan. Manual
+  // Enter (above) still submits instantly without waiting for the pause.
+  const AUTO_SUBMIT_DELAY_MS = 200;
   codeInput.addEventListener('input', () => {
     clearTimeout(autoSubmitTimer);
     if (!codeInput.value.trim()) return;

@@ -1,0 +1,204 @@
+diff --git a/JS/Components/ScanLogModal.js b/JS/Components/ScanLogModal.js
+index f667ab5..ed1a78d 100644
+--- a/JS/Components/ScanLogModal.js
++++ b/JS/Components/ScanLogModal.js
+@@ -8,6 +8,16 @@ import { EmployeesModel } from '../Models/EmployeesModel.js';
+ // and with the value an <input type="date"> gives back.
+ const localDateKey = (iso) => new Date(iso).toLocaleDateString('en-CA');
+ 
++// scan_logs is an unbounded jsonb array on the employee row — some
++// employees accumulate 1000+ entries over time. Rendering all of them as
++// DOM nodes in one innerHTML pass is what causes the brief hang on
++// open/close for those employees; capping how many rows actually get
++// painted keeps this modal responsive regardless of how large the
++// underlying array grows. `logs` itself still holds the full filtered set
++// (needed for the scanner dropdown and for date filtering), only the
++// painted list is capped.
++const RENDER_CAP = 300;
++
+ export async function openScanLogModal(employeeId) {
+   const token = startModalOpen();
+   const overlay = openModal(`
+@@ -37,7 +47,13 @@ export async function openScanLogModal(employeeId) {
+       listEl.innerHTML = `<div class="empty-state">No scans match this filter.</div>`;
+       return;
+     }
+-    listEl.innerHTML = filtered.map((l) => `
++    // logs is already sorted newest-first, so the first RENDER_CAP entries
++    // of `filtered` are exactly the most recent matching scans.
++    const capped = filtered.slice(0, RENDER_CAP);
++    const notice = filtered.length > RENDER_CAP
++      ? `<div class="emp-meta" style="padding:6px 2px;">Showing the most recent ${RENDER_CAP} of ${filtered.length} matching scans — narrow the date range or scanner filter to see others.</div>`
++      : '';
++    listEl.innerHTML = notice + capped.map((l) => `
+       <div class="feed-row">
+         <span class="badge ${l.direction === 'out' ? 'suspended' : 'active'}">${(l.direction || '—').toUpperCase()}</span>
+         <div>
+diff --git a/JS/Features/Scanner/StandaloneScanner.js b/JS/Features/Scanner/StandaloneScanner.js
+index 7cdc599..6be58e0 100644
+--- a/JS/Features/Scanner/StandaloneScanner.js
++++ b/JS/Features/Scanner/StandaloneScanner.js
+@@ -115,11 +115,13 @@ function renderStandaloneScanner() {
+   // Most badge readers act as a keyboard wedge that just "types" the code
+   // character-by-character with no trailing Enter — so waiting for a
+   // keydown Enter alone leaves the code just sitting in the field after a
+-  // tap. Instead, auto-submit a short pause after the last keystroke: a
+-  // reader's burst of characters arrives in a few milliseconds, so a
+-  // 300ms gap with no further typing means the read is done. Manual Enter
+-  // (above) still submits instantly without waiting for that pause.
+-  const AUTO_SUBMIT_DELAY_MS = 300;
++  // tap. Instead, auto-submit after a pause once typing stops. 2s (up from
++  // an earlier 300ms) also doubles as the effective "input blocked"
++  // window: it comfortably outlasts a reader's few-millisecond keystroke
++  // burst, and a second stray/bouncing tap landing within that window just
++  // resets this same timer rather than triggering a second scan. Manual
++  // Enter (above) still submits instantly without waiting for the pause.
++  const AUTO_SUBMIT_DELAY_MS = 2000;
+   codeInput.addEventListener('input', () => {
+     clearTimeout(autoSubmitTimer);
+     if (!codeInput.value.trim()) return;
+diff --git a/JS/Features/Scanner/TestScanPage.js b/JS/Features/Scanner/TestScanPage.js
+index 4548f2e..37b61dd 100644
+--- a/JS/Features/Scanner/TestScanPage.js
++++ b/JS/Features/Scanner/TestScanPage.js
+@@ -67,10 +67,10 @@ export async function renderTestScan() {
+   };
+   codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doScan(); });
+   // See StandaloneScanner.js — most badge readers just "type" the code
+-  // with no trailing Enter, so auto-submit a short pause after the last
+-  // keystroke instead of waiting on one. Manual Enter above still submits
+-  // instantly.
+-  const AUTO_SUBMIT_DELAY_MS = 300;
++  // with no trailing Enter, so auto-submit after a pause once typing
++  // stops (2s, doubling as the effective input-blocked window). Manual
++  // Enter above still submits instantly.
++  const AUTO_SUBMIT_DELAY_MS = 2000;
+   codeInput.addEventListener('input', () => {
+     clearTimeout(autoSubmitTimer);
+     if (!codeInput.value.trim()) return;
+diff --git a/JS/Models/EmployeesModel.js b/JS/Models/EmployeesModel.js
+index d9eedfa..12135ba 100644
+--- a/JS/Models/EmployeesModel.js
++++ b/JS/Models/EmployeesModel.js
+@@ -6,12 +6,36 @@ import { createModel } from './BaseModel.js';
+ 
+ const base = createModel('employees');
+ 
++// supabase-js's functions.invoke() only gives a generic "Edge Function
++// returned a non-2xx status code" message for FunctionsHttpError — the
++// actual { error: "..." } JSON body the function sent back is on
++// error.context (the raw fetch Response), not surfaced automatically. This
++// pulls the real message out so upload/delete failures (missing Google
++// Drive secrets, permission denied, etc.) show something the user can
++// actually act on instead of the generic wrapper text.
++async function readFunctionError(error) {
++  if (!error) return null;
++  try {
++    if (error.context && typeof error.context.clone === 'function') {
++      const body = await error.context.clone().json();
++      if (body?.error) return body.error;
++    }
++  } catch {
++    // response body wasn't JSON (or already consumed) — fall through to the generic message
++  }
++  return error.message || 'Request failed';
++}
++
+ export const EmployeesModel = {
+   ...base,
+ 
+   // Employee Manager grid — denormalized view with card + scan totals.
++  // Capped at 1000 rows: this is a client-side-paginated/filtered grid,
++  // not built to stream tens of thousands of rows to the browser. If the
++  // org ever needs more than 1000 employees visible at once, this should
++  // move to server-side search + range() paging instead of raising the cap.
+   async listDirectory() {
+-    return supabase.from('employee_directory').select('*').order('full_name');
++    return supabase.from('employee_directory').select('*').order('full_name').limit(1000);
+   },
+ 
+   // employee_id -> proximity_card_id lookups (used to filter out cards
+@@ -80,4 +104,39 @@ export const EmployeesModel = {
+   async resolveRemark(employeeId, remarkId, resolved) {
+     return supabase.rpc('resolve_employee_remark', { p_employee_id: employeeId, p_remark_id: remarkId, p_resolved: resolved });
+   },
++
++  // Uploads an already-converted .webp Blob (see Utils/image.js) to Google
++  // Drive via the upload-employee-photo Edge Function. Sent as base64 JSON
++  // rather than multipart/form-data — matches the admin-users/proximity-scan
++  // pattern of a plain functions.invoke() call, and the function itself
++  // needs the whole file in memory anyway to hand to the Drive API.
++  // old_file_id (optional): the Drive file id being replaced, so the
++  // function can best-effort delete it after the new upload succeeds.
++  async uploadPhoto({ base64, filename, oldFileId }) {
++    const { data: sessionData } = await supabase.auth.getSession();
++    const token = sessionData.session.access_token;
++    const { data, error } = await supabase.functions.invoke('upload-employee-photo', {
++      body: { action: 'upload', image_base64: base64, filename, old_file_id: oldFileId || null },
++      headers: { Authorization: `Bearer ${token}` },
++    });
++    if (error) return { error: await readFunctionError(error) };
++    if (data?.error) return { error: data.error };
++    return { data }; // { url, file_id }
++  },
++
++  // Best-effort delete of a Drive file — used when a photo is removed
++  // without being replaced by a new one. Failure here is non-fatal (an
++  // orphaned Drive file costs nothing functionally), so callers may ignore
++  // the error.
++  async deletePhoto(fileId) {
++    if (!fileId) return { data: true };
++    const { data: sessionData } = await supabase.auth.getSession();
++    const token = sessionData.session.access_token;
++    const { data, error } = await supabase.functions.invoke('upload-employee-photo', {
++      body: { action: 'delete', old_file_id: fileId },
++      headers: { Authorization: `Bearer ${token}` },
++    });
++    if (error) return { error: await readFunctionError(error) };
++    return { data };
++  },
+ };
+diff --git a/JS/Models/ProfilesModel.js b/JS/Models/ProfilesModel.js
+index 687f221..a6823e8 100644
+--- a/JS/Models/ProfilesModel.js
++++ b/JS/Models/ProfilesModel.js
+@@ -10,7 +10,9 @@ export const ProfilesModel = {
+   ...base,
+ 
+   async listUsers() {
+-    return supabase.from('profiles').select('*').order('created_at');
++    // Capped at 1000 — see EmployeesModel.listDirectory for the same
++    // reasoning (bounded UI, not meant as true pagination).
++    return supabase.from('profiles').select('*').order('created_at').limit(1000);
+   },
+ 
+   async toggleActive(id, isActive) {
+diff --git a/JS/Models/ProximityCardsModel.js b/JS/Models/ProximityCardsModel.js
+index edc9078..1eef9c0 100644
+--- a/JS/Models/ProximityCardsModel.js
++++ b/JS/Models/ProximityCardsModel.js
+@@ -8,15 +8,22 @@ const base = createModel('proximity_cards');
+ export const ProximityCardsModel = {
+   ...base,
+ 
++  // Capped at 1000 rows — this list backs the Employee modal's card-search
++  // combobox and (via listForTable) the Proximity Cards page. Both are
++  // simple client-paginated/filtered lists, not built for tens of
++  // thousands of rows; the cap keeps the initial fetch + render bounded.
++  // If the org ever has more than 1000 cards, listForTable's UI should
++  // move to server-side search/paging rather than raising this number.
+   async listAll() {
+-    return supabase.from('proximity_cards').select('id, proximity_code, is_active');
++    return supabase.from('proximity_cards').select('id, proximity_code, is_active').limit(1000);
+   },
+ 
+   async listForTable() {
+     return supabase
+       .from('proximity_cards')
+       .select('id, proximity_code, is_active, issued_at, revoked_at')
+-      .order('issued_at', { ascending: false });
++      .order('issued_at', { ascending: false })
++      .limit(1000);
+   },
+ 
+   async issue(proximity_code, createdBy) {

@@ -1,7 +1,7 @@
 // All employee-related reads/writes: the directory view (for the grid),
 // the underlying `employees` table (for create/update/delete + scan logs),
 // and the lookups the Employee modal needs to offer available cards.
-import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '../Core/supabaseClient.js';
+import { supabase } from '../Core/supabaseClient.js';
 import { createModel } from './BaseModel.js';
 
 const base = createModel('employees');
@@ -30,8 +30,12 @@ export const EmployeesModel = {
   ...base,
 
   // Employee Manager grid — denormalized view with card + scan totals.
+  // Capped at 1000 rows: this is a client-side-paginated/filtered grid,
+  // not built to stream tens of thousands of rows to the browser. If the
+  // org ever needs more than 1000 employees visible at once, this should
+  // move to server-side search + range() paging instead of raising the cap.
   async listDirectory() {
-    return supabase.from('employee_directory').select('*').order('full_name');
+    return supabase.from('employee_directory').select('*').order('full_name').limit(1000);
   },
 
   // employee_id -> proximity_card_id lookups (used to filter out cards
@@ -102,45 +106,22 @@ export const EmployeesModel = {
   },
 
   // Uploads an already-converted .webp Blob (see Utils/image.js) to Google
-  // Drive via the upload-employee-photo Edge Function, base64-encoded in the
-  // JSON body. Uses a raw XMLHttpRequest rather than supabase.functions.invoke()
-  // (which is fetch()-based under the hood) specifically because fetch has no
-  // upload-progress event — xhr.upload.onprogress is the only way to report
-  // real byte-level progress for the EmployeeModal photo progress bar. Falls
-  // back to firing 0% then 100% if XHR is somehow unavailable.
+  // Drive via the upload-employee-photo Edge Function. Sent as base64 JSON
+  // rather than multipart/form-data — matches the admin-users/proximity-scan
+  // pattern of a plain functions.invoke() call, and the function itself
+  // needs the whole file in memory anyway to hand to the Drive API.
   // old_file_id (optional): the Drive file id being replaced, so the
   // function can best-effort delete it after the new upload succeeds.
-  async uploadPhoto({ base64, filename, mimeType, oldFileId, onProgress }) {
+  async uploadPhoto({ base64, filename, oldFileId }) {
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData.session.access_token;
-
-    return new Promise((resolve) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${SUPABASE_URL}/functions/v1/upload-employee-photo`);
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-      xhr.setRequestHeader('apikey', SUPABASE_ANON_KEY);
-      xhr.setRequestHeader('Content-Type', 'application/json');
-
-      if (xhr.upload && onProgress) {
-        onProgress(0, 1);
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) onProgress(e.loaded, e.total);
-        };
-      }
-
-      xhr.onload = () => {
-        let body = null;
-        try { body = JSON.parse(xhr.responseText); } catch { /* non-JSON error body, handled below */ }
-        if (xhr.status >= 200 && xhr.status < 300 && body && !body.error) {
-          onProgress?.(1, 1); // the response can land before the upload progress event reports a full 100%
-          resolve({ data: body }); // { url, file_id }
-        } else {
-          resolve({ error: body?.error || `Photo upload failed (HTTP ${xhr.status}).` });
-        }
-      };
-      xhr.onerror = () => resolve({ error: 'Network error while uploading the photo.' });
-      xhr.send(JSON.stringify({ action: 'upload', image_base64: base64, filename, mime_type: mimeType || null, old_file_id: oldFileId || null }));
+    const { data, error } = await supabase.functions.invoke('upload-employee-photo', {
+      body: { action: 'upload', image_base64: base64, filename, old_file_id: oldFileId || null },
+      headers: { Authorization: `Bearer ${token}` },
     });
+    if (error) return { error: await readFunctionError(error) };
+    if (data?.error) return { error: data.error };
+    return { data }; // { url, file_id }
   },
 
   // Best-effort delete of a Drive file — used when a photo is removed

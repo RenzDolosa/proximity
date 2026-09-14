@@ -67,10 +67,10 @@ export async function renderTestScan() {
   };
   codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doScan(); });
   // See StandaloneScanner.js — most badge readers just "type" the code
-  // with no trailing Enter, so auto-submit a short pause after the last
-  // keystroke instead of waiting on one. Manual Enter above still submits
-  // instantly.
-  const AUTO_SUBMIT_DELAY_MS = 300;
+  // with no trailing Enter, so auto-submit after a pause once typing
+  // stops (2s, doubling as the effective input-blocked window). Manual
+  // Enter above still submits instantly.
+  const AUTO_SUBMIT_DELAY_MS = 200;
   codeInput.addEventListener('input', () => {
     clearTimeout(autoSubmitTimer);
     if (!codeInput.value.trim()) return;
