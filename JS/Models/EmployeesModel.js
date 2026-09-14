@@ -3,6 +3,7 @@
 // and the lookups the Employee modal needs to offer available cards.
 import { supabase } from '../Core/supabaseClient.js';
 import { createModel } from './BaseModel.js';
+import { fetchAllRows } from '../Utils/fetchAllRows.js';
 
 const base = createModel('employees');
 
@@ -30,12 +31,13 @@ export const EmployeesModel = {
   ...base,
 
   // Employee Manager grid — denormalized view with card + scan totals.
-  // Capped at 1000 rows: this is a client-side-paginated/filtered grid,
-  // not built to stream tens of thousands of rows to the browser. If the
-  // org ever needs more than 1000 employees visible at once, this should
-  // move to server-side search + range() paging instead of raising the cap.
+  // Pages through past Supabase's default 1000-row-per-request cap so the
+  // grid always reflects the true full roster, however large it grows —
+  // see Utils/fetchAllRows.js for why a plain .limit() can't do this.
   async listDirectory() {
-    return supabase.from('employee_directory').select('*').order('full_name').limit(5000);
+    return fetchAllRows((from, to) =>
+      supabase.from('employee_directory').select('*').order('full_name').range(from, to)
+    );
   },
 
   // employee_id -> proximity_card_id lookups (used to filter out cards

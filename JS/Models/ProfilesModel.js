@@ -3,6 +3,7 @@
 // operations: create, update email, reset password).
 import { supabase } from '../Core/supabaseClient.js';
 import { createModel } from './BaseModel.js';
+import { fetchAllRows } from '../Utils/fetchAllRows.js';
 
 const base = createModel('profiles');
 
@@ -10,9 +11,12 @@ export const ProfilesModel = {
   ...base,
 
   async listUsers() {
-    // Capped at 1000 — see EmployeesModel.listDirectory for the same
-    // reasoning (bounded UI, not meant as true pagination).
-    return supabase.from('profiles').select('*').order('created_at').limit(1000);
+    // Pages through past Supabase's default 1000-row-per-request cap —
+    // see Utils/fetchAllRows.js. Users & Roles is a small table in
+    // practice, but this keeps it correct if that ever changes.
+    return fetchAllRows((from, to) =>
+      supabase.from('profiles').select('*').order('created_at').range(from, to)
+    );
   },
 
   async toggleActive(id, isActive) {

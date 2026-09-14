@@ -2,28 +2,32 @@
 // used by both the Proximity Cards page and the Employee modal's card picker.
 import { supabase } from '../Core/supabaseClient.js';
 import { createModel } from './BaseModel.js';
+import { fetchAllRows } from '../Utils/fetchAllRows.js';
 
 const base = createModel('proximity_cards');
 
 export const ProximityCardsModel = {
   ...base,
 
-  // Capped at 1000 rows — this list backs the Employee modal's card-search
-  // combobox and (via listForTable) the Proximity Cards page. Both are
-  // simple client-paginated/filtered lists, not built for tens of
-  // thousands of rows; the cap keeps the initial fetch + render bounded.
-  // If the org ever has more than 1000 cards, listForTable's UI should
-  // move to server-side search/paging rather than raising this number.
+  // Pages through past Supabase's default 1000-row-per-request cap — see
+  // Utils/fetchAllRows.js. Backs the Employee modal's card-search combobox
+  // and (via listForTable) the Proximity Cards page; both need the true
+  // full set, not a truncated one, since a card sitting past row 1000
+  // needs to be just as findable/manageable as any other.
   async listAll() {
-    return supabase.from('proximity_cards').select('id, proximity_code, is_active').limit(5000);
+    return fetchAllRows((from, to) =>
+      supabase.from('proximity_cards').select('id, proximity_code, is_active').range(from, to)
+    );
   },
 
   async listForTable() {
-    return supabase
-      .from('proximity_cards')
-      .select('id, proximity_code, is_active, issued_at, revoked_at')
-      .order('issued_at', { ascending: false })
-      .limit(5000);
+    return fetchAllRows((from, to) =>
+      supabase
+        .from('proximity_cards')
+        .select('id, proximity_code, is_active, issued_at, revoked_at')
+        .order('issued_at', { ascending: false })
+        .range(from, to)
+    );
   },
 
   async issue(proximity_code, createdBy) {
