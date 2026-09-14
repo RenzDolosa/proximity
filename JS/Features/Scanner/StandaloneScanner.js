@@ -104,23 +104,32 @@ function renderStandaloneScanner() {
     }
     scheduleResultFade();
     codeInput.value = '';
-    codeInput.disabled = false;
-    codeInput.focus();
-    scanBusy = false;
+    // Post-submit cooldown, on top of the input already being disabled
+    // during the request itself: a fast response (a few hundred ms) would
+    // otherwise reopen the input almost immediately, which is long enough
+    // for a physical card that's still sitting on the reader to bounce a
+    // second read. Holding it disabled for a flat 1s after the response
+    // comes back guarantees a minimum gap between scans regardless of how
+    // quick the network round-trip was.
+    setTimeout(() => {
+      codeInput.disabled = false;
+      codeInput.focus();
+      scanBusy = false;
+    }, POST_SCAN_COOLDOWN_MS);
     // Only this operator's own scans, per kiosk — see get_scan_feed's
     // p_scanner_id filter.
     loadScanFeed('ss-feed', 10, operatorName);
   };
   codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doScan(); });
+  const POST_SCAN_COOLDOWN_MS = 1000;
   // Most badge readers act as a keyboard wedge that just "types" the code
   // character-by-character with no trailing Enter — so waiting for a
   // keydown Enter alone leaves the code just sitting in the field after a
-  // tap. Instead, auto-submit after a pause once typing stops. 2s (up from
-  // an earlier 300ms) also doubles as the effective "input blocked"
-  // window: it comfortably outlasts a reader's few-millisecond keystroke
-  // burst, and a second stray/bouncing tap landing within that window just
-  // resets this same timer rather than triggering a second scan. Manual
-  // Enter (above) still submits instantly without waiting for the pause.
+  // tap. Instead, auto-submit after a pause once typing stops. 2s also
+  // doubles as an additional pre-submit "input blocked" window: a second
+  // stray/bouncing tap landing within it just resets this same timer
+  // rather than triggering a second scan. Manual Enter (above) still
+  // submits instantly without waiting for the pause.
   const AUTO_SUBMIT_DELAY_MS = 200;
   codeInput.addEventListener('input', () => {
     clearTimeout(autoSubmitTimer);

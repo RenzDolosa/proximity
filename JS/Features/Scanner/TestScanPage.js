@@ -61,11 +61,16 @@ export async function renderTestScan() {
       resultWrap.innerHTML = renderScanResult(data);
     }
     codeInput.value = '';
-    codeInput.disabled = false;
-    codeInput.focus();
-    scanBusy = false;
+    // Post-submit cooldown — see StandaloneScanner.js for why this is
+    // separate from the input being disabled during the request itself.
+    setTimeout(() => {
+      codeInput.disabled = false;
+      codeInput.focus();
+      scanBusy = false;
+    }, POST_SCAN_COOLDOWN_MS);
   };
   codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doScan(); });
+  const POST_SCAN_COOLDOWN_MS = 1000; // see StandaloneScanner.js
   // See StandaloneScanner.js — most badge readers just "type" the code
   // with no trailing Enter, so auto-submit after a pause once typing
   // stops (2s, doubling as the effective input-blocked window). Manual
