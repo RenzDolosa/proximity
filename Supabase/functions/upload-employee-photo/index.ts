@@ -138,12 +138,25 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      const fileId = await uploadToDrive(bytes, `${safeName}.${ext}`, contentType, folderId, accessToken);
+      // A random suffix keeps every upload's Drive filename unique even
+      // when the caller reuses the same base name (e.g. an employee_code)
+      // across repeated uploads/replacements — avoids any ambiguity in
+      // Drive when browsing the folder directly.
+      const fileId = await uploadToDrive(bytes, `${safeName}-${crypto.randomUUID().slice(0, 8)}.${ext}`, contentType, folderId, accessToken);
       await makeFilePublic(fileId, accessToken); // "anyone with the link can view"
       await deleteOldPromise; // no-op if EdgeRuntime.waitUntil already took it, otherwise waits for the best-effort delete
 
-      // Directly embeddable (not just "open in Drive") image URL.
-      const url = `https://drive.google.com/uc?export=view&id=${fileId}`;
+      // drive.google.com/uc?export=view is deprecated for hot-linking and
+      // does not reliably serve an inline image response for every content
+      // type (webp in particular tends to come back as a download/HTML
+      // interstitial instead of the raw bytes an <img> tag needs) — that's
+      // why photos stopped rendering in the employee avatar right after the
+      // Content-Type fix started sending real webp instead of a mislabeled
+      // fallback. /thumbnail is the format Drive's own UI uses for inline
+      // previews and reliably works for any image type it can generate a
+      // preview for, including webp; sz=w512 is plenty for an avatar shown
+      // at 44-64px even on a retina display.
+      const url = `https://drive.google.com/thumbnail?id=${fileId}&sz=w512`;
       return json({ url, file_id: fileId }, 200, cors);
     }
 
