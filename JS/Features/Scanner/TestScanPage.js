@@ -8,6 +8,7 @@ import { $ } from '../../Utils/dom.js';
 import { esc } from '../../Utils/format.js';
 import { ScanEventsModel } from '../../Models/ScanEventsModel.js';
 import { renderScanResult } from '../../Components/ScanResultCard.js';
+import { PROXIMITY_LOGO_SVG } from '../../Components/ProximityLogo.js';
 
 export async function renderTestScan() {
   const content = $('#content');
@@ -19,8 +20,7 @@ export async function renderTestScan() {
           <input id="ts-code" type="password" class="mono" placeholder="Live Search — scan or type code…" autocomplete="off" autofocus />
         </div>
         <div class="ts-hero">
-          <div class="ts-ring"><div class="ts-icon">▣</div></div>
-          <div class="ts-label"><span class="dim">TAP</span><br/>YOUR CARD</div>
+          <div class="ts-ring"><div class="ts-icon">${PROXIMITY_LOGO_SVG}</div></div>
         </div>
         <div class="ts-result-wrap" id="ts-result"></div>
       </div>

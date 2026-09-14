@@ -5,6 +5,7 @@ import { appState, canViewScanner } from '../../Core/state.js';
 import { ScanEventsModel } from '../../Models/ScanEventsModel.js';
 import { renderScanResult } from '../../Components/ScanResultCard.js';
 import { loadScanFeed } from '../../Components/ScanFeed.js';
+import { PROXIMITY_LOGO_SVG } from '../../Components/ProximityLogo.js';
 
 export function showStandaloneScanner() {
   $('#auth-screen').classList.add('hidden');
@@ -36,8 +37,7 @@ function renderStandaloneScanner() {
           <input id="ss-code" type="password" class="mono" placeholder="Live Search — scan or type code…" autocomplete="off" autofocus />
         </div>
         <div class="ss-hero">
-          <div class="ss-ring"><div class="ss-icon">▣</div></div>
-          <div class="ss-label"><span class="dim">TAP</span><br/>YOUR CARD</div>
+          <div class="ss-ring"><div class="ss-icon">${PROXIMITY_LOGO_SVG}</div></div>
         </div>
         <div class="ss-result-wrap" id="ss-result"></div>
       </div>

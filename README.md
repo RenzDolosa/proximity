@@ -15,7 +15,12 @@ CSS/                       Stylesheets, split by concern, composed by main.css
   layout.css                  app shell (sidebar/topbar/content)
   components.css              shared components: table, badge, modal, toast, panel…
   auth.css                    sign in / create account screen
-  scanner.css                 in-shell scanner + standalone scanner tab
+  scanner.css                 in-shell scanner + standalone scanner tab;
+                               hero ring/icon are sized with clamp(px, dvh, px)
+                               rather than fixed px, so the kiosk hero scales
+                               with viewport height (dvh, not vh, for correct
+                               behavior on mobile browsers that resize the
+                               viewport when browser chrome shows/hides)
   main.css                    entry point — @imports the above in order
 
 JS/
@@ -50,6 +55,11 @@ JS/
     ScanLogModal.js
     ScanResultCard.js
     ScanFeed.js                  Recent Activity list (last 10 scans)
+    ProximityLogo.js             exports PROXIMITY_LOGO_SVG — the brand
+                                  mark, inlined (not <img src>) so its
+                                  fill="currentColor" paths pick up theme
+                                  color from the page; used by the
+                                  Scanner/Test Scan "Tap your card" hero
     ImportModal.js                CSV bulk-import dialog, shared by Employee
                                   Manager and Proximity Cards; both show
                                   upload progress
@@ -62,8 +72,11 @@ JS/
                                        shimmer while the function talks to Drive)
     Proximity/ProximityPage.js       (Proximity Cards)
     Scanner/TestScanPage.js          (in-shell "Test Scan" — calls the
-                                       non-logging test_scan_proximity_code() RPC)
-    Scanner/StandaloneScanner.js     (the real, logging ?scanner=1 tab)
+                                       non-logging test_scan_proximity_code() RPC;
+                                       hero icon is the inlined Proximity
+                                       logo mark, label reads "Tap your card")
+    Scanner/StandaloneScanner.js     (the real, logging ?scanner=1 tab;
+                                       same hero mark/label as Test Scan)
     Users/UsersPage.js               (Users & Roles, admin-only; delete wired
                                        through admin-users v3+ w/ self-delete guard)
     Users/userOptions.js             (shared role/access-scope option lists)
@@ -80,6 +93,12 @@ Public/
   Assets/
     Favicon/favicon.svg
     Icon/icon.svg
+    Logo/proximity-logo.svg      brand mark (fill="currentColor"). Not
+                                  referenced via <img src> anywhere — see
+                                  JS/Components/ProximityLogo.js, which
+                                  inlines this same artwork as a template
+                                  string so currentColor actually themes
+                                  it. Keep both in sync if the mark changes.
   Vendor/
     supabase-js.umd.js           vendored @supabase/supabase-js (see Vendor/README.md)
 
@@ -164,3 +183,36 @@ Cards**, then scan that code in **Test Scan** (in-app) or the standalone
 GitHub connector) and re-verify against `Supabase:list_tables` /
 `list_edge_functions` before making schema or Edge Function claims — this
 file can drift from the live state between sessions.*
+
+### Change log (most recent first)
+
+**2026-09-14 — Scanner/Test Scan hero: brand mark + copy + dvh sizing**
+- `JS/Components/ScanFeed.js` — no change; noted only as a landmark, the
+  actual edits were in the Scanner feature files below.
+- `JS/Features/Scanner/StandaloneScanner.js` and
+  `JS/Features/Scanner/TestScanPage.js` — the hero's center icon (previously
+  a plain `▣` glyph) now renders the Proximity logo mark via
+  `PROXIMITY_LOGO_SVG` from the new `JS/Components/ProximityLogo.js`. The
+  label under it changed from two-line `TAP` / `YOUR CARD` (uppercase, split
+  span) to a single line, sentence-case **"Tap your card"**.
+- New file `JS/Components/ProximityLogo.js` — inlines the same artwork as
+  `Public/Assets/Logo/proximity-logo.svg` as a template string, deliberately
+  **not** loaded via `<img src>`: an `<img>`-referenced SVG is an opaque
+  external document, so its `fill="currentColor"` paths would never pick up
+  the host page's color and the mark couldn't be themed. If the source
+  `.svg` file's artwork ever changes, `ProximityLogo.js` must be regenerated
+  from it to stay in sync (don't hand-edit the path data in both places).
+- `CSS/scanner.css` — `.ss-ring`/`.ss-icon` and `.ts-ring`/`.ts-icon` changed
+  from fixed px to `clamp(minPx, Xdvh, maxPx)` so the hero scales with
+  viewport height instead of staying a fixed size regardless of the kiosk
+  display's dimensions. Added `.proximity-logo-mark{width:100%;height:100%}`
+  to make the inlined mark fill whichever icon box it's placed in. Removed
+  the now-dead `.ss-label .dim` / `.ts-label .dim` rules left over from the
+  old two-span label markup.
+- Not changed: `Public/Assets/Logo/proximity-logo.svg` itself (still the
+  source of truth for the artwork) and `Public/index.html` (the file was
+  already an unreferenced/orphan asset before this change — nothing linked
+  to it via `<img>` or CSS `background-image`, despite the `class=
+  "background-image"` baked into the raw SVG's root element, which is a
+  leftover from wherever the asset originated and is unrelated to any CSS
+  class actually defined in this repo).

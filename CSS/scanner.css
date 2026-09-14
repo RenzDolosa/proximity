@@ -1,3 +1,10 @@
+/* The Proximity logo mark (inlined via PROXIMITY_LOGO_SVG in
+   StandaloneScanner.js / TestScanPage.js — see Components/ProximityLogo.js
+   for why it's inlined instead of <img src>) has no width/height of its
+   own, so it needs this to actually fill whichever icon box it's dropped
+   into. currentColor on its paths picks up color from here. */
+.proximity-logo-mark{display:block;width:100%;height:100%;}
+
 /* Shared result-card styling (used by both the standalone scanner and the
    in-shell Test Scan page). */
 .result-card{margin-top:16px;border:1px solid var(--border);border-radius:6px;padding:18px;}
@@ -28,7 +35,7 @@
 .ss-operator strong{color:var(--text);font-weight:600;}
 
 /* Three-column grid with a spacer column mirroring the feed column's width
-   keeps ss-main (the "TAP YOUR CARD" hero + search box) truly centered on
+   keeps ss-main (the "Tap your card" hero + search box) truly centered on
    the screen, instead of being pulled left by the feed sidebar. */
 .ss-layout{
   flex:1;
@@ -51,14 +58,18 @@
 .ss-topbar{width:min(420px, 90dvw);margin:0 auto 36px;}
 .ss-topbar input{font-family:var(--mono);font-size:14px;text-align:center;}
 .ss-hero{display:flex;flex-direction:column;align-items:center;gap:22px;margin-top:10px;}
-.ss-ring{position:relative;width:160px;height:160px;display:flex;align-items:center;justify-content:center;}
+/* Ring/icon are sized off viewport height (dvh, with a px clamp as a
+   sane floor/ceiling) rather than a fixed px box — this is a kiosk hero
+   that has to hold its proportions whether it's on a small tablet reader
+   or a large wall-mounted display, and dvh (vs vh) keeps it correct on
+   mobile browsers that resize the viewport when chrome shows/hides. */
+.ss-ring{position:relative;width:clamp(120px, 18dvh, 200px);height:clamp(120px, 18dvh, 200px);display:flex;align-items:center;justify-content:center;}
 .ss-ring::before,.ss-ring::after{content:'';position:absolute;border-radius:50%;border:2px solid var(--accent-dim);}
 .ss-ring::before{width:120%;height:120%;animation:ss-pulse 2.4s ease-out infinite;}
 .ss-ring::after{width:150%;height:150%;animation:ss-pulse 2.4s ease-out infinite .5s;}
 @keyframes ss-pulse{0%{transform:scale(.75);opacity:.9;}100%{transform:scale(1.15);opacity:0;}}
-.ss-icon{width:76px;height:76px;border-radius:12px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:34px;z-index:1;}
-.ss-label{text-align:center;font-weight:700;font-size:26px;letter-spacing:.5px;line-height:1.25;}
-.ss-label .dim{color:var(--text-muted);font-weight:700;}
+/* .ss-icon{width:clamp(60px, 8.5dvh, 96px);height:clamp(60px, 8.5dvh, 96px);border-radius:12px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;z-index:1;padding:14%;box-sizing:border-box;color:var(--text);} */
+.ss-label{text-align:center;font-weight:700;font-size:26px;letter-spacing:.5px;line-height:1.25;text-transform:none;}
 .ss-result-wrap{width:min(420px, 90dvw);margin:26px auto 0;transition:opacity .4s ease;}
 .ss-result-wrap.fade-out{opacity:0;}
 .ss-feed-panel{padding:12px 0px 12px 14px;display:flex;flex-direction:column;max-height:calc(100dvh - 120px);}
@@ -78,11 +89,12 @@
 .ts-topbar{width:min(420px, 90dvw);margin:0 auto 32px;}
 .ts-topbar input{font-family:var(--mono);font-size:14px;text-align:center;}
 .ts-hero{display:flex;flex-direction:column;align-items:center;gap:18px;}
-.ts-ring{position:relative;width:120px;height:120px;display:flex;align-items:center;justify-content:center;}
+/* Same dvh-based sizing rationale as .ss-ring/.ss-icon above, scaled down
+   for the smaller in-shell Test Scan panel. */
+.ts-ring{position:relative;width:clamp(90px, 13.5dvh, 150px);height:clamp(90px, 13.5dvh, 150px);display:flex;align-items:center;justify-content:center;}
 .ts-ring::before,.ts-ring::after{content:'';position:absolute;border-radius:50%;border:2px solid var(--accent-dim);}
 .ts-ring::before{width:120%;height:120%;animation:ss-pulse 2.4s ease-out infinite;}
 .ts-ring::after{width:150%;height:150%;animation:ss-pulse 2.4s ease-out infinite .5s;}
-.ts-icon{width:58px;height:58px;border-radius:10px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:26px;z-index:1;}
-.ts-label{text-align:center;font-weight:700;font-size:20px;letter-spacing:.5px;line-height:1.25;}
-.ts-label .dim{color:var(--text-muted);font-weight:700;}
+/* .ts-icon{width:clamp(46px, 6.5dvh, 72px);height:clamp(46px, 6.5dvh, 72px);border-radius:10px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;z-index:1;padding:14%;box-sizing:border-box;color:var(--text);} */
+.ts-label{text-align:center;font-weight:700;font-size:20px;letter-spacing:.5px;line-height:1.25;text-transform:none;}
 .ts-result-wrap{width:100%;margin-top:22px;}
