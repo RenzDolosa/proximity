@@ -34,6 +34,9 @@ export async function openEmployeeModal(emp, onSaved) {
           <input type="file" id="f-photo-file" accept="image/*" />
           <button type="button" class="ghost" id="f-photo-remove" ${emp?.photo_url ? '' : 'style="display:none;"'}>Remove</button>
         </div>
+        <div class="progress hidden" id="f-photo-progress" style="margin:2px 0 0;">
+          <div class="progress-track"><div class="progress-fill" id="f-photo-progress-fill"></div></div>
+        </div>
         <div class="emp-meta" id="f-photo-status" style="min-height:14px;"></div>
       </div>
     </div>
@@ -203,19 +206,35 @@ export async function openEmployeeModal(emp, onSaved) {
     // photo_url/photo_file_id are ready to include in the same insert/update
     // as everything else rather than a separate follow-up write.
     if (pendingPhotoBlob) {
-      photoStatus.textContent = 'Uploading photo…';
+      const progressWrap = $('#f-photo-progress', overlay);
+      const progressFill = $('#f-photo-progress-fill', overlay);
+      const fileInput = $('#f-photo-file', overlay);
+      fileInput.disabled = true;
+      photoRemoveBtn.disabled = true;
+      progressWrap.classList.remove('hidden');
+      progressFill.style.width = '0%';
+      photoStatus.textContent = 'Uploading photo… 0%';
       const base64 = await blobToBase64(pendingPhotoBlob);
       const { data: uploaded, error: photoErr } = await EmployeesModel.uploadPhoto({
         base64,
         filename: payload.employee_code,
         oldFileId: emp?.photo_file_id || null,
+        onProgress: (loaded, total) => {
+          const pct = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 100;
+          progressFill.style.width = `${pct}%`;
+          photoStatus.textContent = `Uploading photo… ${pct}%`;
+        },
       });
+      fileInput.disabled = false;
+      photoRemoveBtn.disabled = false;
+      progressWrap.classList.add('hidden');
       if (photoErr) {
         saveBtn.disabled = false;
         photoStatus.textContent = '';
         showModalError(overlay, errSel, `Photo upload failed: ${photoErr}`);
         return;
       }
+      photoStatus.textContent = 'Upload complete.';
       payload.photo_url = uploaded.url;
       payload.photo_file_id = uploaded.file_id;
     } else if (photoRemoved) {
