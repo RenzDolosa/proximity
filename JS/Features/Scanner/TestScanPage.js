@@ -9,6 +9,7 @@ import { esc } from '../../Utils/format.js';
 import { ScanEventsModel } from '../../Models/ScanEventsModel.js';
 import { renderScanResult } from '../../Components/ScanResultCard.js';
 import { PROXIMITY_LOGO_SVG } from '../../Components/ProximityLogo.js';
+import { loadScanSounds, playScanSound } from '../../Utils/scanSounds.js';
 
 export async function renderTestScan() {
   const content = $('#content');
@@ -29,6 +30,8 @@ export async function renderTestScan() {
       </div>
     </div>
   `;
+  // Loaded once per page visit, not per-scan — see Utils/scanSounds.js.
+  loadScanSounds().catch(() => {});
   const codeInput = $('#ts-code');
   // See StandaloneScanner.js — autofocus via the HTML attribute isn't
   // reliable when the markup is inserted through innerHTML, so it's set
@@ -59,6 +62,7 @@ export async function renderTestScan() {
       resultWrap.innerHTML = `<div class="result-card unmatched"><strong style="color:var(--bad)">Scan failed</strong><div class="emp-meta">${esc(error.message)}</div></div>`;
     } else {
       resultWrap.innerHTML = renderScanResult(data);
+      playScanSound(data);
     }
     codeInput.value = '';
     // Post-submit cooldown — see StandaloneScanner.js for why this is

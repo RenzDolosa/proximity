@@ -6,6 +6,7 @@ import { ScanEventsModel } from '../../Models/ScanEventsModel.js';
 import { renderScanResult } from '../../Components/ScanResultCard.js';
 import { loadScanFeed } from '../../Components/ScanFeed.js';
 import { PROXIMITY_LOGO_SVG } from '../../Components/ProximityLogo.js';
+import { loadScanSounds, playScanSound } from '../../Utils/scanSounds.js';
 
 export function showStandaloneScanner() {
   $('#auth-screen').classList.add('hidden');
@@ -50,6 +51,10 @@ function renderStandaloneScanner() {
     </div>
   `;
   $('#ss-signout').addEventListener('click', async () => { await supabase.auth.signOut(); });
+  // Loaded once per kiosk session, not per-scan — see Utils/scanSounds.js.
+  // A stray unhandled rejection here (e.g. offline on load) shouldn't
+  // block the scanner from working; scans just stay silent until a retry.
+  loadScanSounds().catch(() => {});
   const codeInput = $('#ss-code');
   // The HTML `autofocus` attribute isn't reliably honored when markup is
   // inserted via innerHTML (as opposed to during initial page parsing) —
@@ -101,6 +106,7 @@ function renderStandaloneScanner() {
       resultWrap.innerHTML = `<div class="result-card unmatched"><strong style="color:var(--bad)">Scan failed</strong><div class="emp-meta">${esc(error.message)}</div></div>`;
     } else {
       resultWrap.innerHTML = renderScanResult(data);
+      playScanSound(data);
     }
     scheduleResultFade();
     codeInput.value = '';

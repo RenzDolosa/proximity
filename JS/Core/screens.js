@@ -18,12 +18,14 @@ export function showShell() {
   $('#who-name').textContent = appState.profile?.full_name || appState.session.user.email;
   $('#who-role').textContent = appState.profile?.role || '—';
   $('#nav-users').classList.toggle('hidden', !isAdmin());
+  $('#nav-settings').classList.toggle('hidden', !isAdmin());
   $('button[data-route="directory"]').classList.toggle('hidden', !canViewEmployeeManager());
   $('button[data-route="proximity"]').classList.toggle('hidden', !canViewEmployeeManager());
   $('button[data-route="scanner"]').classList.toggle('hidden', !canViewScanner());
   // land on the first route this account is actually allowed to see
-  if (appState.route === 'directory' && !canViewEmployeeManager()) appState.route = canViewScanner() ? 'scanner' : 'users';
-  if (appState.route === 'scanner' && !canViewScanner()) appState.route = canViewEmployeeManager() ? 'directory' : 'users';
+  if (appState.route === 'directory' && !canViewEmployeeManager()) appState.route = canViewScanner() ? 'scanner' : (isAdmin() ? 'settings' : 'users');
+  if (appState.route === 'scanner' && !canViewScanner()) appState.route = canViewEmployeeManager() ? 'directory' : (isAdmin() ? 'settings' : 'users');
+  if (appState.route === 'settings' && !isAdmin()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : 'users');
   render();
 }
 

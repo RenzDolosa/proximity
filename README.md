@@ -45,6 +45,9 @@ JS/
                                    recentFeed() reads get_scan_feed()
                                    (EmployeesModel.uploadPhoto() below uses raw XHR, not
                                    supabase.functions.invoke(), specifically for upload progress)
+    ScanSoundsModel.js             wraps the public `scan-sounds` Storage bucket
+                                   (list/upload/remove) behind 4 fixed, extension-
+                                   less object keys — see Settings/SettingsPage.js
   Components/                 reusable UI pieces used by more than one feature
     Modal.js                     shared openModal/closeModal scaffold — every
                                   dialog below is built on this
@@ -72,19 +75,29 @@ JS/
                                        shimmer while the function talks to Drive)
     Proximity/ProximityPage.js       (Proximity Cards)
     Scanner/TestScanPage.js          (in-shell "Test Scan" — calls the
-                                       non-logging test_scan_proximity_code() RPC;
-                                       hero icon is the inlined Proximity
-                                       logo mark, label reads "Tap your card")
+                                       non-logging test_scan_proximity_code() RPC,
+                                       which now also returns a read-only `direction`
+                                       preview (see Supabase/README.md) so IN/OUT
+                                       badges and sounds show up here too, not just
+                                       on the real scanner; hero icon is the inlined
+                                       Proximity logo mark, label reads "Tap your card";
+                                       loads scan sounds once per page visit)
     Scanner/StandaloneScanner.js     (the real, logging ?scanner=1 tab;
-                                       same hero mark/label as Test Scan)
+                                       same hero mark/label, direction badge, and
+                                       scan-sound playback as Test Scan)
     Users/UsersPage.js               (Users & Roles, admin-only; delete wired
                                        through admin-users v3+ w/ self-delete guard)
     Users/userOptions.js             (shared role/access-scope option lists)
+    Settings/SettingsPage.js         (Settings, admin-only — upload/replace/remove/
+                                       preview the 4 scan sounds; own top-level route
+                                       so future non-user settings have a home)
   Utils/                      pure helpers, no state, no DOM assumptions
     dom.js                       $ / $$
     format.js                    esc / initials / fmtTime
     toast.js                     toast notifications
     csv.js                       parseCSV / toCSV, used by ImportModal.js
+    scanSounds.js                 loadScanSounds() / playScanSound() — shared by
+                                   StandaloneScanner.js and TestScanPage.js
 
 Public/
   index.html                  the app shell (static markup only — all
@@ -126,23 +139,27 @@ HTTP (see below) rather than double-clicking `index.html`.
 │  - Proximity Cards      │        │  - scan_events        (Scanner log)      │
 │  - Test Scan / Scanner  │        │  - employee_directory (read view, SD)    │
 │  - Users & Roles        │        │  - scan_feed          (read view, SD)    │
-└──────────┬─────────────┘        └──────────────────────────────────────────┘
-           │ RPC / Edge Functions
-           ▼
-┌────────────────────────────┐
-│ proximity-scan               │  Hardware/kiosk scanners that can't run the JS
-│                               │  SDK: POST { proximity_code, scanner_id } +
-│                               │  Bearer JWT → scan_proximity_code() RPC
-├────────────────────────────┤
-│ admin-users                   │  Admin-only create/update/reset_password/
-│                               │  delete on login accounts (needs service-role
-│                               │  key, never exposed to the browser)
-├────────────────────────────┤
-│ upload-employee-photo         │  Employee photo upload; always writes a new
-│                               │  UUID-named file (never overwrites in place)
-│                               │  so the CDN never serves a stale thumbnail
-└────────────────────────────┘
+│  - Settings             │        └──────────────────────────────────────────┘
+└──────────┬─────────────┘
+           │
+           ├── RPC / Edge Functions ──────────────────────────────────────┐
+           │                                                              ▼
+           │                                              ┌────────────────────────────┐
+           │                                              │ proximity-scan               │
+           │                                              │ admin-users                   │
+           │                                              │ upload-employee-photo         │
+           │                                              │ (see table below)             │
+           │                                              └────────────────────────────┘
+           │
+           └── Storage (scan-sounds bucket) ── 4 fixed keys, public read,
+                                                admin-only write via RLS
 ```
+
+| Edge Function | Purpose |
+| --- | --- |
+| `proximity-scan` | Hardware/kiosk scanners that can't run the JS SDK: `POST { proximity_code, scanner_id }` + Bearer JWT → `scan_proximity_code()` RPC |
+| `admin-users` | Admin-only create/update/reset_password/delete on login accounts (needs the service-role key, never exposed to the browser) |
+| `upload-employee-photo` | Employee photo upload; always writes a new UUID-named Drive file (never overwrites in place) so the CDN never serves a stale thumbnail |
 
 ("SD" = `SECURITY DEFINER` — both read views run as definer so scanner-only
 and manager accounts still see joined rows under RLS; see
@@ -161,6 +178,12 @@ employees in **Employee Manager**, issue them a code in **Proximity
 Cards**, then scan that code in **Test Scan** (in-app) or the standalone
 **Scanner** tab (`?scanner=1`, logs to `scan_events`).
 
+As an admin, visit **Settings** to upload a short audio clip for each of
+the 4 scan outcomes (Matched/Success IN, Matched/Success OUT, Card
+revoked, Unknown proximity ID) — Test Scan and the live Scanner both play
+them automatically as soon as a result comes back. An outcome with
+nothing uploaded just stays silent.
+
 ## 4. Suggested next steps
 
 - Wire real hardware (RFID/NFC/QR readers) to call the `proximity-scan` Edge
@@ -178,13 +201,44 @@ Cards**, then scan that code in **Test Scan** (in-app) or the standalone
 
 ---
 *Last reconciled against the live GitHub repo and live Supabase project on
-2026-09-14. If you're another Claude instance picking this project up: fetch
+2026-09-15. If you're another Claude instance picking this project up: fetch
 `github.com/RenzDolosa/proximity` fresh (via web_search + web_fetch, or the
 GitHub connector) and re-verify against `Supabase:list_tables` /
 `list_edge_functions` before making schema or Edge Function claims — this
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-15 — Settings page + admin-uploaded scan sounds**
+- New Supabase Storage bucket `scan-sounds` (public, admin-only write via
+  RLS) — 4 fixed, extension-less object keys (`matched-in`, `matched-out`,
+  `card-revoked`, `unmatched`), so replacing a sound is a plain upsert
+  onto the same path rather than needing old-file cleanup across format
+  changes. See `Supabase/README.md`.
+- `public.test_scan_proximity_code()` now also returns `direction` on a
+  matched result (same read-only parity preview `scan_proximity_code()`
+  already computed from `scan_logs` length — nothing is written). Before
+  this, Test Scan could never show the IN/OUT badge or play the right
+  sound, only the real logging scanner could.
+- New `JS/Models/ScanSoundsModel.js` — list/upload/remove against the
+  bucket, plus `publicUrl(key)`.
+- New `JS/Utils/scanSounds.js` — `loadScanSounds()` (call once per screen
+  mount, not per-scan) and `playScanSound(data)`, which maps a scan result
+  to one of the 4 keys (`inactive_employee` / `unassigned_card` have no
+  dedicated sound and stay silent, rather than guessing with an unrelated
+  clip).
+- New `JS/Features/Settings/SettingsPage.js` — admin-only; upload/replace/
+  remove/preview for all 4 sounds, mirroring `UsersPage.js`'s admin-gate
+  pattern. Its own top-level route/file (not folded into Users & Roles) so
+  future non-user settings have a home without another restructure.
+- `JS/Core/router.js` / `state.js` / `screens.js` and `Public/index.html`
+  — new `settings` route, gated to `isAdmin()` the same way `nav-users` is,
+  including the same-route landing-page fallback chain in `showShell()`.
+- `JS/Features/Scanner/StandaloneScanner.js` and `TestScanPage.js` — call
+  `loadScanSounds()` on mount and `playScanSound(data)` right after a
+  result renders. `audio.play()` rejections (autoplay policy, unsupported
+  format) are swallowed — a missed notification sound must never block or
+  error out the actual scan result on screen.
 
 **2026-09-14 — Scanner/Test Scan hero: brand mark + copy + dvh sizing**
 - `JS/Components/ScanFeed.js` — no change; noted only as a landmark, the
