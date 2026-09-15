@@ -10,6 +10,12 @@ const BUCKET = 'scan-sounds';
 // UI-facing key -> Storage object path. The UI/Scanner code only ever
 // deals in the left-hand keys; this mapping is the one place that knows
 // the actual bucket layout.
+// The bucket's own file_size_limit (see Supabase/README.md — set when the
+// bucket was created, not discoverable via the storage client at runtime).
+// Kept here as the one place that knows it, so the Settings page can show
+// "X of Y used" without hard-coding the number a second time.
+export const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+
 export const SOUND_KEYS = {
   matched_in: 'matched-in',
   matched_out: 'matched-out',
