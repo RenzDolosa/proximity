@@ -47,7 +47,7 @@
 }
 .badge.active,.badge.matched{background:var(--good-dim);color:var(--good);}
 .badge.inactive,.badge.unmatched,.badge.inactive_card,.badge.inactive_employee{background:var(--bad-dim);color:var(--bad);}
-.badge.suspended{background:var(--warn-dim);color:var(--warn);}
+.badge.suspended,.badge.unassigned_card{background:var(--warn-dim);color:var(--warn);}
 .badge.role-admin{background:var(--accent-dim);color:#AFC7FA;}
 .badge.role-manager{background:#2C3550;color:#9FB3DE;}
 .badge.role-viewer{background:#26303B;color:var(--text-muted);}

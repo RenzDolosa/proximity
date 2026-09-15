@@ -15,6 +15,7 @@ export const SOUND_KEYS = {
   matched_out: 'matched-out',
   card_revoked: 'card-revoked',
   unmatched: 'unmatched',
+  unassigned_card: 'unassigned-card',
 };
 
 export const SOUND_LABELS = {
@@ -22,6 +23,7 @@ export const SOUND_LABELS = {
   matched_out: 'Matched / Success — OUT scan',
   card_revoked: 'Card revoked scan',
   unmatched: 'Unknown proximity ID scan',
+  unassigned_card: 'Unassigned card scan',
 };
 
 export const ScanSoundsModel = {
