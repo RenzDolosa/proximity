@@ -1,0 +1,13 @@
+diff --git a/Public/index.html b/Public/index.html
+index 00fb7a0..9ed48c2 100644
+--- a/Public/index.html
++++ b/Public/index.html
+@@ -49,7 +49,7 @@
+         <button data-route="directory" class="active"><span class="ic">▤</span>Employee Manager</button>
+         <button data-route="proximity"><span class="ic">◈</span>Proximity Cards</button>
+         <button data-route="scanner"><span class="ic">▣</span>Test Scan</button>
+-        <button data-route="users" id="nav-users" class="hidden"><span class="ic">⚙</span>Users &amp; Roles</button>
++        <button data-route="users" id="nav-users" class="hidden"><span class="ic">☺</span>Users &amp; Roles</button>
+       </nav>
+       <div class="rail-spacer"></div>
+       <nav class="rail rail-bottom">

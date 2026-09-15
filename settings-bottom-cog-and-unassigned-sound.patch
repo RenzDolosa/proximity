@@ -1,0 +1,127 @@
+diff --git a/CSS/components.css b/CSS/components.css
+index d46ac63..5430bc8 100644
+--- a/CSS/components.css
++++ b/CSS/components.css
+@@ -47,7 +47,7 @@
+ }
+ .badge.active,.badge.matched{background:var(--good-dim);color:var(--good);}
+ .badge.inactive,.badge.unmatched,.badge.inactive_card,.badge.inactive_employee{background:var(--bad-dim);color:var(--bad);}
+-.badge.suspended{background:var(--warn-dim);color:var(--warn);}
++.badge.suspended,.badge.unassigned_card{background:var(--warn-dim);color:var(--warn);}
+ .badge.role-admin{background:var(--accent-dim);color:#AFC7FA;}
+ .badge.role-manager{background:#2C3550;color:#9FB3DE;}
+ .badge.role-viewer{background:#26303B;color:var(--text-muted);}
+diff --git a/CSS/layout.css b/CSS/layout.css
+index e98969b..8a82e10 100644
+--- a/CSS/layout.css
++++ b/CSS/layout.css
+@@ -18,6 +18,7 @@ nav.rail button:hover{background:var(--surface-raised);color:var(--text);}
+ nav.rail button.active{background:var(--surface-raised);color:var(--text);}
+ nav.rail button.active .ic{color:var(--accent);}
+ .rail-spacer{flex:1;}
++.rail-bottom{padding-top:10px;margin-top:8px;border-top:1px solid var(--border-soft);}
+ 
+ #main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;}
+ #topbar{
+diff --git a/CSS/scanner.css b/CSS/scanner.css
+index 7ac834b..c624045 100644
+--- a/CSS/scanner.css
++++ b/CSS/scanner.css
+@@ -10,6 +10,7 @@
+ .result-card{margin-top:16px;border:1px solid var(--border);border-radius:6px;padding:18px;}
+ .result-card.matched{border-color:var(--good);background:linear-gradient(180deg, var(--good-dim), transparent 60%);}
+ .result-card.unmatched,.result-card.inactive_card,.result-card.inactive_employee{border-color:var(--bad);background:linear-gradient(180deg, var(--bad-dim), transparent 60%);}
++.result-card.unassigned_card{border-color:var(--warn);background:linear-gradient(180deg, var(--warn-dim), transparent 60%);}
+ 
+ /* Unresolved-remark callout inside a matched result-card — deliberately
+    loud (warn border + background) since the whole point is that whoever's
+diff --git a/JS/Components/ScanResultCard.js b/JS/Components/ScanResultCard.js
+index b5e4bc8..b3b43b5 100644
+--- a/JS/Components/ScanResultCard.js
++++ b/JS/Components/ScanResultCard.js
+@@ -9,6 +9,7 @@ const LABELS = {
+   unmatched: 'Unknown proximity ID',
+   inactive_card: 'Card revoked',
+   inactive_employee: 'Employee inactive',
++  unassigned_card: 'Card not assigned',
+ };
+ 
+ export function renderScanResult(data) {
+diff --git a/JS/Features/Settings/SettingsPage.js b/JS/Features/Settings/SettingsPage.js
+index 3e8cb71..dc1ab85 100644
+--- a/JS/Features/Settings/SettingsPage.js
++++ b/JS/Features/Settings/SettingsPage.js
+@@ -1,4 +1,4 @@
+-// Admin-only Settings page. Currently holds one section — the 4 scan
++// Admin-only Settings page. Currently holds one section — the 5 scan
+ // feedback sounds, stored in the public `scan-sounds` Storage bucket (see
+ // Models/ScanSoundsModel.js) — but is its own top-level route/file rather
+ // than folded into Users & Roles so future non-user settings have a home
+diff --git a/JS/Models/ScanSoundsModel.js b/JS/Models/ScanSoundsModel.js
+index 193b478..7b804f8 100644
+--- a/JS/Models/ScanSoundsModel.js
++++ b/JS/Models/ScanSoundsModel.js
+@@ -15,6 +15,7 @@ export const SOUND_KEYS = {
+   matched_out: 'matched-out',
+   card_revoked: 'card-revoked',
+   unmatched: 'unmatched',
++  unassigned_card: 'unassigned-card',
+ };
+ 
+ export const SOUND_LABELS = {
+@@ -22,6 +23,7 @@ export const SOUND_LABELS = {
+   matched_out: 'Matched / Success — OUT scan',
+   card_revoked: 'Card revoked scan',
+   unmatched: 'Unknown proximity ID scan',
++  unassigned_card: 'Unassigned card scan',
+ };
+ 
+ export const ScanSoundsModel = {
+diff --git a/JS/Utils/scanSounds.js b/JS/Utils/scanSounds.js
+index 474800d..854d957 100644
+--- a/JS/Utils/scanSounds.js
++++ b/JS/Utils/scanSounds.js
+@@ -29,9 +29,10 @@ function keyForResult(data) {
+   if (data?.result === 'matched') return data.direction === 'out' ? 'matched_out' : 'matched_in';
+   if (data?.result === 'inactive_card') return 'card_revoked';
+   if (data?.result === 'unmatched') return 'unmatched';
+-  // inactive_employee / unassigned_card: no dedicated sound was requested
+-  // for these — they stay silent rather than falling back to an
+-  // unrelated clip that would misrepresent the actual result.
++  if (data?.result === 'unassigned_card') return 'unassigned_card';
++  // inactive_employee: no dedicated sound was requested for this one —
++  // it stays silent rather than falling back to an unrelated clip that
++  // would misrepresent the actual result.
+   return null;
+ }
+ 
+diff --git a/Public/index.html b/Public/index.html
+index fb60262..00fb7a0 100644
+--- a/Public/index.html
++++ b/Public/index.html
+@@ -50,9 +50,11 @@
+         <button data-route="proximity"><span class="ic">◈</span>Proximity Cards</button>
+         <button data-route="scanner"><span class="ic">▣</span>Test Scan</button>
+         <button data-route="users" id="nav-users" class="hidden"><span class="ic">⚙</span>Users &amp; Roles</button>
+-        <button data-route="settings" id="nav-settings" class="hidden"><span class="ic">🔊</span>Settings</button>
+       </nav>
+       <div class="rail-spacer"></div>
++      <nav class="rail rail-bottom">
++        <button data-route="settings" id="nav-settings" class="hidden"><span class="ic">⚙</span>Settings</button>
++      </nav>
+     </aside>
+     <div id="main">
+       <div id="topbar">
+diff --git a/Supabase/README.md b/Supabase/README.md
+index b6fd9b6..1a6bf80 100644
+--- a/Supabase/README.md
++++ b/Supabase/README.md
+@@ -32,7 +32,7 @@ Relationship direction: `employees.proximity_card_id → proximity_cards.id`.
+ 
+ | Bucket | Purpose |
+ | --- | --- |
+-| `scan-sounds` | Public bucket, 4 fixed **extension-less** object keys: `matched-in`, `matched-out`, `card-revoked`, `unmatched`. Uploaded/replaced from the admin-only **Settings** page (`JS/Features/Settings/SettingsPage.js` → `JS/Models/ScanSoundsModel.js`), played back from `JS/Features/Scanner/StandaloneScanner.js` and `TestScanPage.js` via `JS/Utils/scanSounds.js`. |
++| `scan-sounds` | Public bucket, 5 fixed **extension-less** object keys: `matched-in`, `matched-out`, `card-revoked`, `unmatched`, `unassigned-card`. Uploaded/replaced from the admin-only **Settings** page (`JS/Features/Settings/SettingsPage.js` → `JS/Models/ScanSoundsModel.js`), played back from `JS/Features/Scanner/StandaloneScanner.js` and `TestScanPage.js` via `JS/Utils/scanSounds.js`. |
+ 
+ Fixed keys + `upsert: true` on upload mean "replace" always overwrites the
+ same object — no orphaned old file across a format change (mp3 → wav

@@ -1,4 +1,4 @@
-// Admin-only Settings page. Currently holds one section — the 4 scan
+// Admin-only Settings page. Currently holds one section — the 5 scan
 // feedback sounds, stored in the public `scan-sounds` Storage bucket (see
 // Models/ScanSoundsModel.js) — but is its own top-level route/file rather
 // than folded into Users & Roles so future non-user settings have a home

@@ -29,9 +29,10 @@ function keyForResult(data) {
   if (data?.result === 'matched') return data.direction === 'out' ? 'matched_out' : 'matched_in';
   if (data?.result === 'inactive_card') return 'card_revoked';
   if (data?.result === 'unmatched') return 'unmatched';
-  // inactive_employee / unassigned_card: no dedicated sound was requested
-  // for these — they stay silent rather than falling back to an
-  // unrelated clip that would misrepresent the actual result.
+  if (data?.result === 'unassigned_card') return 'unassigned_card';
+  // inactive_employee: no dedicated sound was requested for this one —
+  // it stays silent rather than falling back to an unrelated clip that
+  // would misrepresent the actual result.
   return null;
 }
 

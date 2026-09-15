@@ -10,6 +10,7 @@
 .result-card{margin-top:16px;border:1px solid var(--border);border-radius:6px;padding:18px;}
 .result-card.matched{border-color:var(--good);background:linear-gradient(180deg, var(--good-dim), transparent 60%);}
 .result-card.unmatched,.result-card.inactive_card,.result-card.inactive_employee{border-color:var(--bad);background:linear-gradient(180deg, var(--bad-dim), transparent 60%);}
+.result-card.unassigned_card{border-color:var(--warn);background:linear-gradient(180deg, var(--warn-dim), transparent 60%);}
 
 /* Unresolved-remark callout inside a matched result-card — deliberately
    loud (warn border + background) since the whole point is that whoever's

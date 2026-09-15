@@ -9,6 +9,7 @@ const LABELS = {
   unmatched: 'Unknown proximity ID',
   inactive_card: 'Card revoked',
   inactive_employee: 'Employee inactive',
+  unassigned_card: 'Card not assigned',
 };
 
 export function renderScanResult(data) {
