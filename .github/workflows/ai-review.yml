@@ -1,0 +1,53 @@
+name: AI Code Review
+
+# Runs on every PR update. `synchronize` is what fires on each new push to
+# the PR branch, not just the initial open — without it, new commits
+# wouldn't get re-reviewed.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Only pull-requests: write is needed (to post the review + inline
+# comments). Nothing else — the job never needs to write repo contents.
+permissions:
+  contents: read
+  pull-requests: write
+
+# A new push to the same PR supersedes the review in progress for it —
+# no point paying for (or waiting on) a review of a diff that's already
+# stale.
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: AI Code Review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need the actual base/head commits to diff against, not just
+          # the merge commit GitHub synthesizes for pull_request events.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20' # built-in fetch, no dependency install needed
+
+      - name: Run AI review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # claude-opus-5 for review quality (this is the whole point of the
+          # job); swap to claude-sonnet-5 here if cost matters more than
+          # catching the subtle stuff.
+          AI_REVIEW_MODEL: claude-opus-5
+        run: node .github/scripts/ai-review.mjs
+        # No `continue-on-error` — a failing step here is what makes this
+        # job's status go red, which is exactly what "required status
+        # check" in branch protection gates on. See .github/AI_REVIEW.md.

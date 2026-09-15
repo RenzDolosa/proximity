@@ -1,0 +1,101 @@
+name: Deploy Edge Functions
+
+# Only fires on an actual merge to main, and only when Edge Function
+# source changed — the AI review pipeline has already gated everything
+# that got here.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Supabase/functions/**'
+
+jobs:
+  # Free, fast, and catches real bugs (bad imports, type errors) before
+  # ever touching the live project. Not a substitute for the canary gate
+  # below — this only proves the code compiles, not that it behaves
+  # correctly against real traffic.
+  typecheck:
+    name: Typecheck functions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: deno check every function
+        run: |
+          set -e
+          for dir in Supabase/functions/*/; do
+            entry="${dir}index.ts"
+            if [ -f "$entry" ]; then
+              echo "::group::deno check $entry"
+              deno check "$entry"
+              echo "::endgroup::"
+            fi
+          done
+
+  deploy:
+    name: Deploy to Supabase
+    needs: typecheck
+    runs-on: ubuntu-latest
+    # This is the actual "canary" checkpoint for this stack. Supabase Edge
+    # Functions have no built-in traffic-split/percentage rollout the way
+    # a load-balanced container service would — a deploy replaces the live
+    # function outright. A GitHub Environment with required reviewers
+    # (Settings > Environments > production > required reviewers) turns
+    # this job into a manual gate: it stops right here and waits for an
+    # approval click before touching the live project, so nothing ships
+    # from an automatic merge without a human confirming first. See
+    # .github/DEPLOYMENT.md for the setup step and the Supabase-Branching
+    # alternative if you want this automated instead of manual.
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy changed functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -e
+          # Only some function directories in this repo actually have
+          # source committed (Supabase/README.md explains why — the
+          # others are documentation-only stubs, deployed by hand so
+          # far). Skip anything without an index.ts rather than failing
+          # the whole job trying to deploy a folder that's just a README.
+          for dir in Supabase/functions/*/; do
+            slug="$(basename "$dir")"
+            if [ ! -f "${dir}index.ts" ]; then
+              echo "Skipping $slug — no index.ts in this repo (docs-only stub)."
+              continue
+            fi
+            echo "::group::deploy $slug"
+            supabase functions deploy "$slug" \
+              --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}" \
+              --no-verify-jwt=false
+            echo "::endgroup::"
+          done
+
+      - name: Smoke test
+        run: |
+          set -e
+          # Confirms each *deployed* function is actually reachable and
+          # returning a response post-deploy (a 401/CORS-preflight-style
+          # response is expected and fine here — this only proves the
+          # function didn't fail to boot, not that its full logic is
+          # correct).
+          for dir in Supabase/functions/*/; do
+            slug="$(basename "$dir")"
+            if [ ! -f "${dir}index.ts" ]; then continue; fi
+            url="https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co/functions/v1/${slug}"
+            code="$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS "$url")"
+            echo "$slug: OPTIONS -> $code"
+            if [ "$code" -ge 500 ]; then
+              echo "::error::$slug returned $code on a basic OPTIONS request post-deploy"
+              exit 1
+            fi
+          done
