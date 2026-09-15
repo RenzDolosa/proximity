@@ -4,6 +4,13 @@
 //   -> { url: string, file_id: string }
 // POST { action: "delete", old_file_id: string }
 //   -> { ok: true }
+// POST { action: "quota" }
+//   -> { usage: number, limit: number|null, usageInDrive: number }
+//   Bytes used / total on the connected Google account, straight from
+//   Drive's own `about.get`. `limit` is null for accounts with no storage
+//   cap (some Google Workspace plans) rather than a number that would
+//   misread as "0 bytes available". Read by Settings' "Employee photos"
+//   capacity panel (JS/Features/Settings/SettingsPage.js).
 //
 // mime_type should be the ACTUAL type of the bytes in image_base64 (e.g.
 // what Blob.type reported after client-side conversion) — canvas.toBlob()
@@ -44,6 +51,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
 const DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files";
+const DRIVE_ABOUT_URL = "https://www.googleapis.com/drive/v3/about";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 // Keep in sync with JS/Utils/image.js's EXTENSION_BY_MIME — the client
@@ -99,6 +107,11 @@ Deno.serve(async (req: Request) => {
     if (action === "delete") {
       if (body.old_file_id) await deleteDriveFile(body.old_file_id, accessToken); // best-effort
       return json({ ok: true }, 200, cors);
+    }
+
+    if (action === "quota") {
+      const quota = await getDriveStorageQuota(accessToken);
+      return json(quota, 200, cors);
     }
 
     if (action === "upload") {
@@ -232,6 +245,24 @@ async function makeFilePublic(fileId: string, accessToken: string) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error?.message || "Could not make the photo viewable.");
   }
+}
+
+// storageQuota's `limit` is omitted entirely by Drive for accounts with no
+// storage cap (some Google Workspace plans) rather than sent as 0 — kept
+// as `null` here for the same reason, so the client can tell "unlimited"
+// apart from "full" instead of misreading a missing field as zero bytes.
+async function getDriveStorageQuota(accessToken: string): Promise<{ usage: number; limit: number | null; usageInDrive: number }> {
+  const res = await fetch(`${DRIVE_ABOUT_URL}?fields=storageQuota`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || "Could not read Google Drive storage quota.");
+  const q = data.storageQuota || {};
+  return {
+    usage: Number(q.usage || 0),
+    limit: q.limit != null ? Number(q.limit) : null,
+    usageInDrive: Number(q.usageInDrive || 0),
+  };
 }
 
 async function deleteDriveFile(fileId: string, accessToken: string) {

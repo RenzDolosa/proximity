@@ -181,4 +181,22 @@ export const EmployeesModel = {
     if (error) return { error: await readFunctionError(error) };
     return { data };
   },
+
+  // { limit: bytes|null, usage: bytes, usageInDrive: bytes }. This is the
+  // WHOLE connected Google account's storage quota (Gmail + Drive + Photos
+  // combined) — Drive's API has no per-folder quota, so it can't be scoped
+  // to just the employee-photos folder. Settings page shows that caveat
+  // alongside the number rather than implying it's photo-specific.
+  // limit is null when the account has unlimited storage.
+  async getPhotoStorageQuota() {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    if (!token) return { error: 'Your session has expired — please sign in again.' };
+    const { data, error } = await supabase.functions.invoke('upload-employee-photo', {
+      body: { action: 'quota' },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) return { error: await readFunctionError(error) };
+    return { data };
+  },
 };

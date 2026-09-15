@@ -89,8 +89,12 @@ JS/
                                        through admin-users v3+ w/ self-delete guard)
     Users/userOptions.js             (shared role/access-scope option lists)
     Settings/SettingsPage.js         (Settings, admin-only — upload/replace/remove/
-                                       preview the 4 scan sounds; own top-level route
-                                       so future non-user settings have a home)
+                                       preview the 4 scan sounds, plus a read-only
+                                       Google Drive storage-capacity panel for
+                                       employee photos (whole-account quota, not
+                                       folder-scoped — see change log); own
+                                       top-level route so future non-user settings
+                                       have a home)
   Utils/                      pure helpers, no state, no DOM assumptions
     dom.js                       $ / $$
     format.js                    esc / initials / fmtTime
@@ -208,6 +212,38 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-15 — Settings: employee-photo Google Drive storage capacity**
+- New "Employee photos" section on the Settings page
+  (`JS/Features/Settings/SettingsPage.js`), same visual pattern as the
+  existing "Scan sounds" capacity bar below: `X of Y used — Z remaining`,
+  a `.progress` bar that switches to warn color at ≥80% full, and a
+  manual Refresh button (this number can change from outside this app,
+  so it's not just repainted from local state like the sound rows are).
+- **Important scope caveat, surfaced directly in the UI copy**: employee
+  photos live in a Google Drive folder (see `upload-employee-photo`
+  below), but Drive's API has no per-folder quota — `storageQuota` is
+  reported for the *entire* connected Google account, Gmail and Google
+  Photos included. The number shown is "how full is the whole connected
+  Google account", not "how much room is left for employee photos"
+  specifically. Don't remove that caveat text when touching this section.
+- New `EmployeesModel.getPhotoStorageQuota()` in
+  `JS/Models/EmployeesModel.js` — calls the Edge Function with
+  `{ action: "quota" }`, same `readFunctionError()` unwrapping as
+  `deletePhoto()`.
+- **Backend note for future sessions**: the `upload-employee-photo` Edge
+  Function's `action: "quota"` handler (`getDriveStorageQuota()`, reading
+  Drive's `about.get?fields=storageQuota`) was already live on the
+  Supabase project (`kjwttqmbcjvkivgmwuev`, function version 26) *before*
+  this commit — it wasn't in this repo's `Supabase/functions/
+  upload-employee-photo/index.ts` yet, so the deployed backend and the
+  repo had drifted. This change reconciles the repo file to match what's
+  actually deployed rather than deploying a second, slightly-different
+  implementation over it. **If you're another Claude session touching
+  this function: `Supabase:get_edge_function` before editing it** — the
+  live version can be ahead of this repo, since edits are sometimes made
+  directly against the Supabase project (via MCP tools) without a
+  matching GitHub commit landing at the same time.
 
 **2026-09-15 — Settings page + admin-uploaded scan sounds**
 - New Supabase Storage bucket `scan-sounds` (public, admin-only write via
