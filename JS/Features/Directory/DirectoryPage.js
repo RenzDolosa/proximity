@@ -1,6 +1,7 @@
 import { $, $$ } from '../../Utils/dom.js';
 import { esc, initials, chunkArray } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
+import { wireCopyableCodes } from '../../Utils/clipboard.js';
 import { appState, isAdmin, isAdminOrManager } from '../../Core/state.js';
 import { supabase } from '../../Core/supabaseClient.js';
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
@@ -186,15 +187,7 @@ function paintDirectoryTable(filter) {
     const emp = appState.employeesCache.find((e) => e.id === b.dataset.edit);
     openEmployeeModal(emp, renderDirectory);
   }));
-  $$('[data-copy-code]', wrap).forEach((el) => el.addEventListener('click', async () => {
-    const code = el.dataset.copyCode;
-    try {
-      await navigator.clipboard.writeText(code);
-      toast('Copied proximity code');
-    } catch {
-      toast('Could not copy — your browser blocked clipboard access', 'error');
-    }
-  }));
+  wireCopyableCodes(wrap, 'Copied proximity code');
   $$('button[data-log]', wrap).forEach((b) => b.addEventListener('click', () => openScanLogModal(b.dataset.log)));
   $$('button[data-remarks]', wrap).forEach((b) => b.addEventListener('click', () => openRemarksModal(b.dataset.remarks)));
   $$('button[data-del]', wrap).forEach((b) => b.addEventListener('click', async () => {

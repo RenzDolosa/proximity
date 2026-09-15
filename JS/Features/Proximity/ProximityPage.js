@@ -1,6 +1,7 @@
 import { $, $$ } from '../../Utils/dom.js';
 import { esc, fmtTime, chunkArray } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
+import { wireCopyableCodes } from '../../Utils/clipboard.js';
 import { appState, isAdmin, isAdminOrManager } from '../../Core/state.js';
 import { ProximityCardsModel } from '../../Models/ProximityCardsModel.js';
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
@@ -117,7 +118,7 @@ function paintProximityTable() {
       <tbody>
         ${rows.map((c) => { const e = assignedByCard.get(c.id); return `
           <tr>
-            <td class="mono">${esc(c.proximity_code)}</td>
+            <td class="mono"><span class="copyable-code" data-copy-code="${esc(c.proximity_code)}" title="Click to copy">${esc(c.proximity_code)}</span></td>
             <td>${e ? esc(e.full_name) + ' <span class="emp-meta mono">(' + esc(e.employee_code) + ')</span>' : '<span style="color:var(--text-faint)">unassigned</span>'}</td>
             <td class="col-shrink"><span class="badge ${c.is_active ? 'active' : 'inactive'}">${c.is_active ? 'active' : 'revoked'}</span></td>
             <td class="col-shrink mono">${fmtTime(c.issued_at)}</td>
@@ -135,6 +136,7 @@ function paintProximityTable() {
     total: allRows.length, page, pageSize,
     onChange: (next) => { page = next.page; pageSize = next.pageSize; paintProximityTable(); },
   });
+  wireCopyableCodes(wrap, 'Copied proximity code');
   // Revoke/renew update the one row that changed in place, instead of
   // calling renderProximity() (which wiped the whole page back to
   // "Loading…" and re-fetched both tables just to flip one badge).

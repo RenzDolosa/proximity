@@ -99,6 +99,11 @@ JS/
     dom.js                       $ / $$
     format.js                    esc / initials / fmtTime
     toast.js                     toast notifications
+    clipboard.js                  wireCopyableCodes(wrap, label) — click-to-copy
+                                   for [data-copy-code] elements (.copyable-code
+                                   in CSS/base.css); shared by Employee Manager's
+                                   Proximity ID column and Proximity Cards'
+                                   Proximity code column
     csv.js                       parseCSV / toCSV, used by ImportModal.js
     scanSounds.js                 loadScanSounds() / playScanSound() — shared by
                                    StandaloneScanner.js and TestScanPage.js
@@ -212,6 +217,22 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-15 — Proximity Cards: click-to-copy proximity code**
+- Proximity Cards' "Proximity code" column now uses the same click-to-copy
+  affordance as Employee Manager's Proximity ID column (dotted underline,
+  toast on copy) instead of being plain unstyled `mono` text.
+- Extracted the copy-to-clipboard logic — previously written once, inline,
+  inside `DirectoryPage.js` — into `JS/Utils/clipboard.js`
+  (`wireCopyableCodes(wrap, successLabel)`), and switched `DirectoryPage.js`
+  to call it too, so there's exactly one implementation instead of two
+  near-identical ones. Both pages' markup still uses the existing
+  `.copyable-code` / `data-copy-code` convention from `CSS/base.css`, so no
+  CSS changes were needed.
+- Any future column that should be click-to-copy: give it
+  `<span class="copyable-code" data-copy-code="${esc(value)}" title="Click to copy">${esc(value)}</span>`
+  and call `wireCopyableCodes(wrap, 'your label')` once after painting that
+  table — don't re-implement the clipboard try/catch a third time.
 
 **2026-09-15 — Settings: employee-photo Google Drive storage capacity**
 - New "Employee photos" section on the Settings page
