@@ -39,6 +39,20 @@ export const fmtTime = (iso) => {
   }
 };
 
+// Used by Settings' scan-sounds storage summary. Binary (1024) units to
+// match what Supabase Storage itself reports, not decimal (1000) —
+// showing "4.8 MB" for a file Supabase's own dashboard calls 5 MiB would
+// read as a mismatch even though both are "correct" by different
+// conventions.
+export const fmtBytes = (n) => {
+  if (!Number.isFinite(n) || n < 0) return '—';
+  if (n < 1024) return `${n} B`;
+  const units = ['KB', 'MB', 'GB'];
+  let v = n / 1024, i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return `${v.toFixed(v < 10 ? 1 : 0)} ${units[i]}`;
+};
+
 // Splits an array into fixed-size chunks — used to batch bulk inserts
 // (e.g. CSV import) into a handful of round-trips instead of one per row.
 export const chunkArray = (arr, size) => {
