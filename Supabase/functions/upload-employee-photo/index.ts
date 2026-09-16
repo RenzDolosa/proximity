@@ -12,18 +12,19 @@
 //   misread as "0 bytes available". Read by Settings' "Employee photos"
 //   capacity panel (JS/Features/Settings/SettingsPage.js).
 //
+// Auth is per-action, not a single blanket check: "quota" is read-only
+// (just tells the caller how much room is left) so it's allowed for
+// anyone with Settings access at all — including Viewers — via
+// can_view_settings(); "upload"/"delete" actually write to Drive, so they
+// keep the stricter is_admin_or_manager() check this function always had.
+// Both are re-checked server-side against the caller's own JWT (never a
+// service role), same pattern as proximity-scan.
+//
 // mime_type should be the ACTUAL type of the bytes in image_base64 (e.g.
 // what Blob.type reported after client-side conversion) — canvas.toBlob()
 // can silently fall back to a different format than requested, so the
 // client can't assume it always produced .webp, and neither can this
 // function. Falls back to image/webp only if the caller omits mime_type.
-//
-// Auth: caller must be a signed-in admin or manager. The platform verifies
-// the JWT itself (verify_jwt: true); this function additionally re-checks
-// role server-side via is_admin_or_manager() using a client scoped to the
-// CALLER's own JWT — same pattern as proximity-scan — so a viewer with a
-// valid session still can't upload/delete photos even though they're
-// authenticated.
 //
 // Storage: Google Drive, authenticated as a real Google account via OAuth
 // (NOT a service account). Google service accounts have zero storage quota
@@ -81,19 +82,30 @@ Deno.serve(async (req: Request) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ error: "Missing Authorization header" }, 401, cors);
 
-    // Scoped to the caller's own JWT — RLS + is_admin_or_manager() evaluate
-    // against THIS user, never a service role.
+    // Scoped to the caller's own JWT — RLS and the RPC checks below
+    // evaluate against THIS user, never a service role.
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } }
     );
-    const { data: allowed, error: roleErr } = await supabase.rpc("is_admin_or_manager");
-    if (roleErr) return json({ error: roleErr.message }, 400, cors);
-    if (!allowed) return json({ error: "Only admins and managers can manage employee photos." }, 403, cors);
 
     const body = await req.json();
     const action = body.action;
+
+    // "quota" is read-only, so it only needs Settings *view* access
+    // (can_view_settings() — true for Viewers with a covering access_scope
+    // too, not just admins/managers). "upload"/"delete" actually write to
+    // Drive, so they need the stricter is_admin_or_manager().
+    const rpcName = action === "quota" ? "can_view_settings" : "is_admin_or_manager";
+    const { data: allowed, error: roleErr } = await supabase.rpc(rpcName);
+    if (roleErr) return json({ error: roleErr.message }, 400, cors);
+    if (!allowed) {
+      const message = action === "quota"
+        ? "You don't have access to Settings."
+        : "Only admins and managers can manage employee photos.";
+      return json({ error: message }, 403, cors);
+    }
 
     const clientId = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID");
     const clientSecret = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET");
