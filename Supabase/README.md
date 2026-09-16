@@ -32,7 +32,7 @@ Relationship direction: `employees.proximity_card_id → proximity_cards.id`.
 
 | Bucket | Purpose |
 | --- | --- |
-| `scan-sounds` | Public bucket, 5 fixed **extension-less** object keys: `matched-in`, `matched-out`, `card-revoked`, `unmatched`, `unassigned-card`. Uploaded/replaced from the admin-only **Settings** page (`JS/Features/Settings/SettingsPage.js` → `JS/Models/ScanSoundsModel.js`), played back from `JS/Features/Scanner/StandaloneScanner.js` and `TestScanPage.js` via `JS/Utils/scanSounds.js`. |
+| `scan-sounds` | Public bucket, 5 fixed **extension-less** object keys: `matched-in`, `matched-out`, `card-revoked`, `unmatched`, `unassigned-card`. Uploaded/replaced from the **Settings** page (`JS/Features/Settings/SettingsPage.js` → `JS/Models/ScanSoundsModel.js`) by admins and by managers whose `access_scope` covers Scanner (see Permission model below); played back from `JS/Features/Scanner/StandaloneScanner.js` and `TestScanPage.js` via `JS/Utils/scanSounds.js`. |
 
 Fixed keys + `upsert: true` on upload mean "replace" always overwrites the
 same object — no orphaned old file across a format change (mp3 → wav
@@ -44,10 +44,12 @@ there isn't one), so `<audio src>` playback works purely off the
 `allowed_mime_types` covers the common audio formats
 (`audio/mpeg`, `audio/wav`, `audio/ogg`, `audio/webm`, `audio/mp4`, `audio/aac`).
 
-Storage RLS on `storage.objects` (three policies, `bucket_id = 'scan-sounds'`):
-insert/update/delete require `public.is_admin()`; select is open to any
+Storage RLS on `storage.objects` (four policies, `bucket_id = 'scan-sounds'`):
+insert/update/delete require `public.can_manage_scan_sounds()` (admins, and
+managers whose `access_scope` is `all` or `scanner`); select is open to any
 `authenticated` caller (needed for `list()`/`getPublicUrl()` from within
-the app). The bucket's own `public = true` flag is what lets the actual
+the app — this already covered Viewers before the Settings capacity panel
+existed to use it). The bucket's own `public = true` flag is what lets the actual
 audio bytes be fetched with **no auth at all** at playback time — that's
 independent of the `storage.objects` RLS policies above, which only gate
 the authenticated Storage API calls (list/upload/remove), not the public
@@ -83,6 +85,11 @@ an admin swaps it out.
   created_by_id, created_at}` entry to `employees.remarks_log`.
 - **`is_admin()` / `is_admin_or_manager()`** — role helper functions used
   throughout RLS policies.
+- **`can_view_settings()` / `can_manage_scan_sounds()`** — the Settings
+  page's own permission checks, layered on top of `access_scope` rather
+  than duplicating it (see Permission model below). Used by the
+  `scan-sounds` write RLS policies and by `upload-employee-photo`'s
+  `quota` action.
 
 ## Permission model (enforced via Postgres RLS, not just hidden in the UI)
 
@@ -95,6 +102,25 @@ Two independent dimensions, mirrored in `JS/Core/state.js`:
 RLS policies call `is_admin()` / `is_admin_or_manager()` /
 `can_view_employee_manager()` / `can_view_scanner()`, each reading the
 caller's own `profiles` row.
+
+**Settings** (`JS/Features/Settings/SettingsPage.js`) reuses this same
+`role` + `access_scope` pair rather than adding a third dimension:
+- `can_view_settings()` — true for admins, or for `manager`/`viewer`
+  accounts whose `access_scope` is `all`, `employee_manager`, or
+  `scanner` (i.e. covers at least one Settings-relevant module). Gates
+  whether the account can open Settings at all, and which of its two
+  panels render (`employee_manager` scope → Employee photos panel only;
+  `scanner` scope → Scan sounds panel only; `all` → both).
+- `can_manage_scan_sounds()` — true for admins, or for `manager` accounts
+  whose `access_scope` is `all` or `scanner`. Gates upload/replace/remove
+  on the Scan sounds panel specifically — `viewer` accounts always get a
+  read-only panel (still see the capacity bar and can preview) regardless
+  of scope, matching the `role` axis's edit-vs-view meaning everywhere
+  else in this table.
+Mirrored client-side in `JS/Core/state.js` as `canViewSettings()` /
+`settingsShowSounds()` / `settingsShowPhotos()` / `canManageScanSounds()`
+— the client checks decide what renders, the RPC/RLS checks are what
+actually enforce it if someone bypasses the UI.
 
 **Known gotcha:** a plain view runs under the *invoker's* RLS, not the
 definer's — so a view joining `employees` will silently drop rows for a
@@ -114,11 +140,16 @@ table a restricted role can't see directly.
   Re-checks the caller is really an admin (via their own JWT) before doing
   anything, and guards against an admin deleting their own account. Called
   from `JS/Models/ProfilesModel.js#callAdminUsers`. `verify_jwt: true`.
-- **`upload-employee-photo`** — uploads an employee photo to Google Drive.
-  Always writes the file under a **new UUID filename** rather than
+- **`upload-employee-photo`** — uploads an employee photo to Google Drive,
+  and (a `quota` action, added 2026-09-16) reports the connected Drive
+  account's storage usage/limit for Settings' Employee photos capacity
+  panel. Always writes the file under a **new UUID filename** rather than
   overwriting the previous one in place — Google's thumbnail CDN caches by
   file ID, so an in-place update kept serving the stale photo. `verify_jwt: true`.
-  Request/response contract is unchanged, but the client
+  Auth is per-action: `upload`/`delete` require `is_admin_or_manager()` (unchanged);
+  `quota` only requires `can_view_settings()` since it's read-only, so a
+  Viewer with Settings access can see it too. Request/response contract for
+  `upload`/`delete` is otherwise unchanged, but the client
   (`JS/Models/EmployeesModel.js#uploadPhoto`) now POSTs via a raw
   `XMLHttpRequest` instead of `supabase.functions.invoke()`, purely to get
   real `upload.onprogress` events for the Employee Manager's photo
@@ -138,6 +169,28 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-16 — Settings permission scoping (`can_view_settings()` / `can_manage_scan_sounds()`) + `upload-employee-photo` `quota` action**
+- Settings now opens for any account whose `access_scope` covers a
+  Settings-relevant module, not just admins — reusing the existing
+  `role`/`access_scope` pair (see Permission model above) instead of a
+  new column. `employee_manager` scope shows only the Employee photos
+  panel, `scanner` scope shows only Scan sounds, `all` shows both.
+- Added `can_manage_scan_sounds()` and `can_view_settings()` SQL
+  functions; replaced the `scan-sounds` bucket's 3 admin-only write RLS
+  policies (`scan_sounds_admin_write/update/delete`) with
+  `scan_sounds_manage_insert/update/delete`, now checking
+  `can_manage_scan_sounds()` so managers with covering scope can
+  upload/replace/remove sounds too, not just admins. The read policy was
+  already open to any authenticated caller and didn't need to change.
+- `upload-employee-photo` gained a `quota` action (Drive `about.get` ->
+  `storageQuota`) and switched from one blanket auth check to a
+  per-action one — `quota` needs only `can_view_settings()`, `upload`/
+  `delete` keep the original `is_admin_or_manager()` — so Settings'
+  Employee photos capacity panel works for Viewers with Settings access,
+  without loosening who can actually write photos.
+- Added `MAX_FILE_SIZE_BYTES` export to `ScanSoundsModel.js` and a
+  `fmtBytes()` helper to `Utils/format.js` for both panels' capacity math.
 
 **2026-09-15 — `scan-sounds` Storage bucket + `test_scan_proximity_code()` direction fix**
 - Added the `scan-sounds` public bucket and its 3 admin-only write RLS

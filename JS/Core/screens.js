@@ -2,7 +2,7 @@
 // #standalone-scanner) and only one is ever visible at a time. This module
 // owns that switch so main.js's auth-state handler stays a one-liner.
 import { $ } from '../Utils/dom.js';
-import { appState, isAdmin, canViewEmployeeManager, canViewScanner } from './state.js';
+import { appState, isAdmin, canViewEmployeeManager, canViewScanner, canViewSettings } from './state.js';
 import { render } from './router.js';
 
 export function showAuth() {
@@ -18,14 +18,14 @@ export function showShell() {
   $('#who-name').textContent = appState.profile?.full_name || appState.session.user.email;
   $('#who-role').textContent = appState.profile?.role || '—';
   $('#nav-users').classList.toggle('hidden', !isAdmin());
-  $('#nav-settings').classList.toggle('hidden', !isAdmin());
+  $('#nav-settings').classList.toggle('hidden', !canViewSettings());
   $('button[data-route="directory"]').classList.toggle('hidden', !canViewEmployeeManager());
   $('button[data-route="proximity"]').classList.toggle('hidden', !canViewEmployeeManager());
   $('button[data-route="scanner"]').classList.toggle('hidden', !canViewScanner());
   // land on the first route this account is actually allowed to see
-  if (appState.route === 'directory' && !canViewEmployeeManager()) appState.route = canViewScanner() ? 'scanner' : (isAdmin() ? 'settings' : 'users');
-  if (appState.route === 'scanner' && !canViewScanner()) appState.route = canViewEmployeeManager() ? 'directory' : (isAdmin() ? 'settings' : 'users');
-  if (appState.route === 'settings' && !isAdmin()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : 'users');
+  if (appState.route === 'directory' && !canViewEmployeeManager()) appState.route = canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : 'users');
+  if (appState.route === 'scanner' && !canViewScanner()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewSettings() ? 'settings' : 'users');
+  if (appState.route === 'settings' && !canViewSettings()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : 'users');
   render();
 }
 

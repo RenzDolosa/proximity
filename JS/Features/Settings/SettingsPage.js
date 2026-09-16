@@ -1,13 +1,18 @@
-// Admin-only Settings page. Currently holds one section — the 5 scan
-// feedback sounds, stored in the public `scan-sounds` Storage bucket (see
-// Models/ScanSoundsModel.js) — but is its own top-level route/file rather
-// than folded into Users & Roles so future non-user settings have a home
-// without another restructure.
+// Settings page. Two independent panels — "Scan sounds" (Scanner-related)
+// and "Employee photos" (Employee Manager-related) — each shown only when
+// the signed-in account's access_scope covers that module (or they're an
+// admin, who always sees both). This mirrors canViewEmployeeManager() /
+// canViewScanner() in Core/state.js rather than inventing a separate
+// permission scheme — see state.js for the canViewSettings() /
+// settingsShowSounds() / settingsShowPhotos() / canManageScanSounds()
+// helpers this file reads, and Supabase/README.md for their server-side
+// mirror (can_view_settings() / can_manage_scan_sounds()).
 import { $, $$ } from '../../Utils/dom.js';
 import { esc, fmtTime, fmtBytes } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
-import { isAdmin } from '../../Core/state.js';
+import { settingsShowSounds, settingsShowPhotos, canManageScanSounds } from '../../Core/state.js';
 import { ScanSoundsModel, SOUND_KEYS, SOUND_LABELS, MAX_FILE_SIZE_BYTES } from '../../Models/ScanSoundsModel.js';
+import { EmployeesModel } from '../../Models/EmployeesModel.js';
 
 let soundsCache = {}; // key -> { updated_at, size } | null, once loaded
 let loaded = false;
@@ -17,47 +22,122 @@ let loaded = false;
 // not an arbitrary number — for the capacity bar below.
 const TOTAL_CAPACITY = Object.keys(SOUND_KEYS).length * MAX_FILE_SIZE_BYTES;
 
+let photoQuota = null; // { usage, limit, usageInDrive } once loaded, else null
+let photoQuotaError = null;
+let photoLoaded = false;
+
 export async function renderSettings() {
   const content = $('#content');
-  if (!isAdmin()) { content.innerHTML = `<div class="empty-state">Admins only.</div>`; return; }
+  const showSounds = settingsShowSounds();
+  const showPhotos = settingsShowPhotos();
+  // screens.js only routes here at all when canViewSettings() is true
+  // (which requires at least one of these) — this is just a defensive
+  // fallback, not the primary gate.
+  if (!showSounds && !showPhotos) { content.innerHTML = `<div class="empty-state">You don't have access to any Settings panels.</div>`; return; }
+
   content.innerHTML = `
+    ${!showSounds ? '' : `
     <div class="panel" style="padding:20px;max-width:720px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;">
         <h3 style="margin:0 0 4px;">Scan sounds</h3>
         <div class="emp-meta mono" id="sound-storage-summary" style="white-space:nowrap;">${loaded ? '' : 'Loading…'}</div>
       </div>
       <p class="sub" style="margin:0 0 10px;">
-        Upload a short audio clip for each scan outcome. They play on the
-        live Scanner and Test Scan as soon as a result comes back.
-        Uploading a new file replaces the previous one immediately.
+        ${canManageScanSounds()
+          ? 'Upload a short audio clip for each scan outcome. They play on the live Scanner and Test Scan as soon as a result comes back. Uploading a new file replaces the previous one immediately.'
+          : 'Audio clips played on the live Scanner and Test Scan for each outcome. Your account can view these, not change them.'}
       </p>
       <div class="progress" style="margin:0 0 16px;">
         <div class="progress-track"><div class="progress-fill" id="sound-storage-fill"></div></div>
       </div>
       <div id="sound-rows">${loaded ? '' : 'Loading…'}</div>
     </div>
-  `;
-  if (loaded) { paintRows(); paintStorageSummary(); }
+    `}
 
-  const { data, error } = await ScanSoundsModel.list();
-  if (error) { $('#sound-rows').innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
-  const byPath = Object.fromEntries((data || []).map((o) => [o.name, o]));
-  soundsCache = Object.fromEntries(Object.keys(SOUND_KEYS).map((key) => {
-    const obj = byPath[SOUND_KEYS[key]];
-    return [key, obj ? { updated_at: obj.updated_at, size: obj.metadata?.size ?? 0 } : null];
-  }));
-  loaded = true;
-  paintRows();
-  paintStorageSummary();
+    ${!showPhotos ? '' : `
+    <div class="panel" style="padding:20px;max-width:720px;margin-top:${showSounds ? '16px' : '0'};">
+      <h3 style="margin:0 0 4px;">Employee photos</h3>
+      <p class="sub" style="margin:0 0 10px;">
+        Photos upload into the Google Drive account connected to the
+        photo-upload function — this is how much room is left on that
+        account before uploads start failing.
+      </p>
+      <div id="photo-storage-body">${photoLoaded ? '' : 'Loading…'}</div>
+    </div>
+    `}
+  `;
+  if (showSounds && loaded) { paintRows(); paintStorageSummary(); }
+  if (showPhotos && photoLoaded) paintPhotoStorage();
+
+  const tasks = [];
+  if (showSounds) {
+    tasks.push((async () => {
+      const { data, error } = await ScanSoundsModel.list();
+      if (error) { $('#sound-rows').innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
+      const byPath = Object.fromEntries((data || []).map((o) => [o.name, o]));
+      soundsCache = Object.fromEntries(Object.keys(SOUND_KEYS).map((key) => {
+        const obj = byPath[SOUND_KEYS[key]];
+        return [key, obj ? { updated_at: obj.updated_at, size: obj.metadata?.size ?? 0 } : null];
+      }));
+      loaded = true;
+      paintRows();
+      paintStorageSummary();
+    })());
+  }
+  if (showPhotos) {
+    tasks.push((async () => {
+      const { data, error } = await EmployeesModel.getPhotoStorageQuota();
+      photoQuotaError = error || null;
+      photoQuota = error ? null : data;
+      photoLoaded = true;
+      paintPhotoStorage();
+    })());
+  }
+
+  // Independent panels, each backed by its own API call — run them
+  // concurrently rather than awaiting one before starting the other, and
+  // let each repaint itself as soon as its own data is back instead of
+  // making the faster one wait on the slower.
+  await Promise.all(tasks);
+}
+
+// Mirrors paintStorageSummary()'s used-vs-cap framing, but the "cap" here
+// is a real number Drive itself reports (storageQuota.limit) rather than
+// one derived from this app's own per-file rules — null means the
+// connected account has no storage cap at all (some Workspace plans), not
+// that the number failed to load.
+function paintPhotoStorage() {
+  const body = $('#photo-storage-body');
+  if (!body) return; // panel not in the DOM for this account's scope
+  if (photoQuotaError) {
+    body.innerHTML = `<div class="empty-state">${esc(photoQuotaError)}</div>`;
+    return;
+  }
+  if (!photoQuota) { body.innerHTML = 'Loading…'; return; }
+  const { usage, limit } = photoQuota;
+  if (limit == null) {
+    body.innerHTML = `<div class="emp-meta mono">${fmtBytes(usage)} used — this account has no storage cap.</div>`;
+    return;
+  }
+  const remaining = Math.max(0, limit - usage);
+  const pct = limit ? Math.min(100, (usage / limit) * 100) : 0;
+  body.innerHTML = `
+    <div class="emp-meta mono" style="margin-bottom:8px;">${fmtBytes(usage)} of ${fmtBytes(limit)} used — ${fmtBytes(remaining)} remaining</div>
+    <div class="progress" style="margin:0;">
+      <div class="progress-track"><div class="progress-fill${pct >= 80 ? ' warn' : ''}" style="width:${pct}%;"></div></div>
+    </div>
+  `;
 }
 
 // Sums whatever's actually uploaded against TOTAL_CAPACITY. Reads
 // straight from soundsCache so it always matches what the rows below are
 // showing — callers repaint both together after any change.
 function paintStorageSummary() {
+  const el = $('#sound-storage-summary');
+  if (!el) return; // panel not in the DOM for this account's scope
   const used = Object.values(soundsCache).reduce((sum, o) => sum + (o?.size || 0), 0);
   const pct = TOTAL_CAPACITY ? Math.min(100, (used / TOTAL_CAPACITY) * 100) : 0;
-  $('#sound-storage-summary').textContent = `${fmtBytes(used)} of ${fmtBytes(TOTAL_CAPACITY)} used`;
+  el.textContent = `${fmtBytes(used)} of ${fmtBytes(TOTAL_CAPACITY)} used`;
   const fill = $('#sound-storage-fill');
   fill.style.width = `${pct}%`;
   fill.classList.toggle('warn', pct >= 80);
@@ -65,6 +145,8 @@ function paintStorageSummary() {
 
 function paintRows() {
   const wrap = $('#sound-rows');
+  if (!wrap) return; // panel not in the DOM for this account's scope
+  const manage = canManageScanSounds();
   wrap.innerHTML = Object.keys(SOUND_KEYS).map((key) => {
     const obj = soundsCache[key];
     return `
@@ -76,9 +158,9 @@ function paintRows() {
           </div>
         </div>
         <div class="sound-row-controls">
-          <input type="file" accept="audio/*" data-file="${key}" />
+          ${manage ? `<input type="file" accept="audio/*" data-file="${key}" />` : ''}
           <button type="button" class="ghost" data-preview="${key}" title="Preview" ${obj ? '' : 'disabled'}>▶</button>
-          <button type="button" class="ghost danger" data-remove="${key}" ${obj ? '' : 'style="display:none;"'}>Remove</button>
+          ${manage ? `<button type="button" class="ghost danger" data-remove="${key}" ${obj ? '' : 'style="display:none;"'}>Remove</button>` : ''}
         </div>
         <div class="progress hidden" data-progress>
           <div class="progress-track"><div class="progress-fill indeterminate"></div></div>
@@ -87,9 +169,11 @@ function paintRows() {
     `;
   }).join('');
 
-  $$('input[data-file]', wrap).forEach((input) => {
-    input.addEventListener('change', (e) => handleUpload(e.target.dataset.file, e.target.files[0], e.target));
-  });
+  if (manage) {
+    $$('input[data-file]', wrap).forEach((input) => {
+      input.addEventListener('change', (e) => handleUpload(e.target.dataset.file, e.target.files[0], e.target));
+    });
+  }
   $$('button[data-preview]', wrap).forEach((btn) => {
     btn.addEventListener('click', () => {
       const obj = soundsCache[btn.dataset.preview];
@@ -98,9 +182,11 @@ function paintRows() {
       new Audio(url).play().catch(() => toast('Could not play this file — it may not be a supported audio format.', 'error'));
     });
   });
-  $$('button[data-remove]', wrap).forEach((btn) => {
-    btn.addEventListener('click', () => handleRemove(btn.dataset.remove));
-  });
+  if (manage) {
+    $$('button[data-remove]', wrap).forEach((btn) => {
+      btn.addEventListener('click', () => handleRemove(btn.dataset.remove));
+    });
+  }
 }
 
 async function handleUpload(key, file, inputEl) {

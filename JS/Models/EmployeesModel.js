@@ -181,4 +181,20 @@ export const EmployeesModel = {
     if (error) return { error: await readFunctionError(error) };
     return { data };
   },
+
+  // Storage usage/limit (bytes) on the Google account employee photos are
+  // uploaded into — that account's own quota is the real ceiling on how
+  // many more photos can be stored, so it's what Settings' "Employee
+  // photos" capacity panel reads. Same tiny invoke() pattern as
+  // deletePhoto rather than uploadPhoto's XHR plumbing.
+  async getPhotoStorageQuota() {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session.access_token;
+    const { data, error } = await supabase.functions.invoke('upload-employee-photo', {
+      body: { action: 'quota' },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) return { error: await readFunctionError(error) };
+    return { data }; // { usage, limit, usageInDrive }
+  },
 };

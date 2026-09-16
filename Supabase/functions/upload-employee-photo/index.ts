@@ -4,19 +4,27 @@
 //   -> { url: string, file_id: string }
 // POST { action: "delete", old_file_id: string }
 //   -> { ok: true }
+// POST { action: "quota" }
+//   -> { usage: number, limit: number|null, usageInDrive: number }
+//   Bytes used / total on the connected Google account, straight from
+//   Drive's own `about.get`. `limit` is null for accounts with no storage
+//   cap (some Google Workspace plans) rather than a number that would
+//   misread as "0 bytes available". Read by Settings' "Employee photos"
+//   capacity panel (JS/Features/Settings/SettingsPage.js).
+//
+// Auth is per-action, not a single blanket check: "quota" is read-only
+// (just tells the caller how much room is left) so it's allowed for
+// anyone with Settings access at all — including Viewers — via
+// can_view_settings(); "upload"/"delete" actually write to Drive, so they
+// keep the stricter is_admin_or_manager() check this function always had.
+// Both are re-checked server-side against the caller's own JWT (never a
+// service role), same pattern as proximity-scan.
 //
 // mime_type should be the ACTUAL type of the bytes in image_base64 (e.g.
 // what Blob.type reported after client-side conversion) — canvas.toBlob()
 // can silently fall back to a different format than requested, so the
 // client can't assume it always produced .webp, and neither can this
 // function. Falls back to image/webp only if the caller omits mime_type.
-//
-// Auth: caller must be a signed-in admin or manager. The platform verifies
-// the JWT itself (verify_jwt: true); this function additionally re-checks
-// role server-side via is_admin_or_manager() using a client scoped to the
-// CALLER's own JWT — same pattern as proximity-scan — so a viewer with a
-// valid session still can't upload/delete photos even though they're
-// authenticated.
 //
 // Storage: Google Drive, authenticated as a real Google account via OAuth
 // (NOT a service account). Google service accounts have zero storage quota
@@ -44,6 +52,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
 const DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files";
+const DRIVE_ABOUT_URL = "https://www.googleapis.com/drive/v3/about";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 // Keep in sync with JS/Utils/image.js's EXTENSION_BY_MIME — the client
@@ -73,19 +82,30 @@ Deno.serve(async (req: Request) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ error: "Missing Authorization header" }, 401, cors);
 
-    // Scoped to the caller's own JWT — RLS + is_admin_or_manager() evaluate
-    // against THIS user, never a service role.
+    // Scoped to the caller's own JWT — RLS and the RPC checks below
+    // evaluate against THIS user, never a service role.
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } }
     );
-    const { data: allowed, error: roleErr } = await supabase.rpc("is_admin_or_manager");
-    if (roleErr) return json({ error: roleErr.message }, 400, cors);
-    if (!allowed) return json({ error: "Only admins and managers can manage employee photos." }, 403, cors);
 
     const body = await req.json();
     const action = body.action;
+
+    // "quota" is read-only, so it only needs Settings *view* access
+    // (can_view_settings() — true for Viewers with a covering access_scope
+    // too, not just admins/managers). "upload"/"delete" actually write to
+    // Drive, so they need the stricter is_admin_or_manager().
+    const rpcName = action === "quota" ? "can_view_settings" : "is_admin_or_manager";
+    const { data: allowed, error: roleErr } = await supabase.rpc(rpcName);
+    if (roleErr) return json({ error: roleErr.message }, 400, cors);
+    if (!allowed) {
+      const message = action === "quota"
+        ? "You don't have access to Settings."
+        : "Only admins and managers can manage employee photos.";
+      return json({ error: message }, 403, cors);
+    }
 
     const clientId = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID");
     const clientSecret = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET");
@@ -99,6 +119,11 @@ Deno.serve(async (req: Request) => {
     if (action === "delete") {
       if (body.old_file_id) await deleteDriveFile(body.old_file_id, accessToken); // best-effort
       return json({ ok: true }, 200, cors);
+    }
+
+    if (action === "quota") {
+      const quota = await getDriveStorageQuota(accessToken);
+      return json(quota, 200, cors);
     }
 
     if (action === "upload") {
@@ -232,6 +257,24 @@ async function makeFilePublic(fileId: string, accessToken: string) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error?.message || "Could not make the photo viewable.");
   }
+}
+
+// storageQuota's `limit` is omitted entirely by Drive for accounts with no
+// storage cap (some Google Workspace plans) rather than sent as 0 — kept
+// as `null` here for the same reason, so the client can tell "unlimited"
+// apart from "full" instead of misreading a missing field as zero bytes.
+async function getDriveStorageQuota(accessToken: string): Promise<{ usage: number; limit: number | null; usageInDrive: number }> {
+  const res = await fetch(`${DRIVE_ABOUT_URL}?fields=storageQuota`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || "Could not read Google Drive storage quota.");
+  const q = data.storageQuota || {};
+  return {
+    usage: Number(q.usage || 0),
+    limit: q.limit != null ? Number(q.limit) : null,
+    usageInDrive: Number(q.usageInDrive || 0),
+  };
 }
 
 async function deleteDriveFile(fileId: string, accessToken: string) {
