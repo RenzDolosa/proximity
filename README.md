@@ -153,6 +153,16 @@ Public/
                                   the repo-root gen_sounds.py (stdlib only,
                                   no deps); re-run it if these ever need to
                                   change instead of hand-editing audio files.
+    EmployeePhoto/
+      default-avatar.svg           bundled generic silhouette, precached by
+                                    sw.js at install time; Utils/format.js's
+                                    avatarHTML() falls back to it when there
+                                    IS a photo_url but the real Drive photo
+                                    can't load (esp. offline and never
+                                    cached — see "Offline-first design"
+                                    below), before finally falling back to
+                                    initials. No photo_url at all skips
+                                    straight to initials.
   Vendor/
     supabase-js.umd.js           vendored @supabase/supabase-js (see Vendor/README.md)
 
@@ -282,7 +292,18 @@ blip — three independent pieces make that true:
   prefetch actually warms the cache key the later `<img>` will request —
   building that URL in two places that could drift apart is exactly how
   the `/thumbnail` vs `uc?export=view` format mismatch happened before
-  (see the change log).
+  (see the change log). On top of that, a single generic silhouette at
+  `Public/Assets/EmployeePhoto/default-avatar.svg` **is** precached at
+  Service Worker install time, same as the bundled sounds above — but
+  only for the case where an employee genuinely *has* a `photo_url` and
+  it just can't be reached right now (offline and never prefetched, a
+  transient load error). An employee with no photo on file at all still
+  goes straight to initials — a generic silhouette wouldn't add anything
+  over an identifying initials circle for someone who was never
+  photographed. `Utils/format.js`'s `avatarHTML()` tries the real photo
+  first when there's a `photo_url`, falls back to this bundled image, and
+  only falls back to initials from there if even that local static asset
+  fails to load; with no `photo_url` at all it goes to initials directly.
 - **Queued scans** (`OfflineScanModel.js` + IndexedDB): covered separately
   below.
 
@@ -334,8 +355,35 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-17 — Offline scanner: bundled default-avatar image for missing/uncached employee photos**
+- `avatarHTML()` (`Utils/format.js`) only ever had two tiers: the real
+  Drive photo, or initials. Offline, that meant anyone whose photo hadn't
+  been successfully prefetched before the connection dropped (or who
+  simply has no photo on file) fell straight to a bare initials circle —
+  fine online, but a flat/uninformative result on a kiosk screen offline.
+- Added a third tier, used only when there IS a `photo_url` but it can't
+  be reached: `Public/Assets/EmployeePhoto/default-avatar.svg`, a single
+  bundled generic silhouette, **precached by `sw.js` at install time**
+  (same as the 5 bundled scan sounds below) so it's available from a
+  device's literal first load, online or not. Unlike individual employee
+  photos (700+, can't be precached as a fixed set), this is one static
+  asset that never changes, so precaching it outright is straightforward.
+- `avatarHTML()` now tries the real photo (when there's a `photo_url`) →
+  falls back to this bundled image on load failure → falls back to
+  initials only if even that local asset somehow fails to load. An
+  employee with no `photo_url` at all still goes straight to initials, as
+  before — the bundled silhouette is specifically for "this person does
+  have a photo, we just can't reach it right now," not a stand-in for "no
+  photo on file." Updated `sw.js`'s and `OfflineScanModel.js`'s comments
+  that described the old two-tier behavior to match.
+- Colors are hardcoded directly in the SVG rather than `currentColor` +
+  CSS vars, same reasoning as `ProximityLogo.js`'s comment on the brand
+  mark: this is loaded via a plain `<img src>`, an isolated document that
+  can't inherit the host page's styles — only an inlined SVG (like the
+  logo) can be recolored by the page around it.
+
 **2026-09-17 — Offline scanner: the 5 bundled fallback sounds actually exist now**
-- The entry right below this one ("true cold-start sound support") added
+- The entry two below this one ("true cold-start sound support") added
   `sw.js`'s precache list and `scanSounds.js`'s `FALLBACK_SOUND_PATHS`
   pointing at 5 files under `Public/Assets/Sounds/` — but the files
   themselves, and the `gen_sounds.py` script that was supposed to produce

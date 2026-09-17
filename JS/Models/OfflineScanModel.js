@@ -130,7 +130,7 @@ export const OfflineScanModel = {
       // photo_url/updated_at ride along in get_scanner_offline_cache()'s
       // row already (see Supabase/README.md) — passing them through here
       // is what lets ScanResultCard's avatarHTML() show the real photo
-      // offline instead of always falling back to initials.
+      // offline instead of falling back to the bundled default avatar.
       employee: { full_name: row.full_name, employee_code: row.employee_code, department: row.department, position: row.position, photo_url: row.photo_url, updated_at: row.updated_at },
     };
   },

@@ -21,6 +21,25 @@ export const photoSrc = (photoUrl, cacheKey) => {
   return `${photoUrl}${sep}cb=${encodeURIComponent(cacheKey || '')}`;
 };
 
+// Bundled generic silhouette, shown when an employee HAS a photo_url but
+// it can't be loaded right now — most notably offline, when the real
+// photo was never cached (see sw.js's PHOTO_CACHE: cache-first, but only
+// for what's actually been fetched before while online). Not used when
+// there's no photo_url at all — see avatarHTML() below for why. Same
+// "always something better than nothing" reasoning as scanSounds.js's
+// bundled fallback tones for a kiosk that's never been online at all.
+// Absolute path (not relative to Public/index.html) to match sw.js's
+// precache list and scanSounds.js's FALLBACK_SOUND_PATHS convention —
+// both need one path that resolves the same way from the Service
+// Worker's root scope and from whatever page loads this file.
+const DEFAULT_AVATAR_SRC = '/Public/Assets/EmployeePhoto/default-avatar.svg';
+
+// Always rendered hidden, revealed by the real photo's onerror below.
+// Its own onerror falls through to initials — in practice only reachable
+// if this local static asset itself is missing.
+const defaultAvatarImg = () =>
+  `<img src="${DEFAULT_AVATAR_SRC}" alt="" style="display:none" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'" />`;
+
 // Renders inside a `.avatar` div. photo_url in this app is a Google Drive
 // thumbnail link (drive.google.com/thumbnail?id=...) tied to a fixed file
 // id — replacing the photo in Drive keeps that same URL, and both the
@@ -31,14 +50,25 @@ export const photoSrc = (photoUrl, cacheKey) => {
 // serving a stale cached image. It can't force Google's server-side
 // thumbnail cache to refresh — that can occasionally lag behind a
 // same-file-id replacement on Google's end — but it fixes the half of the
-// problem this app controls, and self-heals via `onerror` (hides the
-// broken image, reveals the initials fallback) instead of showing a
-// broken-image icon if a link is ever invalid or briefly unavailable.
+// problem this app controls.
+//
+// Two distinct "no real photo" cases, deliberately handled differently:
+// - No `photo_url` on the record at all → straight to initials. There's
+//   no photo to ever show for this person, so a generic silhouette would
+//   just be a less-identifying initials circle, not a substitute for
+//   anything.
+// - A `photo_url` exists but can't be shown right now (offline and never
+//   cached in PHOTO_CACHE, a dead/expired link, a transient load error)
+//   → the bundled default-avatar image, then initials only if even that
+//   local static asset somehow fails to load. This case specifically
+//   means "this person does have a photo, we just can't reach it," which
+//   is worth distinguishing from "no photo on file" on a kiosk screen.
 export const avatarHTML = (name, photoUrl, cacheKey) => {
-  const fallback = `<span class="avatar-fallback">${esc(initials(name))}</span>`;
+  const initialsHTML = `<span class="avatar-fallback" style="display:none">${esc(initials(name))}</span>`;
   const src = photoSrc(photoUrl, cacheKey);
-  if (!src) return fallback;
-  return `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'" />${fallback.replace('<span', '<span style="display:none;"')}`;
+  if (!src) return `<span class="avatar-fallback">${esc(initials(name))}</span>`;
+  const realHTML = `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display=''" />`;
+  return realHTML + defaultAvatarImg() + initialsHTML;
 };
 
 export const fmtTime = (iso) => {
