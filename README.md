@@ -9,6 +9,16 @@ Project URL: `https://kjwttqmbcjvkivgmwuev.supabase.co`
 ## 1. Project structure
 
 ```
+sw.js                      Service Worker — offline app-shell caching. Lives at
+                             the repo root (NOT inside Public/) deliberately: its
+                             scope is its own directory + below, and index.html
+                             (in Public/) references ../CSS and ../JS as
+                             *siblings*, not children — a worker registered from
+                             inside Public/ could never see those fetches at all.
+                             Registered from JS/main.js via an absolute
+                             `/sw.js` path. See Supabase/README.md's "Offline
+                             scanning" section for the full offline architecture.
+
 CSS/                       Stylesheets, split by concern, composed by main.css
   variables.css               design tokens (colors, spacing, fonts)
   base.css                    resets + form controls
@@ -27,7 +37,8 @@ JS/
   main.js                     bootstrap: single boot() — wires auth-state changes,
                                resolves the session/profile, guards against the
                                scanner-only-account-lands-in-admin-shell race,
-                               and restores route from the URL hash on reload
+                               and restores route from the URL hash on reload;
+                               also registers /sw.js (see root entry above)
   Core/                       app-wide plumbing, not tied to any one feature
     supabaseClient.js            the one Supabase client instance
     state.js                     session/profile/route state + permission checks
@@ -48,6 +59,10 @@ JS/
     ScanSoundsModel.js             wraps the public `scan-sounds` Storage bucket
                                    (list/upload/remove) behind 4 fixed, extension-
                                    less object keys — see Settings/SettingsPage.js
+    OfflineScanModel.js             IndexedDB-backed lookup cache + offline scan
+                                   queue for the standalone Scanner — see
+                                   Scanner/StandaloneScanner.js and
+                                   Supabase/README.md's "Offline scanning" section
   Components/                 reusable UI pieces used by more than one feature
     Modal.js                     shared openModal/closeModal scaffold — every
                                   dialog below is built on this
@@ -84,7 +99,11 @@ JS/
                                        loads scan sounds once per page visit)
     Scanner/StandaloneScanner.js     (the real, logging ?scanner=1 tab;
                                        same hero mark/label, direction badge, and
-                                       scan-sound playback as Test Scan)
+                                       scan-sound playback as Test Scan; also the
+                                       only screen with offline support — header
+                                       status pill shows online/offline, pending
+                                       queued-scan count, and lookup-cache staleness;
+                                       see Supabase/README.md's "Offline scanning")
     Users/UsersPage.js               (Users & Roles, admin-only; delete wired
                                        through admin-users v3+ w/ self-delete guard)
     Users/userOptions.js             (shared role/access-scope option lists)
@@ -107,6 +126,11 @@ JS/
     csv.js                       parseCSV / toCSV, used by ImportModal.js
     scanSounds.js                 loadScanSounds() / playScanSound() — shared by
                                    StandaloneScanner.js and TestScanPage.js
+    idb.js                         hand-rolled minimal Promise wrapper around
+                                   IndexedDB (2 object stores: offline lookup
+                                   cache, offline scan queue) — the only thing
+                                   backing OfflineScanModel.js; no external idb
+                                   library, to keep this repo dependency-free
 
 Public/
   index.html                  the app shell (static markup only — all
@@ -135,7 +159,10 @@ Supabase/
 No build step: everything is native ES modules and a couple of plain
 `<script>` tags. `JS/main.js` is loaded as `type="module"`, which browsers
 refuse to run from a `file://` URL — so serve the `Public/` folder over
-HTTP (see below) rather than double-clicking `index.html`.
+HTTP (see below) rather than double-clicking `index.html`. Service Workers
+have the same restriction plus one more: they also require HTTPS in
+production (`localhost`/`127.0.0.1` is exempt, which is why offline mode
+works fine under Five Server in dev without any extra setup).
 
 ## 2. Architecture
 
@@ -178,11 +205,20 @@ Full schema, RPC, and permission-model details: [`Supabase/README.md`](./Supabas
 
 ## 3. Running it
 
+`index.html` references `../CSS` and `../JS` — it expects to be served
+from *inside* the repo root, not as the root itself. `npx serve Public`
+alone won't resolve those (or `/sw.js` below). Serve the repo root instead
+and open the nested path:
+
 ```
-npx serve Public
+npx serve .
 ```
 
-Then open the printed URL. Sign up — your first account becomes admin. Add
+Then open `http://localhost:3000/Public/index.html` (or whatever port it
+prints) — this matches how Five Server serves it in local dev (see
+`http://127.0.0.1:5500/Public/index.html`).
+
+Sign up — your first account becomes admin. Add
 employees in **Employee Manager**, issue them a code in **Proximity
 Cards**, then scan that code in **Test Scan** (in-app) or the standalone
 **Scanner** tab (`?scanner=1`, logs to `scan_events`).
@@ -192,6 +228,18 @@ the 4 scan outcomes (Matched/Success IN, Matched/Success OUT, Card
 revoked, Unknown proximity ID) — Test Scan and the live Scanner both play
 them automatically as soon as a result comes back. An outcome with
 nothing uploaded just stays silent.
+
+**Testing offline mode:** open the Scanner tab (`?scanner=1`) at least
+once online first — it needs one successful load to cache both the app
+shell (via `/sw.js`) and the card/employee lookup (via
+`get_scanner_offline_cache()`) before there's anything to fall back to.
+Then in Chrome DevTools → Network → Throttling → **Offline** (killing the
+Wi-Fi/network adapter itself also works, but doesn't let you flip back
+online from the same panel to watch the queue sync). Scan a known code —
+the header pill should switch to "◌ Offline" and the result should show
+"⚠ Offline — recorded locally, will sync automatically." Switch back to
+Online and the queued scan(s) should sync within a few seconds, updating
+Recent Activity.
 
 ## 4. Suggested next steps
 
@@ -207,16 +255,67 @@ nothing uploaded just stays silent.
   are unbounded jsonb and should also get an archival/trim policy at scale.
 - Replace the placeholder SVGs in `Public/Assets/Favicon` and
   `Public/Assets/Icon` with real brand assets.
+- The kiosk's Supabase session token still needs network to silently
+  refresh (default ~1hr expiry) — offline scanning and app-shell loading
+  now survive a real outage (see `Supabase/README.md`'s "Offline
+  scanning"), but a kiosk offline *longer* than its token's lifetime could
+  still get signed out. Consider a longer JWT expiry for scanner-only
+  accounts specifically (Supabase Auth settings) if outages routinely run
+  longer than an hour.
 
 ---
 *Last reconciled against the live GitHub repo and live Supabase project on
-2026-09-15. If you're another Claude instance picking this project up: fetch
+2026-09-16. If you're another Claude instance picking this project up: fetch
 `github.com/RenzDolosa/proximity` fresh (via web_search + web_fetch, or the
 GitHub connector) and re-verify against `Supabase:list_tables` /
 `list_edge_functions` before making schema or Edge Function claims — this
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-16 — Offline-capable Scanner (app shell + scan queue, ~24h target)**
+- New `sw.js` at the **repo root** (deliberately not inside `Public/` — see
+  its own file-tree entry above for why) — a Service Worker that caches
+  the app shell (HTML/CSS/JS/vendor) network-first-falling-back-to-cache,
+  and the `scan-sounds` bucket's audio files cache-first-with-refresh.
+  Registered from `JS/main.js` via an absolute `/sw.js` path. Deliberately
+  does not intercept any other Supabase request (REST/Auth/RPC) — those
+  must always hit the real network or fail visibly.
+- New `JS/Utils/idb.js` (minimal hand-rolled IndexedDB wrapper — no new
+  dependency) and `JS/Models/OfflineScanModel.js`: a local lookup-cache
+  copy (via the new `get_scanner_offline_cache()` RPC — see
+  `Supabase/README.md`) for classifying a scan without network, and a
+  queue of raw scan attempts made offline, replayed strictly in order
+  once back online through the real `scan_proximity_code()` RPC (now
+  accepting an optional backdated `p_scanned_at` so a scan synced hours
+  later still logs its true original time).
+- `JS/Features/Scanner/StandaloneScanner.js` — new header status pill
+  (online/offline, pending queued-scan count, lookup-cache staleness
+  warning past 24h), offline branch in `doScan`, periodic 5-min cache
+  refresh while online, and sync-on-reconnect. **`Test Scan` was
+  deliberately left untouched** — it's an admin diagnostic tool, assumed
+  to be used at a desk with a real connection; only the kiosk-facing
+  Scanner needed this.
+- **Judgment call worth knowing about, not buried in code comments:** past
+  24h without a refresh, the lookup cache is shown as stale but scanning
+  still works (fail-open) — a card revoked since the last refresh could
+  still scan as valid until the kiosk reconnects. Flip this to fail-closed
+  in `OfflineScanModel.js` if this scanner is ever the *sole* access
+  control for something higher-stakes than an attendance log.
+- **Known gap, not solved here:** the kiosk's Supabase session token still
+  needs network to refresh (default ~1hr expiry) — see "Suggested next
+  steps" above.
+- Also fixed in passing: an earlier `CREATE OR REPLACE` on
+  `scan_proximity_code()` this same session added new parameters, which
+  Postgres treats as a distinct overload rather than a replacement when
+  the argument *types* change — this briefly left the original 2-arg
+  version orphaned and, because a newly `CREATE`d function grants
+  `EXECUTE` to `PUBLIC` by default in this project, made the new 4-arg
+  version callable by `anon` (unauthenticated). Caught immediately via
+  `get_advisors`, dropped the orphaned overload, and revoked
+  `public`/`anon` execute on both new functions — confirmed clean via
+  `has_function_privilege()` before shipping. Noted here since it's the
+  kind of mistake worth being able to spot again if it recurs.
 
 **2026-09-15 — Proximity Cards: click-to-copy proximity code**
 - Proximity Cards' "Proximity code" column now uses the same click-to-copy

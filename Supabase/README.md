@@ -64,21 +64,41 @@ an admin swaps it out.
 
 ## RPC
 
-- **`scan_proximity_code(p_proximity_code, p_scanner_id)`** — looks up the
-  card, resolves the linked employee, classifies the result, inserts a
-  `scan_events` row (even on failure), and a trigger appends matched scans
-  into that employee's `scan_logs`. Returns `direction` (`in`/`out`) on a
-  matched result, derived from the parity of `scan_logs`'s length *before*
-  this scan is appended (even count so far → `in`, odd → `out`) — a plain
-  in/out toggle per employee, not tied to any real door-side sensor.
-  Called from `JS/Models/ScanEventsModel.js#scan` (standalone/logging
-  Scanner tab).
+- **`scan_proximity_code(p_proximity_code, p_scanner_id, p_scanned_at, p_offline)`**
+  — looks up the card, resolves the linked employee, classifies the
+  result, inserts a `scan_events` row (even on failure), and a trigger
+  appends matched scans into that employee's `scan_logs`. Returns
+  `direction` (`in`/`out`) on a matched result, derived from the parity of
+  `scan_logs`'s length *before* this scan is appended (even count so far
+  → `in`, odd → `out`) — a plain in/out toggle per employee, not tied to
+  any real door-side sensor. `p_scanned_at` (default `now()`) and
+  `p_offline` (default `false`) were added 2026-09-16 — both optional and
+  backward compatible, so the existing 2-arg calls from
+  `proximity-scan`/`JS/Models/ScanEventsModel.js#scan` are untouched.
+  `p_scanned_at` lets a scan captured offline and replayed later keep its
+  true original timestamp (the `trg_append_scan_log` trigger reads
+  `NEW.scanned_at`, so `scan_logs` inherits the correct time too);
+  `p_offline: true` tags the resulting row's `raw_payload` with
+  `{"captured_offline": true}` purely for audit visibility — e.g. spotting
+  that a since-revoked card was actually tapped while the kiosk was
+  offline, before the cache caught up. See "Offline scanning" below.
+- **`get_scanner_offline_cache()`** — added 2026-09-16. Returns a trimmed
+  `proximity_cards` ⨝ `employees` projection (code, active flags,
+  employee id/name/code/department/position, and current `scan_count` for
+  direction parity) as a single `jsonb` array, for
+  `JS/Models/OfflineScanModel.js` to cache client-side in IndexedDB. Same
+  permission gate as the real scan RPC — deliberately trimmed to only the
+  fields offline classification needs, not full employee rows, even
+  though the calling roles (scanner-scope, in particular) couldn't
+  otherwise `SELECT` `employees` directly at all.
 - **`test_scan_proximity_code(...)`** — same lookup/classification logic
   (including the same `direction` preview on a matched result, added
   2026-09-15 — see change log), but never writes to `scan_events` or
   `scan_logs`. Backs the in-shell **Test Scan** page so admins/managers can
   dry-run a code, including its sound and IN/OUT badge, without polluting
-  the real activity log.
+  the real activity log. Does **not** take the offline-related params
+  above — Test Scan has no offline support (see root `README.md`'s change
+  log for why that's a deliberate scope boundary, not an oversight).
 - **`get_scan_feed()`** — `SECURITY DEFINER` function backing the Recent
   Activity feed (see `scan_feed` above).
 - **`add_employee_remark(...)`** — appends a `{remark, created_by,
@@ -129,6 +149,40 @@ grantable. The fix used here is `SECURITY DEFINER` functions (`get_scan_feed()`)
 rather than plain views, for anything that needs to join across a
 table a restricted role can't see directly.
 
+## Offline scanning
+
+Added 2026-09-16. Only the standalone kiosk Scanner
+(`JS/Features/Scanner/StandaloneScanner.js`) has this — Test Scan is
+unaffected (see its RPC entry above).
+
+**Two separate problems, two separate mechanisms:**
+1. *The app itself won't load with no network* — solved client-side only,
+   by the Service Worker (`sw.js` at the repo root; see root `README.md`).
+   Nothing in Postgres is involved in this half.
+2. *A scan can't be classified or logged with no network* — solved by:
+   - `get_scanner_offline_cache()` (see RPC section above) feeding a local
+     IndexedDB copy of the card→employee lookup, refreshed opportunistically
+     while online (on load, every 5 min, and right after reconnecting).
+   - Failed/offline scans get queued client-side (raw attempt only — code,
+     scanner id, true timestamp — never a guessed result) and replayed
+     **strictly one at a time, in original order** through the real
+     `scan_proximity_code()` RPC once back online. Sequential replay is
+     load-bearing, not just tidy: direction is derived from `scan_logs`'s
+     length *at the moment each RPC call actually runs*, so two calls for
+     the same employee racing in parallel could both read the same
+     "before" count and both come back `in`.
+
+**What this does *not* solve:** the lookup cache is a snapshot — it can't
+see a card revoked, or a scan made on a *different* kiosk or through Test
+Scan, since its last refresh. The client shows a staleness warning past
+24h of no refresh but still allows scanning past that point (fail-open by
+design — see root `README.md`'s change log for the reasoning and how to
+flip it to fail-closed). A kiosk's Supabase session token also still needs
+network to refresh (default ~1hr expiry) independent of all of the above —
+offline scanning survives an outage, staying signed in through one that
+outlasts the token isn't guaranteed unless that's addressed separately
+(longer JWT expiry for scanner-only accounts, e.g.).
+
 ## Edge Functions
 
 - **`proximity-scan`** — for hardware/kiosk scanners that can't run the JS
@@ -164,11 +218,34 @@ contracts each client-side caller relies on.
 *Last reconciled against `Supabase:list_tables` (verbose),
 `Supabase:list_edge_functions`, `storage.buckets`, and
 `pg_get_functiondef()` on the live `kjwttqmbcjvkivgmwuev` project,
-2026-09-15. Re-verify against those before trusting this file blindly in a
+2026-09-16. Re-verify against those before trusting this file blindly in a
 future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-16 — Offline scanning: `get_scanner_offline_cache()` + backdated `scan_proximity_code()`**
+- `scan_proximity_code()` gained two optional, backward-compatible params:
+  `p_scanned_at` (default `now()`) so a scan replayed from the offline
+  queue keeps its true original time, and `p_offline` (default `false`)
+  to tag the row's `raw_payload` for audit visibility. See "Offline
+  scanning" above for the full picture, including the client side.
+- New `get_scanner_offline_cache()` RPC — trimmed card/employee projection
+  for the client's local IndexedDB cache.
+- **Self-caught bug, worth recording so it's recognizable if it recurs:**
+  the first attempt at the `scan_proximity_code()` change used
+  `CREATE OR REPLACE FUNCTION` with new parameters added — Postgres
+  matches `CREATE OR REPLACE` by argument *types*, so a changed signature
+  creates a **new, separate overload** rather than replacing the old one.
+  This left the original 2-arg function orphaned alongside the new 4-arg
+  one, and — because this project grants `EXECUTE` to `PUBLIC` by default
+  on newly `CREATE`d functions, unlike the explicit per-function grants
+  everything else here relies on — the new overload was briefly callable
+  by `anon` (unauthenticated) via PostgREST. Caught via `get_advisors`
+  (security) before this was ever exposed to real traffic; fixed by
+  `DROP FUNCTION`-ing the orphaned 2-arg overload and explicitly
+  `REVOKE`-ing `public`/`anon` + `GRANT`-ing `authenticated` on both new
+  functions, then confirmed clean via `has_function_privilege()`.
 
 **2026-09-16 — Settings permission scoping (`can_view_settings()` / `can_manage_scan_sounds()`) + `upload-employee-photo` `quota` action**
 - Settings now opens for any account whose `access_scope` covers a
