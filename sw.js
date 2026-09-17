@@ -6,7 +6,7 @@
 // there for why a Public/sw.js couldn't work given this repo's layout
 // (index.html in Public/, JS/ and CSS/ as siblings, not children).
 //
-// Two independent caches:
+// Three independent caches:
 // - APP_CACHE: this app's own static files. Network-first, so a normal
 //   online load always gets whatever's actually live, falling back to
 //   the last successfully-cached copy only when the network request
@@ -16,16 +16,22 @@
 //   one in Settings) and losing scan-feedback audio during an outage is
 //   a real UX regression worth avoiding, unlike app code where serving a
 //   few-seconds-stale version while online would be actively worse.
-//
-// Deliberately NOT intercepted: any Supabase request other than the
-// scan-sounds public object URLs (REST/Auth/RPC/Storage-list calls must
-// always hit the real network or fail visibly — caching one of those
-// could serve stale auth state, or silently swallow a real error the
-// offline-queue logic in OfflineScanModel.js needs to actually see), and
-// any non-GET request (writes/RPCs must never be intercepted at all).
-
+// - PHOTO_CACHE: employee photos, served from Google Drive's thumbnail
+//   endpoint (see Utils/format.js's avatarHTML()). Same cache-first
+//   strategy and same reasoning as sounds — but this one specifically
+//   fixes "no employee photo while offline": without it, a genuinely
+//   offline scan's avatarHTML() `<img>` has nowhere to load from at all
+//   (Drive is a remote host, there's no network), so it always fell back
+//   to initials even for someone whose photo had loaded successfully
+//   during this very session. Once an employee's photo has been fetched
+//   at least once while online, it's available offline from here for as
+//   long as their record's cache-busting `cb=` query param stays the
+//   same (see avatarHTML() — that param changes on any edit, which
+//   naturally busts this cache entry the same way it busts the browser's
+//   own HTTP cache).
 const APP_CACHE = 'proximity-app-v1';
 const SOUND_CACHE = 'proximity-sounds-v1';
+const PHOTO_CACHE = 'proximity-photos-v1';
 
 self.addEventListener('install', () => {
   self.skipWaiting();
@@ -33,7 +39,7 @@ self.addEventListener('install', () => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
-    const keep = new Set([APP_CACHE, SOUND_CACHE]);
+    const keep = new Set([APP_CACHE, SOUND_CACHE, PHOTO_CACHE]);
     const names = await caches.keys();
     await Promise.all(names.filter((n) => !keep.has(n)).map((n) => caches.delete(n)));
     await self.clients.claim();
@@ -44,10 +50,24 @@ function isSoundRequest(url) {
   return url.pathname.includes('/storage/v1/object/public/scan-sounds/');
 }
 
+// Matches exactly the endpoint avatarHTML() builds photo_url from —
+// drive.google.com/thumbnail?id=...&sz=...&cb=... — not Drive's other
+// URL shapes (uc?export=view, file/d/.../view, etc.) since those aren't
+// used anywhere in this app.
+function isPhotoRequest(url) {
+  return url.hostname === 'drive.google.com' && url.pathname === '/thumbnail';
+}
+
 function isOtherSupabaseRequest(url) {
   return /\.supabase\.co$/.test(url.hostname) && !isSoundRequest(url);
 }
 
+// Deliberately NOT intercepted: any Supabase request other than the
+// scan-sounds public object URLs (REST/Auth/RPC/Storage-list calls must
+// always hit the real network or fail visibly — caching one of those
+// could serve stale auth state, or silently swallow a real error the
+// offline-queue logic in OfflineScanModel.js needs to actually see), and
+// any non-GET request (writes/RPCs must never be intercepted at all).
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return; // never intercept writes/RPCs — let them hit the network untouched
@@ -58,6 +78,11 @@ self.addEventListener('fetch', (event) => {
 
   if (isSoundRequest(url)) {
     event.respondWith(cacheFirstWithRefresh(req, SOUND_CACHE));
+    return;
+  }
+
+  if (isPhotoRequest(url)) {
+    event.respondWith(cacheFirstWithRefresh(req, PHOTO_CACHE));
     return;
   }
 

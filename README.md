@@ -273,6 +273,42 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-17 — Offline scanner: root-cause fixes for bugs that survived the first pass**
+- **Scan sounds still never played, even once sounds were loading
+  correctly.** The earlier fix that day addressed `loadScanSounds()`
+  failing to fetch the sound URLs at all — but `playScanSound()` itself
+  was still being silently rejected by the browser's autoplay policy
+  every single time, not intermittently. It's always called from inside
+  `doScan()` *after* an `await` (the scan RPC, or the offline lookup) —
+  and a browser's transient user-activation window from the keydown/Enter
+  that started the whole thing expires across that `await`, so `.play()`
+  never actually had a valid gesture behind it by the time it ran. Fixed
+  with `initAudioUnlock()` in `Utils/scanSounds.js`: plays a near-silent
+  clip synchronously inside the very first real keydown/pointerdown on
+  the page (no `await` in between), which is enough for browsers to allow
+  further programmatic `audio.play()` calls for the rest of that page's
+  session. Wired into both `StandaloneScanner.js` and `TestScanPage.js`.
+- **Offline scans still showed initials instead of the photo**, even
+  though `classify()` already passes `photo_url` through correctly. The
+  gap wasn't the data — a genuinely offline browser simply has no network
+  path to Google Drive at all, and `sw.js` never cached Drive's thumbnail
+  responses (only the app shell and the scan-sounds bucket were). Added a
+  third `PHOTO_CACHE` to `sw.js`, cache-first with background refresh,
+  intercepting `drive.google.com/thumbnail?...` requests the same way the
+  existing sound cache handles the scan-sounds bucket. An employee's
+  photo is now available offline once it's loaded successfully at least
+  once while online. See `Supabase/README.md`'s "Offline scanning".
+- **Offline scans still didn't appear in Recent Activity at all until
+  sync** — by design at the time, since nothing's written to
+  `scan_events` yet for a queued-but-unsynced scan, so a real feed reload
+  has nothing new to show. The actual product ask was to see them
+  immediately, not just after sync. `ScanFeed.js` now exports
+  `prependPendingRow()`: a local, non-authoritative "Queued —
+  syncing…" row (dashed left border, dimmed), built straight from the
+  offline `classify()` result. It's plain DOM, never persisted anywhere,
+  and gets wholesale replaced by the real synced entry the next time
+  `loadScanFeed()` runs.
+
 **2026-09-17 — Offline scanner: reconnect/feed/sound/photo bug fixes**
 - **Resync on reconnect wasn't reliable.** The queue only ever flushed on
   the browser's `online` event, and the periodic timer only refreshed the

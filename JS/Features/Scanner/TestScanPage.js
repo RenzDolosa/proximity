@@ -9,7 +9,7 @@ import { esc } from '../../Utils/format.js';
 import { ScanEventsModel } from '../../Models/ScanEventsModel.js';
 import { renderScanResult } from '../../Components/ScanResultCard.js';
 import { PROXIMITY_LOGO_SVG } from '../../Components/ProximityLogo.js';
-import { loadScanSounds, playScanSound } from '../../Utils/scanSounds.js';
+import { loadScanSounds, playScanSound, initAudioUnlock } from '../../Utils/scanSounds.js';
 
 export async function renderTestScan() {
   const content = $('#content');
@@ -32,6 +32,7 @@ export async function renderTestScan() {
   `;
   // Loaded once per page visit, not per-scan — see Utils/scanSounds.js.
   loadScanSounds().catch(() => {});
+  initAudioUnlock();
   const codeInput = $('#ts-code');
   // See StandaloneScanner.js — autofocus via the HTML attribute isn't
   // reliable when the markup is inserted through innerHTML, so it's set

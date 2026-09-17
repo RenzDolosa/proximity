@@ -4,9 +4,9 @@ import { supabase } from '../../Core/supabaseClient.js';
 import { appState, canViewScanner } from '../../Core/state.js';
 import { ScanEventsModel } from '../../Models/ScanEventsModel.js';
 import { renderScanResult } from '../../Components/ScanResultCard.js';
-import { loadScanFeed } from '../../Components/ScanFeed.js';
+import { loadScanFeed, prependPendingRow } from '../../Components/ScanFeed.js';
 import { PROXIMITY_LOGO_SVG } from '../../Components/ProximityLogo.js';
-import { loadScanSounds, playScanSound, scanSoundsLoaded } from '../../Utils/scanSounds.js';
+import { loadScanSounds, playScanSound, scanSoundsLoaded, initAudioUnlock } from '../../Utils/scanSounds.js';
 import { OfflineScanModel, STALE_AFTER_MS } from '../../Models/OfflineScanModel.js';
 
 // Module-level, not per-render: renderStandaloneScanner() only actually
@@ -64,6 +64,7 @@ function renderStandaloneScanner() {
   // A stray unhandled rejection here (e.g. offline on load) shouldn't
   // block the scanner from working; scans just stay silent until a retry.
   loadScanSounds().catch(() => {});
+  initAudioUnlock();
   initOfflineSupport(operatorName);
   const codeInput = $('#ss-code');
   // The HTML `autofocus` attribute isn't reliably honored when markup is
@@ -151,12 +152,18 @@ function renderStandaloneScanner() {
       codeInput.focus();
       scanBusy = false;
     }, POST_SCAN_COOLDOWN_MS);
-    // Only this operator's own scans, per kiosk — see get_scan_feed's
-    // p_scanner_id filter. Skipped for an offline-queued scan: nothing
-    // was written to scan_events yet, so a refresh right now would just
-    // fail (or silently show nothing new) — the feed catches up once the
-    // queue actually syncs.
-    if (!offlineHandled) loadScanFeed('ss-feed', 10, operatorName);
+    // An offline-handled scan was never inserted into scan_events, so a
+    // real loadScanFeed() reload right now would just fail (or silently
+    // show nothing new for it) — but the operator still needs to see that
+    // the scan happened, so it gets a local optimistic row instead. The
+    // real feed reload still happens later, once the queue actually syncs
+    // (see flushIfPending in initOfflineSupport below), which replaces
+    // this placeholder with the authoritative synced entry.
+    if (offlineHandled) {
+      prependPendingRow('ss-feed', data, operatorName, 10);
+    } else {
+      loadScanFeed('ss-feed', 10, operatorName);
+    }
   };
   codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doScan(); });
   const POST_SCAN_COOLDOWN_MS = 1000;

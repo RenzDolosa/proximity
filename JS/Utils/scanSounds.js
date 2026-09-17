@@ -26,6 +26,45 @@ export function scanSoundsLoaded() {
   return loaded;
 }
 
+// Browsers require a user gesture before allowing audio playback, and —
+// this is the part that actually bit us — that allowance has to be
+// claimed synchronously inside the gesture's own event handler. Every
+// call to playScanSound() happens from inside doScan(), AFTER an `await`
+// on either the scan RPC or the offline-cache lookup. By the time
+// execution resumes and reaches `.play()`, the transient activation from
+// the keydown/Enter that started the whole thing has already expired —
+// so the play() promise rejects on the autoplay policy and gets silently
+// swallowed below, every single time, not just intermittently. That's why
+// "no scan sounds" was a hard 100%-of-the-time bug, not a flaky one.
+//
+// Fix: play a near-silent clip SYNCHRONOUSLY inside the very first real
+// keydown/pointerdown this page sees — no `await` in between gesture and
+// play(). Once a page has successfully played audio off a direct gesture
+// like that, browsers (Chrome's Media Engagement Index in particular)
+// allow further programmatic audio.play() calls on that page for the
+// rest of the session regardless of subsequent async gaps. Call this once
+// per screen mount, same place as loadScanSounds() — StandaloneScanner.js
+// and TestScanPage.js both do.
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+let audioUnlocked = false;
+
+export function initAudioUnlock() {
+  if (audioUnlocked) return;
+  const unlock = () => {
+    new Audio(SILENT_WAV).play().then(() => {
+      audioUnlocked = true;
+      document.removeEventListener('keydown', unlock);
+      document.removeEventListener('pointerdown', unlock);
+    }).catch(() => {
+      // Still locked — this "gesture" apparently didn't count (some
+      // browsers are picky about synthetic/trusted events). Listeners
+      // stay attached so the next real one tries again.
+    });
+  };
+  document.addEventListener('keydown', unlock);
+  document.addEventListener('pointerdown', unlock);
+}
+
 export async function loadScanSounds() {
   const { data, error } = await ScanSoundsModel.list();
   if (error) return; // leave `loaded` false — caller can retry later

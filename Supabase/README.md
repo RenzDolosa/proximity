@@ -164,7 +164,13 @@ unaffected (see its RPC entry above).
      IndexedDB copy of the card→employee lookup, refreshed opportunistically
      while online (on load, every 5 min, and right after reconnecting).
      Includes `photo_url`/`updated_at` so an offline-classified scan can
-     still show the real employee photo, not just initials.
+     still show the real employee photo, not just initials — though that
+     alone only gets the *data* to the client; the image itself still
+     needs a network path to Google Drive to actually load. `sw.js`'s
+     `PHOTO_CACHE` (added 2026-09-17, same cache-first-with-refresh
+     strategy as the sound cache) is what makes it available with zero
+     network: an employee's Drive thumbnail is servable offline once it's
+     loaded successfully at least one time while online.
    - Failed/offline scans get queued client-side (raw attempt only — code,
      scanner id, true timestamp — never a guessed result) and replayed
      **strictly one at a time, in original order** through the real
