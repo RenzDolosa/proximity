@@ -169,8 +169,21 @@ unaffected (see its RPC entry above).
      needs a network path to Google Drive to actually load. `sw.js`'s
      `PHOTO_CACHE` (added 2026-09-17, same cache-first-with-refresh
      strategy as the sound cache) is what makes it available with zero
-     network: an employee's Drive thumbnail is servable offline once it's
-     loaded successfully at least one time while online.
+     network — with two important refinements added the same day, after
+     the first version of this cache turned out to never actually cache
+     anything (see root `README.md`'s change log for the full story):
+     (a) a cross-origin `no-cors` photo request always comes back as an
+     *opaque* response (`ok: false` unconditionally, by design), which the
+     cache-put logic now explicitly accounts for instead of silently
+     skipping every single photo; (b) rather than only ever caching a
+     photo reactively (the moment someone happens to scan that person
+     while online), `OfflineScanModel.refreshCache()` now proactively
+     prefetches every roster photo right after refreshing the lookup
+     itself, bounded to 6 concurrent requests. Net effect: an employee's
+     photo is now actually available offline once the kiosk has had one
+     successful `refreshCache()` — not "once that specific person has been
+     scanned online," which for a 700+-person roster meant most of it,
+     effectively never.
    - Failed/offline scans get queued client-side (raw attempt only — code,
      scanner id, true timestamp — never a guessed result) and replayed
      **strictly one at a time, in original order** through the real

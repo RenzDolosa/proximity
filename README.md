@@ -108,7 +108,7 @@ JS/
                                        through admin-users v3+ w/ self-delete guard)
     Users/userOptions.js             (shared role/access-scope option lists)
     Settings/SettingsPage.js         (Settings, admin-only — upload/replace/remove/
-                                       preview the 4 scan sounds, plus a read-only
+                                       preview the 5 scan sounds, plus a read-only
                                        Google Drive storage-capacity panel for
                                        employee photos (whole-account quota, not
                                        folder-scoped — see change log); own
@@ -187,7 +187,7 @@ works fine under Five Server in dev without any extra setup).
            │                                              │ (see table below)             │
            │                                              └────────────────────────────┘
            │
-           └── Storage (scan-sounds bucket) ── 4 fixed keys, public read,
+           └── Storage (scan-sounds bucket) ── 5 fixed keys, public read,
                                                 admin-only write via RLS
 ```
 
@@ -224,22 +224,75 @@ Cards**, then scan that code in **Test Scan** (in-app) or the standalone
 **Scanner** tab (`?scanner=1`, logs to `scan_events`).
 
 As an admin, visit **Settings** to upload a short audio clip for each of
-the 4 scan outcomes (Matched/Success IN, Matched/Success OUT, Card
-revoked, Unknown proximity ID) — Test Scan and the live Scanner both play
-them automatically as soon as a result comes back. An outcome with
-nothing uploaded just stays silent.
+the 5 scan outcomes (Matched/Success IN, Matched/Success OUT, Card
+revoked, Unknown proximity ID, Unassigned card) — Test Scan and the live
+Scanner both play them automatically as soon as a result comes back. An
+outcome with nothing uploaded falls back to a bundled default tone (see
+"Offline-first design" below) rather than staying silent — the one
+exception is `inactive_employee`, which has no dedicated sound at all
+(deliberately: guessing with an unrelated clip would misrepresent the
+result) and stays silent either way.
+
+**Offline-first design:** the standalone Scanner (`?scanner=1`) is built
+to keep working through a real network outage, not just tolerate a brief
+blip — three independent pieces make that true:
+
+- **App shell** (`sw.js`, `APP_CACHE`): network-first with a cache
+  fallback, so a normal online load always gets what's actually live, and
+  only falls back to the last successfully-cached copy once the network
+  request itself fails.
+- **Scan sounds** (`SOUND_CACHE` + bundled fallback tones): the 5
+  admin-uploaded clips are cache-first-with-refresh, same reasoning as the
+  photos below. On top of that, `Public/Assets/Sounds/` ships 5 small
+  default tones as static assets, **precached at Service Worker install
+  time** (not lazily on first fetch, unlike everything else this file
+  caches) — so even a device that has never once been online with this
+  app still gets a distinct sound per outcome from its very first scan.
+  `JS/Utils/scanSounds.js`'s `playScanSound()` uses the admin's custom
+  clip when it's available, falls back to the bundled tone when it isn't
+  (no custom sound uploaded, or the custom one fails to load), and keeps
+  those three places — `sw.js`'s precache list, `scanSounds.js`'s
+  `FALLBACK_SOUND_PATHS`, and the actual files — in sync by filename.
+- **Employee photos** (`PHOTO_CACHE`): also cache-first-with-refresh, but
+  fundamentally can't be precached like sounds — there are 700+ of them
+  and growing, not a fixed set of 5. Instead,
+  `OfflineScanModel.refreshCache()` proactively prefetches every roster
+  photo (bounded to 6 concurrent requests, once per page session) right
+  after it pulls the card/employee lookup, rather than only ever caching
+  a photo the moment someone happens to scan that person while online —
+  which in practice meant most of the roster's photos were never cached
+  at all. A `photo_url` (`drive.google.com/thumbnail?...`) is a
+  cross-origin request the browser can only make as `no-cors`, which
+  comes back as an **opaque** response — `status: 0`, `ok: false`,
+  always, by design, regardless of whether it actually succeeded. `sw.js`
+  originally only cached `res.ok` responses, which silently meant it
+  could never actually cache a single Drive photo despite every other
+  piece of the pipeline looking correct; it now caches opaque responses
+  too, since there's nothing else available to check them against.
+  `JS/Utils/format.js`'s `photoSrc()` builds the exact same cache-busted
+  URL both `avatarHTML()` (for display) and the prefetcher use, so the
+  prefetch actually warms the cache key the later `<img>` will request —
+  building that URL in two places that could drift apart is exactly how
+  the `/thumbnail` vs `uc?export=view` format mismatch happened before
+  (see the change log).
+- **Queued scans** (`OfflineScanModel.js` + IndexedDB): covered separately
+  below.
 
 **Testing offline mode:** open the Scanner tab (`?scanner=1`) at least
-once online first — it needs one successful load to cache both the app
-shell (via `/sw.js`) and the card/employee lookup (via
-`get_scanner_offline_cache()`) before there's anything to fall back to.
-Then in Chrome DevTools → Network → Throttling → **Offline** (killing the
-Wi-Fi/network adapter itself also works, but doesn't let you flip back
-online from the same panel to watch the queue sync). Scan a known code —
-the header pill should switch to "◌ Offline" and the result should show
-"⚠ Offline — recorded locally, will sync automatically." Switch back to
-Online and the queued scan(s) should sync within a few seconds, updating
-Recent Activity.
+once online first — it needs one successful load to cache the app shell
+(via `/sw.js`) and the card/employee lookup (via
+`get_scanner_offline_cache()`) before there's anything to fall back to
+for the *lookup* itself. Scan sounds work from the very first load
+regardless (bundled + precached, see above); photos improve the more the
+kiosk has been online, since the prefetch above needs at least one
+successful `refreshCache()` to have run. Then in Chrome DevTools →
+Network → Throttling → **Offline** (killing the Wi-Fi/network adapter
+itself also works, but doesn't let you flip back online from the same
+panel to watch the queue sync). Scan a known code — the header pill
+should switch to "◌ Offline" and the result should show "⚠ Offline —
+recorded locally, will sync automatically." Switch back to Online and the
+queued scan(s) should sync within a few seconds, updating Recent
+Activity.
 
 ## 4. Suggested next steps
 
@@ -272,6 +325,62 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-17 — Offline scanner: the photo cache was never actually caching anything, plus true cold-start sound support**
+- **`PHOTO_CACHE` (added in the first "root-cause fixes" pass below) could
+  never actually cache a single photo.** `cacheFirstWithRefresh()` only
+  called `cache.put()` when `res.ok` was true — but a cross-origin
+  `no-cors` request (which is what the browser sends by default for a
+  third-party `<img src>` like Drive's thumbnail endpoint) always comes
+  back as an **opaque** response: `status: 0`, `ok: false`, unconditionally,
+  by design, regardless of whether it actually succeeded — the browser
+  deliberately hides the real result so a page can't probe a cross-origin
+  resource's status. So the `res.ok` check was quietly false on every
+  single photo response, forever, no matter how many times a photo loaded
+  successfully online. Fixed in `sw.js`: also cache `res.type === 'opaque'`
+  responses — there's nothing else available to check them against, which
+  is the accepted tradeoff for caching third-party resources at all.
+- **Most of the roster's photos were never cached even once**, since the
+  only path that populated `PHOTO_CACHE` was an `<img>` tag actually
+  loading — i.e. someone had to scan (or otherwise view) that specific
+  employee while online first. For a 700+-person roster, that's most of
+  it, every time. Added `OfflineScanModel.refreshCache()` →
+  `prefetchPhotos()`: after refreshing the offline lookup, proactively
+  `fetch(url, { mode: 'no-cors' })`s every roster photo (bounded to 6
+  concurrent, once per page session) purely to make the Service Worker's
+  `fetch` listener see and cache each one, without ever reading the
+  (unreadable, opaque) response itself.
+- **Scan sounds still went silent on a device's very first-ever offline
+  load** — the existing `SOUND_CACHE` is cache-first-with-refresh, which
+  is correct for "works offline after having been online once" but can't
+  help a kiosk that's never been online with this app at all. Added 5
+  small bundled default tones under `Public/Assets/Sounds/`
+  (`gen_sounds.py`-style short synthesized beeps, not the admin's actual
+  uploaded clips), **precached in `sw.js`'s `install` handler** — not
+  lazily on first fetch like everything else — so they're available
+  starting from the literal first page load, online or not.
+  `Utils/scanSounds.js`'s `playScanSound()` now tries the admin's custom
+  clip first and falls back to the matching bundled tone when it's
+  missing or fails to load.
+- **Fixed a real drift bug while adding the above**: `EmployeeModal.js`'s
+  and `DirectoryPage.js`'s avatar `<img>` tags build `photo_url` directly,
+  without `avatarHTML()`/the cache-busting `cb=` param — so those two
+  spots (Employee Manager grid, Edit modal) can show a stale browser-cached
+  photo after a swap, unlike everywhere the Scanner touches, which all go
+  through `avatarHTML()`. Not fixed here (out of scope for an offline-
+  scanner pass, and those two spots are online-only screens with no
+  offline angle) — flagging since it's the same *class* of bug as the
+  `/thumbnail`-vs-`uc?export=view` mismatch two entries below.
+- Also: `ScanSoundsModel.js`'s and this README's own doc comments said "4"
+  scan sounds in three places — there are, and always were in the current
+  schema, 5 (`unassigned_card` was already a real key). Fixed the ones
+  describing current behavior; left the historical changelog entries below
+  as-is, since a changelog describes state-at-the-time, not now.
+- Extracted `Utils/format.js`'s URL-building logic out of `avatarHTML()`
+  into a standalone `photoSrc()`, so `prefetchPhotos()` above can build the
+  *exact* same cache-busted URL `avatarHTML()` will request later — one
+  function, two callers, instead of two copies that could drift apart
+  (which is exactly how the `/thumbnail` mismatch below happened).
 
 **2026-09-17 — Offline scanner: root-cause fixes for bugs that survived the first pass**
 - **Scan sounds still never played, even once sounds were loading

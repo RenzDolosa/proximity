@@ -33,8 +33,33 @@ const APP_CACHE = 'proximity-app-v1';
 const SOUND_CACHE = 'proximity-sounds-v1';
 const PHOTO_CACHE = 'proximity-photos-v1';
 
-self.addEventListener('install', () => {
-  self.skipWaiting();
+// Bundled fallback scan sounds — precached at install time (not lazily on
+// first fetch, unlike everything else this file caches) specifically so
+// they're available on a device's very first-ever load with no network,
+// not just after "was online with this app once already". Keep this list,
+// Utils/scanSounds.js's FALLBACK_SOUND_PATHS, and the actual files under
+// Public/Assets/Sounds/ in sync — three places that all need to agree on
+// the same 5 filenames.
+const FALLBACK_SOUND_URLS = [
+  '/Public/Assets/Sounds/matched-in.wav',
+  '/Public/Assets/Sounds/matched-out.wav',
+  '/Public/Assets/Sounds/card-revoked.wav',
+  '/Public/Assets/Sounds/unmatched.wav',
+  '/Public/Assets/Sounds/unassigned-card.wav',
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(APP_CACHE);
+    // addAll() is all-or-nothing — if precaching failed (e.g. this install
+    // itself has no network yet, on a repeat install), that's fine: these
+    // files fall back to APP_CACHE's normal network-first-with-fallback
+    // handling below like everything else, they just lose the "available
+    // from the very first offline load" guarantee until a later install
+    // succeeds. Never block/fail activation over this.
+    await cache.addAll(FALLBACK_SOUND_URLS).catch(() => {});
+    self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (event) => {
@@ -110,7 +135,25 @@ async function cacheFirstWithRefresh(req, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(req);
   const networkPromise = fetch(req)
-    .then((res) => { if (res && res.ok) cache.put(req, res.clone()); return res; })
+    .then((res) => {
+      // A cross-origin request the browser sent as no-cors (which is what
+      // an <img>/<audio> tag loading a third-party URL like Drive's
+      // thumbnail endpoint does BY DEFAULT, and what this file's own
+      // no-cors prefetch — see OfflineScanModel.js's prefetchPhotos() —
+      // uses deliberately) always comes back as an "opaque" response:
+      // status 0, ok:false, no matter whether the request actually
+      // succeeded. The browser hides those details on purpose so a page
+      // can't probe a cross-origin resource's real status. That means the
+      // original `res.ok`-only check here could NEVER cache a single
+      // Drive photo response — PHOTO_CACHE was being populated with
+      // nothing, silently, despite every piece of this looking correct.
+      // Cache opaque responses unconditionally alongside genuine res.ok
+      // successes; there's nothing else available to check them against,
+      // and that's the accepted tradeoff for caching third-party
+      // resources at all.
+      if (res && (res.ok || res.type === 'opaque')) cache.put(req, res.clone());
+      return res;
+    })
     .catch(() => null);
   return cached || (await networkPromise) || new Response(null, { status: 504, statusText: 'Offline and not cached' });
 }

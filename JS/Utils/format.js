@@ -8,6 +8,19 @@ export const esc = (s) =>
 export const initials = (name) =>
   (name || '?').trim().split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
+// The URL-building half of avatarHTML() below, split out so
+// OfflineScanModel's prefetchPhotos() can construct the EXACT same URL
+// (cache-busting param included) to warm the Service Worker's photo cache
+// under the same key avatarHTML() will request later — building this in
+// two places that could drift apart is exactly how the /thumbnail vs
+// uc?export=view mismatch happened before (see sw.js's isPhotoRequest()
+// comment); one function, two callers, avoids a repeat.
+export const photoSrc = (photoUrl, cacheKey) => {
+  if (!photoUrl) return null;
+  const sep = photoUrl.includes('?') ? '&' : '?';
+  return `${photoUrl}${sep}cb=${encodeURIComponent(cacheKey || '')}`;
+};
+
 // Renders inside a `.avatar` div. photo_url in this app is a Google Drive
 // thumbnail link (drive.google.com/thumbnail?id=...) tied to a fixed file
 // id — replacing the photo in Drive keeps that same URL, and both the
@@ -23,9 +36,8 @@ export const initials = (name) =>
 // broken-image icon if a link is ever invalid or briefly unavailable.
 export const avatarHTML = (name, photoUrl, cacheKey) => {
   const fallback = `<span class="avatar-fallback">${esc(initials(name))}</span>`;
-  if (!photoUrl) return fallback;
-  const sep = photoUrl.includes('?') ? '&' : '?';
-  const src = `${photoUrl}${sep}cb=${encodeURIComponent(cacheKey || '')}`;
+  const src = photoSrc(photoUrl, cacheKey);
+  if (!src) return fallback;
   return `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'" />${fallback.replace('<span', '<span style="display:none;"')}`;
 };
 

@@ -1,4 +1,4 @@
-// The 4 admin-uploaded scan feedback sounds, stored in the public
+// The 5 admin-uploaded scan feedback sounds, stored in the public
 // `scan-sounds` Storage bucket under fixed, extension-less object keys.
 // Fixed keys mean "replace" is a plain upsert onto the same path — no
 // old-file cleanup needed across format changes, unlike the Drive photo

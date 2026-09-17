@@ -8,6 +8,25 @@
 // benefit, since sounds only change when an admin visits Settings.
 import { ScanSoundsModel, SOUND_KEYS } from '../Models/ScanSoundsModel.js';
 
+// Bundled default tones, shipped as static assets (not admin-uploaded, not
+// Supabase Storage) so the scanner ALWAYS has something to play — even on
+// a device that has never been online with this app at all, which an
+// admin-uploaded sound fundamentally can't guarantee (it only becomes
+// available offline after at least one successful fetch, per
+// Utils/scanSounds.js's `loaded` history and sw.js's cache-first-with-
+// refresh strategy for the scan-sounds bucket). sw.js precaches these 5
+// paths at install time specifically so they survive a true first-ever
+// offline load, not just a "was online once already" one. Keep this in
+// sync with sw.js's PRECACHE_URLS and Public/Assets/Sounds/ — three
+// places that all need to agree on the same 5 filenames.
+const FALLBACK_SOUND_PATHS = {
+  matched_in: '/Public/Assets/Sounds/matched-in.wav',
+  matched_out: '/Public/Assets/Sounds/matched-out.wav',
+  card_revoked: '/Public/Assets/Sounds/card-revoked.wav',
+  unmatched: '/Public/Assets/Sounds/unmatched.wav',
+  unassigned_card: '/Public/Assets/Sounds/unassigned-card.wav',
+};
+
 let urlsByKey = null; // { matched_in: url|null, ... } once loaded, else null
 // Separate from `urlsByKey` being non-null: a *successful* list() can
 // legitimately resolve to no sounds configured yet, which still counts as
@@ -94,13 +113,30 @@ function keyForResult(data) {
 }
 
 // Safe to call even if loadScanSounds() hasn't resolved yet or failed —
-// a missing/not-yet-loaded sound just means silence, never a thrown error
-// that could interrupt the scan flow itself.
+// there's always the bundled fallback to try, so this never goes fully
+// silent just because the custom-sounds list couldn't be fetched (e.g. a
+// device that's never been online with this app before).
 export function playScanSound(data) {
   const key = keyForResult(data);
-  const url = key && urlsByKey?.[key];
+  if (!key) return; // inactive_employee: deliberately silent, see keyForResult
+  const customUrl = urlsByKey?.[key];
+  const fallbackUrl = FALLBACK_SOUND_PATHS[key];
+  playUrl(customUrl || fallbackUrl, customUrl ? fallbackUrl : null);
+}
+
+function playUrl(url, retryFallbackUrl) {
   if (!url) return;
   const audio = new Audio(url);
+  // If the admin-uploaded clip is the one playing and it fails — most
+  // likely offline and this particular one was never cached (see sw.js's
+  // SOUND_CACHE: cache-first, but only for what's actually been fetched
+  // before) — retry once with the bundled fallback instead of just going
+  // silent. `error` catches a failed/aborted network load; `.play()`'s own
+  // rejection catches the browser's autoplay-policy case, which retrying
+  // with a different URL can't fix, so that one doesn't retry.
+  if (retryFallbackUrl) {
+    audio.addEventListener('error', () => playUrl(retryFallbackUrl, null), { once: true });
+  }
   audio.play().catch(() => {
     // Most likely the browser's autoplay policy (no user gesture yet on
     // this page) or a decode error on whatever the admin uploaded —
