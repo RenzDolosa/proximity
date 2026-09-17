@@ -22,13 +22,14 @@
 //   fixes "no employee photo while offline": without it, a genuinely
 //   offline scan's avatarHTML() `<img>` has nowhere to load from at all
 //   (Drive is a remote host, there's no network), so it always fell back
-//   to initials even for someone whose photo had loaded successfully
-//   during this very session. Once an employee's photo has been fetched
-//   at least once while online, it's available offline from here for as
-//   long as their record's cache-busting `cb=` query param stays the
-//   same (see avatarHTML() — that param changes on any edit, which
-//   naturally busts this cache entry the same way it busts the browser's
-//   own HTTP cache).
+//   to the bundled default-avatar image (see DEFAULT_AVATAR_URL below;
+//   initials only beyond that) even for someone whose photo had loaded
+//   successfully during this very session. Once an employee's photo has
+//   been fetched at least once while online, it's available offline from
+//   here for as long as their record's cache-busting `cb=` query param
+//   stays the same (see avatarHTML() — that param changes on any edit,
+//   which naturally busts this cache entry the same way it busts the
+//   browser's own HTTP cache).
 const APP_CACHE = 'proximity-app-v1';
 const SOUND_CACHE = 'proximity-sounds-v1';
 const PHOTO_CACHE = 'proximity-photos-v1';
@@ -48,6 +49,14 @@ const FALLBACK_SOUND_URLS = [
   '/Public/Assets/Sounds/unassigned-card.wav',
 ];
 
+// Same reasoning, one file: the generic default-avatar silhouette
+// Utils/format.js's avatarHTML() falls back to when an employee has no
+// photo_url at all, or the real Drive photo fails to load offline and was
+// never cached in PHOTO_CACHE. Precached here for the same "available from
+// the literal first load, online or not" guarantee as the sounds above —
+// keep this path in sync with Utils/format.js's DEFAULT_AVATAR_SRC.
+const DEFAULT_AVATAR_URL = '/Public/Assets/EmployeePhoto/default-avatar.svg';
+
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(APP_CACHE);
@@ -57,7 +66,7 @@ self.addEventListener('install', (event) => {
     // handling below like everything else, they just lose the "available
     // from the very first offline load" guarantee until a later install
     // succeeds. Never block/fail activation over this.
-    await cache.addAll(FALLBACK_SOUND_URLS).catch(() => {});
+    await cache.addAll([...FALLBACK_SOUND_URLS, DEFAULT_AVATAR_URL]).catch(() => {});
     self.skipWaiting();
   })());
 });
