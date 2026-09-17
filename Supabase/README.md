@@ -163,6 +163,8 @@ unaffected (see its RPC entry above).
    - `get_scanner_offline_cache()` (see RPC section above) feeding a local
      IndexedDB copy of the card→employee lookup, refreshed opportunistically
      while online (on load, every 5 min, and right after reconnecting).
+     Includes `photo_url`/`updated_at` so an offline-classified scan can
+     still show the real employee photo, not just initials.
    - Failed/offline scans get queued client-side (raw attempt only — code,
      scanner id, true timestamp — never a guessed result) and replayed
      **strictly one at a time, in original order** through the real
@@ -171,6 +173,14 @@ unaffected (see its RPC entry above).
      length *at the moment each RPC call actually runs*, so two calls for
      the same employee racing in parallel could both read the same
      "before" count and both come back `in`.
+   - Resync-on-reconnect no longer relies solely on the browser's `online`
+     event (unreliable on some OS/browser/network combos, and easy to miss
+     entirely on a backgrounded kiosk tab): a lightweight 20s poller
+     (a no-op IndexedDB read when the queue is empty) and a
+     `visibilitychange` listener both retry the flush independently. A
+     sync that actually writes rows now also reloads Recent Activity —
+     it previously only refreshed the lookup cache, so newly-synced scans
+     didn't appear until something else happened to reload the feed.
 
 **What this does *not* solve:** the lookup cache is a snapshot — it can't
 see a card revoked, or a scan made on a *different* kiosk or through Test
@@ -223,6 +233,15 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-17 — Offline scanner client-side bug fixes (no schema/RPC change)**
+- No Postgres changes — `get_scanner_offline_cache()` already returned
+  `photo_url`/`updated_at`; `JS/Models/OfflineScanModel.js#classify()` just
+  wasn't passing them through to the rendered result, which is why offline
+  scans showed initials instead of the employee photo. See root
+  `README.md`'s change log for the full list of client-side fixes
+  (resync-on-reconnect, Recent Activity not updating post-sync, and
+  scan-sound loading never retrying after a failed first attempt).
 
 **2026-09-16 — Offline scanning: `get_scanner_offline_cache()` + backdated `scan_proximity_code()`**
 - `scan_proximity_code()` gained two optional, backward-compatible params:

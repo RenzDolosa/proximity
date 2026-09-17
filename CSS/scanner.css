@@ -83,6 +83,13 @@
 .ss-feed-panel .feed-row .emp-meta{font-size:10px;}
 .ss-feed-panel .feed-time{font-size:10px;}
 .ss-feed-panel .badge{font-size:9px;padding:2px 6px;}
+/* Queued/syncing count — deliberately separate from the header's
+   online/offline + staleness pill (.ss-offline-status): this is
+   feed-scoped info (how many of the scans *below* haven't landed there
+   yet), not kiosk-health info, so it lives right under the panel it
+   affects instead of competing with the header for attention. */
+.ss-sync-status{flex:none;text-align:right;margin-top:8px;min-height:1px;}
+.ss-sync-status .emp-meta{font-size:10.5px;}
 
 /* ---------- in-shell Test Scan page (same lookup, never logged) ---------- */
 .test-scan-wrap{width:100%;max-width:480px;margin:0 auto;}

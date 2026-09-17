@@ -265,13 +265,44 @@ Recent Activity.
 
 ---
 *Last reconciled against the live GitHub repo and live Supabase project on
-2026-09-16. If you're another Claude instance picking this project up: fetch
+2026-09-17. If you're another Claude instance picking this project up: fetch
 `github.com/RenzDolosa/proximity` fresh (via web_search + web_fetch, or the
 GitHub connector) and re-verify against `Supabase:list_tables` /
 `list_edge_functions` before making schema or Edge Function claims — this
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-17 — Offline scanner: reconnect/feed/sound/photo bug fixes**
+- **Resync on reconnect wasn't reliable.** The queue only ever flushed on
+  the browser's `online` event, and the periodic timer only refreshed the
+  lookup cache, not the queue — so a missed/never-fired `online` event
+  (common on flaky Wi-Fi, captive portals, some mobile browsers, or a
+  kiosk tab that was simply backgrounded when connectivity came back)
+  could leave scans stranded until a manual reload. Fixed with a cheap
+  20s poller (a no-op IndexedDB read when nothing's queued) plus a
+  `visibilitychange` listener, both independent of the `online` event.
+- **Recent Activity didn't show synced offline scans.** The reconnect
+  handler refreshed the offline lookup cache but never reloaded the feed,
+  so scans that had just been written to `scan_events` for the first time
+  stayed invisible until something else happened to trigger a reload.
+  Now reloads the feed whenever a flush actually syncs anything.
+- **Scan sounds could go silent for a whole session.** `loadScanSounds()`
+  ran once on mount and silently swallowed a failure with no retry — a
+  kiosk that first loaded offline (or raced a flaky connection on that
+  first call) got no scan-feedback audio for the rest of the session.
+  Now retried on the existing 5-min cache-refresh cycle until it actually
+  succeeds.
+- **Offline scans showed initials instead of the employee photo.**
+  `get_scanner_offline_cache()` already returns `photo_url`/`updated_at`
+  (see `Supabase/README.md`) — `OfflineScanModel.classify()` just wasn't
+  passing them through to the rendered result. Fixed client-side only, no
+  RPC change needed.
+- Moved the "Syncing N offline scans…" / "N scans queued" line out of the
+  header pill and under Recent Activity (bottom-right of the kiosk layout,
+  new `.ss-sync-status` element) — it's feed-scoped info, not kiosk-health
+  info, so it now sits next to the feed it actually affects. The header
+  pill still shows online/offline + lookup-cache staleness.
 
 **2026-09-16 — Offline-capable Scanner (app shell + scan queue, ~24h target)**
 - New `sw.js` at the **repo root** (deliberately not inside `Public/` — see

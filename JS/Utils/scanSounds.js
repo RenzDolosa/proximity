@@ -9,9 +9,26 @@
 import { ScanSoundsModel, SOUND_KEYS } from '../Models/ScanSoundsModel.js';
 
 let urlsByKey = null; // { matched_in: url|null, ... } once loaded, else null
+// Separate from `urlsByKey` being non-null: a *successful* list() can
+// legitimately resolve to no sounds configured yet, which still counts as
+// "loaded" (nothing to retry). This flag exists only to answer "did the
+// last attempt fail" so callers know whether a retry is worthwhile.
+let loaded = false;
+
+// Exposed so a caller (e.g. the standalone scanner's reconnect/periodic
+// handler) can tell whether the initial load ever actually succeeded and
+// retry loadScanSounds() if not — see the `loaded` comment above. Without
+// this, a kiosk that boots while offline (or whose very first list() call
+// races a flaky connection) stays silent for its *entire* session: the
+// original code only ever called loadScanSounds() once, on mount, and
+// swallowed a failure with no way to know it needed a retry.
+export function scanSoundsLoaded() {
+  return loaded;
+}
 
 export async function loadScanSounds() {
-  const { data } = await ScanSoundsModel.list();
+  const { data, error } = await ScanSoundsModel.list();
+  if (error) return; // leave `loaded` false — caller can retry later
   const byPath = Object.fromEntries((data || []).map((o) => [o.name, o]));
   const next = {};
   for (const key of Object.keys(SOUND_KEYS)) {
@@ -23,6 +40,7 @@ export async function loadScanSounds() {
     next[key] = obj ? `${ScanSoundsModel.publicUrl(key)}?v=${encodeURIComponent(obj.updated_at || obj.id || '')}` : null;
   }
   urlsByKey = next;
+  loaded = true;
 }
 
 function keyForResult(data) {

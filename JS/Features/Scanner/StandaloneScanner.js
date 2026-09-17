@@ -6,7 +6,7 @@ import { ScanEventsModel } from '../../Models/ScanEventsModel.js';
 import { renderScanResult } from '../../Components/ScanResultCard.js';
 import { loadScanFeed } from '../../Components/ScanFeed.js';
 import { PROXIMITY_LOGO_SVG } from '../../Components/ProximityLogo.js';
-import { loadScanSounds, playScanSound } from '../../Utils/scanSounds.js';
+import { loadScanSounds, playScanSound, scanSoundsLoaded } from '../../Utils/scanSounds.js';
 import { OfflineScanModel, STALE_AFTER_MS } from '../../Models/OfflineScanModel.js';
 
 // Module-level, not per-render: renderStandaloneScanner() only actually
@@ -55,6 +55,7 @@ function renderStandaloneScanner() {
           <div class="ss-feed-title">Recent activity</div>
           <div id="ss-feed">Loading…</div>
         </div>
+        <div class="ss-sync-status" id="ss-sync-status"></div>
       </div>
     </div>
   `;
@@ -63,7 +64,7 @@ function renderStandaloneScanner() {
   // A stray unhandled rejection here (e.g. offline on load) shouldn't
   // block the scanner from working; scans just stay silent until a retry.
   loadScanSounds().catch(() => {});
-  initOfflineSupport();
+  initOfflineSupport(operatorName);
   const codeInput = $('#ss-code');
   // The HTML `autofocus` attribute isn't reliably honored when markup is
   // inserted via innerHTML (as opposed to during initial page parsing) —
@@ -176,32 +177,48 @@ function renderStandaloneScanner() {
   loadScanFeed('ss-feed', 10, operatorName);
 }
 
-// Renders the pill in the header: online/offline, how many scans are
-// queued waiting to sync, and how stale the offline lookup cache is.
-// Called on mount, after every scan (queue count can change), and on
-// every online/offline transition.
+// Renders two things from the same underlying state, in two different
+// spots in the layout: the header pill (connectivity + lookup-cache
+// staleness — operator-facing "is this kiosk healthy" info that belongs
+// near the top) and a small status line under Recent Activity, bottom
+// right (the queued/syncing count — belongs next to the feed it affects,
+// not competing with the header for attention). Called on mount, after
+// every scan (queue count can change), and on every online/offline
+// transition.
 async function renderOfflineStatus() {
-  const el = $('#ss-offline-status');
-  if (!el) return; // scanner tab may have been torn down (sign-out) mid-flight
+  const headerEl = $('#ss-offline-status');
+  const syncEl = $('#ss-sync-status');
+  if (!headerEl && !syncEl) return; // scanner tab may have been torn down (sign-out) mid-flight
   const [pending, meta] = await Promise.all([
     OfflineScanModel.queueCount(),
     OfflineScanModel.getCacheMeta(),
   ]);
   const stale = meta.ageMs > STALE_AFTER_MS;
-  const parts = [];
-  if (navigator.onLine) {
-    parts.push(`<span class="badge active">● Online</span>`);
-    if (pending > 0) parts.push(`<span class="emp-meta">Syncing ${pending} offline scan${pending === 1 ? '' : 's'}…</span>`);
-  } else {
-    parts.push(`<span class="badge suspended">◌ Offline</span>`);
-    parts.push(`<span class="emp-meta">${pending} scan${pending === 1 ? '' : 's'} queued — will sync automatically</span>`);
+
+  if (headerEl) {
+    const parts = [];
+    if (navigator.onLine) {
+      parts.push(`<span class="badge active">● Online</span>`);
+    } else {
+      parts.push(`<span class="badge suspended">◌ Offline</span>`);
+    }
+    if (meta.syncedAt && stale) {
+      parts.push(`<span class="emp-meta" style="color:var(--bad)">⚠ Offline data last synced ${esc(fmtAge(meta.ageMs))} ago — may be out of date</span>`);
+    } else if (!meta.syncedAt) {
+      parts.push(`<span class="emp-meta" style="color:var(--bad)">⚠ No offline data cached yet — scans will fail if the network drops</span>`);
+    }
+    headerEl.innerHTML = parts.join(' ');
   }
-  if (meta.syncedAt && stale) {
-    parts.push(`<span class="emp-meta" style="color:var(--bad)">⚠ Offline data last synced ${esc(fmtAge(meta.ageMs))} ago — may be out of date</span>`);
-  } else if (!meta.syncedAt) {
-    parts.push(`<span class="emp-meta" style="color:var(--bad)">⚠ No offline data cached yet — scans will fail if the network drops</span>`);
+
+  if (syncEl) {
+    if (pending > 0) {
+      syncEl.innerHTML = navigator.onLine
+        ? `<span class="emp-meta">Syncing ${pending} offline scan${pending === 1 ? '' : 's'}…</span>`
+        : `<span class="emp-meta">${pending} scan${pending === 1 ? '' : 's'} queued — will sync automatically</span>`;
+    } else {
+      syncEl.innerHTML = '';
+    }
   }
-  el.innerHTML = parts.join(' ');
 }
 
 function fmtAge(ms) {
@@ -217,29 +234,61 @@ function fmtAge(ms) {
 // aging even on a kiosk that's never explicitly reloaded), and the
 // online/offline wiring that flushes the queue the instant connectivity
 // comes back.
-function initOfflineSupport() {
+function initOfflineSupport(operatorName) {
   if (offlineSupportInited) { renderOfflineStatus(); return; }
   offlineSupportInited = true;
 
   const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 min — cheap single RPC call, keeps the cache fresh through a normal shift without waiting on a reload
+  // Deliberately shorter than REFRESH_INTERVAL_MS: this is the safety net
+  // for a missed/never-fired `online` event (flaky on some OS/browser/
+  // network combos — captive portals, Wi-Fi roaming, some mobile browsers
+  // in particular), so it needs to catch up sooner than "once per 5 min"
+  // would leave a kiosk sitting unsynced.
+  const FLUSH_RETRY_INTERVAL_MS = 20 * 1000;
 
   const refreshIfOnline = async () => {
     if (!navigator.onLine) return;
     await OfflineScanModel.refreshCache().catch(() => {});
+    // loadScanSounds() is normally a once-per-mount call (see
+    // renderStandaloneScanner), but a kiosk that first loaded while
+    // offline (or whose very first list() call raced a flaky connection)
+    // never got a working sound map and, before this, had no way to
+    // retry — it just stayed silent for the rest of the session.
+    if (!scanSoundsLoaded()) await loadScanSounds().catch(() => {});
+    renderOfflineStatus();
+  };
+
+  // Cheap to call often: when the queue is empty this is just a local
+  // IndexedDB count read, no network round-trip at all. Only actually
+  // calls the sync RPC when there's something to send.
+  const flushIfPending = async () => {
+    if (!navigator.onLine) return;
+    const pendingBefore = await OfflineScanModel.queueCount();
+    if (pendingBefore === 0) return;
+    const { synced } = await OfflineScanModel.flushQueue(() => renderOfflineStatus()).catch(() => ({ synced: 0 }));
+    // Recent Activity only shows what's actually in scan_events — an
+    // offline-queued scan was never inserted there, so a sync that just
+    // wrote rows for the first time needs an explicit reload here or
+    // those scans never appear until something else happens to refresh
+    // the feed (e.g. the next manual scan, or a reload).
+    if (synced > 0) loadScanFeed('ss-feed', 10, operatorName);
     renderOfflineStatus();
   };
 
   const flushAndRefresh = async () => {
-    if (!navigator.onLine) return;
-    const pendingBefore = await OfflineScanModel.queueCount();
-    if (pendingBefore > 0) {
-      await OfflineScanModel.flushQueue(() => renderOfflineStatus()).catch(() => {});
-    }
+    await flushIfPending();
     await refreshIfOnline();
   };
 
   window.addEventListener('online', flushAndRefresh);
   window.addEventListener('offline', renderOfflineStatus);
+  // Extra resync trigger alongside the 'online' event, not a replacement
+  // for it: a kiosk tab backgrounded while offline and brought back to
+  // the foreground after connectivity actually returned is exactly the
+  // case where 'online' is most likely to have been missed.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') flushAndRefresh();
+  });
 
   // Kick things off: paint whatever's already cached immediately (no
   // network wait), then try a real refresh/flush if we're online right
@@ -247,5 +296,11 @@ function initOfflineSupport() {
   // "tab just loaded, already online".
   renderOfflineStatus();
   flushAndRefresh();
+  // Periodic *flush* attempt (not just a cache refresh) — the actual fix
+  // for "came back online but nothing resynced automatically": before,
+  // this interval only ever called refreshIfOnline(), so a queue left
+  // behind by a missed 'online' event could sit there indefinitely with
+  // no other path back to syncing short of a manual reload.
+  setInterval(flushIfPending, FLUSH_RETRY_INTERVAL_MS);
   setInterval(refreshIfOnline, REFRESH_INTERVAL_MS);
 }
