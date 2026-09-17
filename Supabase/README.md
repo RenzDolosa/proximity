@@ -247,11 +247,58 @@ contracts each client-side caller relies on.
 *Last reconciled against `Supabase:list_tables` (verbose),
 `Supabase:list_edge_functions`, `storage.buckets`, and
 `pg_get_functiondef()` on the live `kjwttqmbcjvkivgmwuev` project,
-2026-09-16. Re-verify against those before trusting this file blindly in a
+2026-09-17. Re-verify against those before trusting this file blindly in a
 future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-17 — Fixed a real concurrency bug in `trg_append_scan_log()`, plus one more offline-photo gap**
+- **Root cause of the IN/OUT/OUT/IN corruption seen in Employee Manager's
+  scan log** (reported with screenshots — two employees' logs showing
+  broken alternation): `trg_append_scan_log()` used to `SELECT
+  jsonb_array_length(scan_logs)`, compute `direction`, THEN run a separate
+  `UPDATE` — two statements with no row lock between them. Two
+  `scan_events` inserts for the same employee landing close together (a
+  live kiosk scan racing an offline-queue replay, in particular, though
+  any two near-simultaneous scans could trigger it) could both `SELECT`
+  the same stale count and both compute the same direction before either
+  `UPDATE` committed. Fixed by moving `jsonb_array_length(scan_logs)`
+  *inside* the `UPDATE`'s `SET` clause — Postgres locks the target row for
+  the duration of an `UPDATE`, so a second concurrent `UPDATE` for the
+  same employee now blocks until the first commits, then evaluates
+  `scan_logs` fresh against the just-updated row. Single atomic statement,
+  same guarantee `add_employee_remark()` already relies on.
+- `scan_proximity_code()` no longer computes its own `direction` via a
+  second, independent `SELECT` before the insert (which could itself
+  still drift from the trigger's answer under concurrency, even after the
+  fix above) — it now reads the trigger's own just-written value back
+  (`scan_logs -> -1 ->> 'direction'`) after the insert, since
+  `trg_scan_events_append_log` fires synchronously (`AFTER INSERT`, same
+  transaction) before the function continues. Single source of truth, no
+  duplicate logic, provably matches what's actually stored.
+- Each `scan_logs` entry now also carries `'offline'` (from
+  `scan_events.raw_payload->>'captured_offline'`) — lets
+  `JS/Components/ScanLogModal.js` show *why* a backdated entry might sit
+  at a position that looks out of chronological order (see its own entry
+  in root `README.md`'s change log: insertion order and `scanned_at` order
+  can legitimately differ once offline-synced scans exist, and the modal
+  now displays true insertion order rather than re-sorting by time, which
+  would visually "un-alternate" an otherwise-correct sequence).
+- **One-time data repair**, disclosed here rather than done silently:
+  ran a migration recomputing `direction` for all 14 employees who had
+  any `scan_logs` history, purely from array position parity (1st scan
+  ever = in, 2nd = out, ... — fully deterministic, so this is a lossless
+  correction of bad values the bug above had written, not a reinterpretation
+  of history). No other field touched.
+- Also closed one more offline-photo gap on the client side: `classify()`
+  is purely local and never itself attempts a network request, so a photo
+  the background prefetch (see 2026-09-17 entries above) hadn't reached
+  yet for a given employee fell straight to the default avatar — even in
+  the common case where "offline" actually means Supabase specifically
+  failed while the general connection (and Drive) is still fine. See
+  root `README.md`'s change log for the client-side fix
+  (`Utils/format.js`, `Scanner/StandaloneScanner.js`).
 
 **2026-09-17 — Offline scanner client-side bug fixes (no schema/RPC change)**
 - No Postgres changes — `get_scanner_offline_cache()` already returned

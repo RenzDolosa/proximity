@@ -1,5 +1,5 @@
 import { $ } from '../../Utils/dom.js';
-import { esc } from '../../Utils/format.js';
+import { esc, photoSrc } from '../../Utils/format.js';
 import { supabase } from '../../Core/supabaseClient.js';
 import { appState, canViewScanner } from '../../Core/state.js';
 import { ScanEventsModel } from '../../Models/ScanEventsModel.js';
@@ -126,6 +126,22 @@ function renderStandaloneScanner() {
       offlineHandled = true;
       await OfflineScanModel.enqueue(proximity_code, operatorName).catch(() => {});
       renderOfflineStatus();
+      // classify() is purely local — it never itself attempts a network
+      // request, so a photo that the background prefetch (see
+      // OfflineScanModel.js's prefetchPhotos()) hasn't reached yet for
+      // this specific employee falls straight to the default avatar, even
+      // in the common case here where "offline" actually means Supabase
+      // specifically failed while the general connection (and therefore
+      // Drive) is still fine. One best-effort live attempt, fired and not
+      // awaited so it can't add latency to what's meant to be an instant
+      // local classification: if Drive really is reachable, this lands in
+      // sw.js's PHOTO_CACHE in time for avatarHTML()'s one built-in retry
+      // (see Utils/format.js) to pick it up a moment later. If truly
+      // fully offline, this just fails the same way and changes nothing.
+      if (data.employee?.photo_url) {
+        const src = photoSrc(data.employee.photo_url, data.employee.photo_file_id);
+        fetch(src, { mode: 'no-cors' }).catch(() => {});
+      }
     }
     clearTimeout(fadeTimer);
     clearTimeout(clearTimer);

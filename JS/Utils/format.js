@@ -63,11 +63,24 @@ const defaultAvatarImg = () =>
 //   local static asset somehow fails to load. This case specifically
 //   means "this person does have a photo, we just can't reach it," which
 //   is worth distinguishing from "no photo on file" on a kiosk screen.
+//
+// One retry before giving up to the default avatar: OfflineScanModel's
+// doScan() kicks off a best-effort LIVE fetch for this exact photo in
+// parallel with rendering this card (see StandaloneScanner.js) — covering
+// the case where the general connection (and therefore Drive) is
+// actually fine even though Supabase specifically just failed (the case
+// that made this scan take the offline path at all). If that fetch wins
+// the race and lands in sw.js's PHOTO_CACHE within ~1.2s, re-requesting
+// the identical `src` picks up the real photo instead of settling for the
+// silhouette on the very first failed attempt. Harmless if genuinely
+// fully offline — the retry just fails the same way and falls through.
+const PHOTO_RETRY_MS = 1200;
 export const avatarHTML = (name, photoUrl, cacheKey) => {
   const initialsHTML = `<span class="avatar-fallback" style="display:none">${esc(initials(name))}</span>`;
   const src = photoSrc(photoUrl, cacheKey);
   if (!src) return `<span class="avatar-fallback">${esc(initials(name))}</span>`;
-  const realHTML = `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display=''" />`;
+  const onerror = `if(this.dataset.retried!=='1'){this.dataset.retried='1';var im=this,s=this.src;setTimeout(function(){im.src=s;},${PHOTO_RETRY_MS});}else{this.style.display='none';this.nextElementSibling.style.display='';}`;
+  const realHTML = `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" data-retried="0" onerror="${onerror}" />`;
   return realHTML + defaultAvatarImg() + initialsHTML;
 };
 

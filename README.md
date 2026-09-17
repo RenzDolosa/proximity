@@ -355,6 +355,48 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-17 — Employee Manager: scan-log direction corruption, root-caused and fixed (Postgres-side)**
+- Root cause and fix are entirely in `trg_append_scan_log()`/
+  `scan_proximity_code()` — see `Supabase/README.md`'s matching change log
+  entry for the full explanation (a genuine read-then-write race
+  condition, not an offline-specific bug, just one offline sync made far
+  more likely to hit). No JS changes for this part.
+- `JS/Components/ScanLogModal.js` — display now preserves true insertion
+  order (`.reverse()`) instead of re-sorting by `scanned_at`, since
+  direction alternates correctly by insertion order but insertion order
+  and `scanned_at` order can legitimately differ once an offline-captured
+  scan syncs late with a backdated timestamp; re-sorting by time would
+  visually "un-alternate" an otherwise-correct sequence. Entries captured
+  offline now show an `OFFLINE` tag (hover for why the timestamp might
+  look out of order) sourced from the new `scan_logs[].offline` field.
+
+**2026-09-17 — Offline scanner: one more photo gap — `classify()` never attempts a live fetch**
+- The prefetch work below (bundled default-avatar, `PHOTO_CACHE`, etc.)
+  all assumed the photo either got prefetched in advance or didn't — but
+  `OfflineScanModel.classify()` is purely local and never itself tries a
+  network request. In the common case where "offline" actually means
+  *Supabase specifically* failed while the general connection (and
+  therefore Drive) is still fine, that meant a not-yet-prefetched photo
+  fell straight to the default avatar even though it was, in that moment,
+  perfectly reachable.
+- `StandaloneScanner.js`'s `doScan()` now fires a best-effort, non-awaited
+  `fetch(..., {mode:'no-cors'})` for the scanned employee's photo the
+  moment it takes the offline path — if Drive really is reachable this
+  lands in `sw.js`'s `PHOTO_CACHE` within roughly a second. `Utils/format.js`'s
+  `avatarHTML()` now retries its own `<img>` once after a short delay
+  before giving up to the default avatar, specifically to give that
+  fetch a chance to land in time for the same result card. Harmless if
+  genuinely fully offline — both just fail the same way and change
+  nothing.
+- **Still an open question worth confirming, not assumed:** if scans in
+  your testing are failing while the header still shows "● Online," that
+  strongly suggests a Supabase-specific outage rather than true
+  network-level offline — the fix above targets exactly that case. If
+  you're testing via a full network cut (DevTools "Offline," airplane
+  mode), the only real fix for a not-yet-prefetched employee is giving
+  the roster-wide prefetch (see below) time to finish before going
+  offline — that's a timing/patience issue, not a bug.
+
 **2026-09-17 — Offline scanner: bundled default-avatar image for missing/uncached employee photos**
 - `avatarHTML()` (`Utils/format.js`) only ever had two tiers: the real
   Drive photo, or initials. Offline, that meant anyone whose photo hadn't
