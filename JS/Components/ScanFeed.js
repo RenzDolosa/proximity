@@ -49,7 +49,11 @@ export function prependPendingRow(targetId, classifyResult, scannerId, limit = 1
     scanner_id: scannerId,
     employee_name: e?.full_name || null,
     photo_url: e?.photo_url || null,
-    cache_key: e?.updated_at || '',
+    // photo_file_id, not updated_at — a scan bumps employees.updated_at
+    // itself (trg_employees_updated_at fires on the scan_logs append), so
+    // updated_at would never match what prefetchPhotos() actually cached.
+    // See OfflineScanModel.js's classify() for the full explanation.
+    cache_key: e?.photo_file_id || '',
   });
   const existingRows = feedEl.querySelector('.empty-state') ? [] : Array.from(feedEl.children);
   feedEl.innerHTML = rowHTML + existingRows.slice(0, limit - 1).map((el) => el.outerHTML).join('');

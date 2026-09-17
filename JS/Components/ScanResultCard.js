@@ -25,7 +25,7 @@ export function renderScanResult(data) {
         <span class="badge matched">${esc(LABELS[result])}</span>
         ${data.direction ? `<span class="badge ${data.direction === 'out' ? 'suspended' : 'active'}" style="margin-left:6px;">${esc(data.direction.toUpperCase())}</span>` : ''}
         <div class="emp-line" style="margin-top:12px;">
-          <div class="avatar">${avatarHTML(e.full_name, e.photo_url, e.updated_at)}</div>
+          <div class="avatar">${avatarHTML(e.full_name, e.photo_url, e.photo_file_id)}</div>
           <div>
             <div class="emp-name">${esc(e.full_name)}</div>
             <div class="emp-meta">${esc(e.department || '—')} · ${esc(e.position || '—')} · <span class="mono">${esc(e.employee_code)}</span></div>

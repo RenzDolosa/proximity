@@ -41,22 +41,49 @@ function isNetworkError(error) {
 // someone happens to scan that person while online — which meant, in
 // practice, that most of a 700+-person roster's photos were never cached
 // at all, and "offline" scans for anyone not recently seen fell back to
-// initials. This runs once per page session (see `prefetched` below), not
-// on every refreshCache() call — refetching 700+ photos on every refresh
-// would be wasteful, and cache-first-with-refresh already keeps each one
-// reasonably fresh once it's in the cache at all.
+// initials. Runs at most once per page session (see `prefetched` below) —
+// but that guard alone isn't enough: `prefetched` is a plain in-memory JS
+// variable, so it resets on every page load, not just once ever. Without
+// checking Cache Storage itself first, a reload used to restart the WHOLE
+// roster's prefetch from zero every single time, discarding all progress
+// from the last session even though PHOTO_CACHE (which IS persistent
+// across reloads) already had most of it. For a large roster at
+// PREFETCH_CONCURRENCY workers, that full burst takes real time to finish
+// — long enough that going offline shortly after a fresh load (exactly
+// the documented manual test: load online once, then flip to Offline)
+// meant most employees genuinely hadn't been fetched yet, showing the
+// bundled silhouette/initials instead of a real photo. Checking
+// cache.match() before each fetch means a reload only has to catch up on
+// what's actually missing or changed (new hires, photo swaps) — once one
+// full pass has ever completed, every later load is near-instant.
 let prefetched = false;
 const PREFETCH_CONCURRENCY = 6; // a handful of workers, not 700+ requests at once — see below
 
 async function prefetchPhotos(rows) {
   if (prefetched) return;
   prefetched = true;
-  const urls = [...new Set((rows || []).map((r) => photoSrc(r.photo_url, r.updated_at)).filter(Boolean))];
+  const urls = [...new Set((rows || []).map((r) => photoSrc(r.photo_url, r.photo_file_id)).filter(Boolean))];
   if (!urls.length) return;
+
+  // Skip anything already sitting in the Service Worker's PHOTO_CACHE from
+  // a previous session. cache.match() reads Cache Storage directly (not
+  // this module's in-memory state), so this check survives reloads even
+  // though `prefetched` itself doesn't. If the Cache API isn't available
+  // for some reason, fall through and just attempt every URL as before.
+  let toFetch = urls;
+  try {
+    const cache = await caches.open('proximity-photos-v1');
+    const hits = await Promise.all(urls.map((url) => cache.match(url)));
+    toFetch = urls.filter((_, idx) => !hits[idx]);
+  } catch {
+    // no caches API (non-SW context, unsupported browser) — attempt all.
+  }
+  if (!toFetch.length) return;
+
   let i = 0;
   const worker = async () => {
-    while (i < urls.length) {
-      const url = urls[i++];
+    while (i < toFetch.length) {
+      const url = toFetch[i++];
       try {
         // no-cors: this is a cross-origin (Drive) request and the response
         // is never read here — the point is purely to make the Service
@@ -79,7 +106,7 @@ async function prefetchPhotos(rows) {
   // kiosk device's bandwidth/CPU for a background task nobody's actively
   // waiting on. A handful of workers pulling from a shared index keeps
   // this moving without flooding the network.
-  await Promise.all(Array.from({ length: Math.min(PREFETCH_CONCURRENCY, urls.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(PREFETCH_CONCURRENCY, toFetch.length) }, worker));
 }
 
 export const OfflineScanModel = {
@@ -127,11 +154,20 @@ export const OfflineScanModel = {
       result: 'matched',
       direction,
       offline: true,
-      // photo_url/updated_at ride along in get_scanner_offline_cache()'s
+      // photo_url/photo_file_id ride along in get_scanner_offline_cache()'s
       // row already (see Supabase/README.md) — passing them through here
       // is what lets ScanResultCard's avatarHTML() show the real photo
       // offline instead of falling back to the bundled default avatar.
-      employee: { full_name: row.full_name, employee_code: row.employee_code, department: row.department, position: row.position, photo_url: row.photo_url, updated_at: row.updated_at },
+      // Deliberately photo_file_id, NOT updated_at, as the cache-busting
+      // key: employees.updated_at is bumped by trg_employees_updated_at on
+      // ANY update to the row, including the one this very scan just made
+      // (appending to scan_logs) — so updated_at changes on every single
+      // scan, which meant the photo URL built here could never match the
+      // one prefetchPhotos() actually cached moments earlier. photo_file_id
+      // only changes when the photo itself is replaced (a fresh UUID per
+      // upload — see upload-employee-photo), so it's stable across scans
+      // and actually lines up with what's sitting in PHOTO_CACHE.
+      employee: { full_name: row.full_name, employee_code: row.employee_code, department: row.department, position: row.position, photo_url: row.photo_url, photo_file_id: row.photo_file_id, updated_at: row.updated_at },
     };
   },
 
