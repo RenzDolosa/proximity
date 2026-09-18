@@ -355,6 +355,23 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-18 — Recent Activity: a failed feed refresh dumped a raw JS error into the UI**
+- `ScanFeed.js`'s `loadScanFeed()` is called unconditionally on page init
+  (`StandaloneScanner.js`), including on a page load that happens while
+  already offline. When the underlying `get_scan_feed()` RPC call fails
+  (no network — the exact condition being tested throughout this whole
+  offline-photo saga), the old code did
+  `feedEl.innerHTML = error.message` — showing the operator the literal
+  JS exception text (`TypeError: Failed to fetch`) as if it were a feed
+  row, and wiping out any existing content in the process, including
+  pending offline-scan rows that were already visible.
+- Fixed: a failed refresh with nothing already in the feed shows a plain
+  "Recent activity unavailable — offline/reconnecting…" placeholder
+  instead of the raw error; a failed refresh with existing rows leaves
+  them alone entirely rather than clobbering them. This matches the
+  "best-effort, never let a network hiccup break the rest of the app"
+  pattern the rest of the offline path already follows.
+
 **2026-09-18 — Offline scanner: the actual root cause of the whole photo saga — testing over a LAN IP**
 - Every fix below this one (prefetch coverage, `photo_file_id` cache-busting,
   the live-fetch retry) was real and necessary, but none of them could

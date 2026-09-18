@@ -25,7 +25,24 @@ export async function loadScanFeed(targetId = 'scan-feed', limit = 10, scannerId
   const feedEl = $('#' + targetId);
   if (!feedEl) return;
   const { data, error } = await ScanEventsModel.recentFeed(limit, scannerId);
-  if (error) { feedEl.innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
+  if (error) {
+    // A failed refresh is routine, not fatal — it happens on every page
+    // load made while already offline (StandaloneScanner.js calls this
+    // unconditionally on init), and on any periodic/post-sync retry made
+    // while still offline. This used to replace the ENTIRE feed with the
+    // raw error text (`TypeError: Failed to fetch` and similar — exactly
+    // what a failed fetch() throws, not a message meant for an operator
+    // to read), which threw away whatever pending/offline rows were
+    // already showing. Only show a placeholder if the feed has nothing
+    // in it to preserve; otherwise leave existing rows alone and let the
+    // next successful refresh fix it silently — same pattern as
+    // OfflineScanModel's "best-effort, never break the rest of the app
+    // over a network hiccup" throughout this file.
+    if (!feedEl.children.length) {
+      feedEl.innerHTML = `<div class="empty-state">Recent activity unavailable — ${navigator.onLine ? 'reconnecting…' : 'offline'}</div>`;
+    }
+    return;
+  }
   if (!data.length) { feedEl.innerHTML = `<div class="empty-state">No scans yet.</div>`; return; }
   feedEl.innerHTML = data.map((row) => feedRowHTML({ ...row, cache_key: row.scanned_at })).join('');
 }
