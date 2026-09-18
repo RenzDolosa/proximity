@@ -20,14 +20,29 @@ initRouter();
 // from inside Public/ could never see fetches for /JS/* or /CSS/* at
 // all, which are exactly the files that matter most to cache. sw.js
 // therefore lives at the repo root (see file tree in README.md), not
-// inside Public/. Requires HTTPS in production (localhost/127.0.0.1 is
-// exempt for local dev, which is why this works under Five Server).
+// inside Public/. Requires a secure context in production (HTTPS) —
+// http://localhost and http://127.0.0.1 are exempt for local dev, but a
+// bare LAN IP (http://10.x.x.x:5500, http://192.168.x.x:5500, the kind
+// of URL Five Server/Live Server show you alongside localhost) is NOT
+// exempt and silently fails registration, even on your own network. This
+// bit real testing once already — see README.md's change log — because
+// the failure used to be swallowed with zero console output, making
+// "the whole offline photo cache doesn't work" look like a photo bug
+// instead of a five-minute wrong-URL problem.
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {
+  navigator.serviceWorker.register('/sw.js').catch((err) => {
     // Offline-first is a resilience feature, not a hard requirement — a
-    // registration failure (unsupported browser, non-HTTPS deployment)
-    // should degrade to "just doesn't survive an outage", not break the
-    // rest of the app.
+    // registration failure (unsupported browser, non-secure-context
+    // deployment) should degrade to "just doesn't survive an outage",
+    // not break the rest of the app. But it should NEVER fail silently —
+    // a swallowed rejection here previously looked identical, from the
+    // console, to every actual photo-caching bug this session chased.
+    console.warn(
+      'Service Worker registration failed — offline mode (including cached employee photos) will not work on this page load. ' +
+      'If you\'re on a LAN IP (not localhost/127.0.0.1) without HTTPS, that\'s expected: browsers only allow Service Workers on secure contexts. ' +
+      'Open this page via http://localhost or http://127.0.0.1 instead, or serve over HTTPS.',
+      err,
+    );
   });
 }
 

@@ -355,6 +355,36 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-18 — Offline scanner: the actual root cause of the whole photo saga — testing over a LAN IP**
+- Every fix below this one (prefetch coverage, `photo_file_id` cache-busting,
+  the live-fetch retry) was real and necessary, but none of them could
+  ever have worked during testing, because the Service Worker itself was
+  never running: Service Workers require a secure context (HTTPS, or
+  `http://localhost`/`http://127.0.0.1`), and testing happened over a
+  bare LAN IP (`http://10.x.x.x:5500`, the kind of URL Five Server shows
+  you right alongside `localhost`) — which browsers do NOT treat as
+  secure, even on a trusted local network. `navigator.serviceWorker.
+  register()` was rejecting on every single page load, silently: the
+  `.catch(() => {})` in `JS/main.js` swallowed the failure with zero
+  console output, so "no photos ever cache, online or offline, for
+  anyone" looked exactly like an application bug from the console, not
+  like a wrong-URL problem. Confirmed via DevTools: Cache Storage
+  (`proximity-photos-v1`) was completely empty while IndexedDB (the
+  roster lookup, which doesn't need a Service Worker) had real data —
+  the SW-dependent half of offline support was simply never active.
+- Fixed by logging the actual rejection reason (`JS/main.js`) instead of
+  discarding it, with an explicit message pointing at the localhost/
+  127.0.0.1 requirement. No other code changed — the underlying fixes
+  were already correct once tested against `http://localhost:5500`
+  instead of the LAN IP.
+- Worth remembering for eventual real kiosk deployment, not just local
+  dev: a kiosk hitting this app over a bare LAN IP without HTTPS will
+  hit this exact same silent failure in production. Production needs
+  either real HTTPS (a proper cert, or a reverse proxy that terminates
+  TLS) or, if that's genuinely not available on the deployment network,
+  Chrome's `unsafely-treat-insecure-origin-as-secure` flag set per-kiosk
+  — not something to rely on by default, but worth knowing exists.
+
 **2026-09-17 — Employee Manager: scan-log direction corruption, root-caused and fixed (Postgres-side)**
 - Root cause and fix are entirely in `trg_append_scan_log()`/
   `scan_proximity_code()` — see `Supabase/README.md`'s matching change log
