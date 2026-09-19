@@ -347,6 +347,27 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-19 — Scanner: full-size result photo, and a real CSS regression fixed along the way**
+- While investigating, found `.ss-icon`/`.ts-icon` in `CSS/scanner.css`
+  entirely commented out — the hero logo mark had no sizing/background/
+  border rules at all, left over from some earlier edit that never got
+  restored. Uncommented both; unrelated to the feature below but a real,
+  visible regression worth fixing on sight.
+- Added a large centered result photo: on a matched scan with a photo on
+  file, the standalone Scanner's hero icon swaps from the small logo mark
+  to the employee's actual photo at `clamp(160px, 32dvh, 360px)` — same
+  dvh-scaled idiom `.ss-icon`/`.ss-ring` already used, just bigger and
+  circular, since the point is recognizing someone from a normal viewing
+  distance rather than a badge-sized crop. Reuses `photo_thumb_b64`
+  already on `data.employee` for every scan result (online or offline —
+  see `ScanResultCard.js`), so no extra fetch. Reverts to the logo at the
+  same moment the result card itself fades out, and explicitly resets on
+  any non-photo result (unmatched, or matched with no photo on file) so a
+  scan right after a matched one can't leave the previous person's photo
+  showing. Test Scan's `.ts-icon` got the same CSS fix but not the photo
+  swap itself — it stays a plain diagnostic tool, consistent with why it
+  was left out of offline support too (see the 2026-09-16 entry below).
+
 **2026-09-19 — Scanner responsiveness: three real fixes, one honest limit**
 - **Online→offline scan slow to render**: `ScanEventsModel.scan()` had no
   timeout, and `doScan()` trusted `navigator.onLine` to decide whether to

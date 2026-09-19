@@ -70,7 +70,17 @@
 .ss-ring::before{width:120%;height:120%;animation:ss-pulse 2.4s ease-out infinite;}
 .ss-ring::after{width:150%;height:150%;animation:ss-pulse 2.4s ease-out infinite .5s;}
 @keyframes ss-pulse{0%{transform:scale(.75);opacity:.9;}100%{transform:scale(1.15);opacity:0;}}
-/* .ss-icon{width:clamp(60px, 8.5dvh, 96px);height:clamp(60px, 8.5dvh, 96px);border-radius:12px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;z-index:1;padding:14%;box-sizing:border-box;color:var(--text);} */
+.ss-icon{width:clamp(60px, 8.5dvh, 96px);height:clamp(60px, 8.5dvh, 96px);border-radius:12px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;z-index:1;padding:14%;box-sizing:border-box;color:var(--text);transition:width .3s ease,height .3s ease,border-radius .3s ease,padding .3s ease;}
+/* Swapped in over the logo mark for the duration of a matched result with
+   a photo (see StandaloneScanner.js's showHeroPhoto/resetHeroIcon) — same
+   dvh-clamp sizing idiom as the plain icon above, just larger and round,
+   since the point here is "big enough to actually recognize someone from
+   a few feet away," not "a small badge-sized glyph." padding:0 and
+   object-fit:cover on the <img> itself (not inherited from .ss-icon,
+   which sizes the *logo* via percentage padding) — a photo needs to fill
+   the circle edge-to-edge, not sit inset like the logo mark does. */
+.ss-icon.ss-icon-photo{width:clamp(160px, 32dvh, 360px);height:clamp(160px, 32dvh, 360px);border-radius:50%;padding:0;overflow:hidden;border-color:var(--good);}
+.ss-icon.ss-icon-photo img{width:100%;height:100%;object-fit:cover;display:block;}
 .ss-label{text-align:center;font-weight:700;font-size:26px;letter-spacing:.5px;line-height:1.25;text-transform:none;}
 .ss-result-wrap{width:min(420px, 90dvw);margin:26px auto 0;transition:opacity .4s ease;}
 .ss-result-wrap.fade-out{opacity:0;}
@@ -104,6 +114,6 @@
 .ts-ring::before,.ts-ring::after{content:'';position:absolute;border-radius:50%;border:2px solid var(--accent-dim);}
 .ts-ring::before{width:120%;height:120%;animation:ss-pulse 2.4s ease-out infinite;}
 .ts-ring::after{width:150%;height:150%;animation:ss-pulse 2.4s ease-out infinite .5s;}
-/* .ts-icon{width:clamp(46px, 6.5dvh, 72px);height:clamp(46px, 6.5dvh, 72px);border-radius:10px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;z-index:1;padding:14%;box-sizing:border-box;color:var(--text);} */
+.ts-icon{width:clamp(46px, 6.5dvh, 72px);height:clamp(46px, 6.5dvh, 72px);border-radius:10px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;z-index:1;padding:14%;box-sizing:border-box;color:var(--text);}
 .ts-label{text-align:center;font-weight:700;font-size:20px;letter-spacing:.5px;line-height:1.25;text-transform:none;}
 .ts-result-wrap{width:100%;margin-top:22px;}

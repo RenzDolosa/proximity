@@ -50,7 +50,7 @@ function renderStandaloneScanner() {
           <input id="ss-code" type="password" class="mono" placeholder="Live Search — scan or type code…" autocomplete="off" autofocus />
         </div>
         <div class="ss-hero">
-          <div class="ss-ring"><div class="ss-icon">${PROXIMITY_LOGO_SVG}</div></div>
+          <div class="ss-ring"><div class="ss-icon" id="ss-icon">${PROXIMITY_LOGO_SVG}</div></div>
         </div>
         <div class="ss-result-wrap" id="ss-result"></div>
       </div>
@@ -85,6 +85,25 @@ function renderStandaloneScanner() {
     }, 50);
   });
   const resultWrap = $('#ss-result');
+  const heroIcon = $('#ss-icon');
+  const HERO_LOGO_HTML = heroIcon.innerHTML; // captured once, before anything ever swaps it — this is what resetHeroIcon() restores
+  // Swapped in for a matched scan with a photo on file: replaces the
+  // small logo glyph with the employee's actual photo at a much larger,
+  // dvh-scaled size (see .ss-icon-photo in CSS/scanner.css) — the point
+  // is a security/reception operator being able to visually confirm the
+  // person from a normal viewing distance, which a 96px logo-sized crop
+  // can't really do. Reuses photo_thumb_b64 (already on data.employee
+  // for every scan result, online or offline — see ScanResultCard.js's
+  // header comment) so this needs no extra fetch of its own.
+  const showHeroPhoto = (name, thumbB64) => {
+    heroIcon.classList.add('ss-icon-photo');
+    heroIcon.innerHTML = `<img src="data:image/jpeg;base64,${thumbB64}" alt="${esc(name || '')}" />`;
+  };
+  const resetHeroIcon = () => {
+    if (!heroIcon.classList.contains('ss-icon-photo')) return; // already showing the logo — avoid an unnecessary reflow on every non-photo scan
+    heroIcon.classList.remove('ss-icon-photo');
+    heroIcon.innerHTML = HERO_LOGO_HTML;
+  };
   let fadeTimer = null;
   let clearTimer = null;
   let autoSubmitTimer = null;
@@ -105,6 +124,7 @@ function renderStandaloneScanner() {
       clearTimer = setTimeout(() => {
         resultWrap.innerHTML = '';
         resultWrap.classList.remove('fade-out');
+        resetHeroIcon();
       }, FADE_DURATION_MS);
     }, RESULT_LIFETIME_MS);
   };
@@ -174,11 +194,17 @@ function renderStandaloneScanner() {
     resultWrap.classList.remove('fade-out');
     if (error) {
       resultWrap.innerHTML = `<div class="result-card unmatched"><strong style="color:var(--bad)">Scan failed</strong><div class="emp-meta">${esc(error.message)}</div></div>`;
+      resetHeroIcon();
     } else {
       resultWrap.innerHTML = renderScanResult(data) + (offlineHandled
         ? `<div class="emp-meta" style="margin-top:6px;">⚠ Offline — recorded locally, will sync automatically</div>`
         : '');
       playScanSound(data);
+      if (data.result === 'matched' && data.employee?.photo_thumb_b64) {
+        showHeroPhoto(data.employee.full_name, data.employee.photo_thumb_b64);
+      } else {
+        resetHeroIcon(); // e.g. an unmatched scan right after a matched one — don't leave the previous person's photo up
+      }
     }
     scheduleResultFade();
     codeInput.value = '';
