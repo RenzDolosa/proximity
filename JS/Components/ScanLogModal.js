@@ -1,6 +1,10 @@
 import { $ } from '../Utils/dom.js';
 import { esc, fmtTime } from '../Utils/format.js';
+import { toast } from '../Utils/toast.js';
+import { exportXlsx, todayStamp } from '../Utils/xlsxExport.js';
+import { isAdmin } from '../Core/state.js';
 import { openModal, closeModal, startModalOpen, isStaleModalOpen, onModalClose } from './Modal.js';
+import { openConfirmModal } from './ConfirmModal.js';
 import { supabase } from '../Core/supabaseClient.js';
 import { EmployeesModel } from '../Models/EmployeesModel.js';
 
@@ -21,7 +25,10 @@ const RENDER_CAP = 300;
 export async function openScanLogModal(employeeId) {
   const token = startModalOpen();
   const overlay = openModal(`
-    <h3 id="log-title">Scan log</h3>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;">
+      <h3 id="log-title" style="margin:0;">Scan log</h3>
+      <button class="ghost" id="log-export" style="flex:0 0 auto;padding:5px 10px;font-size:12px;">Export .xlsx</button>
+    </div>
     <div id="log-body" class="empty-state">Loading…</div>
     <div class="actions">
       <button class="ghost" id="log-close">Close</button>
@@ -31,6 +38,30 @@ export async function openScanLogModal(employeeId) {
   $('#log-close', overlay).addEventListener('click', () => closeModal(overlay));
 
   let logs = [];
+  let employeeName = '';
+  let filteredForExport = []; // kept in sync by paintList() below — export uses the FULL filtered set, not just the RENDER_CAP-limited painted rows
+
+  $('#log-export', overlay).addEventListener('click', () => {
+    if (!filteredForExport.length) { toast('Nothing to export for the current filter.', 'error'); return; }
+    exportXlsx({
+      filename: `scan-log-${(employeeName || 'employee').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${todayStamp()}.xlsx`,
+      sheetName: 'Scan log',
+      columns: [
+        { key: 'scanned_at', label: 'Scanned at' },
+        { key: 'scanner_id', label: 'Scanner' },
+        { key: 'direction', label: 'Direction' },
+        { key: 'proximity_code', label: 'Proximity code', text: true },
+        { key: 'offline', label: 'Recorded offline' },
+      ],
+      rows: filteredForExport.map((l) => ({
+        scanned_at: fmtTime(l.scanned_at),
+        scanner_id: l.scanner_id || '—',
+        direction: (l.direction || '—').toUpperCase(),
+        proximity_code: l.proximity_code || '',
+        offline: l.offline ? 'Yes' : 'No',
+      })),
+    });
+  });
 
   const paintList = () => {
     const fromVal = $('#log-date-from', overlay)?.value;
@@ -42,6 +73,7 @@ export async function openScanLogModal(employeeId) {
         (!toVal || key <= toVal) &&
         (scannerVal === 'all' || l.scanner_id === scannerVal);
     });
+    filteredForExport = filtered;
     const listEl = $('#log-list', overlay);
     if (!filtered.length) {
       listEl.innerHTML = `<div class="empty-state">No scans match this filter.</div>`;
@@ -51,7 +83,7 @@ export async function openScanLogModal(employeeId) {
     // of `filtered` are exactly the most recent matching scans.
     const capped = filtered.slice(0, RENDER_CAP);
     const notice = filtered.length > RENDER_CAP
-      ? `<div class="emp-meta" style="padding:6px 2px;">Showing the most recent ${RENDER_CAP} of ${filtered.length} matching scans — narrow the date range or scanner filter to see others.</div>`
+      ? `<div class="emp-meta" style="padding:6px 2px;">Showing the most recent ${RENDER_CAP} of ${filtered.length} matching scans — narrow the date range or scanner filter to see others. Export uses all ${filtered.length}.</div>`
       : '';
     listEl.innerHTML = notice + capped.map((l) => `
       <div class="feed-row">
@@ -61,8 +93,26 @@ export async function openScanLogModal(employeeId) {
           <div class="emp-meta mono">${esc(l.proximity_code || '')}</div>
         </div>
         <div class="feed-time">${fmtTime(l.scanned_at)}</div>
+        ${isAdmin() ? `<button class="ghost" data-del-log="${esc(l.scan_id)}" title="Delete this scan log entry" style="flex:0 0 auto;padding:2px 7px;margin-left:6px;color:var(--bad);">×</button>` : ''}
       </div>
     `).join('');
+    if (isAdmin()) {
+      listEl.querySelectorAll('button[data-del-log]').forEach((btn) => btn.addEventListener('click', async () => {
+        const scanId = btn.dataset.delLog;
+        const entry = logs.find((l) => l.scan_id === scanId);
+        const ok = await openConfirmModal({
+          title: 'Delete this scan log entry?',
+          message: `Permanently delete the ${(entry?.direction || '').toUpperCase() || 'scan'} record${entry ? ` from ${fmtTime(entry.scanned_at)}` : ''}? This also removes it from Recent Activity. This can't be undone.`,
+          confirmLabel: 'Delete',
+        });
+        if (!ok) return;
+        const { error } = await EmployeesModel.deleteScanLog(employeeId, scanId);
+        if (error) { toast(error.message, 'error'); return; }
+        logs = logs.filter((l) => l.scan_id !== scanId);
+        toast('Scan log entry deleted');
+        paintList();
+      }));
+    }
   };
 
   // Re-fetches this employee's scan_logs and repaints, preserving whatever
@@ -74,6 +124,7 @@ export async function openScanLogModal(employeeId) {
     const bodyEl = $('#log-body', overlay);
     if (error) { bodyEl.textContent = error.message; return; }
     $('#log-title', overlay).textContent = `Scan log — ${emp.full_name}`;
+    employeeName = emp.full_name || '';
     logs = (emp.scan_logs || []).slice().sort((a, b) => new Date(b.scanned_at) - new Date(a.scanned_at));
     if (!logs.length) {
       bodyEl.innerHTML = `<div class="empty-state"><strong>No scans yet</strong>This employee hasn't tapped their card at any scanner.</div>`;

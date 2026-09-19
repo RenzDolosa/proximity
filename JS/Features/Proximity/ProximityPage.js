@@ -2,6 +2,7 @@ import { $, $$ } from '../../Utils/dom.js';
 import { esc, fmtTime, chunkArray } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
 import { wireCopyableCodes } from '../../Utils/clipboard.js';
+import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
 import { appState, isAdmin, isAdminOrManager } from '../../Core/state.js';
 import { ProximityCardsModel } from '../../Models/ProximityCardsModel.js';
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
@@ -16,6 +17,7 @@ let assignedByCard = new Map();
 let page = 1;
 let pageSize = 50;
 let loaded = false; // distinguishes "never fetched yet" from "fetched, zero rows"
+let visibleRows = []; // current search/status-filtered set (pre-pagination) — kept in sync by paintProximityTable(), read by the Export button
 
 export async function renderProximity() {
   const content = $('#content');
@@ -29,19 +31,49 @@ export async function renderProximity() {
           <option value="revoked">Revoked only</option>
         </select>
       </div>
-      ${isAdminOrManager() ? `
-        <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;">
+        <button class="ghost" id="prox-export">Export .xlsx</button>
+        ${isAdminOrManager() ? `
           ${isAdmin() ? '<button class="ghost danger" id="prox-delete-all">Delete all</button>' : ''}
           <button class="ghost" id="prox-import">Import</button>
           <button class="primary" id="prox-add">+ Issue proximity card</button>
-        </div>
-      ` : ''}
+        ` : ''}
+      </div>
     </div>
     <div class="table-scroll"><div id="prox-table-wrap">${loaded ? '' : 'Loading…'}</div></div>
     <div id="prox-pagination"></div>
   `;
   $('#prox-search').addEventListener('input', () => { page = 1; paintProximityTable(); });
   $('#prox-filter').addEventListener('change', () => { page = 1; paintProximityTable(); });
+  $('#prox-export').addEventListener('click', () => {
+    if (!visibleRows.length) { toast('Nothing to export for the current search/filter.', 'error'); return; }
+    exportXlsx({
+      filename: `proximity-cards-${todayStamp()}.xlsx`,
+      sheetName: 'Proximity cards',
+      // proximity_code and the assignee's employee_code are both marked
+      // text: true — same reasoning as Employee Manager's export: both
+      // can be all-digit codes that must survive an Excel round-trip
+      // exactly as issued, not get silently reinterpreted as a number.
+      // See Utils/xlsxExport.js.
+      columns: [
+        { key: 'proximity_code', label: 'Proximity code', text: true },
+        { key: 'assigned_to', label: 'Assigned to' },
+        { key: 'employee_code', label: 'Employee code', text: true },
+        { key: 'status', label: 'Status' },
+        { key: 'issued_at', label: 'Issued' },
+      ],
+      rows: visibleRows.map((c) => {
+        const e = assignedByCard.get(c.id);
+        return {
+          proximity_code: c.proximity_code || '',
+          assigned_to: e?.full_name || '',
+          employee_code: e?.employee_code || '',
+          status: c.is_active ? 'active' : 'revoked',
+          issued_at: fmtTime(c.issued_at),
+        };
+      }),
+    });
+  });
   if (isAdmin()) {
     $('#prox-delete-all').addEventListener('click', async () => {
       // Assigned cards can't be deleted (employees.proximity_card_id is a
@@ -104,6 +136,7 @@ function paintProximityTable() {
     const e = assignedByCard.get(c.id);
     return [c.proximity_code, e?.full_name, e?.employee_code].some((v) => (v || '').toLowerCase().includes(q));
   });
+  visibleRows = allRows;
   const filtered = statusFilter !== 'all' || q;
   if (!allRows.length) {
     wrap.innerHTML = `<div class="empty-state"><strong>No proximity cards${filtered ? ' match this filter' : ' yet'}</strong>${filtered ? 'Try a different search or status.' : "Issue a card — it doesn't need to be assigned to anyone right away."}</div>`;

@@ -90,6 +90,17 @@ export const EmployeesModel = {
     return supabase.from('employees').select('full_name, scan_logs').eq('id', employeeId).single();
   },
 
+  // Deletes one entry from an employee's scan log — actually deletes the
+  // underlying scan_events row too (via the delete_employee_scan_log()
+  // RPC), not just the cached jsonb entry, so Recent Activity and this
+  // log stay in sync. Admin-only (enforced server-side by the RPC itself,
+  // not just hidden client-side) — this is an audit-trail correction,
+  // not a routine edit, same tier as deleting an employee or a card
+  // outright rather than the lighter admin-or-manager bar remarks use.
+  async deleteScanLog(employeeId, scanId) {
+    return supabase.rpc('delete_employee_scan_log', { p_employee_id: employeeId, p_scan_id: scanId });
+  },
+
   async getRemarks(employeeId) {
     return supabase.from('employees').select('full_name, remarks_log').eq('id', employeeId).single();
   },

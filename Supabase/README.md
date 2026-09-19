@@ -115,6 +115,24 @@ an admin swaps it out.
   Activity feed (see `scan_feed` above).
 - **`add_employee_remark(...)`** — appends a `{remark, created_by,
   created_by_id, created_at}` entry to `employees.remarks_log`.
+- **`delete_employee_scan_log(p_employee_id, p_scan_id)`** — added
+  2026-09-19. Deletes the matching `scan_events` row **and** prunes the
+  corresponding cached entry out of `employees.scan_logs` (keyed by the
+  `scan_id` field `trg_append_scan_log()` stores on every entry), in one
+  transaction — `scan_logs` is a cache of `scan_events`, not an
+  independent record, so deleting only one side would leave it
+  permanently out of sync (nothing else re-syncs it). `is_admin()`-gated
+  — stricter than `add_employee_remark`'s admin-or-manager bar, since
+  this removes an actual audit record rather than adding a note, the
+  same tier as deleting an employee or a card outright. Backs the
+  Scan Log modal's per-row delete button (root `README.md`'s matching
+  change log entry). Does **not** attempt to renumber the `direction`
+  (IN/OUT) of any entry appended after the deleted one — that's computed
+  once, at insert time, from `jsonb_array_length(scan_logs) % 2`, so a
+  deletion here can shift later entries' apparent parity relative to
+  what actually happened. Accepted as-is; see the change log entry for
+  why recomputing history wasn't worth it for a single-entry correction
+  tool.
 - **`is_admin()` / `is_admin_or_manager()`** — role helper functions used
   throughout RLS policies.
 - **`can_view_settings()` / `can_manage_scan_sounds()`** — the Settings
@@ -279,6 +297,27 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-19 — New RPC `delete_employee_scan_log()`, backing the Scan Log modal's admin-only delete button**
+- New function `delete_employee_scan_log(p_employee_id uuid, p_scan_id
+  uuid) returns void` — see RPC section above for the full contract.
+  Deletes the `scan_events` row and prunes the matching `employees.scan_logs`
+  entry (matched by that entry's `scan_id` field) in the same transaction.
+- Grants: revoked from `public` and `anon` explicitly, granted to
+  `authenticated` — same pattern as every other RPC in this file, and
+  double-checked via `has_function_privilege()` rather than assumed
+  correct by analogy, same as `get_scanner_offline_photos()`'s entry
+  below did.
+- Permission check inside the function itself is `is_admin()`, not
+  `is_admin_or_manager()` — deliberately stricter than
+  `add_employee_remark()`/`resolve_employee_remark()`, since this
+  deletes an actual audit record (a real scan event) rather than adding
+  an annotation to one. Matches the tier `deleteEmployee()`/card-delete
+  already use client-side.
+- Ran `get_advisors` (security) afterward — no new findings beyond the
+  pre-existing, already-accepted baseline (every `SECURITY DEFINER`
+  function here self-checks permissions internally, which the advisor
+  can't see and flags generically regardless).
 
 **2026-09-19 — `upload-employee-photo`: prefer a client-supplied `.webp` thumbnail over the server-side Drive fetch**
 - No schema change. `upload`'s request body gained optional

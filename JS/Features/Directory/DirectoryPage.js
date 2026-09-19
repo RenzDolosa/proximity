@@ -2,6 +2,7 @@ import { $, $$ } from '../../Utils/dom.js';
 import { esc, initials, chunkArray } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
 import { wireCopyableCodes } from '../../Utils/clipboard.js';
+import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
 import { appState, isAdmin, isAdminOrManager } from '../../Core/state.js';
 import { supabase } from '../../Core/supabaseClient.js';
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
@@ -18,6 +19,7 @@ let pageSize = 50;
 let loaded = false; // distinguishes "never fetched yet" from "fetched, zero rows"
 let scanChannel = null; // created once, kept alive for the rest of the session — see below
 let unresolvedOnly = false; // toolbar toggle — resets to off each fresh page load, same as `page`
+let visibleRows = []; // the current search/toggle-filtered set (pre-pagination) — kept in sync by paintDirectoryTable(), read by the Export button so it exports what's actually on screen, not just the current page
 
 export async function renderDirectory() {
   const content = $('#content');
@@ -27,13 +29,14 @@ export async function renderDirectory() {
         <input class="search" id="dir-search" placeholder="Search name, code, department…" />
         <button class="ghost${unresolvedOnly ? ' active' : ''}" id="dir-unresolved-toggle" title="Show only employees with unresolved remarks">Unresolved remarks<span class="count-pill" id="dir-unresolved-count"></span></button>
       </div>
-      ${isAdminOrManager() ? `
-        <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;">
+        <button class="ghost" id="dir-export">Export .xlsx</button>
+        ${isAdminOrManager() ? `
           ${isAdmin() ? '<button class="ghost danger" id="dir-delete-all">Delete all</button>' : ''}
           <button class="ghost" id="dir-import">Import</button>
           <button class="primary" id="dir-add">+ Add employee</button>
-        </div>
-      ` : ''}
+        ` : ''}
+      </div>
     </div>
     <div class="table-scroll"><div id="dir-table-wrap">${loaded ? '' : 'Loading…'}</div></div>
     <div id="dir-pagination"></div>
@@ -44,6 +47,37 @@ export async function renderDirectory() {
     e.target.classList.toggle('active', unresolvedOnly);
     page = 1;
     paintDirectoryTable($('#dir-search')?.value || '');
+  });
+  $('#dir-export').addEventListener('click', () => {
+    if (!visibleRows.length) { toast('Nothing to export for the current search/filter.', 'error'); return; }
+    exportXlsx({
+      filename: `employees-${todayStamp()}.xlsx`,
+      sheetName: 'Employees',
+      // employee_code and Proximity ID are both marked text: true — both
+      // are codes that can look numeric (e.g. "00091") and must survive
+      // an Excel round-trip exactly as issued, not get silently
+      // reinterpreted as a number. See Utils/xlsxExport.js.
+      columns: [
+        { key: 'full_name', label: 'Name' },
+        { key: 'email', label: 'Email' },
+        { key: 'employee_code', label: 'Employee code', text: true },
+        { key: 'department', label: 'Department' },
+        { key: 'position', label: 'Position' },
+        { key: 'proximity_code', label: 'Proximity ID', text: true },
+        { key: 'status', label: 'Status' },
+        { key: 'total_scans', label: 'Total scans' },
+      ],
+      rows: visibleRows.map((e) => ({
+        full_name: e.full_name || '',
+        email: e.email || '',
+        employee_code: e.employee_code || '',
+        department: e.department || '',
+        position: e.position || '',
+        proximity_code: e.active_proximity_code || '',
+        status: e.status || '',
+        total_scans: e.total_scans ?? 0,
+      })),
+    });
   });
   if (isAdmin()) {
     $('#dir-delete-all').addEventListener('click', async () => {
@@ -140,6 +174,7 @@ function paintDirectoryTable(filter) {
     return !f || [e.full_name, e.employee_code, e.department, e.position, e.active_proximity_code]
       .some((v) => (v || '').toLowerCase().includes(f));
   });
+  visibleRows = allRows;
   if (!allRows.length) {
     const emptyReason = unresolvedOnly
       ? 'No employees have unresolved remarks right now.'

@@ -91,7 +91,15 @@ JS/
     ProximityCardModal.js
     UserModal.js
     ResetPasswordModal.js
-    ScanLogModal.js
+    ScanLogModal.js               per-employee scan log, date/scanner filters;
+                                  Export .xlsx button next to the title (added
+                                  2026-09-19, exports the full filtered set,
+                                  not just the RENDER_CAP-limited painted
+                                  rows), and an admin-only per-row delete (×)
+                                  that removes both the scan_events row and
+                                  the cached scan_logs entry via the
+                                  delete_employee_scan_log() RPC — see
+                                  Supabase/README.md
     ScanResultCard.js
     ScanFeed.js                  Recent Activity list (last 10 scans)
     ProximityLogo.js             exports PROXIMITY_LOGO_SVG — the brand
@@ -111,8 +119,13 @@ JS/
                                        cache-busted via updated_at; the Edit/Add
                                        modal's photo picker shows a real upload
                                        progress bar, incl. an indeterminate
-                                       shimmer while the function talks to Drive)
-    Proximity/ProximityPage.js       (Proximity Cards)
+                                       shimmer while the function talks to Drive;
+                                       toolbar Export .xlsx button, added
+                                       2026-09-19, exports the current
+                                       search/filter view via Utils/xlsxExport.js)
+    Proximity/ProximityPage.js       (Proximity Cards; toolbar Export .xlsx
+                                       button, added 2026-09-19, same pattern
+                                       as Employee Manager's)
     Scanner/TestScanPage.js          (in-shell "Test Scan" — calls the
                                        non-logging test_scan_proximity_code() RPC,
                                        which now also returns a read-only `direction`
@@ -157,6 +170,17 @@ JS/
                                    the only thing backing OfflineScanModel.js;
                                    no external idb library, to keep this repo
                                    dependency-free
+    xlsxExport.js                  exportXlsx({filename, sheetName, columns,
+                                   rows}) — added 2026-09-19, built on the
+                                   vendored SheetJS mini build (window.XLSX,
+                                   see Public/Vendor/README.md). Every
+                                   "Export .xlsx" button (Employee Manager,
+                                   Proximity Cards, Scan Log) goes through
+                                   this one function so the columns:[{key,
+                                   label, text:true}] convention — forcing
+                                   a code-like column to real text so Excel
+                                   can't silently reinterpret it as a number
+                                   — lives in exactly one place
 
 Public/
   index.html                  the app shell (static markup only — all
@@ -194,6 +218,9 @@ Public/
                                     skips straight to initials.
   Vendor/
     supabase-js.umd.js           vendored @supabase/supabase-js (see Vendor/README.md)
+    xlsx.mini.min.js              vendored SheetJS xlsx@0.18.5 mini build,
+                                   added 2026-09-19 — Apache-2.0, see
+                                   Vendor/README.md and xlsx.LICENSE.txt
 
 Supabase/
   README.md                   schema, RPC, and permission-model reference
@@ -396,6 +423,65 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-19 — Export to .xlsx (Employee Manager, Proximity Cards, Scan Log) + scan log entry delete**
+- Vendored SheetJS `xlsx@0.18.5` (Apache-2.0) as `Public/Vendor/xlsx.mini.min.js`
+  — the **mini** build (250KB) over the full build (881KB), since this app
+  already cares about bundle size for kiosk/offline use; the only real
+  omission is legacy-format support (XLS/XLSB/Lotus 1-2-3/SpreadsheetML
+  2003) this app never reads or writes. Fetched via `npm pack xlsx`
+  against `registry.npmjs.org` rather than `unpkg`/`cdn.sheetjs.com` —
+  SheetJS stopped publishing new versions to npm/unpkg/cdnjs in mid-2024
+  over an ongoing dispute with npm (see
+  `github.com/SheetJS/sheetjs/issues/2822`), so 0.18.5 is the last npm
+  release and will be the version here until a future upgrade fetches
+  directly from SheetJS's new home. License text vendored alongside it as
+  `xlsx.LICENSE.txt` per Apache-2.0's own attribution requirement. See
+  `Vendor/README.md` for the full upgrade story.
+- New `JS/Utils/xlsxExport.js` (`exportXlsx({filename, sheetName, columns,
+  rows})`) — every export button below goes through this one function.
+  Columns marked `text: true` get both `cell.t = 's'` (stops SheetJS
+  itself writing a numeric cell type) and `cell.z = '@'`, Excel's "Text"
+  number format (stops **Excel** re-interpreting an all-digit code like
+  `"00091"` as a number the next time the file's opened or the cell's
+  clicked into — `t: 's'` alone doesn't survive that round-trip). Applied
+  to every proximity code / employee code column in every export below.
+- **Employee Manager**: toolbar "Export .xlsx" button, visible to everyone
+  who can see this page (it's read-only, not gated behind admin/manager
+  like Import/Add/Delete are) — exports the *current search/filter view*,
+  not the whole roster unconditionally. Columns: Name, Email, Employee
+  code (text), Department, Position, Proximity ID (text), Status, Total
+  scans.
+- **Proximity Cards**: same pattern — toolbar "Export .xlsx", exports the
+  current search/status-filter view. Columns: Proximity code (text),
+  Assigned to, [assignee's] Employee code (text), Status, Issued.
+- **Scan Log modal**: "Export .xlsx" button next to the title ("Scan log
+  — [Name]"). Exports the full date/scanner-filtered set (`filtered` in
+  `ScanLogModal.js`), not just the `RENDER_CAP`-limited 300 rows actually
+  painted to the DOM — an export isn't constrained by DOM-rendering
+  performance the way live painting is, so there's no reason to cap it
+  the same way. Columns: Scanned at, Scanner, Direction, Proximity code
+  (text), Recorded offline.
+- **Scan Log modal, admin-only**: a small × delete button on each row.
+  Backed by a new RPC, `delete_employee_scan_log(p_employee_id,
+  p_scan_id)` (see `Supabase/README.md`) — deletes the real `scan_events`
+  row *and* prunes the matching cached entry out of
+  `employees.scan_logs` in one transaction, so Recent Activity and this
+  log stay in sync rather than the cached copy silently drifting from
+  the source of truth. Admin-only, both server-side (the RPC itself
+  checks `is_admin()`, not just the client hiding the button) and at the
+  same tier as deleting an employee or a card outright — stricter than
+  the admin-or-manager bar the remarks-log add/resolve RPCs use, since
+  this is an audit-trail correction, not a routine edit.
+- **Known, accepted consequence of the delete above**: `direction`
+  (IN/OUT) on every scan log entry is computed at *insert* time from
+  `jsonb_array_length(scan_logs) % 2` (see `trg_append_scan_log()`) —
+  deleting an entry shrinks that count and shifts the in/out parity of
+  everything appended *after* it, the same way editing/removing a
+  remark doesn't retroactively renumber anything else in that log. Not
+  fixed here; recomputing every subsequent entry's direction on every
+  delete would be a much bigger, riskier change for a correction feature
+  whose whole point is fixing one wrong entry, not rewriting history.
 
 **2026-09-19 — Removed self-service account creation; Enter submits sign-in**
 - `Public/index.html` — the auth screen's Sign in / Create account tab
