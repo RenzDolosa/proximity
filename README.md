@@ -158,11 +158,14 @@ Public/
                                     sw.js at install time; Utils/format.js's
                                     avatarHTML() falls back to it when there
                                     IS a photo_url but the real Drive photo
-                                    can't load (esp. offline and never
-                                    cached — see "Offline-first design"
-                                    below), before finally falling back to
-                                    initials. No photo_url at all skips
-                                    straight to initials.
+                                    can't load (Employee Manager/Directory
+                                    only — a transient error, not an offline
+                                    scenario; the Scanner uses
+                                    offlineAvatarHTML()'s stored base64
+                                    thumbnail instead, see "Offline-first
+                                    design" below), before finally falling
+                                    back to initials. No photo_url at all
+                                    skips straight to initials.
   Vendor/
     supabase-js.umd.js           vendored @supabase/supabase-js (see Vendor/README.md)
 
@@ -271,39 +274,25 @@ blip — three independent pieces make that true:
   (no custom sound uploaded, or the custom one fails to load), and keeps
   those three places — `sw.js`'s precache list, `scanSounds.js`'s
   `FALLBACK_SOUND_PATHS`, and the actual files — in sync by filename.
-- **Employee photos** (`PHOTO_CACHE`): also cache-first-with-refresh, but
-  fundamentally can't be precached like sounds — there are 700+ of them
-  and growing, not a fixed set of 5. Instead,
-  `OfflineScanModel.refreshCache()` proactively prefetches every roster
-  photo (bounded to 6 concurrent requests, once per page session) right
-  after it pulls the card/employee lookup, rather than only ever caching
-  a photo the moment someone happens to scan that person while online —
-  which in practice meant most of the roster's photos were never cached
-  at all. A `photo_url` (`drive.google.com/thumbnail?...`) is a
-  cross-origin request the browser can only make as `no-cors`, which
-  comes back as an **opaque** response — `status: 0`, `ok: false`,
-  always, by design, regardless of whether it actually succeeded. `sw.js`
-  originally only cached `res.ok` responses, which silently meant it
-  could never actually cache a single Drive photo despite every other
-  piece of the pipeline looking correct; it now caches opaque responses
-  too, since there's nothing else available to check them against.
-  `JS/Utils/format.js`'s `photoSrc()` builds the exact same cache-busted
-  URL both `avatarHTML()` (for display) and the prefetcher use, so the
-  prefetch actually warms the cache key the later `<img>` will request —
-  building that URL in two places that could drift apart is exactly how
-  the `/thumbnail` vs `uc?export=view` format mismatch happened before
-  (see the change log). On top of that, a single generic silhouette at
-  `Public/Assets/EmployeePhoto/default-avatar.svg` **is** precached at
-  Service Worker install time, same as the bundled sounds above — but
-  only for the case where an employee genuinely *has* a `photo_url` and
-  it just can't be reached right now (offline and never prefetched, a
-  transient load error). An employee with no photo on file at all still
-  goes straight to initials — a generic silhouette wouldn't add anything
-  over an identifying initials circle for someone who was never
-  photographed. `Utils/format.js`'s `avatarHTML()` tries the real photo
-  first when there's a `photo_url`, falls back to this bundled image, and
-  only falls back to initials from there if even that local static asset
-  fails to load; with no `photo_url` at all it goes to initials directly.
+- **Employee photos** (`employees.photo_thumb_b64`): not a Service Worker
+  cache at all, unlike sounds above — a small (`sz=w96`) base64 JPEG
+  thumbnail, fetched **server-side** by `upload-employee-photo` right
+  after every upload (a normal same-origin-to-Google fetch, with a real
+  HTTP status — no CORS or opaque-response ambiguity), and stored
+  directly on the employee row. `get_scanner_offline_cache()` and
+  `get_scan_feed()` both return it, so it rides along in every offline
+  lookup row and every feed entry with zero extra requests. The Scanner's
+  result card and Recent Activity render it via `Utils/format.js`'s
+  `offlineAvatarHTML()` — a plain `data:image/jpeg;base64,...` `<img
+  src>`, identical online or offline, nothing to prefetch, cache, or race
+  against a network outage. This replaced an entire earlier generation of
+  Drive-prefetch machinery (a `PHOTO_CACHE` Service Worker cache, a
+  roster-wide background fetcher, cross-origin opaque-response handling)
+  that turned out to be fundamentally unreliable at scale — see the
+  2026-09-18 change log entry for the full root-cause story. Employee
+  Manager and Directory are unaffected: they still use the original
+  `avatarHTML()` and the full-resolution Drive `photo_url`, since they're
+  always used online and a 96px thumbnail would be a downgrade there.
 - **Queued scans** (`OfflineScanModel.js` + IndexedDB): covered separately
   below.
 
@@ -312,12 +301,13 @@ once online first — it needs one successful load to cache the app shell
 (via `/sw.js`) and the card/employee lookup (via
 `get_scanner_offline_cache()`) before there's anything to fall back to
 for the *lookup* itself. Scan sounds work from the very first load
-regardless (bundled + precached, see above); photos improve the more the
-kiosk has been online, since the prefetch above needs at least one
-successful `refreshCache()` to have run. Then in Chrome DevTools →
-Network → Throttling → **Offline** (killing the Wi-Fi/network adapter
-itself also works, but doesn't let you flip back online from the same
-panel to watch the queue sync). Scan a known code — the header pill
+regardless (bundled + precached, see above); photos work identically from
+the very first offline scan too, since `photo_thumb_b64` rides along in
+the same lookup row rather than needing its own separate warm-up. Then in
+Chrome DevTools → Network → Throttling → **Offline** (killing the
+Wi-Fi/network adapter itself also works, but doesn't let you flip back
+online from the same panel to watch the queue sync). Scan a known code —
+the header pill
 should switch to "◌ Offline" and the result should show "⚠ Offline —
 recorded locally, will sync automatically." Switch back to Online and the
 queued scan(s) should sync within a few seconds, updating Recent
@@ -347,13 +337,53 @@ Activity.
 
 ---
 *Last reconciled against the live GitHub repo and live Supabase project on
-2026-09-17. If you're another Claude instance picking this project up: fetch
+2026-09-18. If you're another Claude instance picking this project up: fetch
 `github.com/RenzDolosa/proximity` fresh (via web_search + web_fetch, or the
 GitHub connector) and re-verify against `Supabase:list_tables` /
 `list_edge_functions` before making schema or Edge Function claims — this
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-18 — Offline scanner photos: replaced the entire Drive-prefetch approach with a stored base64 thumbnail**
+- After the LAN-IP fix below made the Service Worker actually run, and
+  `photo_file_id` cache-busting and the live-fetch retry were all in
+  place and individually correct, photos were *still* inconsistently
+  missing for some employees, sometimes, with no obvious pattern — the
+  behavior reported that finally pinned down why the whole approach was
+  fragile at its foundation, not just missing one more edge case.
+- **Root cause:** the roster-wide photo prefetch (`OfflineScanModel.js`'s
+  old `prefetchPhotos()`) fetched every employee's Drive thumbnail with
+  `{ mode: 'no-cors' }`, since Drive's `/thumbnail` endpoint sends no CORS
+  headers for a page-script `fetch()`. A `no-cors` response is always
+  "opaque" — status 0, `ok: false` — **whether or not the request actually
+  succeeded**. Across a 700+-person roster, that meant any transient
+  failure (a rate limit, a timeout, a dropped connection) among hundreds
+  of concurrent requests was completely indistinguishable from success
+  and got cached by `sw.js` as if it had worked — there was no way for
+  that architecture to ever be fully reliable, by design of what
+  cross-origin `no-cors` responses can tell you.
+- **Fix — sidestep the problem instead of chasing it further:** deleted
+  `prefetchPhotos()`, `sw.js`'s `PHOTO_CACHE`, and `Utils/format.js`'s
+  live-retry-fetch logic entirely. `upload-employee-photo` now fetches a
+  small (`sz=w96`) Drive thumbnail **server-side**, right after upload —
+  a normal same-origin-to-Google server fetch with a real, trustworthy
+  HTTP status, no CORS or opaque-response ambiguity at all — and returns
+  it as base64 (`thumb_b64`) alongside the usual `url`/`file_id`. The
+  client stores it directly on the row (`employees.photo_thumb_b64`, a
+  new column), and both `get_scanner_offline_cache()` and `get_scan_feed()`
+  now return it. The Scanner's result card and Recent Activity feed
+  render it via a new `offlineAvatarHTML()` (`Utils/format.js`) — a plain
+  `data:image/jpeg;base64,...` `<img src>`, no network request at all,
+  identical online or offline. There is nothing left to prefetch, cache,
+  or race against a network outage: the thumbnail already rides along in
+  every scan response, the moment the photo is uploaded.
+- Employee Manager and Directory are untouched — they still use the
+  original `avatarHTML()` and the full-resolution Drive URL, since they're
+  always used online and a 96px thumbnail would be a downgrade there for
+  no benefit.
+- Full detail (schema, RPC, and Edge Function changes) in
+  `Supabase/README.md`'s matching entry.
 
 **2026-09-18 — Recent Activity: a failed feed refresh dumped a raw JS error into the UI**
 - `ScanFeed.js`'s `loadScanFeed()` is called unconditionally on page init

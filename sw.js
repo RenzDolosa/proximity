@@ -6,7 +6,7 @@
 // there for why a Public/sw.js couldn't work given this repo's layout
 // (index.html in Public/, JS/ and CSS/ as siblings, not children).
 //
-// Three independent caches:
+// Two independent caches:
 // - APP_CACHE: this app's own static files. Network-first, so a normal
 //   online load always gets whatever's actually live, falling back to
 //   the last successfully-cached copy only when the network request
@@ -16,23 +16,25 @@
 //   one in Settings) and losing scan-feedback audio during an outage is
 //   a real UX regression worth avoiding, unlike app code where serving a
 //   few-seconds-stale version while online would be actively worse.
-// - PHOTO_CACHE: employee photos, served from Google Drive's thumbnail
-//   endpoint (see Utils/format.js's avatarHTML()). Same cache-first
-//   strategy and same reasoning as sounds — but this one specifically
-//   fixes "no employee photo while offline": without it, a genuinely
-//   offline scan's avatarHTML() `<img>` has nowhere to load from at all
-//   (Drive is a remote host, there's no network), so it always fell back
-//   to the bundled default-avatar image (see DEFAULT_AVATAR_URL below;
-//   initials only beyond that) even for someone whose photo had loaded
-//   successfully during this very session. Once an employee's photo has
-//   been fetched at least once while online, it's available offline from
-//   here for as long as their record's cache-busting `cb=` query param
-//   stays the same (see avatarHTML() — that param changes on any edit,
-//   which naturally busts this cache entry the same way it busts the
-//   browser's own HTTP cache).
+//
+// There used to be a third cache here (PHOTO_CACHE, for employee photos
+// fetched live from Google Drive) plus a whole roster-wide background
+// prefetcher in OfflineScanModel.js to keep it warm. Deleted 2026-09-18:
+// employees.photo_thumb_b64 (a small base64 JPEG, produced server-side by
+// upload-employee-photo at upload time, stored directly on the row) makes
+// all of that unnecessary for the offline Scanner — there's nothing left
+// to prefetch or cache, since the thumbnail already rides along in every
+// scan response. See Supabase/README.md's matching change log entry.
+// `activate` below will clean up any leftover `proximity-photos-v1` cache
+// still sitting on an already-deployed kiosk from before this change, the
+// same way it always prunes any cache name it doesn't recognize.
+//
+// avatarHTML()'s own default-avatar fallback (Employee Manager/Directory,
+// still Drive-URL-based and unaffected by any of this — see
+// Utils/format.js) is unrelated to PHOTO_CACHE's removal; DEFAULT_AVATAR_URL
+// below is precached independently of it.
 const APP_CACHE = 'proximity-app-v1';
 const SOUND_CACHE = 'proximity-sounds-v1';
-const PHOTO_CACHE = 'proximity-photos-v1';
 
 // Bundled fallback scan sounds — precached at install time (not lazily on
 // first fetch, unlike everything else this file caches) specifically so
@@ -51,10 +53,12 @@ const FALLBACK_SOUND_URLS = [
 
 // Same reasoning, one file: the generic default-avatar silhouette
 // Utils/format.js's avatarHTML() falls back to when an employee has no
-// photo_url at all, or the real Drive photo fails to load offline and was
-// never cached in PHOTO_CACHE. Precached here for the same "available from
-// the literal first load, online or not" guarantee as the sounds above —
-// keep this path in sync with Utils/format.js's DEFAULT_AVATAR_SRC.
+// photo_url at all, or the real Drive photo fails to load (Employee
+// Manager/Directory only — the Scanner uses offlineAvatarHTML()'s base64
+// thumbnail instead and never reaches this fallback at all). Precached
+// here for the same "available from the literal first load, online or
+// not" guarantee as the sounds above — keep this path in sync with
+// Utils/format.js's DEFAULT_AVATAR_SRC.
 const DEFAULT_AVATAR_URL = '/Public/Assets/EmployeePhoto/default-avatar.svg';
 
 self.addEventListener('install', (event) => {
@@ -73,7 +77,7 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
-    const keep = new Set([APP_CACHE, SOUND_CACHE, PHOTO_CACHE]);
+    const keep = new Set([APP_CACHE, SOUND_CACHE]);
     const names = await caches.keys();
     await Promise.all(names.filter((n) => !keep.has(n)).map((n) => caches.delete(n)));
     await self.clients.claim();
@@ -82,14 +86,6 @@ self.addEventListener('activate', (event) => {
 
 function isSoundRequest(url) {
   return url.pathname.includes('/storage/v1/object/public/scan-sounds/');
-}
-
-// Matches exactly the endpoint avatarHTML() builds photo_url from —
-// drive.google.com/thumbnail?id=...&sz=...&cb=... — not Drive's other
-// URL shapes (uc?export=view, file/d/.../view, etc.) since those aren't
-// used anywhere in this app.
-function isPhotoRequest(url) {
-  return url.hostname === 'drive.google.com' && url.pathname === '/thumbnail';
 }
 
 function isOtherSupabaseRequest(url) {
@@ -112,11 +108,6 @@ self.addEventListener('fetch', (event) => {
 
   if (isSoundRequest(url)) {
     event.respondWith(cacheFirstWithRefresh(req, SOUND_CACHE));
-    return;
-  }
-
-  if (isPhotoRequest(url)) {
-    event.respondWith(cacheFirstWithRefresh(req, PHOTO_CACHE));
     return;
   }
 
@@ -146,20 +137,18 @@ async function cacheFirstWithRefresh(req, cacheName) {
   const networkPromise = fetch(req)
     .then((res) => {
       // A cross-origin request the browser sent as no-cors (which is what
-      // an <img>/<audio> tag loading a third-party URL like Drive's
-      // thumbnail endpoint does BY DEFAULT, and what this file's own
-      // no-cors prefetch — see OfflineScanModel.js's prefetchPhotos() —
-      // uses deliberately) always comes back as an "opaque" response:
-      // status 0, ok:false, no matter whether the request actually
-      // succeeded. The browser hides those details on purpose so a page
-      // can't probe a cross-origin resource's real status. That means the
-      // original `res.ok`-only check here could NEVER cache a single
-      // Drive photo response — PHOTO_CACHE was being populated with
-      // nothing, silently, despite every piece of this looking correct.
-      // Cache opaque responses unconditionally alongside genuine res.ok
-      // successes; there's nothing else available to check them against,
-      // and that's the accepted tradeoff for caching third-party
-      // resources at all.
+      // an <audio>/<img> tag loading a third-party URL does BY DEFAULT
+      // with no `crossorigin` attribute set — see scanSounds.js's
+      // playUrl(), which doesn't set one) always comes back as an
+      // "opaque" response: status 0, ok:false, no matter whether the
+      // request actually succeeded. The browser hides those details on
+      // purpose so a page can't probe a cross-origin resource's real
+      // status. Cache opaque responses unconditionally alongside genuine
+      // res.ok successes; there's nothing else available to check them
+      // against, and that's the accepted tradeoff for caching third-party
+      // resources at all. (This used to matter for a Drive PHOTO_CACHE
+      // too — removed 2026-09-18, see this file's top-of-file comment —
+      // but still applies to the scan-sounds bucket here.)
       if (res && (res.ok || res.type === 'opaque')) cache.put(req, res.clone());
       return res;
     })

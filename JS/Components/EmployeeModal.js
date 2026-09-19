@@ -216,8 +216,9 @@ export async function openEmployeeModal(emp, onSaved) {
     saveBtn.disabled = true;
 
     // Photo goes to Drive before the employee row is written, so
-    // photo_url/photo_file_id are ready to include in the same insert/update
-    // as everything else rather than a separate follow-up write.
+    // photo_url/photo_file_id/photo_thumb_b64 are ready to include in the
+    // same insert/update as everything else rather than a separate
+    // follow-up write.
     if (pendingPhotoBlob) {
       const progressWrap = $('#f-photo-progress', overlay);
       const progressFill = $('#f-photo-progress-fill', overlay);
@@ -257,9 +258,16 @@ export async function openEmployeeModal(emp, onSaved) {
       photoStatus.textContent = 'Upload complete.';
       payload.photo_url = uploaded.url;
       payload.photo_file_id = uploaded.file_id;
+      // thumb_b64: null is a valid, expected outcome (the server-side
+      // thumbnail fetch is best-effort — see upload-employee-photo's
+      // README) — this employee just falls back to initials on the
+      // offline Scanner until their next photo upload succeeds at
+      // producing one. Never treated as an upload failure.
+      payload.photo_thumb_b64 = uploaded.thumb_b64 ?? null;
     } else if (photoRemoved) {
       payload.photo_url = null;
       payload.photo_file_id = null;
+      payload.photo_thumb_b64 = null;
       if (emp?.photo_file_id) EmployeesModel.deletePhoto(emp.photo_file_id); // best-effort, don't block save on it
     }
 

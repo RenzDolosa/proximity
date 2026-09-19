@@ -2,7 +2,15 @@
 // RPC call. Shared by the standalone scanner tab and Test Scan; kept as a
 // pure function so it's trivial to reuse anywhere else a scan result needs
 // to be shown.
-import { esc, avatarHTML } from '../Utils/format.js';
+//
+// Always renders the photo from photo_thumb_b64 (offlineAvatarHTML — see
+// Utils/format.js), even for a live/online scan: both scan_proximity_code()
+// and test_scan_proximity_code() return the full employee row via
+// to_jsonb(), which now includes photo_thumb_b64 like every other column,
+// so there's no reason to special-case "online" here to use the
+// Drive-URL-based avatarHTML() instead — one code path renders identically
+// online or offline.
+import { esc, offlineAvatarHTML } from '../Utils/format.js';
 
 const LABELS = {
   matched: 'Access granted',
@@ -25,7 +33,7 @@ export function renderScanResult(data) {
         <span class="badge matched">${esc(LABELS[result])}</span>
         ${data.direction ? `<span class="badge ${data.direction === 'out' ? 'suspended' : 'active'}" style="margin-left:6px;">${esc(data.direction.toUpperCase())}</span>` : ''}
         <div class="emp-line" style="margin-top:12px;">
-          <div class="avatar">${avatarHTML(e.full_name, e.photo_url, e.photo_file_id)}</div>
+          <div class="avatar">${offlineAvatarHTML(e.full_name, e.photo_thumb_b64)}</div>
           <div>
             <div class="emp-name">${esc(e.full_name)}</div>
             <div class="emp-meta">${esc(e.department || '—')} · ${esc(e.position || '—')} · <span class="mono">${esc(e.employee_code)}</span></div>

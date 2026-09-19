@@ -2,13 +2,13 @@
 // compact sidebar of the standalone scanner tab (targetId lets callers
 // point it at either container).
 import { $ } from '../Utils/dom.js';
-import { esc, avatarHTML, fmtTime } from '../Utils/format.js';
+import { esc, offlineAvatarHTML, fmtTime } from '../Utils/format.js';
 import { ScanEventsModel } from '../Models/ScanEventsModel.js';
 
 function feedRowHTML(row) {
   return `
     <div class="feed-row${row.pending ? ' feed-row-pending' : ''}">
-      <div class="avatar">${row.employee_name ? avatarHTML(row.employee_name, row.photo_url, row.cache_key) : '?'}</div>
+      <div class="avatar">${row.employee_name ? offlineAvatarHTML(row.employee_name, row.photo_thumb_b64) : '?'}</div>
       <div>
         <div style="font-weight:500;">${row.employee_name ? esc(row.employee_name) : 'Unmatched scan'}</div>
         <div class="emp-meta mono">${esc(row.scanner_id)}</div>
@@ -44,7 +44,7 @@ export async function loadScanFeed(targetId = 'scan-feed', limit = 10, scannerId
     return;
   }
   if (!data.length) { feedEl.innerHTML = `<div class="empty-state">No scans yet.</div>`; return; }
-  feedEl.innerHTML = data.map((row) => feedRowHTML({ ...row, cache_key: row.scanned_at })).join('');
+  feedEl.innerHTML = data.map((row) => feedRowHTML(row)).join('');
 }
 
 // Optimistic local row for a scan made while offline. Nothing was
@@ -65,12 +65,7 @@ export function prependPendingRow(targetId, classifyResult, scannerId, limit = 1
     result: classifyResult.result,
     scanner_id: scannerId,
     employee_name: e?.full_name || null,
-    photo_url: e?.photo_url || null,
-    // photo_file_id, not updated_at — a scan bumps employees.updated_at
-    // itself (trg_employees_updated_at fires on the scan_logs append), so
-    // updated_at would never match what prefetchPhotos() actually cached.
-    // See OfflineScanModel.js's classify() for the full explanation.
-    cache_key: e?.photo_file_id || '',
+    photo_thumb_b64: e?.photo_thumb_b64 || null,
   });
   const existingRows = feedEl.querySelector('.empty-state') ? [] : Array.from(feedEl.children);
   feedEl.innerHTML = rowHTML + existingRows.slice(0, limit - 1).map((el) => el.outerHTML).join('');

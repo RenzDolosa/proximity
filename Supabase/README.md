@@ -20,7 +20,7 @@ supabase functions download upload-employee-photo --project-ref kjwttqmbcjvkivgm
 | Table                       | Purpose                                                                                                                                                                                                    |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `profiles`                   | One row per login account (`auth.users` 1:1). `role` = `admin` / `manager` / `viewer`. `access_scope` = `all` / `employee_manager` / `scanner` — which sections the account can open at all. `is_active` — soft-disable; checked at boot, force signs out if false or missing. |
-| `employees`                  | Master employee record. Requires `employee_code` **and** `proximity_card_id` (NOT NULL + unique — every employee has exactly one card). `status` = `active`/`inactive`/`suspended`. `scan_logs` jsonb — append-only, written by `trg_append_scan_log` on every matched scan. `remarks_log` jsonb — append-only notes, written via `add_employee_remark()`. `photo_url` / `photo_file_id` — Drive-hosted photo; `photo_file_id` changes to a fresh UUID on every replace (see Edge Functions below). |
+| `employees`                  | Master employee record. Requires `employee_code` **and** `proximity_card_id` (NOT NULL + unique — every employee has exactly one card). `status` = `active`/`inactive`/`suspended`. `scan_logs` jsonb — append-only, written by `trg_append_scan_log` on every matched scan. `remarks_log` jsonb — append-only notes, written via `add_employee_remark()`. `photo_url` / `photo_file_id` — Drive-hosted photo; `photo_file_id` changes to a fresh UUID on every replace (see Edge Functions below). `photo_thumb_b64` — small base64 JPEG thumbnail (added 2026-09-18), fetched server-side by `upload-employee-photo` at upload time; feeds the offline Scanner's `offlineAvatarHTML()` with zero network requests — see "Offline scanning" below. |
 | `proximity_cards`             | Standalone card inventory. Does **not** require an employee — a card can be issued and sit unassigned until linked from Employee Manager. `is_active` + `revoke_reason` for revoked cards.               |
 | `scan_events`                 | FK to `employees` and `proximity_cards`. Every scan attempt is logged: `matched`, `unmatched`, `inactive_card`, `inactive_employee`, or `unassigned_card`.                                                |
 | `employee_directory` (view)  | Employee joined to required card + scan totals, for the Employee Manager grid. Runs `SECURITY DEFINER` so scanner-only / restricted roles still see joined rows under RLS. Read by `JS/Models/EmployeesModel.js#listDirectory`. |
@@ -163,27 +163,15 @@ unaffected (see its RPC entry above).
    - `get_scanner_offline_cache()` (see RPC section above) feeding a local
      IndexedDB copy of the card→employee lookup, refreshed opportunistically
      while online (on load, every 5 min, and right after reconnecting).
-     Includes `photo_url`/`updated_at` so an offline-classified scan can
-     still show the real employee photo, not just initials — though that
-     alone only gets the *data* to the client; the image itself still
-     needs a network path to Google Drive to actually load. `sw.js`'s
-     `PHOTO_CACHE` (added 2026-09-17, same cache-first-with-refresh
-     strategy as the sound cache) is what makes it available with zero
-     network — with two important refinements added the same day, after
-     the first version of this cache turned out to never actually cache
-     anything (see root `README.md`'s change log for the full story):
-     (a) a cross-origin `no-cors` photo request always comes back as an
-     *opaque* response (`ok: false` unconditionally, by design), which the
-     cache-put logic now explicitly accounts for instead of silently
-     skipping every single photo; (b) rather than only ever caching a
-     photo reactively (the moment someone happens to scan that person
-     while online), `OfflineScanModel.refreshCache()` now proactively
-     prefetches every roster photo right after refreshing the lookup
-     itself, bounded to 6 concurrent requests. Net effect: an employee's
-     photo is now actually available offline once the kiosk has had one
-     successful `refreshCache()` — not "once that specific person has been
-     scanned online," which for a 700+-person roster meant most of it,
-     effectively never.
+     Includes `photo_thumb_b64` (added 2026-09-18, replacing an earlier
+     `photo_url`/`updated_at` + Service Worker `PHOTO_CACHE` approach — see
+     root `README.md`'s change log for the full root-cause story of why
+     that was replaced rather than patched further) — a small base64 JPEG
+     the client renders directly as a `data:` URI via `offlineAvatarHTML()`
+     (`Utils/format.js`). No network request at all is needed to show it,
+     online or offline: the thumbnail is already sitting in the row this
+     RPC returns, fetched server-side by `upload-employee-photo` once, at
+     upload time.
    - Failed/offline scans get queued client-side (raw attempt only — code,
      scanner id, true timestamp — never a guessed result) and replayed
      **strictly one at a time, in original order** through the real
@@ -238,6 +226,13 @@ outlasts the token isn't guaranteed unless that's addressed separately
   real `upload.onprogress` events for the Employee Manager's photo
   progress bar — `invoke()` is `fetch()`-based and only resolves once the
   whole round trip finishes, same limitation noted for CSV import.
+  `upload` also fetches a small `sz=w96` Drive thumbnail server-side right
+  after the upload (added 2026-09-18) and returns it as base64
+  (`thumb_b64`) alongside `url`/`file_id`, for the client to store as
+  `employees.photo_thumb_b64` — see "Offline scanning" above. Best-effort:
+  a failed thumbnail fetch is logged and returns `thumb_b64: null`, never
+  fails the upload itself (`url`/`file_id` are already secured by that
+  point regardless).
 
 See `functions/proximity-scan/README.md`, `functions/admin-users/README.md`,
 and `functions/upload-employee-photo/README.md` for the request/response
@@ -247,11 +242,40 @@ contracts each client-side caller relies on.
 *Last reconciled against `Supabase:list_tables` (verbose),
 `Supabase:list_edge_functions`, `storage.buckets`, and
 `pg_get_functiondef()` on the live `kjwttqmbcjvkivgmwuev` project,
-2026-09-17. Re-verify against those before trusting this file blindly in a
+2026-09-18. Re-verify against those before trusting this file blindly in a
 future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-18 — `employees.photo_thumb_b64`: replaced Drive-prefetch with a stored server-side thumbnail**
+- New column `employees.photo_thumb_b64` (text) — a small base64 JPEG,
+  written by `upload-employee-photo`'s `upload` action right after every
+  successful upload (see its Edge Function entry above).
+- `get_scanner_offline_cache()` and `get_scan_feed()` (`CREATE OR REPLACE`,
+  same signatures as before — no overload risk this time, unlike the
+  2026-09-16 `scan_proximity_code()` mistake) both now return it.
+- **Why:** the previous approach — a roster-wide client-side prefetch of
+  every employee's Drive thumbnail into a Service Worker cache — fetched
+  each one with `{mode:'no-cors'}` (required, since Drive's `/thumbnail`
+  endpoint sends no CORS headers for a page-script `fetch()`). A `no-cors`
+  response is always "opaque" (`status: 0`, `ok: false`) **whether or not
+  the request actually succeeded** — there is no way to tell a real
+  failure apart from success. Across 700+ concurrent-ish requests, that
+  meant some fraction silently "succeeded" as empty/failed cache entries
+  on every single prefetch pass, with no error, no pattern, and no way to
+  detect it client-side. Fetching the same thumbnail **server-side**
+  instead (a normal fetch from Deno to Google, no CORS involved at all)
+  makes `res.ok` a real, trustworthy signal — a failure there is a real,
+  loggable failure, not indistinguishable from success.
+- `get_advisors` (security) re-run after both `CREATE OR REPLACE`s —
+  clean, same 3 pre-existing `anon`-executable findings as before
+  (`can_manage_scan_sounds`, `can_view_settings`, `rls_auto_enable` — none
+  from this work), confirmed via `has_function_privilege()` that neither
+  changed function is `anon`-executable.
+- Full client-side detail (deleted `prefetchPhotos()`, `sw.js`'s
+  `PHOTO_CACHE`, the live-retry-fetch; new `offlineAvatarHTML()`) in root
+  `README.md`'s matching change log entry.
 
 **2026-09-17 — Fixed a real concurrency bug in `trg_append_scan_log()`, plus one more offline-photo gap**
 - **Root cause of the IN/OUT/OUT/IN corruption seen in Employee Manager's

@@ -15,9 +15,19 @@
 // can occasionally disagree with what the server records once synced —
 // an accepted tradeoff for a kiosk that needs to keep working with no
 // network at all, not a bug to chase.
+//
+// No photo-prefetching machinery here anymore (there used to be a
+// prefetchPhotos(), a Service Worker PHOTO_CACHE, and a live-retry-fetch
+// on the rendered <img> — all deleted 2026-09-18). employees.photo_thumb_b64
+// (a small base64 JPEG, produced server-side by upload-employee-photo at
+// upload time) rides along in get_scanner_offline_cache()'s row already,
+// so classify() below just passes it straight through — no network
+// request, no cache to warm, no race between "went offline" and "finished
+// prefetching," ever. See Supabase/README.md's matching change log entry
+// for the full story of why the old approach was replaced rather than
+// patched further.
 import { supabase } from '../Core/supabaseClient.js';
 import { idbGetCache, idbSetCache, idbEnqueue, idbGetQueue, idbRemoveFromQueue, idbCountQueue } from '../Utils/idb.js';
-import { photoSrc } from '../Utils/format.js';
 
 // Past this age, the cached lookup is old enough that a card revoked (or
 // an employee deactivated/reactivated) since the last refresh could still
@@ -56,58 +66,20 @@ function isNetworkError(error) {
 // cache.match() before each fetch means a reload only has to catch up on
 // what's actually missing or changed (new hires, photo swaps) — once one
 // full pass has ever completed, every later load is near-instant.
-let prefetched = false;
-const PREFETCH_CONCURRENCY = 6; // a handful of workers, not 700+ requests at once — see below
-
-async function prefetchPhotos(rows) {
-  if (prefetched) return;
-  prefetched = true;
-  const urls = [...new Set((rows || []).map((r) => photoSrc(r.photo_url, r.photo_file_id)).filter(Boolean))];
-  if (!urls.length) return;
-
-  // Skip anything already sitting in the Service Worker's PHOTO_CACHE from
-  // a previous session. cache.match() reads Cache Storage directly (not
-  // this module's in-memory state), so this check survives reloads even
-  // though `prefetched` itself doesn't. If the Cache API isn't available
-  // for some reason, fall through and just attempt every URL as before.
-  let toFetch = urls;
-  try {
-    const cache = await caches.open('proximity-photos-v1');
-    const hits = await Promise.all(urls.map((url) => cache.match(url)));
-    toFetch = urls.filter((_, idx) => !hits[idx]);
-  } catch {
-    // no caches API (non-SW context, unsupported browser) — attempt all.
-  }
-  if (!toFetch.length) return;
-
-  let i = 0;
-  const worker = async () => {
-    while (i < toFetch.length) {
-      const url = toFetch[i++];
-      try {
-        // no-cors: this is a cross-origin (Drive) request and the response
-        // is never read here — the point is purely to make the Service
-        // Worker's fetch listener see and cache it (sw.js's
-        // cacheFirstWithRefresh explicitly handles the resulting opaque
-        // response). A default 'cors'-mode fetch to Drive's thumbnail
-        // endpoint would just fail outright — that endpoint sends no CORS
-        // headers, since it's designed for <img> tag consumption, not
-        // page-script fetch().
-        await fetch(url, { mode: 'no-cors' });
-      } catch {
-        // best-effort — one employee with no photo, or a request that
-        // fails because we're ALSO offline right now, never blocks the
-        // rest of the roster from prefetching.
-      }
-    }
-  };
-  // Bounded concurrency: unbounded would mean 700+ simultaneous requests
-  // on a page load, which is both rude to Drive's API and a poor use of a
-  // kiosk device's bandwidth/CPU for a background task nobody's actively
-  // waiting on. A handful of workers pulling from a shared index keeps
-  // this moving without flooding the network.
-  await Promise.all(Array.from({ length: Math.min(PREFETCH_CONCURRENCY, toFetch.length) }, worker));
-}
+//
+// DELETED 2026-09-18. All of the above was ultimately working around one
+// fundamental problem: a cross-origin no-cors fetch returns an opaque
+// response with no inspectable status, so a rate-limited or transient
+// failure among hundreds of concurrent Drive requests was indistinguishable
+// from success and got cached as if it worked — which is exactly why
+// photos were STILL inconsistently missing offline even with this entire
+// prefetch system in place and working as designed. employees.photo_thumb_b64
+// (see get_scanner_offline_cache() in Supabase/README.md) replaces all of
+// it: a small thumbnail fetched server-side (real HTTP status, no CORS
+// involved) once, at upload time, and stored directly on the row — every
+// scan response already has it, online or offline, nothing to prefetch or
+// race at all. classify() below just reads row.photo_thumb_b64 straight
+// through.
 
 export const OfflineScanModel = {
   isNetworkError,
@@ -116,7 +88,6 @@ export const OfflineScanModel = {
     const { data, error } = await supabase.rpc('get_scanner_offline_cache');
     if (error) return { error };
     await idbSetCache({ rows: data, syncedAt: new Date().toISOString() });
-    prefetchPhotos(data); // best-effort, doesn't block the caller on it
     return { data: true };
   },
 
@@ -154,20 +125,12 @@ export const OfflineScanModel = {
       result: 'matched',
       direction,
       offline: true,
-      // photo_url/photo_file_id ride along in get_scanner_offline_cache()'s
-      // row already (see Supabase/README.md) — passing them through here
-      // is what lets ScanResultCard's avatarHTML() show the real photo
-      // offline instead of falling back to the bundled default avatar.
-      // Deliberately photo_file_id, NOT updated_at, as the cache-busting
-      // key: employees.updated_at is bumped by trg_employees_updated_at on
-      // ANY update to the row, including the one this very scan just made
-      // (appending to scan_logs) — so updated_at changes on every single
-      // scan, which meant the photo URL built here could never match the
-      // one prefetchPhotos() actually cached moments earlier. photo_file_id
-      // only changes when the photo itself is replaced (a fresh UUID per
-      // upload — see upload-employee-photo), so it's stable across scans
-      // and actually lines up with what's sitting in PHOTO_CACHE.
-      employee: { full_name: row.full_name, employee_code: row.employee_code, department: row.department, position: row.position, photo_url: row.photo_url, photo_file_id: row.photo_file_id, updated_at: row.updated_at },
+      // photo_thumb_b64 rides along in get_scanner_offline_cache()'s row
+      // already — a small base64 JPEG, rendered directly via
+      // offlineAvatarHTML() (Utils/format.js) with no network request at
+      // all, online or offline. See this file's top-of-file comment for
+      // what this replaced.
+      employee: { full_name: row.full_name, employee_code: row.employee_code, department: row.department, position: row.position, photo_thumb_b64: row.photo_thumb_b64 },
     };
   },
 

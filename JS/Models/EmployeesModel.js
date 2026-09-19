@@ -154,7 +154,7 @@ export const EmployeesModel = {
           // non-JSON response (e.g. a gateway error page) — body stays null, handled below
         }
         if (xhr.status >= 200 && xhr.status < 300 && body && !body.error) {
-          resolve({ data: body }); // { url, file_id }
+          resolve({ data: body }); // { url, file_id, thumb_b64 }
         } else {
           resolve({ error: body?.error || `Upload failed (HTTP ${xhr.status})` });
         }

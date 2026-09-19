@@ -84,6 +84,35 @@ export const avatarHTML = (name, photoUrl, cacheKey) => {
   return realHTML + defaultAvatarImg() + initialsHTML;
 };
 
+// Renders straight from a locally-cached base64 JPEG thumbnail (see
+// employees.photo_thumb_b64 / get_scanner_offline_cache() /
+// get_scan_feed() in Supabase/README.md) as an inline `data:` URI — no
+// network request involved at all, so this looks identical online or
+// fully offline. This replaced an entire generation of Drive-prefetch
+// machinery (a Service Worker PHOTO_CACHE, a roster-wide background
+// fetcher, cross-origin opaque-response handling, a live-retry-fetch on
+// the `<img>` itself) that all existed to solve exactly the problem a
+// small pre-fetched thumbnail sidesteps outright: there's nothing to
+// prefetch, nothing to race, nothing that can go stale relative to
+// whether the kiosk happens to be online right now.
+//
+// Scanner-only, deliberately: Employee Manager and Directory keep using
+// avatarHTML() (the full-resolution live Drive photo) unchanged — they're
+// always used online, so there's no reason to show a 96px thumbnail where
+// the real photo works fine. This function exists specifically for the
+// standalone Scanner's result card and Recent Activity feed (both synced
+// rows, via get_scan_feed(), and optimistic pending rows, via
+// OfflineScanModel.classify()) — see ScanResultCard.js and ScanFeed.js.
+export const offlineAvatarHTML = (name, thumbB64) => {
+  const initialsHTML = `<span class="avatar-fallback" style="display:none">${esc(initials(name))}</span>`;
+  if (!thumbB64) return `<span class="avatar-fallback">${esc(initials(name))}</span>`;
+  // Always JPEG — Drive's /thumbnail endpoint (what upload-employee-photo
+  // fetches server-side to produce this) returns JPEG regardless of the
+  // original upload's format (webp, png, ...).
+  const realHTML = `<img src="data:image/jpeg;base64,${thumbB64}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''" />`;
+  return realHTML + initialsHTML;
+};
+
 export const fmtTime = (iso) => {
   try {
     return new Date(iso).toLocaleString(undefined, {
