@@ -232,7 +232,12 @@ outlasts the token isn't guaranteed unless that's addressed separately
   `employees.photo_thumb_b64` — see "Offline scanning" above. Best-effort:
   a failed thumbnail fetch is logged and returns `thumb_b64: null`, never
   fails the upload itself (`url`/`file_id` are already secured by that
-  point regardless).
+  point regardless). That fetch is now bounded to a 2.5s timeout (added
+  2026-09-19, deployed as v33) — it used to run with no timeout at all,
+  which meant a freshly-uploaded file without an instantly-ready Drive
+  thumbnail (a real, fairly common lag) sat directly in the upload's own
+  response time. A timed-out fetch now just means `thumb_b64: null`, same
+  as any other best-effort failure.
 
 See `functions/proximity-scan/README.md`, `functions/admin-users/README.md`,
 and `functions/upload-employee-photo/README.md` for the request/response
@@ -242,11 +247,26 @@ contracts each client-side caller relies on.
 *Last reconciled against `Supabase:list_tables` (verbose),
 `Supabase:list_edge_functions`, `storage.buckets`, and
 `pg_get_functiondef()` on the live `kjwttqmbcjvkivgmwuev` project,
-2026-09-18. Re-verify against those before trusting this file blindly in a
+2026-09-19. Re-verify against those before trusting this file blindly in a
 future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-19 — `upload-employee-photo`'s thumbnail fetch bounded to a timeout (v33)**
+- The only Postgres/Edge Function-side piece of a 3-bug regression report
+  after 2026-09-18's `photo_thumb_b64` change — the other two
+  (sync-queue slow, Alt-Tab "Loading…") were pure client-side bugs, fully
+  detailed in root `README.md`'s matching entry, which also documents a
+  deliberately-deferred scaling concern with this RPC's payload shape
+  (photos riding along in a frequently-refreshed roster-wide cache) worth
+  reading if you're about to touch this area again.
+- No schema change. `upload-employee-photo`'s server-side thumbnail fetch
+  (see its Edge Function entry above) now carries a 2.5s
+  `AbortSignal.timeout()` — it previously had none at all, so a
+  freshly-uploaded file's thumbnail not being instantly ready on Drive's
+  side (a real, fairly common few-second lag) sat directly in the
+  upload's own response time, reported directly as "upload speed slow."
 
 **2026-09-18 — `employees.photo_thumb_b64`: replaced Drive-prefetch with a stored server-side thumbnail**
 - New column `employees.photo_thumb_b64` (text) — a small base64 JPEG,

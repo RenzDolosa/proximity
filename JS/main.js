@@ -98,6 +98,23 @@ supabase.auth.onAuthStateChange((event, session) => {
     appState.session = session;
     return;
   }
+  // SIGNED_IN can ALSO fire as that same focus-regain re-affirmation, not
+  // just on an actual new sign-in — which is exactly the case
+  // TOKEN_REFRESHED above was already filtering, just under a different
+  // event name depending on which check supabase-js's visibility-driven
+  // session validation happens to take. Left unguarded, this was the
+  // remaining path to the same full re-render — Alt-Tab into the
+  // standalone Scanner still reset Recent Activity to "Loading…" and
+  // refetched everything from scratch, even with the TOKEN_REFRESHED fix
+  // in place. A same-user SIGNED_IN is just the SDK re-confirming a
+  // session that never actually changed, so treat it exactly like
+  // TOKEN_REFRESHED: keep the session reference current, skip boot().
+  // Only a REAL transition — no prior session, or a different user
+  // entirely — is worth resetting the whole screen for.
+  if (event === 'SIGNED_IN' && appState.session?.user?.id && appState.session.user.id === session?.user?.id) {
+    appState.session = session;
+    return;
+  }
   boot(session);
 });
 

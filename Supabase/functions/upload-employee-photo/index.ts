@@ -1,7 +1,12 @@
 // upload-employee-photo Edge Function
 //
 // POST { action: "upload", image_base64: string, filename: string, mime_type?: string, old_file_id?: string|null }
-//   -> { url: string, file_id: string }
+//   -> { url: string, file_id: string, thumb_b64: string|null }
+//   thumb_b64: a small (sz=w96) Drive thumbnail, fetched server-side and
+//   base64-encoded, for the client to store as employees.photo_thumb_b64 —
+//   see README.md's 2026-09-18 change log entry for why. null if the
+//   server-side thumbnail fetch failed (logged, never fails the upload
+//   itself — url/file_id are unaffected either way).
 // POST { action: "delete", old_file_id: string }
 //   -> { ok: true }
 // POST { action: "quota" }
@@ -171,6 +176,56 @@ Deno.serve(async (req: Request) => {
       await makeFilePublic(fileId, accessToken); // "anyone with the link can view"
       await deleteOldPromise; // no-op if EdgeRuntime.waitUntil already took it, otherwise waits for the best-effort delete
 
+      // A small (sz=w96) thumbnail, fetched SERVER-SIDE right now and
+      // handed back as base64 for the client to store directly on the
+      // employee row (photo_thumb_b64) — see README.md's 2026-09-18
+      // change log entry for the full reasoning. The short version: this
+      // exact same drive.google.com/thumbnail URL, fetched from the
+      // BROWSER as a bulk client-side prefetch, is what all of the
+      // offline-photo flakiness this session traced back to — a
+      // cross-origin `no-cors` fetch gets an opaque response with no
+      // inspectable status, so a rate-limited or transient failure among
+      // hundreds of concurrent requests is indistinguishable from success
+      // and gets cached as if it worked. Fetched from HERE instead — a
+      // normal server-side fetch, once, at upload time — there's no CORS
+      // involved at all: `res.ok` is a real, trustworthy signal. If it
+      // fails, that's a real, loggable failure, not a silent one, and it
+      // doesn't take the rest of the upload down with it — photo_url and
+      // file_id (the full-resolution Drive photo used everywhere online)
+      // are already secured by this point regardless.
+      //
+      // Bounded to THUMB_FETCH_TIMEOUT_MS: a file Drive JUST finished
+      // receiving doesn't always have a thumbnail ready to serve
+      // instantly — its thumbnail generation can lag the upload by a
+      // second or more. Without a timeout, that lag sat directly in the
+      // upload's own response time, making every single upload feel slow
+      // regardless of roster size (reported directly as "upload speed
+      // slow" — this wasn't about how many employees have photos, it was
+      // this one synchronous fetch on the critical path of every upload).
+      // A bounded wait keeps the worst case predictable; a timeout just
+      // means thumb_b64 comes back null this time, same as any other
+      // best-effort failure — nothing else about the upload is affected.
+      const THUMB_FETCH_TIMEOUT_MS = 2500;
+      let thumbB64: string | null = null;
+      try {
+        const thumbRes = await fetch(`https://drive.google.com/thumbnail?id=${fileId}&sz=w96`, {
+          signal: AbortSignal.timeout(THUMB_FETCH_TIMEOUT_MS),
+        });
+        if (thumbRes.ok) {
+          thumbB64 = bytesToBase64(new Uint8Array(await thumbRes.arrayBuffer()));
+        } else {
+          console.warn(`Offline-thumbnail fetch for Drive file ${fileId} returned HTTP ${thumbRes.status} — photo_thumb_b64 will be null for this employee.`);
+        }
+      } catch (thumbErr) {
+        // Best-effort, deliberately: the employee's photo is already fully
+        // uploaded and public at this point. Missing an offline thumbnail
+        // means that one employee falls back to the default avatar during
+        // an offline scan (same as before this feature existed) — it must
+        // never fail the whole upload. Covers both a timeout (AbortError,
+        // from THUMB_FETCH_TIMEOUT_MS above) and any other network error.
+        console.warn(`Offline-thumbnail fetch for Drive file ${fileId} threw (or timed out after ${THUMB_FETCH_TIMEOUT_MS}ms) — photo_thumb_b64 will be null for this employee.`, thumbErr);
+      }
+
       // drive.google.com/uc?export=view is deprecated for hot-linking and
       // does not reliably serve an inline image response for every content
       // type (webp in particular tends to come back as a download/HTML
@@ -182,7 +237,7 @@ Deno.serve(async (req: Request) => {
       // preview for, including webp; sz=w512 is plenty for an avatar shown
       // at 44-64px even on a retina display.
       const url = `https://drive.google.com/thumbnail?id=${fileId}&sz=w512`;
-      return json({ url, file_id: fileId }, 200, cors);
+      return json({ url, file_id: fileId, thumb_b64: thumbB64 }, 200, cors);
     }
 
     return json({ error: `Unknown action "${action}"` }, 400, cors);
@@ -296,6 +351,19 @@ function base64ToBytes(b64: string): Uint8Array {
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes;
+}
+
+// Reverse of base64ToBytes, for encoding the server-side thumbnail fetch's
+// response back to base64 for the JSON reply. Chunked to avoid blowing the
+// call stack on String.fromCharCode(...bytes) for a large array — not a
+// real concern at thumbnail size (a few KB), but cheap insurance.
+function bytesToBase64(bytes: Uint8Array): string {
+  const CHUNK = 8192;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
 }
 
 function concatBytes(parts: Uint8Array[]): Uint8Array {

@@ -259,9 +259,21 @@ function initOfflineSupport(operatorName) {
   // in particular), so it needs to catch up sooner than "once per 5 min"
   // would leave a kiosk sitting unsynced.
   const FLUSH_RETRY_INTERVAL_MS = 20 * 1000;
+  // Floor between two cache refreshes, independent of what triggered them.
+  // 'online', 'visibilitychange' (Alt-Tab back in), and the 5-min interval
+  // all call refreshIfOnline() through the same flushAndRefresh() path —
+  // without this, a few quick Alt-Tabs in a row each fired a full
+  // get_scanner_offline_cache() round trip (the entire roster) back to
+  // back, which is exactly the kind of redundant network churn that made
+  // the kiosk feel sluggish for no benefit: a cache that's 10 seconds old
+  // doesn't need re-fetching just because the window regained focus.
+  const MIN_REFRESH_GAP_MS = 30 * 1000;
+  let lastRefreshAt = 0;
 
   const refreshIfOnline = async () => {
     if (!navigator.onLine) return;
+    if (Date.now() - lastRefreshAt < MIN_REFRESH_GAP_MS) return;
+    lastRefreshAt = Date.now();
     await OfflineScanModel.refreshCache().catch(() => {});
     // loadScanSounds() is normally a once-per-mount call (see
     // renderStandaloneScanner), but a kiosk that first loaded while
@@ -279,7 +291,18 @@ function initOfflineSupport(operatorName) {
     if (!navigator.onLine) return;
     const pendingBefore = await OfflineScanModel.queueCount();
     if (pendingBefore === 0) return;
-    const { synced } = await OfflineScanModel.flushQueue(() => renderOfflineStatus()).catch(() => ({ synced: 0 }));
+    const syncEl = $('#ss-sync-status');
+    const { synced } = await OfflineScanModel.flushQueue((done, total) => {
+      // Cheap, synchronous text update from the numbers flushQueue already
+      // has in hand — no IndexedDB round trip per item. This used to call
+      // the full renderOfflineStatus() (2 IDB reads + rebuilding the
+      // header pill) after EVERY single synced scan, which for a queue
+      // built up over a longer outage meant dozens of redundant reads
+      // stacked directly on top of the sync RPC calls themselves,
+      // visibly slowing the whole flush down for no benefit — the header
+      // pill doesn't need per-item updates, only this line does.
+      if (syncEl) syncEl.innerHTML = `<span class="emp-meta">Syncing ${done}/${total} offline scan${total === 1 ? '' : 's'}…</span>`;
+    }).catch(() => ({ synced: 0 }));
     // Recent Activity only shows what's actually in scan_events — an
     // offline-queued scan was never inserted there, so a sync that just
     // wrote rows for the first time needs an explicit reload here or

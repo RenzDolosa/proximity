@@ -337,13 +337,72 @@ Activity.
 
 ---
 *Last reconciled against the live GitHub repo and live Supabase project on
-2026-09-18. If you're another Claude instance picking this project up: fetch
+2026-09-19. If you're another Claude instance picking this project up: fetch
 `github.com/RenzDolosa/proximity` fresh (via web_search + web_fetch, or the
 GitHub connector) and re-verify against `Supabase:list_tables` /
 `list_edge_functions` before making schema or Edge Function claims — this
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-19 — Three real regressions from the `photo_thumb_b64` change, plus one non-bug worth clarifying**
+- **Upload noticeably slower** — real bug, now fixed. `upload-employee-photo`
+  fetched the server-side thumbnail (see 2026-09-18 below) synchronously,
+  in the upload's own critical path, with no timeout. A freshly-uploaded
+  Drive file doesn't always have a thumbnail ready to serve instantly —
+  generation can lag the upload by a second or more — and that lag sat
+  directly in every single upload's response time, regardless of roster
+  size. Fixed with a 2.5s `AbortSignal.timeout()` on that one fetch: a
+  slow thumbnail now just comes back as `thumb_b64: null` (same
+  best-effort fallback as any other thumbnail failure) instead of holding
+  up the whole upload. Deployed as v33.
+- **Sync queue slow on reconnect** — real bug, now fixed, and not what it
+  looked like: `OfflineScanModel.flushQueue()`'s per-item progress
+  callback was calling the FULL `renderOfflineStatus()` (2 IndexedDB
+  reads + rebuilding the header pill) after every single synced scan —
+  stacked directly on top of each scan's own sync RPC call. For a queue
+  built up over a longer outage, that's dozens of redundant IndexedDB
+  round trips with no benefit, visibly slowing the whole flush down.
+  `StandaloneScanner.js` now updates the sync-status line with a cheap,
+  synchronous text update from the numbers `flushQueue()` already hands
+  it, and only runs the full `renderOfflineStatus()` once, after the loop
+  finishes. Also added a 30-second floor between cache refreshes
+  regardless of what triggered them — `online`, Alt-Tab
+  (`visibilitychange`), and the 5-minute interval all funnel through the
+  same refresh path, and a few quick Alt-Tabs in a row were each
+  triggering a full roster re-fetch back to back for no reason.
+- **Alt-Tab back into the Scanner showed "Loading…" on Recent Activity**
+  — real bug, now fixed. The 2026-09-17 fix below only filtered
+  `TOKEN_REFRESHED` auth events to stop them from triggering a full
+  `boot()`/re-render on every focus regain. Supabase-js can *also* emit a
+  same-user `SIGNED_IN` event on that same focus-regain session check,
+  depending on which internal path its visibility-driven validation
+  takes — left unguarded, that was the remaining route to the exact same
+  full re-render (and the exact same "Loading…" flash) the earlier fix
+  was meant to eliminate entirely. `main.js` now treats a `SIGNED_IN`
+  event for the *same* user id the same way as `TOKEN_REFRESHED`: update
+  the session reference, skip `boot()`. Only a genuinely new sign-in (no
+  prior session, or a different user) still triggers a real re-render.
+- **"Still not showing image for all new scans" — not a bug, a data
+  fact**: only 7 of 705 employees have ever had a photo uploaded at all
+  (verified directly against the `employees` table). The `photo_thumb_b64`
+  pipeline is working correctly for all 7 who have one — this was
+  confirmed by checking the data, not assumed. Scanning any of the other
+  698 correctly shows initials, because there is no photo on file to
+  show, online or offline. Worth testing specifically against one of the
+  7 known-to-have-a-photo employees to confirm the pipeline itself before
+  concluding it's broken again.
+- **Noted for later, not acted on now**: `get_scanner_offline_cache()`
+  currently embeds `photo_thumb_b64` in the same roster-wide payload
+  that's refreshed every 5 minutes and after every reconnect. At 7
+  photos / 0.07MB total this isn't a measurable cost today, but it's the
+  wrong shape to keep scaling — a lookup that needs to stay small and
+  frequent is coupled to a payload that will only grow and doesn't need
+  refreshing nearly that often. If photo adoption grows substantially,
+  worth splitting into a separate, infrequently-refreshed
+  employee_id→thumbnail cache rather than letting this one keep growing
+  in place — flagged here deliberately instead of rebuilding it
+  preemptively a third time on a hunch.
 
 **2026-09-18 — Offline scanner photos: replaced the entire Drive-prefetch approach with a stored base64 thumbnail**
 - After the LAN-IP fix below made the Service Worker actually run, and
