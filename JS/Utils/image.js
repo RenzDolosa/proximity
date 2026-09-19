@@ -107,3 +107,54 @@ export function blobToBase64(blob) {
     reader.readAsDataURL(blob);
   });
 }
+
+// employees.photo_thumb_b64 is fetched SERVER-SIDE by upload-employee-photo
+// from Drive's `/thumbnail?...` endpoint (see that function's index.ts) and
+// stored as raw base64 with no Content-Type captured alongside it. Every
+// consumer of that column used to assume the bytes were always JPEG — they
+// aren't: Drive's `/thumbnail` responds with whatever format it decides to
+// generate the preview in (observed both PNG and JPEG across employees,
+// seemingly based on the source upload), so a PNG-formatted thumbnail
+// labeled `image/jpeg` in a data: URI decodes as visual garbage (static/
+// noise) instead of either the real photo or a clean broken-image icon.
+// Root cause confirmed 2026-09-19 by pulling live rows via Supabase MCP:
+// 6 of 9 employees had PNG signatures despite every call site hardcoding
+// `data:image/jpeg;base64,`.
+//
+// Fixed client-side, once, here: sniff the real format from the first few
+// decoded bytes (the same magic-number check a file(1)-style tool uses)
+// instead of trusting a hardcoded label. Only decodes ~12 bytes via atob()
+// — cheap regardless of the thumbnail's actual size — so every caller can
+// afford to sniff on every render rather than caching a mime alongside the
+// base64 (which would mean a schema/Edge-Function change; this doesn't).
+const MAGIC_BYTES = [
+  { mime: 'image/png', bytes: [0x89, 0x50, 0x4e, 0x47] },
+  { mime: 'image/jpeg', bytes: [0xff, 0xd8, 0xff] },
+  { mime: 'image/gif', bytes: [0x47, 0x49, 0x46, 0x38] },
+  // WEBP is a RIFF container ("RIFF" + 4-byte size + "WEBP"); the "WEBP"
+  // tag sits at offset 8, so this needs the offset form below rather than
+  // a plain byte-0 prefix like the others.
+  { mime: 'image/webp', bytes: [0x57, 0x45, 0x42, 0x50], offset: 8 },
+];
+
+export function sniffImageMimeFromBase64(base64) {
+  if (!base64) return 'image/jpeg'; // no bytes to sniff — harmless fallback, offlineAvatarHTML/showHeroPhoto already treat falsy base64 as "no photo" before this is ever called
+  try {
+    // 16 raw bytes needs at most 22 base64 chars (4 chars encode 3 bytes);
+    // slicing generously up front keeps this a single atob() call.
+    const head = atob(base64.slice(0, 24));
+    for (const { mime, bytes, offset = 0 } of MAGIC_BYTES) {
+      if (head.length < offset + bytes.length) continue;
+      if (bytes.every((b, i) => head.charCodeAt(offset + i) === b)) return mime;
+    }
+  } catch {
+    // Malformed base64 — fall through to the default below rather than
+    // throwing out of what's meant to be a display-only helper.
+  }
+  return 'image/jpeg'; // unrecognized signature — same default this code path always used before sniffing existed
+}
+
+/** Builds a `data:` URI for a stored `photo_thumb_b64` value, labeled with its real sniffed mime type rather than an assumed one. */
+export function photoDataUri(base64) {
+  return `data:${sniffImageMimeFromBase64(base64)};base64,${base64}`;
+}

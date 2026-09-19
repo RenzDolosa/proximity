@@ -347,6 +347,47 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-19 — Scanner: real PNG/JPEG photo bug fixed, result photo moved to a full-viewport stage, logo moved to a background layer**
+- **Root cause of the garbled/static-looking employee photo** reported on
+  the standalone Scanner: `employees.photo_thumb_b64` is fetched
+  server-side by `upload-employee-photo` from Drive's `/thumbnail?...`
+  endpoint, which returns whichever format it decides to generate the
+  preview in — PNG for roughly two-thirds of the roster when checked
+  live via Supabase MCP, JPEG for the rest — with no Content-Type
+  captured alongside the stored bytes. Every consumer (`offlineAvatarHTML`
+  in `Utils/format.js`, the Scanner's hero-photo swap) hardcoded
+  `data:image/jpeg;base64,...` regardless, so a PNG-formatted thumbnail
+  decoded as visual noise instead of either the real photo or a clean
+  broken-image icon. Fixed client-side only, no schema or Edge Function
+  change: new `sniffImageMimeFromBase64()` / `photoDataUri()` in
+  `Utils/image.js` read the real magic bytes (PNG/JPEG/GIF/WEBP
+  signatures) off the first ~16 decoded bytes and build the `data:` URI
+  from that instead of an assumed label. Both call sites switched over.
+- **Result photo moved from `.ss-icon` to a dedicated full-viewport
+  stage** (`.ss-photo-stage`, new fixed-position element sized via
+  `min(82dvh, 82dvw)`): the previous approach swapped the photo directly
+  into `.ss-icon`, which sits inside `.ss-main`'s grid column and capped
+  the photo at `clamp(160px, 32dvh, 360px)` regardless of how much
+  vertical space the kiosk display actually had. The new stage is sized
+  purely off viewport height/width, independent of the 3-column layout,
+  so it can't be constrained by (or overflow into) the feed sidebar.
+- **Logo mark moved out of `.ss-icon` into a full-viewport background
+  layer** (`.ss-bg-logo`, `position:fixed`, low-opacity, sized off
+  `min(72dvh, 72dvw)`): previously the Proximity mark lived inside the
+  small hero ring for the idle state; now it's ambient branding behind
+  the whole kiosk screen (header + feed panel included), and `.ss-icon`
+  is left empty as just the center point for the pulsing `.ss-ring`
+  animation. `.ss-header` and `.ss-layout` got explicit
+  `position:relative;z-index:1;` so they still stack above the fixed
+  background/photo layers correctly.
+- Test Scan's `.ts-icon`/`.ts-ring` were deliberately left untouched —
+  same reasoning as every earlier entry that's scoped a Scanner change to
+  the standalone kiosk only: Test Scan is an in-shell admin diagnostic
+  panel, not a door-facing kiosk screen, so a full-viewport photo/logo
+  layer doesn't fit its embedded layout. It still benefits from the
+  `offlineAvatarHTML` mime fix above, since `ScanResultCard.js` is shared
+  by both.
+
 **2026-09-19 — Scanner: full-size result photo, and a real CSS regression fixed along the way**
 - While investigating, found `.ss-icon`/`.ts-icon` in `CSS/scanner.css`
   entirely commented out — the hero logo mark had no sizing/background/

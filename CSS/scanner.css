@@ -30,8 +30,32 @@
   padding:20px clamp(16px, 4dvw, 28px) 40px;
   background:radial-gradient(900px 500px at 50% 0%, #17213A 0%, transparent 65%), var(--bg);
   box-sizing:border-box;
+  /* Establishes the stacking context .ss-bg-logo sits behind and
+     .ss-header/.ss-layout sit in front of — see both below. */
+  position:relative;
 }
-.ss-header{width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:14px;border-bottom:1px solid var(--border-soft);}
+/* Full-viewport decorative brand mark. Previously the logo lived INSIDE
+   .ss-icon (the small hero ring) for both idle and matched states; moved
+   out entirely so .ss-icon/.ss-photo-stage are free to be dedicated to
+   the live scan result (see the 2026-09-19 change log entry). Sized off
+   dvh/dvw like the rest of this kiosk screen rather than fixed px, kept
+   very low-opacity so it reads as ambient branding behind the header/
+   feed panel, not a competing foreground element, and pointer-events:none
+   plus a negative-ish stacking position (z-index:0, everything else on
+   this screen sits at z-index:1+) keeps it inert and out of the way. */
+.ss-bg-logo{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:0;
+  pointer-events:none;
+  opacity:.05;
+  color:var(--text);
+}
+.ss-bg-logo .proximity-logo-mark{width:min(72dvh, 72dvw);height:min(72dvh, 72dvw);}
+.ss-header{position:relative;z-index:1;width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:14px;border-bottom:1px solid var(--border-soft);}
 .ss-offline-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .ss-operator{font-size:12.5px;color:var(--text-muted);}
 .ss-operator strong{color:var(--text);font-weight:600;}
@@ -40,6 +64,8 @@
    keeps ss-main (the "Tap your card" hero + search box) truly centered on
    the screen, instead of being pulled left by the feed sidebar. */
 .ss-layout{
+  position:relative;
+  z-index:1;
   flex:1;
   display:grid;
   grid-template-columns: minmax(0, 280px) minmax(0, 1fr) minmax(0, 280px);
@@ -70,18 +96,48 @@
 .ss-ring::before{width:120%;height:120%;animation:ss-pulse 2.4s ease-out infinite;}
 .ss-ring::after{width:150%;height:150%;animation:ss-pulse 2.4s ease-out infinite .5s;}
 @keyframes ss-pulse{0%{transform:scale(.75);opacity:.9;}100%{transform:scale(1.15);opacity:0;}}
-.ss-icon{width:clamp(60px, 8.5dvh, 96px);height:clamp(60px, 8.5dvh, 96px);border-radius:12px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;z-index:1;padding:14%;box-sizing:border-box;color:var(--text);transition:width .3s ease,height .3s ease,border-radius .3s ease,padding .3s ease;}
-/* Swapped in over the logo mark for the duration of a matched result with
-   a photo (see StandaloneScanner.js's showHeroPhoto/resetHeroIcon) — same
-   dvh-clamp sizing idiom as the plain icon above, just larger and round,
-   since the point here is "big enough to actually recognize someone from
-   a few feet away," not "a small badge-sized glyph." padding:0 and
-   object-fit:cover on the <img> itself (not inherited from .ss-icon,
-   which sizes the *logo* via percentage padding) — a photo needs to fill
-   the circle edge-to-edge, not sit inset like the logo mark does. */
-.ss-icon.ss-icon-photo{width:clamp(160px, 32dvh, 360px);height:clamp(160px, 32dvh, 360px);border-radius:50%;padding:0;overflow:hidden;border-color:var(--good);}
-.ss-icon.ss-icon-photo img{width:100%;height:100%;object-fit:cover;display:block;}
+/* Idle "tap here" indicator only, now that the logo mark lives in
+   .ss-bg-logo instead — deliberately left with no icon content inside
+   (the pulsing .ss-ring rings around it are the idle affordance); this
+   box's job is now just to hold a spot at the center of .ss-hero so the
+   layout doesn't jump when .ss-photo-stage below takes over on a scan. */
+.ss-icon{width:clamp(60px, 8.5dvh, 96px);height:clamp(60px, 8.5dvh, 96px);border-radius:12px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;z-index:1;box-sizing:border-box;color:var(--text);}
 .ss-label{text-align:center;font-weight:700;font-size:26px;letter-spacing:.5px;line-height:1.25;text-transform:none;}
+/* Full-viewport, centered stage for the matched-scan result photo (see
+   StandaloneScanner.js's showHeroPhoto/resetHeroIcon). Previously this
+   swapped directly into .ss-icon and was capped at 360px by that box's
+   place in the .ss-main grid column — max clamp(160px,32dvh,360px) meant
+   the photo never really got bigger than a large badge crop even on a
+   tall kiosk display. Moved to its own `position:fixed` layer instead so
+   sizing is driven purely by viewport height/width (dvh/dvw), independent
+   of the 3-column grid .ss-main sits in — the sidebar/feed column can't
+   constrain how large this gets, and it can't overflow into or displace
+   them either. min(82dvh,82dvw) keeps it a true circle that always fits
+   within the SMALLER viewport dimension, so it can't clip off-screen on
+   a narrow portrait kiosk tablet the way a dvh-only size could. */
+.ss-photo-stage{
+  position:fixed;
+  inset:0;
+  z-index:6;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  pointer-events:none;
+  opacity:0;
+  transform:scale(.94);
+  transition:opacity .35s ease, transform .35s ease;
+}
+.ss-photo-stage.active{opacity:1;transform:scale(1);}
+.ss-photo-stage img{
+  width:min(82dvh, 82dvw);
+  height:min(82dvh, 82dvw);
+  border-radius:50%;
+  object-fit:cover;
+  display:block;
+  background:var(--surface-raised);
+  border:4px solid var(--good);
+  box-shadow:0 0 0 1px var(--border), 0 30px 90px rgba(0,0,0,.55);
+}
 .ss-result-wrap{width:min(420px, 90dvw);margin:26px auto 0;transition:opacity .4s ease;}
 .ss-result-wrap.fade-out{opacity:0;}
 .ss-feed-panel{padding:12px 0px 12px 14px;display:flex;flex-direction:column;max-height:calc(100dvh - 120px);}

@@ -6,6 +6,7 @@ import { ScanEventsModel } from '../../Models/ScanEventsModel.js';
 import { renderScanResult } from '../../Components/ScanResultCard.js';
 import { loadScanFeed, prependPendingRow } from '../../Components/ScanFeed.js';
 import { PROXIMITY_LOGO_SVG } from '../../Components/ProximityLogo.js';
+import { photoDataUri } from '../../Utils/image.js';
 import { loadScanSounds, playScanSound, scanSoundsLoaded, initAudioUnlock } from '../../Utils/scanSounds.js';
 import { OfflineScanModel, STALE_AFTER_MS } from '../../Models/OfflineScanModel.js';
 
@@ -39,6 +40,8 @@ function renderStandaloneScanner() {
   const wrap = $('#standalone-scanner');
   const operatorName = appState.profile?.full_name || appState.session.user.email;
   wrap.innerHTML = `
+    <div class="ss-bg-logo" aria-hidden="true">${PROXIMITY_LOGO_SVG}</div>
+    <div class="ss-photo-stage" id="ss-photo-stage" aria-hidden="true"></div>
     <div class="ss-header">
       <div class="ss-operator">Operator: <strong class="mono">${esc(operatorName)}</strong></div>
       <div class="ss-offline-status" id="ss-offline-status"></div>
@@ -50,7 +53,7 @@ function renderStandaloneScanner() {
           <input id="ss-code" type="password" class="mono" placeholder="Live Search — scan or type code…" autocomplete="off" autofocus />
         </div>
         <div class="ss-hero">
-          <div class="ss-ring"><div class="ss-icon" id="ss-icon">${PROXIMITY_LOGO_SVG}</div></div>
+          <div class="ss-ring"><div class="ss-icon" id="ss-icon"></div></div>
         </div>
         <div class="ss-result-wrap" id="ss-result"></div>
       </div>
@@ -85,24 +88,36 @@ function renderStandaloneScanner() {
     }, 50);
   });
   const resultWrap = $('#ss-result');
-  const heroIcon = $('#ss-icon');
-  const HERO_LOGO_HTML = heroIcon.innerHTML; // captured once, before anything ever swaps it — this is what resetHeroIcon() restores
-  // Swapped in for a matched scan with a photo on file: replaces the
-  // small logo glyph with the employee's actual photo at a much larger,
-  // dvh-scaled size (see .ss-icon-photo in CSS/scanner.css) — the point
-  // is a security/reception operator being able to visually confirm the
-  // person from a normal viewing distance, which a 96px logo-sized crop
-  // can't really do. Reuses photo_thumb_b64 (already on data.employee
-  // for every scan result, online or offline — see ScanResultCard.js's
-  // header comment) so this needs no extra fetch of its own.
+  const photoStage = $('#ss-photo-stage');
+  // Swapped in for a matched scan with a photo on file: fills the fixed,
+  // full-viewport .ss-photo-stage (see CSS/scanner.css) rather than the
+  // small .ss-icon hero ring — the point is a security/reception operator
+  // being able to visually confirm the person from a normal viewing
+  // distance, which a badge-sized crop can't really do, and doing it as
+  // its own viewport-sized layer means it's not bounded by .ss-main's
+  // grid column width the way growing .ss-icon itself would be. Reuses
+  // photo_thumb_b64 (already on data.employee for every scan result,
+  // online or offline — see ScanResultCard.js's header comment) so this
+  // needs no extra fetch of its own. photoDataUri() sniffs the real
+  // image format from the bytes instead of assuming JPEG — Drive's
+  // /thumbnail endpoint (what produced this base64 server-side) returns
+  // either PNG or JPEG depending on the source photo, and a mislabeled
+  // data: URI decodes as visual static rather than the real photo (see
+  // Utils/image.js's header comment for the root-cause writeup).
   const showHeroPhoto = (name, thumbB64) => {
-    heroIcon.classList.add('ss-icon-photo');
-    heroIcon.innerHTML = `<img src="data:image/jpeg;base64,${thumbB64}" alt="${esc(name || '')}" />`;
+    photoStage.innerHTML = `<img src="${photoDataUri(thumbB64)}" alt="${esc(name || '')}" />`;
+    photoStage.classList.add('active');
   };
   const resetHeroIcon = () => {
-    if (!heroIcon.classList.contains('ss-icon-photo')) return; // already showing the logo — avoid an unnecessary reflow on every non-photo scan
-    heroIcon.classList.remove('ss-icon-photo');
-    heroIcon.innerHTML = HERO_LOGO_HTML;
+    if (!photoStage.classList.contains('active')) return; // nothing showing — avoid an unnecessary reflow on every non-photo scan
+    photoStage.classList.remove('active');
+    // Clear the <img> only after the CSS opacity/transform transition
+    // finishes, not immediately — emptying innerHTML right away would cut
+    // the fade-out short (the browser has nothing left to fade). 400ms
+    // matches .ss-photo-stage's transition duration in CSS/scanner.css.
+    setTimeout(() => {
+      if (!photoStage.classList.contains('active')) photoStage.innerHTML = '';
+    }, 400);
   };
   let fadeTimer = null;
   let clearTimer = null;

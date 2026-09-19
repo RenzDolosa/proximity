@@ -1,4 +1,5 @@
 // Pure formatting helpers — no DOM, no state, safe to reuse anywhere.
+import { photoDataUri } from './image.js';
 
 export const esc = (s) =>
   (s ?? '').toString().replace(/[&<>"']/g, (c) => ({
@@ -106,10 +107,16 @@ export const avatarHTML = (name, photoUrl, cacheKey) => {
 export const offlineAvatarHTML = (name, thumbB64) => {
   const initialsHTML = `<span class="avatar-fallback" style="display:none">${esc(initials(name))}</span>`;
   if (!thumbB64) return `<span class="avatar-fallback">${esc(initials(name))}</span>`;
-  // Always JPEG — Drive's /thumbnail endpoint (what upload-employee-photo
-  // fetches server-side to produce this) returns JPEG regardless of the
-  // original upload's format (webp, png, ...).
-  const realHTML = `<img src="data:image/jpeg;base64,${thumbB64}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''" />`;
+  // NOT always JPEG, despite Drive's /thumbnail endpoint being what
+  // upload-employee-photo fetches server-side to produce this: Drive
+  // returns whichever format it decides to generate the preview in (PNG
+  // observed as often as JPEG in practice), and no Content-Type is
+  // captured alongside the stored bytes to tell them apart later. A
+  // PNG thumbnail served with a hardcoded `image/jpeg` label decodes as
+  // visual static, not a clean broken-image icon — see photoDataUri()'s
+  // header comment in Utils/image.js for the root-cause writeup. Sniffed
+  // from the real bytes instead of assumed.
+  const realHTML = `<img src="${photoDataUri(thumbB64)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''" />`;
   return realHTML + initialsHTML;
 };
 
