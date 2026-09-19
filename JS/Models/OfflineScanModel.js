@@ -142,30 +142,74 @@ export const OfflineScanModel = {
     return idbCountQueue().catch(() => 0);
   },
 
-  // Replays the queue strictly in FIFO order, one RPC call at a time
-  // (never Promise.all): direction is derived server-side from
-  // scan_logs's length at the moment each call actually runs, so two
-  // calls for the same employee racing in parallel could both read the
-  // same "before" count and both come back `in`. Stops at the first
-  // failure (still offline, or a real server error) and leaves the rest
-  // queued — retried whole on the next 'online' event or periodic
-  // attempt, never partially skipped, so ordering is never disturbed.
+  // Replays the queue in per-employee chronological order, but different
+  // employees' queues run CONCURRENTLY (bounded), not one global queue
+  // processed one entry at a time. Why grouping is required, not
+  // optional: direction is derived server-side from scan_logs's length
+  // at the moment each call actually runs, so two calls for the SAME
+  // employee racing in parallel could both read the same "before" count
+  // and both come back `in` — so within one employee's own entries,
+  // order is still strictly preserved (sequential, awaited). Why
+  // parallelizing ACROSS employees is safe: they share no server-side
+  // state at all, so there's no correctness reason to make one
+  // employee's sync wait behind an unrelated one's. This is the actual
+  // fix for "sync queue slow" reported after a longer outage — the old
+  // global one-at-a-time loop meant a 20-scan backlog took 20 sequential
+  // round trips no matter how unrelated those scans were to each other.
+  // Still stops ALL groups on the first failure (a shared `stopped` flag,
+  // checked before every call) rather than letting each group fail
+  // independently — same original reasoning as the old code: a failure
+  // usually means something is broken right now (auth, connectivity
+  // flapped mid-flush), not that this one employee's data is bad, so
+  // hammering the server across several parallel workers after that
+  // point wastes calls rather than making progress. Whatever didn't sync
+  // stays queued, retried whole on the next attempt, same as before.
   async flushQueue(onProgress) {
     const entries = (await idbGetQueue().catch(() => []))
       .sort((a, b) => new Date(a.scanned_at) - new Date(b.scanned_at));
-    let synced = 0;
+    const total = entries.length;
+    if (!total) return { synced: 0, remaining: 0 };
+
+    const groups = new Map();
     for (const entry of entries) {
+      if (!groups.has(entry.proximity_code)) groups.set(entry.proximity_code, []);
+      groups.get(entry.proximity_code).push(entry);
+    }
+
+    let synced = 0;
+    let stopped = false;
+    const syncOne = async (entry) => {
+      if (stopped) return false;
       const { error } = await supabase.rpc('scan_proximity_code', {
         p_proximity_code: entry.proximity_code,
         p_scanner_id: entry.scanner_id,
         p_scanned_at: entry.scanned_at,
         p_offline: true,
       });
-      if (error) break;
+      if (error) { stopped = true; return false; }
       await idbRemoveFromQueue(entry.id).catch(() => {});
       synced++;
-      onProgress?.(synced, entries.length);
-    }
-    return { synced, remaining: entries.length - synced };
+      onProgress?.(synced, total);
+      return true;
+    };
+    const syncGroup = async (groupEntries) => {
+      for (const entry of groupEntries) {
+        if (!(await syncOne(entry))) return; // this employee's remaining entries stay queued too, in order — never skip ahead within a group
+      }
+    };
+
+    // A handful of employees' queues in flight at once, not the whole
+    // roster at once — same bounded-concurrency reasoning as the old
+    // photo prefetch: fast, without turning a big backlog into a burst
+    // of simultaneous requests.
+    const FLUSH_CONCURRENCY = 6;
+    const groupArrays = [...groups.values()];
+    let i = 0;
+    const worker = async () => {
+      while (i < groupArrays.length) await syncGroup(groupArrays[i++]);
+    };
+    await Promise.all(Array.from({ length: Math.min(FLUSH_CONCURRENCY, groupArrays.length) }, worker));
+
+    return { synced, remaining: total - synced };
   },
 };

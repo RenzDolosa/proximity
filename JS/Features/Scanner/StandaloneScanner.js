@@ -14,6 +14,10 @@ import { OfflineScanModel, STALE_AFTER_MS } from '../../Models/OfflineScanModel.
 // call (if that ever changes) can't stack a second setInterval or a
 // second pair of online/offline listeners.
 let offlineSupportInited = false;
+// Set the first (real) time initOfflineSupport runs; returned to any
+// re-entrant call after that (see the guard at the top of the function)
+// so doScan() always has a real flushIfPending to call, never undefined.
+let flushIfPendingShared = async () => {};
 
 export function showStandaloneScanner() {
   $('#auth-screen').classList.add('hidden');
@@ -65,7 +69,7 @@ function renderStandaloneScanner() {
   // block the scanner from working; scans just stay silent until a retry.
   loadScanSounds().catch(() => {});
   initAudioUnlock();
-  initOfflineSupport(operatorName);
+  const flushPendingQueue = initOfflineSupport(operatorName);
   const codeInput = $('#ss-code');
   // The HTML `autofocus` attribute isn't reliably honored when markup is
   // inserted via innerHTML (as opposed to during initial page parsing) —
@@ -87,6 +91,12 @@ function renderStandaloneScanner() {
   let scanBusy = false;
   const RESULT_LIFETIME_MS = 10000;
   const FADE_DURATION_MS = 400;
+  // See the comment at its use in doScan() below for the full reasoning.
+  // Generous enough not to false-trigger on a genuinely slow-but-working
+  // connection (a normal RPC round trip is well under 1s), short enough
+  // that a dead connection doesn't leave the operator staring at nothing
+  // for anywhere near as long as a native browser timeout would.
+  const ONLINE_SCAN_TIMEOUT_MS = 4000;
   const scheduleResultFade = () => {
     clearTimeout(fadeTimer);
     clearTimeout(clearTimer);
@@ -112,9 +122,34 @@ function renderStandaloneScanner() {
     let data, error;
     let offlineHandled = false;
     if (navigator.onLine) {
-      ({ data, error } = await ScanEventsModel.scan(proximity_code, operatorName));
+      // navigator.onLine reports whether the device has ANY active
+      // network interface, not whether the internet — or Supabase
+      // specifically — is actually reachable right now. It's common for
+      // it to still read `true` for a while after a connection has
+      // genuinely died (Wi-Fi still associated to a dead router, a
+      // captive portal, etc.), and a plain `supabase.rpc()` call has no
+      // timeout of its own — it hangs until the browser's native
+      // TCP/DNS timeout, which can be tens of seconds. That hang used to
+      // sit directly in front of the offline fallback below, reported
+      // as "scan slow to render result" right as connectivity dropped.
+      // Racing it against a short local timeout bounds the worst case to
+      // ONLINE_SCAN_TIMEOUT_MS regardless of what the OS network stack
+      // decides to do; a timeout is treated exactly like any other
+      // network failure below and falls through to the same offline path.
+      const scanPromise = ScanEventsModel.scan(proximity_code, operatorName);
+      const timeout = new Promise((resolve) => {
+        setTimeout(() => resolve({ data: null, error: { message: 'timed out', timedOut: true } }), ONLINE_SCAN_TIMEOUT_MS);
+      });
+      ({ data, error } = await Promise.race([scanPromise, timeout]));
+      if (error?.timedOut) {
+        // The real request is still in flight — let it resolve/reject in
+        // the background rather than leaving an unhandled rejection, but
+        // don't wait for it or act on whatever it eventually returns;
+        // we've already committed to the offline path for this attempt.
+        scanPromise.catch(() => {});
+      }
     }
-    if (!navigator.onLine || OfflineScanModel.isNetworkError(error)) {
+    if (!navigator.onLine || error?.timedOut || OfflineScanModel.isNetworkError(error)) {
       // Either genuinely offline, or the request itself failed to reach
       // the network (as opposed to reaching Supabase and getting a real
       // error back, which still surfaces as a failed scan below). Fall
@@ -169,7 +204,27 @@ function renderStandaloneScanner() {
     if (offlineHandled) {
       prependPendingRow('ss-feed', data, operatorName, 10);
     } else {
-      loadScanFeed('ss-feed', 10, operatorName);
+      // A plain loadScanFeed() here used to wholesale-replace the feed
+      // with whatever's authoritative in scan_events RIGHT NOW — which
+      // is fine when the offline queue is already empty, but if this
+      // online scan happens while there's STILL an un-synced backlog
+      // (very possible in the first moments after reconnecting, before
+      // the periodic/on-'online' flush has caught up), that reload wipes
+      // out the visible "Queued — syncing…" rows for scans that are
+      // still only in IndexedDB, not in scan_events yet — they vanish
+      // from the feed even though the data itself is completely safe,
+      // just not yet synced. Draining the queue first means the reload
+      // that follows actually reflects everything, so nothing visibly
+      // disappears without being replaced by its real counterpart.
+      // flushPendingQueue (from initOfflineSupport below) already calls
+      // loadScanFeed() itself when it syncs anything, so this only calls
+      // it again separately in the empty-queue case.
+      const pendingBefore = await OfflineScanModel.queueCount();
+      if (pendingBefore > 0) {
+        await flushPendingQueue();
+      } else {
+        loadScanFeed('ss-feed', 10, operatorName);
+      }
     }
   };
   codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doScan(); });
@@ -249,7 +304,7 @@ function fmtAge(ms) {
 // online/offline wiring that flushes the queue the instant connectivity
 // comes back.
 function initOfflineSupport(operatorName) {
-  if (offlineSupportInited) { renderOfflineStatus(); return; }
+  if (offlineSupportInited) { renderOfflineStatus(); return flushIfPendingShared; }
   offlineSupportInited = true;
 
   const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 min — cheap single RPC call, keeps the cache fresh through a normal shift without waiting on a reload
@@ -340,4 +395,12 @@ function initOfflineSupport(operatorName) {
   // no other path back to syncing short of a manual reload.
   setInterval(flushIfPending, FLUSH_RETRY_INTERVAL_MS);
   setInterval(refreshIfOnline, REFRESH_INTERVAL_MS);
+
+  // Exposed so doScan() (in renderStandaloneScanner above) can drain the
+  // queue before reloading the feed on an online scan — see its call site
+  // for why. flushIfPendingShared covers the defensive re-entrant-call
+  // branch at the top of this function; the direct return covers the
+  // normal first-call path.
+  flushIfPendingShared = flushIfPending;
+  return flushIfPending;
 }

@@ -345,6 +345,54 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-19 — Scanner responsiveness: three real fixes, one honest limit**
+- **Online→offline scan slow to render**: `ScanEventsModel.scan()` had no
+  timeout, and `doScan()` trusted `navigator.onLine` to decide whether to
+  even attempt it. `navigator.onLine` only reflects whether the device has
+  *an* active network interface, not whether the internet (or Supabase)
+  is actually reachable — it commonly still reads `true` for a while
+  after a connection has genuinely died. When that happened, the scan
+  hung on the browser's native TCP/DNS timeout (tens of seconds) before
+  ever falling back offline. Fixed: the online attempt now races against
+  a 4s local timeout (`ONLINE_SCAN_TIMEOUT_MS`); a timeout is treated
+  exactly like any other network failure and falls straight through to
+  the same offline path.
+- **Sync queue not "almost instant"**: `flushQueue()` processed every
+  queued scan strictly one RPC round trip at a time, globally. Fixed:
+  entries are now grouped by employee (`proximity_code`) and different
+  employees' groups sync concurrently (bounded to 6 at once) — still
+  strictly sequential *within* one employee's own entries (direction is
+  derived server-side from that employee's scan_logs length at call
+  time, so their own entries can never race each other), but unrelated
+  employees no longer wait behind one another. Still stops all groups on
+  the first failure, same safety reasoning as before, just scoped
+  correctly now.
+- **Queue rows "disappearing" from Recent Activity**: an online scan
+  unconditionally called `loadScanFeed()`, which wholesale-replaces the
+  feed with whatever's authoritative in `scan_events` right now. If that
+  happened while there was STILL an un-synced backlog (common in the
+  first moments after reconnecting), the reload wiped the visible
+  "Queued — syncing…" rows for scans that hadn't actually synced yet —
+  the data was always safe in IndexedDB, but the UI looked like it lost
+  them. Fixed: `doScan()`'s online branch now checks the queue first and
+  drains it (reusing the same flush function `initOfflineSupport` uses
+  internally, now exposed for this) before reloading the feed, so nothing
+  is ever wiped without being properly replaced by its real synced row.
+- **Employee Manager upload still slow** (after the thumbnail-fetch
+  timeout fix in the entry below): partially addressed, not eliminated.
+  `upload-employee-photo` now caches its Google OAuth access token across
+  warm Edge Function invocations instead of re-fetching one on every
+  single call — a real network round trip removed from most uploads. What
+  this does NOT remove: the upload itself is inherently 3 sequential
+  Google Drive API calls (upload the file, make it public, fetch the
+  thumbnail) plus, on a cold instance, the token exchange — that's
+  real, unavoidable round-trip latency to an external service, not a
+  bug. If this still needs to feel meaningfully faster, the honest next
+  step is client-side: skip the wait entirely by saving the employee
+  record optimistically and letting the Drive upload finish in the
+  background, rather than trying to shave further milliseconds off a
+  sequential external API chain.
+
 **2026-09-19 — Three real regressions from the `photo_thumb_b64` change, plus one non-bug worth clarifying**
 - **Upload noticeably slower** — real bug, now fixed. `upload-employee-photo`
   fetched the server-side thumbnail (see 2026-09-18 below) synchronously,

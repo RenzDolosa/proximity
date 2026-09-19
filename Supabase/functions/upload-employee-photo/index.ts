@@ -119,7 +119,7 @@ Deno.serve(async (req: Request) => {
     if (!clientId || !clientSecret || !refreshToken || !folderId) {
       return json({ error: "Google Drive isn't configured yet — GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_OAUTH_REFRESH_TOKEN, and GOOGLE_DRIVE_FOLDER_ID must be set as Edge Function secrets." }, 500, cors);
     }
-    const accessToken = await getGoogleAccessToken(clientId, clientSecret, refreshToken);
+    const accessToken = await getCachedGoogleAccessToken(clientId, clientSecret, refreshToken);
 
     if (action === "delete") {
       if (body.old_file_id) await deleteDriveFile(body.old_file_id, accessToken); // best-effort
@@ -254,7 +254,35 @@ function json(body: unknown, status: number, cors: Record<string, string>) {
 // Much simpler than the service-account JWT-signing flow it replaces: no
 // RS256/Web Crypto involved, just a single token-refresh POST.
 
-async function getGoogleAccessToken(clientId: string, clientSecret: string, refreshToken: string): Promise<string> {
+// Module-scope, not per-request: a Supabase Edge Function instance stays
+// "warm" and reuses the same JS runtime (and therefore the same
+// module-level state) across multiple invocations that arrive close
+// together — a burst of uploads, or Settings' quota panel polling. Google
+// access tokens are normally valid for an hour; refetching one on EVERY
+// single call, every time, was one more full network round trip sitting
+// in the critical path of every upload (reported as "upload slow" even
+// after the thumbnail-fetch timeout fix below addressed the other half
+// of that). Cached here with a safety margin before the real expiry, and
+// scoped to the specific refresh token it was issued for — if that env
+// var is ever rotated, the cache correctly misses and re-fetches rather
+// than serving a token for the wrong account.
+let cachedToken: { accessToken: string; expiresAt: number; forRefreshToken: string } | null = null;
+const TOKEN_EXPIRY_SAFETY_MARGIN_MS = 60_000; // refresh a minute early rather than risk a request landing right at expiry
+
+async function getCachedGoogleAccessToken(clientId: string, clientSecret: string, refreshToken: string): Promise<string> {
+  if (cachedToken && cachedToken.forRefreshToken === refreshToken && Date.now() < cachedToken.expiresAt) {
+    return cachedToken.accessToken;
+  }
+  const { accessToken, expiresInSeconds } = await getGoogleAccessToken(clientId, clientSecret, refreshToken);
+  cachedToken = {
+    accessToken,
+    expiresAt: Date.now() + (expiresInSeconds * 1000) - TOKEN_EXPIRY_SAFETY_MARGIN_MS,
+    forRefreshToken: refreshToken,
+  };
+  return accessToken;
+}
+
+async function getGoogleAccessToken(clientId: string, clientSecret: string, refreshToken: string): Promise<{ accessToken: string; expiresInSeconds: number }> {
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -272,7 +300,12 @@ async function getGoogleAccessToken(clientId: string, clientSecret: string, refr
     // shows up here as invalid_grant.
     throw new Error(data.error_description || data.error || "Google authentication failed — the refresh token may be invalid or revoked.");
   }
-  return data.access_token;
+  // expires_in is Google's own stated lifetime in seconds (normally 3600).
+  // Falling back to a conservative 1800s if it's ever absent from the
+  // response keeps the cache from assuming an indefinitely-valid token —
+  // worst case with the fallback is refreshing twice as often as
+  // strictly needed, never serving a token past its real expiry.
+  return { accessToken: data.access_token, expiresInSeconds: Number(data.expires_in) || 1800 };
 }
 
 // ---- Drive API ----
