@@ -51,7 +51,7 @@
   justify-content:center;
   z-index:0;
   pointer-events:none;
-  opacity:.05;
+  opacity:1;
   color:var(--text);
 }
 .ss-bg-logo .proximity-logo-mark{width:min(72dvh, 72dvw);height:min(72dvh, 72dvw);}
@@ -113,7 +113,8 @@
    that has to hold its proportions whether it's on a small tablet reader
    or a large wall-mounted display, and dvh (vs vh) keeps it correct on
    mobile browsers that resize the viewport when chrome shows/hides. */
-.ss-ring{position:relative;width:clamp(120px, 18dvh, 200px);height:clamp(120px, 18dvh, 200px);display:flex;align-items:center;justify-content:center;}
+/* .ss-ring{position:relative;width:clamp(120px, 18dvh, 200px);height:clamp(120px, 18dvh, 200px);display:flex;align-items:center;justify-content:center;} */
+.ss-ring{position:relative;width:35dvw;height:65dvh;display:flex;align-items:center;justify-content:center;}
 .ss-ring::before,.ss-ring::after{content:'';position:absolute;border-radius:50%;border:2px solid var(--accent-dim);}
 .ss-ring::before{width:120%;height:120%;animation:ss-pulse 2.4s ease-out infinite;}
 .ss-ring::after{width:150%;height:150%;animation:ss-pulse 2.4s ease-out infinite .5s;}
@@ -123,7 +124,7 @@
    (the pulsing .ss-ring rings around it are the idle affordance); this
    box's job is now just to hold a spot at the center of .ss-hero so the
    layout doesn't jump when .ss-photo-stage below takes over on a scan. */
-.ss-icon{width:clamp(60px, 8.5dvh, 96px);height:clamp(60px, 8.5dvh, 96px);border-radius:12px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;z-index:1;box-sizing:border-box;color:var(--text);}
+/* .ss-icon{width:clamp(60px, 8.5dvh, 96px);height:clamp(60px, 8.5dvh, 96px);border-radius:12px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;z-index:1;box-sizing:border-box;color:var(--text);} */
 .ss-label{text-align:center;font-weight:700;font-size:26px;letter-spacing:.5px;line-height:1.25;text-transform:none;}
 /* Full-viewport, centered stage for the matched-scan result photo (see
    StandaloneScanner.js's showHeroPhoto/resetHeroIcon). Previously this

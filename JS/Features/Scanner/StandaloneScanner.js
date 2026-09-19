@@ -40,11 +40,10 @@ function renderStandaloneScanner() {
   const wrap = $('#standalone-scanner');
   const operatorName = appState.profile?.full_name || appState.session.user.email;
   wrap.innerHTML = `
-    <div class="ss-bg-logo" aria-hidden="true">${PROXIMITY_LOGO_SVG}</div>
+    <div class="ss-bg-logo" aria-hidden="true"><div class="ss-ring">${PROXIMITY_LOGO_SVG}</div></div>
     <div class="ss-photo-stage" id="ss-photo-stage" aria-hidden="true"></div>
     <div class="ss-header">
-      <div class="ss-operator">Operator: <strong class="mono">${esc(operatorName)}</strong></div>
-      <div class="ss-offline-status" id="ss-offline-status"></div>
+      <div class="ss-operator" style="display: flex; align-items: center;">Operator: <strong class="mono" style="margin: 0 8px 0 8px;">${esc(operatorName)}</strong><div class="ss-offline-status" id="ss-offline-status"></div></div>
       <button class="ghost" id="ss-signout">Sign out</button>
     </div>
     <div class="ss-layout">
@@ -52,9 +51,6 @@ function renderStandaloneScanner() {
       <div class="ss-main">
         <div class="ss-topbar">
           <input id="ss-code" type="password" class="mono" placeholder="Live Search — scan or type code…" autocomplete="off" autofocus />
-        </div>
-        <div class="ss-hero">
-          <div class="ss-ring"><div class="ss-icon" id="ss-icon"></div></div>
         </div>
       </div>
       <div class="ss-feed-col">
