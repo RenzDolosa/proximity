@@ -45,7 +45,7 @@ CSS/                       Stylesheets, split by concern, composed by main.css
   base.css                    resets + form controls
   layout.css                  app shell (sidebar/topbar/content)
   components.css              shared components: table, badge, modal, toast, panel…
-  auth.css                    sign in / create account screen
+  auth.css                    sign-in screen (no self-service account creation)
   scanner.css                 in-shell scanner + standalone scanner tab;
                                hero ring/icon are sized with clamp(px, dvh, px)
                                rather than fixed px, so the kiosk hero scales
@@ -103,7 +103,10 @@ JS/
                                   Manager and Proximity Cards; both show
                                   upload progress
   Features/                   one folder per screen/area of the app
-    Auth/AuthScreen.js
+    Auth/AuthScreen.js               (sign-in only — no self-service account
+                                       creation, removed 2026-09-19; Enter in
+                                       either field submits, same as clicking
+                                       Sign in)
     Directory/DirectoryPage.js       (Employee Manager — avatarHTML() helper,
                                        cache-busted via updated_at; the Edit/Add
                                        modal's photo picker shows a real upload
@@ -266,7 +269,19 @@ and "Open with Five Server" still works exactly as before (e.g.
 `http://127.0.0.1:5500/Public/index.html`), or just browse to the bare
 `http://127.0.0.1:5500/` root instead now that it redirects.
 
-Sign up — your first account becomes admin. Add
+Sign in with credentials for an existing account. **Brand-new deployment,
+no accounts yet?** There's no self-service sign-up UI (removed
+2026-09-19 — see change log) — create the first user directly in the
+Supabase Dashboard: **Authentication → Users → Add user**, set an email +
+password there. `handle_new_auth_user()` (the same trigger that always
+handled this) fires on that insert exactly like it did for the old
+sign-up form and auto-promotes it to admin, since it checks "does
+`profiles` have anyone yet at all," not which UI created the row. Sign in
+with those credentials here, then create everyone else's accounts under
+**Users & Roles** instead of the Dashboard — that's the one-time
+exception, not the new normal path.
+
+Once signed in as admin, add
 employees in **Employee Manager**, issue them a code in **Proximity
 Cards**, then scan that code in **Test Scan** (in-app) or the standalone
 **Scanner** tab (`?scanner=1`, logs to `scan_events`).
@@ -381,6 +396,39 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-19 — Removed self-service account creation; Enter submits sign-in**
+- `Public/index.html` — the auth screen's Sign in / Create account tab
+  toggle and the entire `#signup-form` are gone; the card is a single
+  sign-in form now. `CSS/auth.css`'s now-dead `.auth-toggle` rules removed
+  alongside it.
+- `JS/Features/Auth/AuthScreen.js` — rewritten: no `signup-submit`
+  handler, no tab-switching logic. Pressing **Enter** in either the email
+  or password field now submits sign-in, same as clicking the button —
+  there was no keyboard-submit path at all before this (no `<form>` tag
+  is used here, deliberately, to avoid a real page navigation on submit —
+  same reasoning as other in-app forms — so Enter needed an explicit
+  handler rather than getting it for free).
+- **Removing the button alone doesn't fully close this — said here
+  plainly rather than left implicit**: `supabase.auth.signUp()` is a
+  public method on the anon-key client; nothing stops someone from
+  calling it directly (browser console, a raw `curl` against the
+  Supabase Auth REST endpoint) even with the UI gone. Closing that
+  requires **Supabase Dashboard → Authentication → Providers → Email →
+  disable "Allow new users to sign up"** — a platform setting, not
+  something reachable via `apply_migration`/`execute_sql` (Auth
+  provider config isn't a Postgres table), so it wasn't flipped as part
+  of this change. Worth doing if self-service sign-up should be
+  impossible, not just hidden.
+- **Bootstrap path changed as a result**: a brand-new deployment with an
+  empty `profiles` table used to get its first (auto-admin) account
+  through this now-removed sign-up form. `handle_new_auth_user()` itself
+  is untouched and still auto-promotes whoever the first row in
+  `profiles` turns out to be — it doesn't care which UI created the
+  underlying `auth.users` row — so the fix is procedural, not code: create
+  that first user via **Supabase Dashboard → Authentication → Users →
+  Add user** instead, then sign in here with those credentials. See
+  `## 3. Running it` above, updated to match.
 
 **2026-09-19 — New root `index.html`: redirect stub to `Public/index.html`**
 - The repo root had no `index.html` at all (confirmed via a direct
