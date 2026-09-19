@@ -9,6 +9,27 @@ Project URL: `https://kjwttqmbcjvkivgmwuev.supabase.co`
 ## 1. Project structure
 
 ```
+index.html                 Redirect-only stub at the repo root, to
+                             Public/index.html — the real app lives there
+                             (see that entry below), never here. Exists so
+                             hitting the bare site root (GitHub Pages, a
+                             plain `npx serve .` with no path typed in,
+                             any static host pointed at the repo root)
+                             lands somewhere instead of a 404 or a raw
+                             directory listing. Relative redirect path
+                             (`Public/index.html`, not `/Public/index.html`)
+                             deliberately — this file can end up served
+                             from a domain root OR a subpath (a GitHub
+                             Pages *project* site is served under
+                             /<repo-name>/, not the domain root), and only
+                             the relative form resolves correctly either
+                             way. JS `location.replace()` first (instant,
+                             no back-button entry of its own), a
+                             `<meta http-equiv="refresh">` as the no-JS
+                             fallback, and a visible link as the last
+                             resort. Not part of the app itself — never
+                             add real markup, styles, or logic here.
+
 sw.js                      Service Worker — offline app-shell caching. Lives at
                              the repo root (NOT inside Public/) deliberately: its
                              scope is its own directory + below, and index.html
@@ -228,18 +249,22 @@ Full schema, RPC, and permission-model details: [`Supabase/README.md`](./Supabas
 
 ## 3. Running it
 
-`index.html` references `../CSS` and `../JS` — it expects to be served
-from *inside* the repo root, not as the root itself. `npx serve Public`
-alone won't resolve those (or `/sw.js` below). Serve the repo root instead
-and open the nested path:
+`Public/index.html` (the real app) references `../CSS` and `../JS` — it
+expects to be served from *inside* the repo root, not as the root itself.
+`npx serve Public` alone won't resolve those (or `/sw.js`). Serve the repo
+root instead:
 
 ```
 npx serve .
 ```
 
-Then open `http://localhost:3000/Public/index.html` (or whatever port it
-prints) — this matches how Five Server serves it in local dev (see
-`http://127.0.0.1:5500/Public/index.html`).
+Then just open the printed URL's bare root (e.g. `http://localhost:3000/`)
+— the root `index.html` redirect stub takes you straight to
+`Public/index.html`, so there's no nested path to remember or type. Same
+if you're using Five Server in VS Code: right-click `Public/index.html`
+and "Open with Five Server" still works exactly as before (e.g.
+`http://127.0.0.1:5500/Public/index.html`), or just browse to the bare
+`http://127.0.0.1:5500/` root instead now that it redirects.
 
 Sign up — your first account becomes admin. Add
 employees in **Employee Manager**, issue them a code in **Proximity
@@ -356,6 +381,18 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-19 — New root `index.html`: redirect stub to `Public/index.html`**
+- The repo root had no `index.html` at all (confirmed via a direct
+  `raw.githubusercontent.com` fetch — 404) — hitting the bare site root
+  under any static host pointed at the repo root (GitHub Pages, a plain
+  `npx serve .` with no path typed in) landed on a 404 or a raw directory
+  listing instead of the app. New root `index.html` is a redirect-only
+  stub to `Public/index.html` — see its own file-tree entry above for why
+  it uses a relative redirect path rather than an absolute one, and why
+  it must never grow real markup/logic of its own. `## 3. Running it`
+  updated to match: no more "open the printed URL, then navigate to
+  Public/index.html" — the bare root now gets you there directly.
 
 **2026-09-19 — Scanner: hero photo progressively upgrades to full resolution when online**
 - Complements, doesn't replace, the entry directly below this one (which

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Proximity</title>
+  <!-- Relative path, not an absolute /Public/index.html: this file can end
+       up served from a domain root (a custom domain, Five Server, `npx
+       serve .`) or from a subpath (a GitHub Pages *project* site is
+       served under /<repo-name>/, not the domain root) depending on how
+       it's hosted. A relative path resolves correctly either way; an
+       absolute one would silently break under a subpath deployment. -->
+  <meta http-equiv="refresh" content="0; url=Public/index.html" />
+  <link rel="canonical" href="Public/index.html" />
+  <script>
+    // Primary redirect — instant, and replace() (not href/location=) means
+    // this redirect page never becomes a back-button stop of its own.
+    // The meta refresh above is the fallback for the JS-disabled case;
+    // this app is a JS-heavy SPA regardless, so nothing is lost by
+    // preferring JS here when it's available.
+    location.replace('Public/index.html');
+  </script>
+</head>
+<body>
+  <p>Redirecting to <a href="Public/index.html">the Proximity app</a>…</p>
+</body>
+</html>
