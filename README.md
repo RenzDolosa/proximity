@@ -357,6 +357,39 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-19 — Scanner: hero photo progressively upgrades to full resolution when online**
+- Complements, doesn't replace, the entry directly below this one (which
+  fixed `photo_thumb_b64` itself going forward — 480px `.webp` instead of
+  96px). That fix only applies to photos uploaded *after* it landed;
+  existing rows keep their old 96px thumbnail — still visibly blurry at
+  `.ss-photo-stage`'s `min(82dvh, 82dvw)` size — until someone re-uploads
+  them. Rather than wait on that, `showHeroPhoto()` (`StandaloneScanner.js`)
+  now shows `photo_thumb_b64` immediately as before (instant, always
+  available, online or offline), then swaps to `photoUrl`'s full 512px
+  Drive photo the moment that finishes loading, via a plain `<img>`
+  preload. `photoUrl` is only ever present for an ONLINE scan
+  (`scan_proximity_code()`'s `to_jsonb(employees)` response includes the
+  full row; the offline lookup cache deliberately dropped `photo_url` as
+  dead weight once nothing else read it — see the 2026-09-19 "Scanner
+  responsiveness" entry and `Supabase/README.md`'s matching one) — so
+  this is purely additive: if it never loads — offline, Drive
+  unreachable, slow network — the thumbnail just keeps showing. Offline
+  is unaffected either way; this only makes the ONLINE case actually
+  sharp regardless of which thumbnail generation an employee's stored
+  `photo_thumb_b64` came from. A small guard (`photoStage.contains(thumbImg)`)
+  prevents a slow-loading upgrade from landing on the wrong photo if a
+  newer scan has already replaced what's on screen by the time it
+  finishes.
+- **Existing rows still worth re-uploading eventually**: this doesn't
+  backfill anyone's stored `photo_thumb_b64` — an employee whose photo
+  predates the 480px fix below still shows the old 96px thumbnail
+  *offline*, same as before. With current adoption this small (single
+  digits), the practical fix is just re-saving each affected employee's
+  photo once in Employee Manager — that alone regenerates the 480px
+  `.webp` through the already-fixed pipeline. Not worth a one-off backfill
+  script for a handful of rows; worth reconsidering if adoption grows
+  enough that manual re-upload stops being practical.
+
 **2026-09-19 — Scanner: blurry result photo, `photo_thumb_b64` guaranteed `.webp` going forward, result card moved off the empty spacer column**
 - **Blurry photo, root cause:** the previous entry below moved the
   matched-scan photo into `.ss-photo-stage`, sized up to

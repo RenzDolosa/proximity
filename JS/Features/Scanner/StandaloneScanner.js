@@ -95,18 +95,45 @@ function renderStandaloneScanner() {
   // being able to visually confirm the person from a normal viewing
   // distance, which a badge-sized crop can't really do, and doing it as
   // its own viewport-sized layer means it's not bounded by .ss-main's
-  // grid column width the way growing .ss-icon itself would be. Reuses
-  // photo_thumb_b64 (already on data.employee for every scan result,
-  // online or offline — see ScanResultCard.js's header comment) so this
-  // needs no extra fetch of its own. photoDataUri() sniffs the real
-  // image format from the bytes instead of assuming JPEG — Drive's
-  // /thumbnail endpoint (what produced this base64 server-side) returns
-  // either PNG or JPEG depending on the source photo, and a mislabeled
-  // data: URI decodes as visual static rather than the real photo (see
+  // grid column width the way growing .ss-icon itself would be.
+  //
+  // Shows photo_thumb_b64 immediately (already on data.employee for
+  // every scan result, online or offline — see ScanResultCard.js's
+  // header comment), then progressively upgrades to photoUrl's full
+  // 512px Drive photo once that's actually loaded, via a plain <img>
+  // preload (ordinary HTTP caching, no fetch()/blob needed). Two
+  // different jobs for two different sources, deliberately: thumb_b64 is
+  // always present and instant (that's the whole reason it exists — see
+  // the 2026-09-18 change log) but a 96px thumbnail sized for a 44-64px
+  // avatar reads as visibly blurry blown up to fill this much bigger
+  // stage; photoUrl is only ever present for an ONLINE scan
+  // (scan_proximity_code()'s to_jsonb(employees) response includes the
+  // full row — the offline lookup cache deliberately dropped photo_url
+  // as dead weight once nothing else read it, see this file's own change
+  // log) and sharp, but not guaranteed to load at all. Upgrading is
+  // purely additive: if photoUrl never loads — offline, Drive
+  // unreachable, slow network — the thumbnail just keeps showing, so
+  // there's no way this can regress the offline case photo_thumb_b64
+  // exists to guarantee. photoDataUri() sniffs the real image format
+  // from the bytes instead of assuming JPEG — Drive's /thumbnail
+  // endpoint (what produced this base64 server-side) returns either PNG
+  // or JPEG depending on the source photo, and a mislabeled data: URI
+  // decodes as visual static rather than the real photo (see
   // Utils/image.js's header comment for the root-cause writeup).
-  const showHeroPhoto = (name, thumbB64) => {
+  const showHeroPhoto = (name, thumbB64, photoUrl) => {
     photoStage.innerHTML = `<img src="${photoDataUri(thumbB64)}" alt="${esc(name || '')}" />`;
     photoStage.classList.add('active');
+    if (!photoUrl) return;
+    const thumbImg = photoStage.querySelector('img'); // the ONE just created above, captured now — see the guard in onload below for why
+    const hiRes = new Image();
+    hiRes.onload = () => {
+      // A newer scan (or this same result fading out and a fresh one
+      // landing) could have already replaced photoStage's content by the
+      // time a slow image finishes loading — only swap if OUR <img> is
+      // still the one actually on screen, never onto whatever's there now.
+      if (photoStage.contains(thumbImg)) thumbImg.src = hiRes.src;
+    };
+    hiRes.src = photoUrl;
   };
   const resetHeroIcon = () => {
     if (!photoStage.classList.contains('active')) return; // nothing showing — avoid an unnecessary reflow on every non-photo scan
@@ -216,7 +243,7 @@ function renderStandaloneScanner() {
         : '');
       playScanSound(data);
       if (data.result === 'matched' && data.employee?.photo_thumb_b64) {
-        showHeroPhoto(data.employee.full_name, data.employee.photo_thumb_b64);
+        showHeroPhoto(data.employee.full_name, data.employee.photo_thumb_b64, data.employee.photo_url);
       } else {
         resetHeroIcon(); // e.g. an unmatched scan right after a matched one — don't leave the previous person's photo up
       }
