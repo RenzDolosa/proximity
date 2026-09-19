@@ -245,18 +245,26 @@ outlasts the token isn't guaranteed unless that's addressed separately
   real `upload.onprogress` events for the Employee Manager's photo
   progress bar — `invoke()` is `fetch()`-based and only resolves once the
   whole round trip finishes, same limitation noted for CSV import.
-  `upload` also fetches a small `sz=w96` Drive thumbnail server-side right
-  after the upload (added 2026-09-18) and returns it as base64
-  (`thumb_b64`) alongside `url`/`file_id`, for the client to store as
-  `employees.photo_thumb_b64` — see "Offline scanning" above. Best-effort:
-  a failed thumbnail fetch is logged and returns `thumb_b64: null`, never
-  fails the upload itself (`url`/`file_id` are already secured by that
-  point regardless). That fetch is now bounded to a 2.5s timeout (added
-  2026-09-19, deployed as v33) — it used to run with no timeout at all,
-  which meant a freshly-uploaded file without an instantly-ready Drive
-  thumbnail (a real, fairly common lag) sat directly in the upload's own
-  response time. A timed-out fetch now just means `thumb_b64: null`, same
-  as any other best-effort failure.
+  `upload` accepts an optional `thumb_base64`/`thumb_mime_type` pair
+  (added 2026-09-19) — a small (~480px) `.webp` thumbnail the client
+  already generated via `Utils/image.js`'s `fileToOfflineThumbWebp()` —
+  and, if present and within a sane size bound, returns it straight back
+  as `thumb_b64` for the client to store as `employees.photo_thumb_b64`
+  (see "Offline scanning" above). Only when the client didn't supply one
+  (an older client, or the client-side conversion itself failed) does it
+  fall back to fetching a Drive thumbnail **server-side** itself — the
+  original mechanism this feature shipped with 2026-09-18, now at
+  `sz=w480` (bumped from the original `sz=w96`, which had gone visibly
+  blurry once the Scanner started displaying this thumbnail at up to
+  `min(82dvh, 82dvw)` — see root `README.md`'s matching change log entry).
+  That fallback fetch is bounded to a 2.5s timeout (added 2026-09-19,
+  deployed as v33) — it used to run with no timeout at all, which meant a
+  freshly-uploaded file without an instantly-ready Drive thumbnail (a
+  real, fairly common lag) sat directly in the upload's own response
+  time. Either path is best-effort: a failure (fetch timeout, or a
+  client-supplied value that fails a basic size/decode sanity check) is
+  logged and returns `thumb_b64: null`, never fails the upload itself
+  (`url`/`file_id` are already secured by that point regardless).
 
 See `functions/proximity-scan/README.md`, `functions/admin-users/README.md`,
 and `functions/upload-employee-photo/README.md` for the request/response
@@ -271,6 +279,20 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-19 — `upload-employee-photo`: prefer a client-supplied `.webp` thumbnail over the server-side Drive fetch**
+- No schema change. `upload`'s request body gained optional
+  `thumb_base64`/`thumb_mime_type` — see the Edge Function entry above for
+  the full contract and root `README.md`'s matching change log entry for
+  why (the old `sz=w96` server-side fetch had gone visibly blurry once the
+  Scanner started displaying `photo_thumb_b64` at up to
+  `min(82dvh, 82dvw)`, and Drive's `/thumbnail` endpoint has no way to
+  request `.webp` output specifically, which is why the client generating
+  its own thumbnail was the fix rather than just asking Drive for a
+  different size).
+- The server-side Drive fetch this replaces as the primary path is still
+  there as a fallback (now `sz=w480`, not `sz=w96`) for a client that
+  didn't supply one.
 
 **2026-09-19 — Split `get_scanner_offline_cache()`'s photo payload into `get_scanner_offline_photos()`**
 - New RPC `get_scanner_offline_photos()` — see RPC section above for the

@@ -1,12 +1,17 @@
 // upload-employee-photo Edge Function
 //
-// POST { action: "upload", image_base64: string, filename: string, mime_type?: string, old_file_id?: string|null }
+// POST { action: "upload", image_base64: string, filename: string, mime_type?: string, old_file_id?: string|null, thumb_base64?: string|null, thumb_mime_type?: string|null }
 //   -> { url: string, file_id: string, thumb_b64: string|null }
-//   thumb_b64: a small (sz=w96) Drive thumbnail, fetched server-side and
-//   base64-encoded, for the client to store as employees.photo_thumb_b64 —
-//   see README.md's 2026-09-18 change log entry for why. null if the
-//   server-side thumbnail fetch failed (logged, never fails the upload
-//   itself — url/file_id are unaffected either way).
+//   thumb_b64: normally an echo of the caller's thumb_base64 — a small
+//   (~480px) .webp thumbnail the client already generated client-side via
+//   Utils/image.js's fileToOfflineThumbWebp() — for the client to store
+//   as employees.photo_thumb_b64. If thumb_base64 is omitted (an older
+//   client) or looks malformed, falls back to a server-side Drive
+//   thumbnail fetch instead — see README.md's 2026-09-18/09-19 change log
+//   entries for why that used to be the only mechanism, and isn't
+//   guaranteed .webp the way the client-side path is. null if neither
+//   produced anything usable (logged, never fails the upload itself —
+//   url/file_id are unaffected either way).
 // POST { action: "delete", old_file_id: string }
 //   -> { ok: true }
 // POST { action: "quota" }
@@ -132,7 +137,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "upload") {
-      const { image_base64, filename, mime_type, old_file_id } = body;
+      const { image_base64, filename, mime_type, old_file_id, thumb_base64, thumb_mime_type } = body;
       if (!image_base64 || typeof image_base64 !== "string") {
         return json({ error: "image_base64 is required" }, 400, cors);
       }
@@ -176,28 +181,46 @@ Deno.serve(async (req: Request) => {
       await makeFilePublic(fileId, accessToken); // "anyone with the link can view"
       await deleteOldPromise; // no-op if EdgeRuntime.waitUntil already took it, otherwise waits for the best-effort delete
 
-      // A small (sz=w96) thumbnail, fetched SERVER-SIDE right now and
-      // handed back as base64 for the client to store directly on the
-      // employee row (photo_thumb_b64) — see README.md's 2026-09-18
-      // change log entry for the full reasoning. The short version: this
-      // exact same drive.google.com/thumbnail URL, fetched from the
-      // BROWSER as a bulk client-side prefetch, is what all of the
-      // offline-photo flakiness this session traced back to — a
-      // cross-origin `no-cors` fetch gets an opaque response with no
-      // inspectable status, so a rate-limited or transient failure among
-      // hundreds of concurrent requests is indistinguishable from success
-      // and gets cached as if it worked. Fetched from HERE instead — a
-      // normal server-side fetch, once, at upload time — there's no CORS
-      // involved at all: `res.ok` is a real, trustworthy signal. If it
-      // fails, that's a real, loggable failure, not a silent one, and it
-      // doesn't take the rest of the upload down with it — photo_url and
-      // file_id (the full-resolution Drive photo used everywhere online)
-      // are already secured by this point regardless.
-      //
-      // Bounded to THUMB_FETCH_TIMEOUT_MS: a file Drive JUST finished
-      // receiving doesn't always have a thumbnail ready to serve
-      // instantly — its thumbnail generation can lag the upload by a
-      // second or more. Without a timeout, that lag sat directly in the
+      // Offline-Scanner thumbnail: PREFER whatever the client already sent
+      // (Utils/image.js's fileToOfflineThumbWebp(), a guaranteed-.webp
+      // client-side canvas resize — see EmployeeModal.js) over fetching
+      // one ourselves. Sanity-checked, not just trusted blindly: capped at
+      // 1MB (a 480px webp thumbnail has no legitimate reason to be
+      // anywhere near that; a bloated value here would otherwise ride
+      // along in get_scanner_offline_photos() for every kiosk sync) and
+      // ignored (falls through to the server-side fetch below) if it's
+      // clearly not real image bytes.
+      const MAX_CLIENT_THUMB_BYTES = 1 * 1024 * 1024;
+      let thumbB64: string | null = null;
+      if (typeof thumb_base64 === "string" && thumb_base64.length > 0) {
+        try {
+          const thumbBytes = base64ToBytes(thumb_base64);
+          if (thumbBytes.length > 0 && thumbBytes.length <= MAX_CLIENT_THUMB_BYTES) {
+            thumbB64 = thumb_base64;
+          } else {
+            console.warn(`Client-supplied offline thumbnail for Drive file ${fileId} was ${thumbBytes.length} bytes (mime ${thumb_mime_type || "unknown"}) — outside the expected range, falling back to a server-side fetch.`);
+          }
+        } catch {
+          console.warn(`Client-supplied offline thumbnail for Drive file ${fileId} wasn't valid base64 — falling back to a server-side fetch.`);
+        }
+      }
+
+      // Fallback only: an older client that hasn't picked up
+      // fileToOfflineThumbWebp() yet, or one where that client-side
+      // conversion itself failed (see EmployeeModal.js's try/catch around
+      // it). This is the ORIGINAL mechanism this feature shipped with —
+      // see README.md's 2026-09-18 change log entry for the full
+      // reasoning on why it's a server-side fetch (avoiding the same
+      // opaque-response no-cors problem a bulk client-side prefetch had).
+      // w480 (bumped up from the original w96 — see the same change log's
+      // 2026-09-19 follow-up entry) roughly matches
+      // fileToOfflineThumbWebp()'s own OFFLINE_THUMB_MAX_DIMENSION, so a
+      // fallback-sourced thumbnail doesn't look visibly blurrier than a
+      // client-sourced one once StandaloneScanner.js blows it up to fill
+      // .ss-photo-stage. Bounded to THUMB_FETCH_TIMEOUT_MS: a file Drive
+      // JUST finished receiving doesn't always have a thumbnail ready to
+      // serve instantly — its thumbnail generation can lag the upload by
+      // a second or more. Without a timeout, that lag sat directly in the
       // upload's own response time, making every single upload feel slow
       // regardless of roster size (reported directly as "upload speed
       // slow" — this wasn't about how many employees have photos, it was
@@ -205,25 +228,26 @@ Deno.serve(async (req: Request) => {
       // A bounded wait keeps the worst case predictable; a timeout just
       // means thumb_b64 comes back null this time, same as any other
       // best-effort failure — nothing else about the upload is affected.
-      const THUMB_FETCH_TIMEOUT_MS = 2500;
-      let thumbB64: string | null = null;
-      try {
-        const thumbRes = await fetch(`https://drive.google.com/thumbnail?id=${fileId}&sz=w96`, {
-          signal: AbortSignal.timeout(THUMB_FETCH_TIMEOUT_MS),
-        });
-        if (thumbRes.ok) {
-          thumbB64 = bytesToBase64(new Uint8Array(await thumbRes.arrayBuffer()));
-        } else {
-          console.warn(`Offline-thumbnail fetch for Drive file ${fileId} returned HTTP ${thumbRes.status} — photo_thumb_b64 will be null for this employee.`);
+      if (thumbB64 === null) {
+        const THUMB_FETCH_TIMEOUT_MS = 2500;
+        try {
+          const thumbRes = await fetch(`https://drive.google.com/thumbnail?id=${fileId}&sz=w480`, {
+            signal: AbortSignal.timeout(THUMB_FETCH_TIMEOUT_MS),
+          });
+          if (thumbRes.ok) {
+            thumbB64 = bytesToBase64(new Uint8Array(await thumbRes.arrayBuffer()));
+          } else {
+            console.warn(`Offline-thumbnail fetch for Drive file ${fileId} returned HTTP ${thumbRes.status} — photo_thumb_b64 will be null for this employee.`);
+          }
+        } catch (thumbErr) {
+          // Best-effort, deliberately: the employee's photo is already fully
+          // uploaded and public at this point. Missing an offline thumbnail
+          // means that one employee falls back to the default avatar during
+          // an offline scan (same as before this feature existed) — it must
+          // never fail the whole upload. Covers both a timeout (AbortError,
+          // from THUMB_FETCH_TIMEOUT_MS above) and any other network error.
+          console.warn(`Offline-thumbnail fetch for Drive file ${fileId} threw (or timed out after ${THUMB_FETCH_TIMEOUT_MS}ms) — photo_thumb_b64 will be null for this employee.`, thumbErr);
         }
-      } catch (thumbErr) {
-        // Best-effort, deliberately: the employee's photo is already fully
-        // uploaded and public at this point. Missing an offline thumbnail
-        // means that one employee falls back to the default avatar during
-        // an offline scan (same as before this feature existed) — it must
-        // never fail the whole upload. Covers both a timeout (AbortError,
-        // from THUMB_FETCH_TIMEOUT_MS above) and any other network error.
-        console.warn(`Offline-thumbnail fetch for Drive file ${fileId} threw (or timed out after ${THUMB_FETCH_TIMEOUT_MS}ms) — photo_thumb_b64 will be null for this employee.`, thumbErr);
       }
 
       // drive.google.com/uc?export=view is deprecated for hot-linking and

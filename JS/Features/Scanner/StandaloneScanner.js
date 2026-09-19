@@ -48,6 +48,7 @@ function renderStandaloneScanner() {
       <button class="ghost" id="ss-signout">Sign out</button>
     </div>
     <div class="ss-layout">
+      <div class="ss-result-wrap" id="ss-result"></div>
       <div class="ss-main">
         <div class="ss-topbar">
           <input id="ss-code" type="password" class="mono" placeholder="Live Search — scan or type code…" autocomplete="off" autofocus />
@@ -55,7 +56,6 @@ function renderStandaloneScanner() {
         <div class="ss-hero">
           <div class="ss-ring"><div class="ss-icon" id="ss-icon"></div></div>
         </div>
-        <div class="ss-result-wrap" id="ss-result"></div>
       </div>
       <div class="ss-feed-col">
         <div class="panel ss-feed-panel">

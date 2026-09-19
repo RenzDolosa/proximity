@@ -60,9 +60,15 @@
 .ss-operator{font-size:12.5px;color:var(--text-muted);}
 .ss-operator strong{color:var(--text);font-weight:600;}
 
-/* Three-column grid with a spacer column mirroring the feed column's width
-   keeps ss-main (the "Tap your card" hero + search box) truly centered on
-   the screen, instead of being pulled left by the feed sidebar. */
+/* Three-column grid. Column 1 now holds the live scan result
+   (.ss-result-wrap) instead of sitting empty as a pure spacer — see the
+   2026-09-19 change log entry: with .ss-photo-stage now a full-viewport
+   fixed layer centered over .ss-main (see below), a result card that also
+   lived centered in .ss-main was rendering directly underneath that
+   photo, effectively invisible during the one moment it matters most.
+   Column 3 (.ss-feed-col) is unchanged. .ss-main (the "Tap your card"
+   hero + search box) stays in column 2, still visually centered between
+   two roughly-equal side columns, same as when column 1 was empty. */
 .ss-layout{
   position:relative;
   z-index:1;
@@ -78,10 +84,26 @@
 }
 .ss-main{grid-column:2;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;}
 .ss-feed-col{grid-column:3;position:sticky;top:20px;max-height:calc(100dvh - 120px);}
+/* Sticky/max-height mirror .ss-feed-col's own treatment — same reasoning:
+   this column can end up scrollable-tall on a small kiosk display, and it
+   shouldn't scroll the whole page to do it, nor drift out of view while
+   .ss-main's hero sits fixed in the middle. Empty (no min-height) when
+   there's no active result — .ss-result-wrap itself has no visible chrome
+   until renderScanResult() fills it, so an empty column takes up no
+   visual space of its own. */
+.ss-result-wrap{grid-column:1;position:sticky;top:20px;max-height:calc(100dvh - 120px);width:100%;transition:opacity .4s ease;}
+.ss-result-wrap.fade-out{opacity:0;}
 @media (max-width: 900px){
   .ss-layout{grid-template-columns:1fr;}
-  .ss-main{grid-column:1;}
-  .ss-feed-col{grid-column:1;position:static;max-height:none;}
+  /* Below the breakpoint this collapses to one column, so `order` (not
+     grid-column, which no longer does anything meaningful with a single
+     track) decides stacking order — kept in the sensible reading order
+     "search/hero, then result, then recent activity" rather than the
+     source-order sequence the markup happens to use for column-1
+     placement above (.ss-result-wrap, .ss-main, .ss-feed-col). */
+  .ss-result-wrap{grid-column:1;order:2;position:static;max-height:none;}
+  .ss-main{grid-column:1;order:1;}
+  .ss-feed-col{grid-column:1;order:3;position:static;max-height:none;}
 }
 .ss-topbar{width:min(420px, 90dvw);margin:0 auto 36px;}
 .ss-topbar input{font-family:var(--mono);font-size:14px;text-align:center;}
@@ -138,8 +160,6 @@
   border:4px solid var(--good);
   box-shadow:0 0 0 1px var(--border), 0 30px 90px rgba(0,0,0,.55);
 }
-.ss-result-wrap{width:min(420px, 90dvw);margin:26px auto 0;transition:opacity .4s ease;}
-.ss-result-wrap.fade-out{opacity:0;}
 .ss-feed-panel{padding:12px 0px 12px 14px;display:flex;flex-direction:column;max-height:calc(100dvh - 120px);}
 .ss-feed-title{flex:none;font-weight:600;margin-bottom:8px;font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;}
 #ss-feed{overflow-y:auto;max-height:calc(100dvh - 170px);}

@@ -123,12 +123,22 @@ export const EmployeesModel = {
   //
   // old_file_id (optional): the Drive file id being replaced, so the
   // function can best-effort delete it after the new upload succeeds.
+  // mimeType: the ACTUAL type Utils/image.js's fileToWebp() produced
+  // (blob.type, not assumed) — the Edge Function only guesses `image/webp`
+  // when this is omitted, so an older/non-webp-capable browser's real
+  // output (canvas.toBlob() can silently fall back) doesn't get uploaded
+  // to Drive mislabeled.
+  // thumbBase64/thumbMimeType (optional): the small offline-Scanner
+  // thumbnail from Utils/image.js's fileToOfflineThumbWebp(), if it
+  // succeeded — see EmployeeModal.js. Passed straight through to skip the
+  // Edge Function's own (lower-res, format-unpredictable) server-side
+  // Drive thumbnail fetch. null is fine; the Edge Function falls back.
   // onProgress (optional): (pct:number) => void, 0–100, called as the
   // browser pushes bytes to Supabase. pct reaching 100 only means the
   // upload finished sending — the function may still be talking to Google
   // Drive server-side, which the caller should represent as an
   // indeterminate/"finishing" state rather than treating 100% as done.
-  uploadPhoto({ base64, filename, oldFileId, onProgress }) {
+  uploadPhoto({ base64, mimeType, thumbBase64, thumbMimeType, filename, oldFileId, onProgress }) {
     return new Promise(async (resolve) => {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
@@ -162,7 +172,15 @@ export const EmployeesModel = {
       xhr.onerror = () => resolve({ error: 'Network error while uploading the photo. Check your connection and try again.' });
       xhr.onabort = () => resolve({ error: 'Upload cancelled.' });
 
-      xhr.send(JSON.stringify({ action: 'upload', image_base64: base64, filename, old_file_id: oldFileId || null }));
+      xhr.send(JSON.stringify({
+        action: 'upload',
+        image_base64: base64,
+        mime_type: mimeType || null,
+        thumb_base64: thumbBase64 || null,
+        thumb_mime_type: thumbMimeType || null,
+        filename,
+        old_file_id: oldFileId || null,
+      }));
     });
   },
 

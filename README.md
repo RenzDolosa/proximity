@@ -277,24 +277,34 @@ blip — three independent pieces make that true:
   those three places — `sw.js`'s precache list, `scanSounds.js`'s
   `FALLBACK_SOUND_PATHS`, and the actual files — in sync by filename.
 - **Employee photos** (`employees.photo_thumb_b64`): not a Service Worker
-  cache at all, unlike sounds above — a small (`sz=w96`) base64 JPEG
-  thumbnail, fetched **server-side** by `upload-employee-photo` right
-  after every upload (a normal same-origin-to-Google fetch, with a real
-  HTTP status — no CORS or opaque-response ambiguity), and stored
-  directly on the employee row. `get_scanner_offline_cache()` and
-  `get_scan_feed()` both return it, so it rides along in every offline
-  lookup row and every feed entry with zero extra requests. The Scanner's
-  result card and Recent Activity render it via `Utils/format.js`'s
-  `offlineAvatarHTML()` — a plain `data:image/jpeg;base64,...` `<img
-  src>`, identical online or offline, nothing to prefetch, cache, or race
-  against a network outage. This replaced an entire earlier generation of
+  cache at all, unlike sounds above — a small (~480px, `.webp`) thumbnail,
+  generated **client-side** by `Utils/image.js`'s `fileToOfflineThumbWebp()`
+  at upload time and sent to `upload-employee-photo` alongside the main
+  photo, which stores it as-is (falling back to its own lower-res,
+  format-unpredictable server-side Drive fetch only if the client didn't
+  supply one — see that function's `index.ts` and the 2026-09-19 change
+  log entries below). Two different paths carry it from there, split by
+  how often each consumer actually needs a refresh: `get_scan_feed()`
+  still returns `photo_thumb_b64` directly (Recent Activity re-fetches
+  the whole feed often enough that a per-row column costs nothing extra),
+  while `get_scanner_offline_photos()` — split out from
+  `get_scanner_offline_cache()`, see that change log entry — returns it
+  separately as a sparse `[{employee_id, photo_thumb_b64}]` array for the
+  Scanner's own card/employee lookup cache, refreshed only every 30
+  minutes (`OfflineScanModel.js`) instead of riding along in that lookup's
+  much more frequent 5-minute refresh. The Scanner's result card and Recent
+  Activity render it via `Utils/format.js`'s `offlineAvatarHTML()` — a
+  `data:` URI labeled with the byte-sniffed real mime type (never assumed
+  — some earlier rows are PNG or JPEG from before this function existed),
+  identical online or offline, nothing to prefetch, cache, or race against
+  a network outage. This replaced an entire earlier generation of
   Drive-prefetch machinery (a `PHOTO_CACHE` Service Worker cache, a
   roster-wide background fetcher, cross-origin opaque-response handling)
   that turned out to be fundamentally unreliable at scale — see the
   2026-09-18 change log entry for the full root-cause story. Employee
   Manager and Directory are unaffected: they still use the original
   `avatarHTML()` and the full-resolution Drive `photo_url`, since they're
-  always used online and a 96px thumbnail would be a downgrade there.
+  always used online and a small thumbnail would be a downgrade there.
 - **Queued scans** (`OfflineScanModel.js` + IndexedDB): covered separately
   below.
 
@@ -346,6 +356,55 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-19 — Scanner: blurry result photo, `photo_thumb_b64` guaranteed `.webp` going forward, result card moved off the empty spacer column**
+- **Blurry photo, root cause:** the previous entry below moved the
+  matched-scan photo into `.ss-photo-stage`, sized up to
+  `min(82dvh, 82dvw)` — several hundred px on a real kiosk display — but
+  `employees.photo_thumb_b64` was still a `sz=w96` Drive thumbnail. A 96px
+  source stretched to fill most of the screen is exactly what "blurry"
+  looks like; nothing was actually broken, the thumbnail was just sized
+  for a badge-sized crop that no longer exists.
+- **Fix, and the `.webp` ask, together:** rather than just bumping Drive's
+  `sz=` param (Drive's `/thumbnail` endpoint doesn't support requesting a
+  specific output format — it returns PNG or JPEG at its own discretion,
+  which is *why* `offlineAvatarHTML()`/`photoDataUri()` had to sniff real
+  magic bytes instead of trusting a label in the first place), added
+  `Utils/image.js`'s `fileToOfflineThumbWebp()`: the same canvas-resize
+  trick `fileToWebp()` already uses for the main photo, run a second time
+  at 480px/`.webp` specifically for the offline thumbnail.
+  `EmployeeModal.js` now generates both blobs when a file is picked and
+  sends the thumbnail's base64 to `upload-employee-photo` alongside the
+  main upload; the Edge Function stores it as-is, only falling back to its
+  own server-side Drive fetch (bumped from `sz=w96` to `sz=w480` while
+  touching that code, in case it's ever actually used) if the client
+  didn't supply one. Every upload going forward is guaranteed `.webp` at a
+  size that holds up at `.ss-photo-stage`'s scale; the sniffing in
+  `photoDataUri()` stays as-is for the handful of rows stored before this
+  change (still PNG/JPEG) and as a safety net for the fallback path.
+- **Also fixed while in this code:** the main photo's `mime_type` was
+  never actually sent to `upload-employee-photo` at all —
+  `EmployeesModel.uploadPhoto()`'s request body simply didn't include it,
+  despite the Edge Function's own header comment describing it as
+  required-if-accurate. Harmless today (every browser this app has
+  actually been tested on produces real `.webp`, matching the function's
+  no-`mime_type` fallback), but silently wrong the moment `canvas.toBlob`
+  falls back to a different format on some browser, which is precisely
+  the failure mode `Utils/image.js`'s own header comment warns about.
+  Threaded `pendingPhotoBlob.type` through `EmployeeModal.js` →
+  `EmployeesModel.uploadPhoto()` → the request body so this can't drift
+  again.
+- **`#ss-result` moved to the grid's left column:** previously centered
+  inside `.ss-main`, directly underneath where `.ss-photo-stage`'s
+  full-viewport photo now renders on top of everything (`z-index:6`) —
+  meaning the match/status text was effectively invisible right when it
+  mattered most. `.ss-layout`'s column 1 (previously an empty spacer that
+  existed only to keep `.ss-main` visually centered against the feed
+  sidebar) now holds `.ss-result-wrap` instead, sticky-positioned to
+  mirror `.ss-feed-col`'s own treatment. Below the 900px breakpoint, where
+  the grid collapses to one column, `order` keeps the stacking sensible
+  (search/hero, then result, then Recent Activity) independent of the
+  source order needed for column-1 placement above the breakpoint.
 
 **2026-09-19 — Scanner: real PNG/JPEG photo bug fixed, result photo moved to a full-viewport stage, logo moved to a background layer**
 - **Root cause of the garbled/static-looking employee photo** reported on

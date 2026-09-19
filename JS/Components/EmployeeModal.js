@@ -5,7 +5,7 @@ import { openModal, closeModal, showModalError, startModalOpen, isStaleModalOpen
 import { appState } from '../Core/state.js';
 import { EmployeesModel } from '../Models/EmployeesModel.js';
 import { ProximityCardsModel } from '../Models/ProximityCardsModel.js';
-import { fileToWebp, blobToBase64 } from '../Utils/image.js';
+import { fileToWebp, fileToOfflineThumbWebp, blobToBase64 } from '../Utils/image.js';
 
 // Opens instantly — the two network calls this needs (unassigned cards +
 // who's linked to what) load in the background *after* the modal is
@@ -85,6 +85,7 @@ export async function openEmployeeModal(emp, onSaved) {
   // The actual Drive upload is deferred until Save (below), so picking a
   // photo and then cancelling the modal never uploads anything.
   let pendingPhotoBlob = null; // converted .webp Blob awaiting upload, or null
+  let pendingThumbBlob = null; // smaller .webp Blob for the offline Scanner's photo_thumb_b64 — see Utils/image.js's fileToOfflineThumbWebp()
   let photoRemoved = false; // true if the existing photo should be cleared on save
   const photoAvatar = $('#f-photo-avatar', overlay);
   const photoStatus = $('#f-photo-status', overlay);
@@ -103,6 +104,15 @@ export async function openEmployeeModal(emp, onSaved) {
     try {
       const { blob, previewUrl } = await fileToWebp(file);
       pendingPhotoBlob = blob;
+      // Best-effort: a failure here shouldn't block the main photo the
+      // admin is actively looking at and just approved via the preview.
+      // Falls back to null, same as the old server-side Drive thumbnail
+      // fetch failing (upload-employee-photo's fallback still covers it).
+      try {
+        pendingThumbBlob = (await fileToOfflineThumbWebp(file)).blob;
+      } catch {
+        pendingThumbBlob = null;
+      }
       photoRemoved = false;
       setAvatarPreview(previewUrl);
       photoRemoveBtn.style.display = '';
@@ -115,6 +125,7 @@ export async function openEmployeeModal(emp, onSaved) {
 
   photoRemoveBtn.addEventListener('click', () => {
     pendingPhotoBlob = null;
+    pendingThumbBlob = null;
     photoRemoved = true;
     $('#f-photo-file', overlay).value = '';
     setAvatarPreview(null);
@@ -228,8 +239,16 @@ export async function openEmployeeModal(emp, onSaved) {
       photoStatus.textContent = 'Uploading photo… 0%';
 
       const base64 = await blobToBase64(pendingPhotoBlob);
+      // thumbBase64 null is fine — uploadPhoto/the Edge Function falls
+      // back to its own (lower-res, non-webp-guaranteed) server-side
+      // Drive thumbnail fetch when the client didn't supply one, same as
+      // every upload before fileToOfflineThumbWebp() existed.
+      const thumbBase64 = pendingThumbBlob ? await blobToBase64(pendingThumbBlob) : null;
       const { data: uploaded, error: photoErr } = await EmployeesModel.uploadPhoto({
         base64,
+        mimeType: pendingPhotoBlob.type,
+        thumbBase64,
+        thumbMimeType: pendingThumbBlob?.type || null,
         filename: payload.employee_code,
         oldFileId: emp?.photo_file_id || null,
         onProgress: (pct) => {
@@ -258,11 +277,11 @@ export async function openEmployeeModal(emp, onSaved) {
       photoStatus.textContent = 'Upload complete.';
       payload.photo_url = uploaded.url;
       payload.photo_file_id = uploaded.file_id;
-      // thumb_b64: null is a valid, expected outcome (the server-side
-      // thumbnail fetch is best-effort — see upload-employee-photo's
-      // README) — this employee just falls back to initials on the
-      // offline Scanner until their next photo upload succeeds at
-      // producing one. Never treated as an upload failure.
+      // thumb_b64: null is a valid, expected outcome (the fallback
+      // server-side thumbnail fetch is itself best-effort — see
+      // upload-employee-photo's README) — this employee just falls back
+      // to initials on the offline Scanner until their next photo upload
+      // succeeds at producing one. Never treated as an upload failure.
       payload.photo_thumb_b64 = uploaded.thumb_b64 ?? null;
     } else if (photoRemoved) {
       payload.photo_url = null;
