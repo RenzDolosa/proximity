@@ -127,10 +127,12 @@ JS/
     scanSounds.js                 loadScanSounds() / playScanSound() — shared by
                                    StandaloneScanner.js and TestScanPage.js
     idb.js                         hand-rolled minimal Promise wrapper around
-                                   IndexedDB (2 object stores: offline lookup
-                                   cache, offline scan queue) — the only thing
-                                   backing OfflineScanModel.js; no external idb
-                                   library, to keep this repo dependency-free
+                                   IndexedDB (3 object stores: offline lookup
+                                   cache, offline scan queue, offline photo
+                                   cache — added 2026-09-19, see change log) —
+                                   the only thing backing OfflineScanModel.js;
+                                   no external idb library, to keep this repo
+                                   dependency-free
 
 Public/
   index.html                  the app shell (static markup only — all
@@ -440,7 +442,9 @@ file can drift from the live state between sessions.*
   show, online or offline. Worth testing specifically against one of the
   7 known-to-have-a-photo employees to confirm the pipeline itself before
   concluding it's broken again.
-- **Noted for later, not acted on now**: `get_scanner_offline_cache()`
+- **Noted for later, not acted on now** *(superseded — see the
+  2026-09-19 "Split `get_scanner_offline_cache()`" entry below: this
+  ended up getting acted on the same day, not deferred)*: `get_scanner_offline_cache()`
   currently embeds `photo_thumb_b64` in the same roster-wide payload
   that's refreshed every 5 minutes and after every reconnect. At 7
   photos / 0.07MB total this isn't a measurable cost today, but it's the
@@ -451,6 +455,44 @@ file can drift from the live state between sessions.*
   employee_id→thumbnail cache rather than letting this one keep growing
   in place — flagged here deliberately instead of rebuilding it
   preemptively a third time on a hunch.
+
+**2026-09-19 — Split `get_scanner_offline_cache()`'s photo payload into its own RPC + cache**
+- Follow-through on the "noted for later" bullet immediately above, from
+  earlier the same day — reopened sooner than planned because a
+  same-day Postgres migration (`split_offline_lookup_and_photos`) had
+  already done the backend half before this repo's docs or client code
+  caught up with it. **If you're another Claude session and you see a
+  gap like this again: `Supabase:list_migrations` before trusting this
+  file's account of "what's been decided vs. done" — a migration can
+  land without a matching commit/doc update landing at the same time.**
+- Backend (already live, this entry documents it rather than
+  introducing it): `get_scanner_offline_cache()` no longer returns
+  `photo_thumb_b64` at all. New RPC `get_scanner_offline_photos()`
+  returns a sparse `[{employee_id, photo_thumb_b64}]` array — only
+  employees who actually have a thumbnail, not the whole roster — with
+  the same `is_admin() or can_view_scanner()` permission gate as every
+  other scanner RPC. Grants were already correct (`anon` cannot execute,
+  `authenticated` can) — verified via `has_function_privilege()`, not
+  assumed.
+- Client (this commit): `JS/Utils/idb.js` gained a third IndexedDB store,
+  `photoCache` (`DB_VERSION` 1→2, purely additive — no migration of the
+  existing two stores needed). `OfflineScanModel.js` gained
+  `refreshPhotoCache()` (calls the new RPC, stores it as a plain
+  `employee_id -> b64` map) and now merges that map into
+  `getCacheMeta()`'s rows by `employee_id` before handing them to
+  `classify()` — which means `classify()` itself needed **zero**
+  changes: it still just reads `row.photo_thumb_b64` off whatever row
+  it's given, with no idea the photo came from a separate cache/RPC now.
+  `StandaloneScanner.js` refreshes the photo cache on its own 30-minute
+  interval (vs. the lookup cache's 5 minutes) — gated by its own 5-minute
+  minimum-gap floor, same pattern as the existing lookup-refresh
+  throttle — since a photo only changes on re-upload, not worth polling
+  anywhere near as often.
+- Not changed: `classify()`, `ScanResultCard.js`, `ScanFeed.js`, and
+  `TestScanPage.js` (still has no offline support, unaffected either
+  way) — every consumer of `photo_thumb_b64` keeps reading it from
+  exactly the same place on the employee/row object as before. The split
+  is invisible above `OfflineScanModel.getCacheMeta()`.
 
 **2026-09-18 — Offline scanner photos: replaced the entire Drive-prefetch approach with a stored base64 thumbnail**
 - After the LAN-IP fix below made the Service Worker actually run, and

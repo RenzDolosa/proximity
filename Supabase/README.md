@@ -90,7 +90,19 @@ an admin swaps it out.
   permission gate as the real scan RPC — deliberately trimmed to only the
   fields offline classification needs, not full employee rows, even
   though the calling roles (scanner-scope, in particular) couldn't
-  otherwise `SELECT` `employees` directly at all.
+  otherwise `SELECT` `employees` directly at all. Did briefly also carry
+  `photo_thumb_b64` (2026-09-18–2026-09-19); see
+  `get_scanner_offline_photos()` immediately below for why that moved out.
+- **`get_scanner_offline_photos()`** — added 2026-09-19. Split out of
+  `get_scanner_offline_cache()` above: returns a **sparse**
+  `[{employee_id, photo_thumb_b64}]` array — only employees who actually
+  have a thumbnail on file, not the whole roster — so the lookup RPC
+  above can stay small and get refreshed every 5 minutes without a
+  growing photo payload riding along on every single one of those
+  refreshes. Same permission gate. Client-side, refreshed on its own
+  30-minute interval rather than 5 (`StandaloneScanner.js`), merged back
+  into the lookup cache's rows by `employee_id` at read time
+  (`OfflineScanModel.getCacheMeta()`) — see "Offline scanning" below.
 - **`test_scan_proximity_code(...)`** — same lookup/classification logic
   (including the same `direction` preview on a matched result, added
   2026-09-15 — see change log), but never writes to `scan_events` or
@@ -163,15 +175,22 @@ unaffected (see its RPC entry above).
    - `get_scanner_offline_cache()` (see RPC section above) feeding a local
      IndexedDB copy of the card→employee lookup, refreshed opportunistically
      while online (on load, every 5 min, and right after reconnecting).
-     Includes `photo_thumb_b64` (added 2026-09-18, replacing an earlier
-     `photo_url`/`updated_at` + Service Worker `PHOTO_CACHE` approach — see
-     root `README.md`'s change log for the full root-cause story of why
-     that was replaced rather than patched further) — a small base64 JPEG
-     the client renders directly as a `data:` URI via `offlineAvatarHTML()`
-     (`Utils/format.js`). No network request at all is needed to show it,
-     online or offline: the thumbnail is already sitting in the row this
-     RPC returns, fetched server-side by `upload-employee-photo` once, at
-     upload time.
+   - `get_scanner_offline_photos()` (added 2026-09-19 — see RPC section
+     above and this file's change log) feeds a *separate* local IndexedDB
+     cache of `employee_id -> photo_thumb_b64`, refreshed far less often
+     (every 30 min, client-side — see root `README.md`). Split out of the
+     lookup cache above on purpose: that one needs to stay small and
+     frequent (card/employee status), while photos only change on
+     re-upload and were only ever going to grow. `OfflineScanModel.js`'s
+     `getCacheMeta()` merges the two back together by `employee_id`
+     before anything else sees a row, so `classify()` (and everything
+     downstream of it — `ScanResultCard.js`, `ScanFeed.js`) still just
+     reads `photo_thumb_b64` off the row it's given, same as always. The
+     client renders it directly as a `data:` URI via `offlineAvatarHTML()`
+     (`Utils/format.js`) — no network request at all, online or offline:
+     the thumbnail was already fetched server-side by `upload-employee-photo`
+     once, at upload time (see `photo_thumb_b64`'s own change log entry,
+     2026-09-18, for why that replaced an earlier Drive-prefetch approach).
    - Failed/offline scans get queued client-side (raw attempt only — code,
      scanner id, true timestamp — never a guessed result) and replayed
      **strictly one at a time, in original order** through the real
@@ -252,6 +271,22 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-19 — Split `get_scanner_offline_cache()`'s photo payload into `get_scanner_offline_photos()`**
+- New RPC `get_scanner_offline_photos()` — see RPC section above for the
+  full contract. `get_scanner_offline_cache()`'s `jsonb_build_object` no
+  longer includes `photo_thumb_b64`.
+- Backend-only change (this migration, `split_offline_lookup_and_photos`)
+  landed same-day as, but separately from, the client-side follow-through
+  in root `README.md`'s matching change log entry — flagging that gap
+  explicitly here since it's exactly the kind of drift this file warns
+  about elsewhere ("the live version can be ahead of this repo"). Always
+  `Supabase:list_migrations` before trusting either README's account of
+  what's actually deployed.
+- Grants double-checked via `has_function_privilege()` rather than
+  assumed correct by analogy to the sibling RPCs: `anon` cannot execute,
+  `authenticated` can — same as `get_scanner_offline_cache()` and
+  `get_scan_feed()`.
 
 **2026-09-19 — `upload-employee-photo`'s thumbnail fetch bounded to a timeout (v33)**
 - The only Postgres/Edge Function-side piece of a 3-bug regression report

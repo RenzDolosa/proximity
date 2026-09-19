@@ -308,6 +308,12 @@ function initOfflineSupport(operatorName) {
   offlineSupportInited = true;
 
   const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 min — cheap single RPC call, keeps the cache fresh through a normal shift without waiting on a reload
+  // A photo only changes when someone re-uploads one (rare, admin-driven)
+  // — nowhere near as time-sensitive as card/employee status, so this
+  // polls far less often than REFRESH_INTERVAL_MS. See
+  // OfflineScanModel.refreshPhotoCache() / Supabase/README.md's change
+  // log entry on splitting this out of get_scanner_offline_cache().
+  const PHOTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 min
   // Deliberately shorter than REFRESH_INTERVAL_MS: this is the safety net
   // for a missed/never-fired `online` event (flaky on some OS/browser/
   // network combos — captive portals, Wi-Fi roaming, some mobile browsers
@@ -324,6 +330,10 @@ function initOfflineSupport(operatorName) {
   // doesn't need re-fetching just because the window regained focus.
   const MIN_REFRESH_GAP_MS = 30 * 1000;
   let lastRefreshAt = 0;
+  // Same reasoning as MIN_REFRESH_GAP_MS above, just a longer floor to
+  // match PHOTO_REFRESH_INTERVAL_MS's much lower urgency.
+  const MIN_PHOTO_REFRESH_GAP_MS = 5 * 60 * 1000;
+  let lastPhotoRefreshAt = 0;
 
   const refreshIfOnline = async () => {
     if (!navigator.onLine) return;
@@ -337,6 +347,19 @@ function initOfflineSupport(operatorName) {
     // retry — it just stayed silent for the rest of the session.
     if (!scanSoundsLoaded()) await loadScanSounds().catch(() => {});
     renderOfflineStatus();
+  };
+
+  // Deliberately separate from refreshIfOnline above, on its own much
+  // longer interval — see PHOTO_REFRESH_INTERVAL_MS. Doesn't touch
+  // renderOfflineStatus(): the status pill only reflects the lookup
+  // cache's staleness, and a stale-ish photo cache isn't something that
+  // should ever block or warn about scanning the way a stale card/
+  // employee lookup would.
+  const refreshPhotosIfOnline = async () => {
+    if (!navigator.onLine) return;
+    if (Date.now() - lastPhotoRefreshAt < MIN_PHOTO_REFRESH_GAP_MS) return;
+    lastPhotoRefreshAt = Date.now();
+    await OfflineScanModel.refreshPhotoCache().catch(() => {});
   };
 
   // Cheap to call often: when the queue is empty this is just a local
@@ -370,6 +393,7 @@ function initOfflineSupport(operatorName) {
   const flushAndRefresh = async () => {
     await flushIfPending();
     await refreshIfOnline();
+    await refreshPhotosIfOnline();
   };
 
   window.addEventListener('online', flushAndRefresh);
@@ -395,6 +419,7 @@ function initOfflineSupport(operatorName) {
   // no other path back to syncing short of a manual reload.
   setInterval(flushIfPending, FLUSH_RETRY_INTERVAL_MS);
   setInterval(refreshIfOnline, REFRESH_INTERVAL_MS);
+  setInterval(refreshPhotosIfOnline, PHOTO_REFRESH_INTERVAL_MS);
 
   // Exposed so doScan() (in renderStandaloneScanner above) can drain the
   // queue before reloading the feed on an online scan — see its call site

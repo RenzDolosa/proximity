@@ -20,14 +20,28 @@
 // prefetchPhotos(), a Service Worker PHOTO_CACHE, and a live-retry-fetch
 // on the rendered <img> — all deleted 2026-09-18). employees.photo_thumb_b64
 // (a small base64 JPEG, produced server-side by upload-employee-photo at
-// upload time) rides along in get_scanner_offline_cache()'s row already,
-// so classify() below just passes it straight through — no network
-// request, no cache to warm, no race between "went offline" and "finished
-// prefetching," ever. See Supabase/README.md's matching change log entry
-// for the full story of why the old approach was replaced rather than
-// patched further.
+// upload time) is what classify() below passes through — no network
+// request, no race between "went offline" and "finished prefetching,"
+// ever.
+//
+// UPDATED 2026-09-19: photo_thumb_b64 no longer rides along in
+// get_scanner_offline_cache()'s own row. That RPC is refreshed every 5
+// minutes (see StandaloneScanner.js) and is meant to stay a small, cheap,
+// frequent lookup — card/employee status, nothing else — but embedding
+// every employee's thumbnail in it coupled a payload that needs to stay
+// small and frequent to one that will only grow and doesn't need
+// refreshing nearly that often. Thumbnails now come from their own RPC,
+// get_scanner_offline_photos() (sparse — only employees who actually
+// have one), cached separately (idb.js's photoCache store) and on a much
+// longer interval, since a photo only changes when someone re-uploads
+// one. getCacheMeta() below merges the two caches back together by
+// employee_id before handing rows to classify(), so classify() itself
+// stays exactly as it was — still just reads row.photo_thumb_b64 off
+// whatever row it's given, with no idea the photo came from a different
+// cache/RPC than the rest of the row. See Supabase/README.md's matching
+// change log entry for the full story.
 import { supabase } from '../Core/supabaseClient.js';
-import { idbGetCache, idbSetCache, idbEnqueue, idbGetQueue, idbRemoveFromQueue, idbCountQueue } from '../Utils/idb.js';
+import { idbGetCache, idbSetCache, idbEnqueue, idbGetQueue, idbRemoveFromQueue, idbCountQueue, idbGetPhotoCache, idbSetPhotoCache } from '../Utils/idb.js';
 
 // Past this age, the cached lookup is old enough that a card revoked (or
 // an employee deactivated/reactivated) since the last refresh could still
@@ -91,10 +105,39 @@ export const OfflineScanModel = {
     return { data: true };
   },
 
+  // Separate from refreshCache() above on purpose — see this file's
+  // top-of-file comment. Sparse response (only employees who actually
+  // have a thumbnail), stored as a plain employee_id -> b64 map so
+  // getCacheMeta()'s merge below is an O(1) lookup per row rather than a
+  // find() per row.
+  async refreshPhotoCache() {
+    const { data, error } = await supabase.rpc('get_scanner_offline_photos');
+    if (error) return { error };
+    const byEmployeeId = Object.fromEntries((data || []).map((r) => [r.employee_id, r.photo_thumb_b64]));
+    await idbSetPhotoCache({ byEmployeeId, syncedAt: new Date().toISOString() });
+    return { data: true };
+  },
+
   async getCacheMeta() {
-    const cache = await idbGetCache().catch(() => null);
+    const [cache, photoCache] = await Promise.all([
+      idbGetCache().catch(() => null),
+      idbGetPhotoCache().catch(() => null),
+    ]);
     if (!cache) return { rows: [], syncedAt: null, ageMs: Infinity };
-    return { rows: cache.rows, syncedAt: cache.syncedAt, ageMs: Date.now() - new Date(cache.syncedAt).getTime() };
+    // Merge the two caches back together by employee_id here, once, so
+    // classify() (and anything else that reads getCacheMeta().rows) can
+    // stay oblivious to the split and just keep reading row.photo_thumb_b64
+    // like it always did. A row with no cached thumbnail (never uploaded
+    // one, or the photo cache hasn't been fetched yet this session)
+    // simply keeps whatever it already had — undefined — which
+    // offlineAvatarHTML() already treats as "show initials".
+    const photosByEmployee = photoCache?.byEmployeeId || {};
+    const rows = cache.rows.map((r) => (
+      r.employee_id && photosByEmployee[r.employee_id] !== undefined
+        ? { ...r, photo_thumb_b64: photosByEmployee[r.employee_id] }
+        : r
+    ));
+    return { rows, syncedAt: cache.syncedAt, ageMs: Date.now() - new Date(cache.syncedAt).getTime() };
   },
 
   // employee_id -> count of this kiosk's own not-yet-synced queue entries
@@ -125,8 +168,10 @@ export const OfflineScanModel = {
       result: 'matched',
       direction,
       offline: true,
-      // photo_thumb_b64 rides along in get_scanner_offline_cache()'s row
-      // already — a small base64 JPEG, rendered directly via
+      // photo_thumb_b64 rides along on the row by the time classify() sees
+      // it — merged in by getCacheMeta() above from the separate photo
+      // cache, not from get_scanner_offline_cache() itself anymore (see
+      // this file's top-of-file comment) — rendered directly via
       // offlineAvatarHTML() (Utils/format.js) with no network request at
       // all, online or offline. See this file's top-of-file comment for
       // what this replaced.
