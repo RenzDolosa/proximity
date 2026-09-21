@@ -84,6 +84,8 @@ JS/
                                    queue for the standalone Scanner — see
                                    Scanner/StandaloneScanner.js and
                                    Supabase/README.md's "Offline scanning" section
+    AuditLogModel.js                thin wrapper over get_audit_log() — the RPC
+                                   itself is the real gate, this just calls it
   Components/                 reusable UI pieces used by more than one feature
     Modal.js                     shared openModal/closeModal scaffold — every
                                   dialog below is built on this
@@ -151,6 +153,13 @@ JS/
                                        folder-scoped — see change log); own
                                        top-level route so future non-user settings
                                        have a home)
+    Audit/AuditLogPage.js            (Audit Log, admin-only — read-only table over
+                                       get_audit_log(); describeEvent() translates
+                                       each row's raw {action, entity_type, detail}
+                                       into a sentence, with a generic fallback for
+                                       any action added to the schema without a
+                                       matching update here — see Supabase/README.md's
+                                       "Audit log" section for the full list)
   Utils/                      pure helpers, no state, no DOM assumptions
     dom.js                       $ / $$
     format.js                    esc / initials / fmtTime
@@ -416,13 +425,49 @@ Activity.
 
 ---
 *Last reconciled against the live GitHub repo and live Supabase project on
-2026-09-19. If you're another Claude instance picking this project up: fetch
+2026-09-21. If you're another Claude instance picking this project up: fetch
 `github.com/RenzDolosa/proximity` fresh (via web_search + web_fetch, or the
 GitHub connector) and re-verify against `Supabase:list_tables` /
 `list_edge_functions` before making schema or Edge Function claims — this
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-21 — Audit Log: new admin-only sidebar page (client-side; DB was already live)**
+- The database side of this feature (`audit_log` table, `log_audit_event()`,
+  `get_audit_log()`, 3 audit triggers, and a since-fixed permission gap on
+  `log_audit_event()` itself) was already fully built, correct, and
+  documented in `Supabase/README.md` as of an earlier session this same
+  week — see that file's matching change log entry. What never got built,
+  and had no files in this repo at all despite an earlier session's own
+  transcript describing it as done, was the client side.
+- New `JS/Models/AuditLogModel.js` + `JS/Features/Audit/AuditLogPage.js` —
+  admin-only (both `isAdmin()` client-side and `get_audit_log()`'s own
+  `where is_admin()` server-side), read-only table: Time / Actor / Event.
+  `describeEvent()` turns each row's raw `{action, entity_type, detail}`
+  into a sentence — one case per action the schema currently emits
+  (`employee_deleted`, `proximity_card_deleted`, `card_revoked`,
+  `remark_resolved`/`remark_reopened`, `scan_log_entry_deleted`,
+  `account_changed`), plus a generic fallback for anything added later
+  without a matching update here.
+- `account_changed` entries always carry all three of
+  `role`/`access_scope`/`is_active` as `{from, to}` pairs regardless of
+  which one(s) actually changed (that's how `trg_audit_profile_changes`
+  writes it) — `describeEvent()` filters to only the fields where
+  `from !== to` before displaying, so an edit that only changed one of
+  the three doesn't show two "X → X" no-op lines alongside it.
+- Wired into `state.js` (`'audit'` added to `VALID_ROUTES`), `router.js`
+  (title + dispatch), `screens.js` (nav visibility + folded into the same
+  "land on the first route this account can actually see" fallback chain
+  every other gated route already participates in), and a new sidebar
+  button in the bottom rail next to Settings — both are admin-utility/
+  oversight pages rather than core day-to-day workflow, unlike Employee
+  Manager/Proximity Cards/Test Scan/Users & Roles above them.
+- **Known gap, not fixed here** (documented in `Supabase/README.md`, not
+  silently left out): `admin-users` never calls `log_audit_event()`, so
+  creating an account, resetting a password, or deleting one leaves
+  nothing in this log today — only a role/access_scope/is_active change
+  does (via the trigger, independent of which caller made it).
 
 **2026-09-21 — Settings: dark/light theme toggle**
 - Added an "Appearance" panel to Settings — always visible regardless of

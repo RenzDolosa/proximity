@@ -5,6 +5,7 @@ import { renderProximity } from '../Features/Proximity/ProximityPage.js';
 import { renderTestScan } from '../Features/Scanner/TestScanPage.js';
 import { renderUsers } from '../Features/Users/UsersPage.js';
 import { renderSettings } from '../Features/Settings/SettingsPage.js';
+import { renderAuditLog } from '../Features/Audit/AuditLogPage.js';
 
 const titles = {
   directory: ['Employee Manager', 'View and edit the employee directory'],
@@ -12,6 +13,7 @@ const titles = {
   scanner: ['Test Scan', 'Try a proximity ID against the live directory — results here are not logged'],
   users: ['Users & Roles', 'Manage login accounts and permission tiers'],
   settings: ['Settings', 'App-wide configuration'],
+  audit: ['Audit Log', 'Who did what — destructive and permission-changing actions only'],
 };
 
 export function render() {
@@ -30,6 +32,7 @@ export function render() {
   if (appState.route === 'scanner') renderTestScan();
   if (appState.route === 'users') renderUsers();
   if (appState.route === 'settings') renderSettings();
+  if (appState.route === 'audit') renderAuditLog();
 }
 
 export function initRouter() {

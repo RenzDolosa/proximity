@@ -4,7 +4,7 @@
 // UI code never has to know how permissions or session data are derived.
 import { supabase } from './supabaseClient.js';
 
-const VALID_ROUTES = ['directory', 'proximity', 'scanner', 'users', 'settings'];
+const VALID_ROUTES = ['directory', 'proximity', 'scanner', 'users', 'settings', 'audit'];
 const hashRoute = location.hash.replace('#', '');
 
 export const appState = {

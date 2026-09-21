@@ -25,6 +25,7 @@ supabase functions download upload-employee-photo --project-ref kjwttqmbcjvkivgm
 | `scan_events`                 | FK to `employees` and `proximity_cards`. Every scan attempt is logged: `matched`, `unmatched`, `inactive_card`, `inactive_employee`, or `unassigned_card`.                                                |
 | `employee_directory` (view)  | Employee joined to required card + scan totals, for the Employee Manager grid. Runs `SECURITY DEFINER` so scanner-only / restricted roles still see joined rows under RLS. Read by `JS/Models/EmployeesModel.js#listDirectory`. |
 | `scan_feed` (view / function) | `get_scan_feed()` — `SECURITY DEFINER` function (originally a plain view, which silently dropped employee joins for scanner-only accounts under invoker RLS; replaced for that reason). Read by `JS/Models/ScanEventsModel.js#recentFeed`. |
+| `audit_log`                   | Append-only — RLS enabled with exactly one policy (`audit_log_select_admin`, `SELECT` only, `is_admin()`); no INSERT/UPDATE/DELETE policy exists at all, so nothing can write to it directly via PostgREST regardless of role. One row per destructive or permission-changing action: `actor_id`/`actor_name`, `action`, `entity_type`/`entity_id`, `detail` jsonb. Written only via `log_audit_event()` (`SECURITY DEFINER`, bypasses the table's own RLS the way every writer function here does), never a direct insert. See "Audit log" below. |
 
 Relationship direction: `employees.proximity_card_id → proximity_cards.id`.
 
@@ -330,6 +331,73 @@ offline scanning survives an outage, staying signed in through one that
 outlasts the token isn't guaranteed unless that's addressed separately
 (longer JWT expiry for scanner-only accounts, e.g.).
 
+## Audit log
+
+Admin-only, read-only, append-only (see the `audit_log` table entry
+above for the exact RLS shape). `JS/Features/Audit/AuditLogPage.js`
+(sidebar: **Audit Log**, admin-gated the same way **Users & Roles** is —
+both client-side via `isAdmin()` and server-side, since `get_audit_log()`
+itself only returns rows `where is_admin()`).
+
+**Every writer goes through one function, `log_audit_event(p_action,
+p_entity_type, p_entity_id, p_detail)`** — inserts a row with
+`actor_id = auth.uid()` and `actor_name` looked up from `profiles` at
+write time (so the log still reads correctly even if that person's name
+or account changes later). `raise exception`s if `auth.uid()` is null,
+which matters for the trigger-based callers below: a trigger firing from
+something run with no request context (a service-role script, a
+migration) just silently skips logging rather than erroring the whole
+operation — see each trigger's own `if auth.uid() is not null` guard.
+
+Direct callers (an RPC calling `log_audit_event()` as one more step in
+what it already does):
+- `revoke_proximity_card()` → `card_revoked` (`proximity_card`) — detail:
+  `proximity_code`, `reason`, `employee_id`
+- `resolve_employee_remark()` → `remark_resolved` or `remark_reopened`
+  (`employee`) — detail: `remark_id`
+- `delete_employee_scan_log()` → `scan_log_entry_deleted` (`employee`) —
+  detail: `scan_id`
+
+Trigger-based callers (react to a delete/update on the table itself,
+rather than a purpose-built RPC — used where the "destructive action" is
+just a plain DELETE/UPDATE statement, not its own RPC):
+- `trg_audit_employee_delete` (`AFTER DELETE` on `employees`) →
+  `employee_deleted` — detail: `full_name`, `employee_code`
+- `trg_audit_proximity_card_delete` (`AFTER DELETE` on `proximity_cards`)
+  → `proximity_card_deleted` — detail: `proximity_code`
+- `trg_audit_profile_changes` (`AFTER UPDATE` on `profiles`) →
+  `account_changed`, only when `role`/`access_scope`/`is_active` actually
+  changed (a plain name/email edit doesn't fire this) — detail always
+  includes all three as `{from, to}` pairs regardless of which one(s)
+  changed; `AuditLogPage.js`'s `describeEvent()` filters to only the ones
+  where `from !== to` before displaying, rather than showing "no change"
+  noise for the other two.
+
+**Security note, fixed during this feature's own build:** `log_audit_event()`
+was, briefly, directly callable by any `authenticated` user (not just
+admins) via `/rest/v1/rpc/log_audit_event` — the default grant a newly
+`CREATE`d function gets in this project (see the 2026-09-16
+`scan_proximity_code()` overload story for why that default keeps
+catching new functions here). That would have let any signed-in account
+insert fabricated entries into an otherwise admin-trusted audit trail.
+Revoked from `public`/`authenticated`/`anon` — the three trigger
+functions themselves need no direct grant at all (Postgres invokes a
+trigger function via the trigger mechanism regardless of who could
+`EXECUTE` it standalone), so they were locked down the same way as a
+belt-and-suspenders measure, not because either gap was independently
+exploitable. Confirmed via `has_function_privilege()` and a clean
+`get_advisors` pass.
+
+**Known gap, not fixed here:** `admin-users` (the Edge Function backing
+Users & Roles' create/reset-password/delete) never calls
+`log_audit_event()` at all. A role/access_scope/is_active change made
+*through* that function still gets audited (it updates `profiles`
+directly, which `trg_audit_profile_changes` reacts to independent of
+which caller made the change) — but creating an account, resetting a
+password, or deleting one leaves no audit trail entry today. Worth
+closing if account lifecycle events need the same visibility as
+everything else here.
+
 ## Edge Functions
 
 - **`proximity-scan`** — for hardware/kiosk scanners that can't run the JS
@@ -393,11 +461,23 @@ contracts each client-side caller relies on.
 *Last reconciled against `Supabase:list_tables` (verbose),
 `Supabase:list_edge_functions`, `storage.buckets`, and
 `pg_get_functiondef()` on the live `kjwttqmbcjvkivgmwuev` project,
-2026-09-19. Re-verify against those before trusting this file blindly in a
+2026-09-21. Re-verify against those before trusting this file blindly in a
 future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-21 — Documented the audit log feature (DB side was already live, undocumented)**
+- No schema/RPC change — `audit_log`, `log_audit_event()`, `get_audit_log()`,
+  and all three audit triggers were already fully built and correctly
+  secured from an earlier session's work this same week; they'd just
+  never made it into this file. Added the full "Audit log" section above
+  and the `audit_log` table row, including the security fix that session
+  made (`log_audit_event()` was briefly `authenticated`-callable directly)
+  and the one known gap left open (`admin-users` doesn't log account
+  create/reset-password/delete). See root `README.md`'s matching entry
+  for the client-side `AuditLogPage.js` that was actually missing and
+  got built this session.
 
 **2026-09-21 — `upload-employee-photo`: Google auth failures get a stable code; typecheck fix**
 - Reported as "Google Drive token expired". Root cause class: Google's
