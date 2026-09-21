@@ -237,6 +237,40 @@ the live project (`pg_policies`, `pg_proc` definitions, actual grants via
   tradeoff for hot-linking Drive as a free photo host, not something this
   audit pass changed. Worth reconsidering only if employee photos are
   ever treated as confidential — not assumed here.
+- **Follow-up review, same day: a GraphQL-hardening checklist (disable
+  introspection, cap query depth/complexity, hide field-suggestion
+  errors) doesn't actually apply to this project** — confirmed via
+  `pg_extension`: `pg_graphql` isn't installed, so there's no GraphQL
+  surface at all, let alone one with adjustable depth limits or field
+  suggestions. Translated to what's real for a PostgREST+RPC API instead:
+  - *Schema introspection* — PostgREST's own OpenAPI/Swagger spec at the
+    API root is the actual equivalent surface (table/column/function
+    shapes, not row data — RLS still gates that regardless). Confirmed
+    already disabled for every role via `alter role authenticator set
+    pgrst.openapi_mode to 'disabled'` (predates this entry — verified
+    live, not re-applied).
+  - *Unbounded response size* — no query-depth concept exists here since
+    there's no client-composed nesting, only fixed foreign-key-declared
+    embedding, but the underlying "one request returns everything" risk
+    is real via a different path: no cap existed on rows returned by a
+    single REST request. `statement_timeout=8s` (already set) guards
+    against a request hanging, but not a fast query against a
+    large/growing table (`scan_events`) returning an unbounded row count
+    in that time. Added `pgrst.db_max_rows = 1000` — PostgREST returns
+    `206 Partial Content` with a `Content-Range` header past this,
+    signaling the client to paginate rather than silently truncating.
+    Matches the row-count cap already planned client-side for Employee
+    Manager/Proximity Cards/Users & Roles, just enforced at the DB level
+    too regardless of what the client asks for.
+  - *Field-suggestion/error-verbosity leakage* — PostgREST's error
+    responses for a bad table/column name aren't a comparable leak to
+    GraphQL's per-field "did you mean" suggestions; there's no equivalent
+    setting to toggle here. The two layers that actually prevent
+    schema-mapping-by-observation are the ones above: the API's schema
+    listing is already unreachable (`openapi_mode=disabled`), and RLS
+    means even a syntactically-valid guess against a real table/column
+    still returns zero rows without proper auth — nothing further to
+    change under this heading specifically.
 
 ## Offline scanning
 
