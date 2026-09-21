@@ -86,6 +86,12 @@ JS/
                                    Supabase/README.md's "Offline scanning" section
     AuditLogModel.js                thin wrapper over get_audit_log() — the RPC
                                    itself is the real gate, this just calls it
+    QueryStatsModel.js              added 2026-09-21; thin wrapper over
+                                   get_slow_query_stats()/reset_slow_query_stats()
+                                   — same "the RPC is the real gate" pattern as
+                                   AuditLogModel.js, see Settings/SettingsPage.js's
+                                   "Query performance" panel and
+                                   Supabase/README.md's change log
   Components/                 reusable UI pieces used by more than one feature
     Modal.js                     shared openModal/closeModal scaffold — every
                                   dialog below is built on this
@@ -146,13 +152,18 @@ JS/
     Users/UsersPage.js               (Users & Roles, admin-only; delete wired
                                        through admin-users v3+ w/ self-delete guard)
     Users/userOptions.js             (shared role/access-scope option lists)
-    Settings/SettingsPage.js         (Settings, admin-only — upload/replace/remove/
+    Settings/SettingsPage.js         (Settings — upload/replace/remove/
                                        preview the 5 scan sounds, plus a read-only
                                        Google Drive storage-capacity panel for
                                        employee photos (whole-account quota, not
                                        folder-scoped — see change log); own
                                        top-level route so future non-user settings
-                                       have a home)
+                                       have a home; "Query performance" panel
+                                       (added 2026-09-21, unconditionally
+                                       admin-only unlike the two panels above) —
+                                       pg_stat_statements via get_slow_query_stats(),
+                                       adjustable threshold, Reset stats button;
+                                       see Supabase/README.md's change log)
     Audit/AuditLogPage.js            (Audit Log, admin-only — read-only table over
                                        get_audit_log(); describeEvent() translates
                                        each row's raw {action, entity_type, detail}
@@ -432,6 +443,61 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-21 — Settings: "Query performance" panel (slow query logging + pg_stat_statements dashboard)**
+- **Corrected a real gap left by an earlier, cut-off session**: it had
+  already run `ALTER ROLE postgres SET log_min_duration_statement = 200`
+  — but `postgres` is the role migrations/the SQL editor/MCP tooling
+  connect as, **never** the role the live app's own traffic runs as.
+  PostgREST connects as `authenticator` and impersonates (`SET ROLE`)
+  into `anon`/`authenticated` per request based on the caller's JWT; per
+  PostgREST 11.1's "Impersonated Role Settings" (Supabase's own
+  documented pattern — they use it for `statement_timeout`, this project
+  already had `anon`: 3s / `authenticated`: 8s set that way before this
+  change), a role-level `ALTER ROLE … SET` only takes effect for a
+  request when it's set on the *impersonated* role, not `authenticator`
+  or `postgres`. So the earlier setting was silently logging nothing for
+  actual app requests. Fixed by also setting it on `anon`,
+  `authenticated`, and `service_role` (200ms — same value, correct
+  roles), and reloading PostgREST's config cache (`NOTIFY pgrst, 'reload
+  config'`) so the fix actually took effect rather than sitting cached.
+- `log_min_duration_statement` writes to the Postgres log (viewable in
+  the Supabase Dashboard's Logs Explorer) — good for raw "here's a slow
+  request as it happens" visibility, but log text isn't something the
+  app can query and turn into a dashboard. That's what
+  `pg_stat_statements` is for — already enabled on this project
+  (confirmed already accumulating real stats — 1,458+ rows — despite
+  being completely unused until now) and directly SQL-queryable. New
+  RPCs `get_slow_query_stats(p_threshold_ms, p_limit)` and
+  `reset_slow_query_stats()` (admin-only, see `Supabase/README.md`) sit
+  on top of it.
+- New "Query performance" panel in Settings
+  (`JS/Features/Settings/SettingsPage.js`) — unconditionally admin-only
+  (`isAdmin()` directly, not the `settingsShowSounds()`/`settingsShowPhotos()`
+  scope helpers the other two panels use): an adjustable threshold
+  (default 200ms, matching the DB-side default above), a table of every
+  query shape averaging at or above it — Calls ("how often"), Total time
+  = Calls × Mean ("how much resource", the real cumulative load, which a
+  single slow-but-rare query wouldn't show on its own), Max, Rows, and
+  cache-hit % — and a Reset stats button (with a confirm dialog; it's
+  instance-wide, not scoped to what's currently shown).
+- Filtered to the app's own `anon`/`authenticated`/`service_role`
+  traffic, not raw `pg_stat_statements` — a managed-Postgres instance's
+  unfiltered stats are dominated by Supabase's own internal housekeeping
+  (Realtime, background workers, the SQL editor itself running as
+  `postgres`) which would drown out anything actually actionable here.
+- New `JS/Models/QueryStatsModel.js` — thin wrapper, same "the RPC is the
+  real gate" pattern as `AuditLogModel.js`.
+- Verified end-to-end against the live project rather than assumed:
+  confirmed the corrected role settings actually landed
+  (`pg_roles.rolconfig`), confirmed grants (`anon` blocked,
+  `authenticated` allowed, via `has_function_privilege()`), and ran the
+  RPC's own underlying query directly — which immediately surfaced a
+  real, pre-existing finding: the Employee Manager directory listing
+  query was averaging ~230ms across nearly 2,000 calls, comfortably over
+  the 200ms threshold. Not fixed as part of this change (out of scope —
+  this feature is the *instrument*, not a query-tuning pass) but worth
+  a follow-up look.
 
 **2026-09-21 — Audit Log: new admin-only sidebar page (client-side; DB was already live)**
 - The database side of this feature (`audit_log` table, `log_audit_event()`,

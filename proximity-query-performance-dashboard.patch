@@ -1,0 +1,426 @@
+diff --git a/JS/Features/Settings/SettingsPage.js b/JS/Features/Settings/SettingsPage.js
+index 7a159ee..b9dec1f 100644
+--- a/JS/Features/Settings/SettingsPage.js
++++ b/JS/Features/Settings/SettingsPage.js
+@@ -1,19 +1,25 @@
+-// Settings page. Two independent panels — "Scan sounds" (Scanner-related)
+-// and "Employee photos" (Employee Manager-related) — each shown only when
+-// the signed-in account's access_scope covers that module (or they're an
+-// admin, who always sees both). This mirrors canViewEmployeeManager() /
++// Settings page. "Scan sounds" (Scanner-related) and "Employee photos"
++// (Employee Manager-related) are each shown only when the signed-in
++// account's access_scope covers that module (or they're an admin, who
++// always sees both). This mirrors canViewEmployeeManager() /
+ // canViewScanner() in Core/state.js rather than inventing a separate
+ // permission scheme — see state.js for the canViewSettings() /
+ // settingsShowSounds() / settingsShowPhotos() / canManageScanSounds()
+ // helpers this file reads, and Supabase/README.md for their server-side
+-// mirror (can_view_settings() / can_manage_scan_sounds()).
++// mirror (can_view_settings() / can_manage_scan_sounds()). "Query
++// performance" (added 2026-09-21) is unconditionally admin-only instead
++// — isAdmin() directly, not one of the scope helpers above, since there's
++// no partial-visibility case that makes sense for raw cross-database
++// query stats the way there is for sounds/photos.
+ import { $, $$ } from '../../Utils/dom.js';
+ import { esc, fmtTime, fmtBytes } from '../../Utils/format.js';
+ import { toast } from '../../Utils/toast.js';
+ import { getTheme, setTheme } from '../../Utils/theme.js';
+-import { settingsShowSounds, settingsShowPhotos, canManageScanSounds } from '../../Core/state.js';
++import { isAdmin, settingsShowSounds, settingsShowPhotos, canManageScanSounds } from '../../Core/state.js';
+ import { ScanSoundsModel, SOUND_KEYS, SOUND_LABELS, MAX_FILE_SIZE_BYTES } from '../../Models/ScanSoundsModel.js';
+ import { EmployeesModel } from '../../Models/EmployeesModel.js';
++import { QueryStatsModel } from '../../Models/QueryStatsModel.js';
++import { openConfirmModal } from '../../Components/ConfirmModal.js';
+ 
+ let soundsCache = {}; // key -> { updated_at, size } | null, once loaded
+ let loaded = false;
+@@ -27,6 +33,11 @@ let photoQuota = null; // { usage, limit, usageInDrive } once loaded, else null
+ let photoQuotaError = null;
+ let photoLoaded = false;
+ 
++let queryStats = null; // array once loaded, else null
++let queryStatsError = null;
++let queryStatsLoaded = false;
++let queryThresholdMs = 200; // matches the server-side default in get_slow_query_stats() / the log_min_duration_statement set on anon/authenticated/service_role — see Supabase/README.md
++
+ export async function renderSettings() {
+   const content = $('#content');
+   const showSounds = settingsShowSounds();
+@@ -75,6 +86,35 @@ export async function renderSettings() {
+     </div>
+     `}
+     `}
++
++    ${!isAdmin() ? '' : `
++    <div class="panel" style="padding:20px;max-width:920px;margin-top:16px;">
++      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
++        <h3 style="margin:0 0 4px;">Query performance</h3>
++        <div style="display:flex;align-items:center;gap:8px;">
++          <label class="emp-meta" for="qs-threshold" style="white-space:nowrap;">Slower than (ms)</label>
++          <input type="number" id="qs-threshold" value="${queryThresholdMs}" min="0" step="10" style="width:80px;" />
++          <button type="button" class="ghost" id="qs-refresh">Refresh</button>
++          <button type="button" class="ghost danger" id="qs-reset">Reset stats</button>
++        </div>
++      </div>
++      <p class="sub" style="margin:0 0 10px;">
++        Every distinct query shape the app has run (grouped the way
++        Postgres itself groups them — same query text with different
++        literal values counts as one row), whose <em>average</em> time is
++        at or above the threshold above. "How often" is Calls; "how much
++        resource" is Total time (Calls × Mean — the actual cumulative
++        load a query puts on the database, which a single slow-but-rare
++        query might not). Scoped to this app's own traffic — Supabase's
++        internal housekeeping queries are left out. Stats accumulate
++        since the last reset (see "since" below); Reset stats clears them
++        to get a clean baseline, e.g. right after a fix, to confirm it
++        actually worked rather than reading a history that mixes pre-
++        and post-fix numbers together.
++      </p>
++      <div id="qs-body">${queryStatsLoaded ? '' : 'Loading…'}</div>
++    </div>
++    `}
+   `;
+   paintThemePicker();
+   $$('button[data-theme-choice]', $('#theme-picker')).forEach((btn) => {
+@@ -82,6 +122,28 @@ export async function renderSettings() {
+   });
+   if (showSounds && loaded) { paintRows(); paintStorageSummary(); }
+   if (showPhotos && photoLoaded) paintPhotoStorage();
++  if (isAdmin()) {
++    if (queryStatsLoaded) paintQueryStats();
++    $('#qs-refresh').addEventListener('click', () => loadQueryStats());
++    $('#qs-threshold').addEventListener('change', (e) => {
++      const v = Math.max(0, parseInt(e.target.value, 10) || 0);
++      queryThresholdMs = v;
++      e.target.value = v;
++      loadQueryStats();
++    });
++    $('#qs-reset').addEventListener('click', async () => {
++      const ok = await openConfirmModal({
++        title: 'Reset query statistics?',
++        message: 'Clears every accumulated call count and timing for every query shape, app-wide — not just what\'s shown below. This can\'t be undone, and there\'s no reason to do this routinely; it\'s for getting a clean baseline right after a fix.',
++        confirmLabel: 'Reset',
++      });
++      if (!ok) return;
++      const { error } = await QueryStatsModel.reset();
++      if (error) { toast(error.message, 'error'); return; }
++      toast('Query statistics reset');
++      loadQueryStats();
++    });
++  }
+ 
+   const tasks = [];
+   if (showSounds) {
+@@ -107,6 +169,7 @@ export async function renderSettings() {
+       paintPhotoStorage();
+     })());
+   }
++  if (isAdmin()) tasks.push(loadQueryStats());
+ 
+   // Independent panels, each backed by its own API call — run them
+   // concurrently rather than awaiting one before starting the other, and
+@@ -157,6 +220,53 @@ function paintPhotoStorage() {
+   `;
+ }
+ 
++async function loadQueryStats() {
++  const { data, error } = await QueryStatsModel.list(queryThresholdMs);
++  queryStatsError = error ? error.message : null;
++  queryStats = error ? null : (data || []);
++  queryStatsLoaded = true;
++  paintQueryStats();
++}
++
++// mean_exec_time_ms is what determines inclusion (server-side threshold
++// filter) and what this sorts severity by visually; total_exec_time_ms
++// (already the sort order the RPC returns rows in) is what the table's
++// own row order reflects — see the panel's own explanatory copy in
++// renderSettings() for why those answer different questions.
++function paintQueryStats() {
++  const body = $('#qs-body');
++  if (!body) return; // panel not in the DOM (non-admin) — shouldn't happen since loadQueryStats() is only ever called when isAdmin()
++  if (queryStatsError) {
++    body.innerHTML = `<div class="empty-state">${esc(queryStatsError)}</div>`;
++    return;
++  }
++  if (!queryStats) { body.innerHTML = 'Loading…'; return; }
++  if (!queryStats.length) {
++    body.innerHTML = `<div class="empty-state">No query shape is averaging ${queryThresholdMs}ms or slower right now.</div>`;
++    return;
++  }
++  const oldestSince = queryStats.reduce((oldest, r) => (!oldest || r.stats_since < oldest ? r.stats_since : oldest), null);
++  body.innerHTML = `
++    <table>
++      <thead><tr><th>Query</th><th class="col-shrink">Calls</th><th class="col-shrink">Mean</th><th class="col-shrink">Total</th><th class="col-shrink">Max</th><th class="col-shrink">Rows</th><th class="col-shrink">Cache hit</th></tr></thead>
++      <tbody>
++        ${queryStats.map((r) => `
++          <tr>
++            <td class="mono" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.query)}">${esc(r.query)}</td>
++            <td class="col-shrink mono">${r.calls.toLocaleString()}</td>
++            <td class="col-shrink mono"${r.mean_exec_time_ms >= queryThresholdMs * 2 ? ' style="color:var(--bad);font-weight:600;"' : ''}>${r.mean_exec_time_ms}ms</td>
++            <td class="col-shrink mono">${(r.total_exec_time_ms / 1000).toFixed(1)}s</td>
++            <td class="col-shrink mono">${r.max_exec_time_ms}ms</td>
++            <td class="col-shrink mono">${r.rows.toLocaleString()}</td>
++            <td class="col-shrink mono">${r.cache_hit_pct == null ? '—' : `${r.cache_hit_pct}%`}</td>
++          </tr>
++        `).join('')}
++      </tbody>
++    </table>
++    ${oldestSince ? `<div class="emp-meta" style="margin-top:8px;">Accumulated since ${esc(fmtTime(oldestSince))}${queryStats.length >= 50 ? ' — showing the top 50 by total time' : ''}</div>` : ''}
++  `;
++}
++
+ // Sums whatever's actually uploaded against TOTAL_CAPACITY. Reads
+ // straight from soundsCache so it always matches what the rows below are
+ // showing — callers repaint both together after any change.
+diff --git a/JS/Models/QueryStatsModel.js b/JS/Models/QueryStatsModel.js
+new file mode 100644
+index 0000000..7852c9c
+--- /dev/null
++++ b/JS/Models/QueryStatsModel.js
+@@ -0,0 +1,20 @@
++// Read-only(ish) wrapper around get_slow_query_stats()/reset_slow_query_stats()
++// — both RPCs raise an exception for a non-admin caller (is_admin() check
++// in the function body), but SettingsPage.js's "Query performance" panel
++// also self-guards with isAdmin() before ever calling these, same as
++// every other admin-only page in this app (see AuditLogPage.js).
++import { supabase } from '../Core/supabaseClient.js';
++
++export const QueryStatsModel = {
++  // p_threshold_ms: only query shapes whose MEAN execution time is at or
++  // above this show up at all — see Supabase/README.md for why mean
++  // (not max) is the right cutoff for "is this query a routine problem",
++  // and why this whole thing is filtered to the app's own anon/
++  // authenticated/service_role traffic rather than raw pg_stat_statements.
++  async list(thresholdMs = 200, limit = 50) {
++    return supabase.rpc('get_slow_query_stats', { p_threshold_ms: thresholdMs, p_limit: limit });
++  },
++  async reset() {
++    return supabase.rpc('reset_slow_query_stats');
++  },
++};
+diff --git a/README.md b/README.md
+index f89f33b..69684b7 100644
+--- a/README.md
++++ b/README.md
+@@ -86,6 +86,12 @@ JS/
+                                    Supabase/README.md's "Offline scanning" section
+     AuditLogModel.js                thin wrapper over get_audit_log() — the RPC
+                                    itself is the real gate, this just calls it
++    QueryStatsModel.js              added 2026-09-21; thin wrapper over
++                                   get_slow_query_stats()/reset_slow_query_stats()
++                                   — same "the RPC is the real gate" pattern as
++                                   AuditLogModel.js, see Settings/SettingsPage.js's
++                                   "Query performance" panel and
++                                   Supabase/README.md's change log
+   Components/                 reusable UI pieces used by more than one feature
+     Modal.js                     shared openModal/closeModal scaffold — every
+                                   dialog below is built on this
+@@ -146,13 +152,18 @@ JS/
+     Users/UsersPage.js               (Users & Roles, admin-only; delete wired
+                                        through admin-users v3+ w/ self-delete guard)
+     Users/userOptions.js             (shared role/access-scope option lists)
+-    Settings/SettingsPage.js         (Settings, admin-only — upload/replace/remove/
++    Settings/SettingsPage.js         (Settings — upload/replace/remove/
+                                        preview the 5 scan sounds, plus a read-only
+                                        Google Drive storage-capacity panel for
+                                        employee photos (whole-account quota, not
+                                        folder-scoped — see change log); own
+                                        top-level route so future non-user settings
+-                                       have a home)
++                                       have a home; "Query performance" panel
++                                       (added 2026-09-21, unconditionally
++                                       admin-only unlike the two panels above) —
++                                       pg_stat_statements via get_slow_query_stats(),
++                                       adjustable threshold, Reset stats button;
++                                       see Supabase/README.md's change log)
+     Audit/AuditLogPage.js            (Audit Log, admin-only — read-only table over
+                                        get_audit_log(); describeEvent() translates
+                                        each row's raw {action, entity_type, detail}
+@@ -433,6 +444,61 @@ file can drift from the live state between sessions.*
+ 
+ ### Change log (most recent first)
+ 
++**2026-09-21 — Settings: "Query performance" panel (slow query logging + pg_stat_statements dashboard)**
++- **Corrected a real gap left by an earlier, cut-off session**: it had
++  already run `ALTER ROLE postgres SET log_min_duration_statement = 200`
++  — but `postgres` is the role migrations/the SQL editor/MCP tooling
++  connect as, **never** the role the live app's own traffic runs as.
++  PostgREST connects as `authenticator` and impersonates (`SET ROLE`)
++  into `anon`/`authenticated` per request based on the caller's JWT; per
++  PostgREST 11.1's "Impersonated Role Settings" (Supabase's own
++  documented pattern — they use it for `statement_timeout`, this project
++  already had `anon`: 3s / `authenticated`: 8s set that way before this
++  change), a role-level `ALTER ROLE … SET` only takes effect for a
++  request when it's set on the *impersonated* role, not `authenticator`
++  or `postgres`. So the earlier setting was silently logging nothing for
++  actual app requests. Fixed by also setting it on `anon`,
++  `authenticated`, and `service_role` (200ms — same value, correct
++  roles), and reloading PostgREST's config cache (`NOTIFY pgrst, 'reload
++  config'`) so the fix actually took effect rather than sitting cached.
++- `log_min_duration_statement` writes to the Postgres log (viewable in
++  the Supabase Dashboard's Logs Explorer) — good for raw "here's a slow
++  request as it happens" visibility, but log text isn't something the
++  app can query and turn into a dashboard. That's what
++  `pg_stat_statements` is for — already enabled on this project
++  (confirmed already accumulating real stats — 1,458+ rows — despite
++  being completely unused until now) and directly SQL-queryable. New
++  RPCs `get_slow_query_stats(p_threshold_ms, p_limit)` and
++  `reset_slow_query_stats()` (admin-only, see `Supabase/README.md`) sit
++  on top of it.
++- New "Query performance" panel in Settings
++  (`JS/Features/Settings/SettingsPage.js`) — unconditionally admin-only
++  (`isAdmin()` directly, not the `settingsShowSounds()`/`settingsShowPhotos()`
++  scope helpers the other two panels use): an adjustable threshold
++  (default 200ms, matching the DB-side default above), a table of every
++  query shape averaging at or above it — Calls ("how often"), Total time
++  = Calls × Mean ("how much resource", the real cumulative load, which a
++  single slow-but-rare query wouldn't show on its own), Max, Rows, and
++  cache-hit % — and a Reset stats button (with a confirm dialog; it's
++  instance-wide, not scoped to what's currently shown).
++- Filtered to the app's own `anon`/`authenticated`/`service_role`
++  traffic, not raw `pg_stat_statements` — a managed-Postgres instance's
++  unfiltered stats are dominated by Supabase's own internal housekeeping
++  (Realtime, background workers, the SQL editor itself running as
++  `postgres`) which would drown out anything actually actionable here.
++- New `JS/Models/QueryStatsModel.js` — thin wrapper, same "the RPC is the
++  real gate" pattern as `AuditLogModel.js`.
++- Verified end-to-end against the live project rather than assumed:
++  confirmed the corrected role settings actually landed
++  (`pg_roles.rolconfig`), confirmed grants (`anon` blocked,
++  `authenticated` allowed, via `has_function_privilege()`), and ran the
++  RPC's own underlying query directly — which immediately surfaced a
++  real, pre-existing finding: the Employee Manager directory listing
++  query was averaging ~230ms across nearly 2,000 calls, comfortably over
++  the 200ms threshold. Not fixed as part of this change (out of scope —
++  this feature is the *instrument*, not a query-tuning pass) but worth
++  a follow-up look.
++
+ **2026-09-21 — Audit Log: new admin-only sidebar page (client-side; DB was already live)**
+ - The database side of this feature (`audit_log` table, `log_audit_event()`,
+   `get_audit_log()`, 3 audit triggers, and a since-fixed permission gap on
+diff --git a/Supabase/README.md b/Supabase/README.md
+index ce65d70..7be02db 100644
+--- a/Supabase/README.md
++++ b/Supabase/README.md
+@@ -398,6 +398,88 @@ password, or deleting one leaves no audit trail entry today. Worth
+ closing if account lifecycle events need the same visibility as
+ everything else here.
+ 
++## Query performance (slow query logging + `pg_stat_statements`)
++
++Two separate mechanisms, two separate jobs — both scoped to this app's
++own traffic, not raw instance-wide activity:
++
++**`log_min_duration_statement = 200` (ms), set on `anon`, `authenticated`,
++and `service_role`** — any statement run as one of those roles that takes
++200ms or longer gets written to the Postgres log itself, viewable in the
++Supabase Dashboard's Logs Explorer. This is a *role*-level setting
++(`ALTER ROLE <role> SET log_min_duration_statement = 200`), not a
++database- or session-level one, and that distinction matters here more
++than it usually would: PostgREST connects as `authenticator` and
++impersonates (`SET ROLE`) into `anon`/`authenticated` per request based
++on the caller's JWT (`service_role` for Edge Functions using the service
++key). Per PostgREST 11.1's "Impersonated Role Settings" — the same
++pattern this project already used for `statement_timeout` (`anon`: 3s,
++`authenticated`: 8s, both predate this) — a role-level `ALTER ROLE … SET`
++only takes effect for a request when it's set on the **impersonated**
++role. A setting on `authenticator` or `postgres` does not carry over,
++which is exactly the mistake an earlier session made here (set it on
++`postgres` — the role migrations/the SQL editor/MCP tooling connect as,
++never real app traffic) before this entry's fix. Always `NOTIFY pgrst,
++'reload config'` after changing this — PostgREST caches role config and
++won't pick up an `ALTER ROLE` until reloaded.
++
++**`pg_stat_statements`** (already enabled on this project; was already
++accumulating real stats — confirmed 1,458+ rows — despite being unused
++until this feature) — an in-database, SQL-queryable aggregate: per
++distinct *query shape* (literal values normalized out, so the same query
++with different parameters is one row), call count, total/mean/max/min
++exec time, rows, and buffer cache hit counts. This is the actual data
++source for "which queries exceeded a threshold, how often, how much
++resource" — log text isn't something the app can turn into a dashboard,
++but this view is queryable directly.
++
++- **`get_slow_query_stats(p_threshold_ms numeric default 200, p_limit
++  integer default 50)`** — admin-only (`is_admin()`). Returns query
++  shapes whose **mean** exec time is at or above `p_threshold_ms` (mean,
++  not max — a single unlucky slow call shouldn't flag an otherwise-fine
++  query the way a consistently-slow mean does), ordered by
++  `total_exec_time` (`calls × mean` — the actual cumulative database load
++  a query shape causes, which differs meaningfully from "is any single
++  call of it slow"). **Filtered to `userid::regrole::text = any(array
++  ['anon','authenticated','service_role'])`** — raw `pg_stat_statements`
++  on a managed-Postgres instance is dominated by Supabase's own internal
++  housekeeping (Realtime, background workers, the SQL editor itself
++  running as `postgres`), which would drown out anything actionable here;
++  also excludes its own query text (`query not ilike '%pg_stat_statements%'`)
++  and scopes to `current_database()`'s `dbid`. `queryid` comes back as
++  `text`, not a number — Postgres bigints can exceed JS's safe-integer
++  range. Backs Settings' "Query performance" panel
++  (`JS/Features/Settings/SettingsPage.js`, `JS/Models/QueryStatsModel.js`).
++- **`reset_slow_query_stats()`** — admin-only, calls
++  `pg_stat_statements_reset()`. Instance-wide, not scoped to a threshold
++  or query — the panel's own confirm-dialog copy says so explicitly
++  before an admin can trigger it.
++
++Both functions' owner (`postgres`, the role `apply_migration` runs
++`CREATE FUNCTION` as on this project) is a member of `pg_read_all_stats`,
++which is what lets a `SECURITY DEFINER` function read every role's
++`pg_stat_statements` rows, not just its own — verified directly
++(`pg_has_role('postgres', 'pg_read_all_stats', 'member')`) rather than
++assumed, since Supabase's managed `postgres` role is *not* a true
++Postgres superuser (`rolsuper = false`, though it does have
++`rolbypassrls = true`) and superuser is the more commonly-documented way
++to get this access.
++
++Grants: revoked from `public`/`anon`, granted to `authenticated` — same
++pattern as every other RPC here, verified via `has_function_privilege()`
++rather than assumed.
++
++**Verified end-to-end against live data, not just that the SQL parses:**
++ran the RPC's underlying query directly and got real, immediately
++actionable results — the Employee Manager directory listing
++(`employee_directory` view, paginated) was averaging ~230ms across
++~1,900 calls; two `proximity_cards`/`employees` listing queries were
++averaging 115–160ms across similar call counts. Not investigated further
++as part of this change (this feature is the *instrument* for finding
++that kind of thing, not a query-tuning pass itself) — worth a follow-up
++look, likely starting with whatever index(es) `employee_directory`'s
++`ORDER BY full_name` is or isn't using.
++
+ ## Edge Functions
+ 
+ - **`proximity-scan`** — for hardware/kiosk scanners that can't run the JS
+@@ -467,6 +549,31 @@ git commits here since nothing is deployed *from* this repo yet.*
+ 
+ ### Change log (most recent first)
+ 
++**2026-09-21 — Slow query logging fixed to the right roles + `pg_stat_statements` RPCs**
++- **Fixed a real bug from an earlier, cut-off session**: it had set
++  `log_min_duration_statement = 200` on the `postgres` role — which is
++  never the role live app traffic runs as (PostgREST impersonates
++  `anon`/`authenticated`/`service_role`, not `postgres` or
++  `authenticator` — see the new "Query performance" section above for
++  the full explanation). That meant the earlier session's slow-query
++  logging was silently capturing nothing for real requests. Corrected by
++  also setting it on `anon`, `authenticated`, and `service_role`, then
++  `NOTIFY pgrst, 'reload config'` (the earlier session's change hadn't
++  needed this, since a `postgres`-role setting takes effect immediately
++  on that connection — another sign it was never actually going to touch
++  app traffic). Verified via `pg_roles.rolconfig`, not assumed fixed.
++- New RPCs `get_slow_query_stats(p_threshold_ms, p_limit)` and
++  `reset_slow_query_stats()` — see "Query performance" above for the
++  full contract, the `pg_read_all_stats` ownership detail, and the real
++  findings (directory listing averaging ~230ms) turned up while
++  verifying this against live data.
++- Grants verified via `has_function_privilege()`: `anon` blocked,
++  `authenticated` allowed, matching every other RPC here.
++- Ran `get_advisors` (security) after — no new findings beyond the
++  pre-existing, already-accepted baseline (every `SECURITY DEFINER`
++  function here self-checks permissions internally, which the advisor
++  flags generically regardless of that).
++
+ **2026-09-21 — Documented the audit log feature (DB side was already live, undocumented)**
+ - No schema/RPC change — `audit_log`, `log_audit_event()`, `get_audit_log()`,
+   and all three audit triggers were already fully built and correctly

@@ -398,6 +398,88 @@ password, or deleting one leaves no audit trail entry today. Worth
 closing if account lifecycle events need the same visibility as
 everything else here.
 
+## Query performance (slow query logging + `pg_stat_statements`)
+
+Two separate mechanisms, two separate jobs — both scoped to this app's
+own traffic, not raw instance-wide activity:
+
+**`log_min_duration_statement = 200` (ms), set on `anon`, `authenticated`,
+and `service_role`** — any statement run as one of those roles that takes
+200ms or longer gets written to the Postgres log itself, viewable in the
+Supabase Dashboard's Logs Explorer. This is a *role*-level setting
+(`ALTER ROLE <role> SET log_min_duration_statement = 200`), not a
+database- or session-level one, and that distinction matters here more
+than it usually would: PostgREST connects as `authenticator` and
+impersonates (`SET ROLE`) into `anon`/`authenticated` per request based
+on the caller's JWT (`service_role` for Edge Functions using the service
+key). Per PostgREST 11.1's "Impersonated Role Settings" — the same
+pattern this project already used for `statement_timeout` (`anon`: 3s,
+`authenticated`: 8s, both predate this) — a role-level `ALTER ROLE … SET`
+only takes effect for a request when it's set on the **impersonated**
+role. A setting on `authenticator` or `postgres` does not carry over,
+which is exactly the mistake an earlier session made here (set it on
+`postgres` — the role migrations/the SQL editor/MCP tooling connect as,
+never real app traffic) before this entry's fix. Always `NOTIFY pgrst,
+'reload config'` after changing this — PostgREST caches role config and
+won't pick up an `ALTER ROLE` until reloaded.
+
+**`pg_stat_statements`** (already enabled on this project; was already
+accumulating real stats — confirmed 1,458+ rows — despite being unused
+until this feature) — an in-database, SQL-queryable aggregate: per
+distinct *query shape* (literal values normalized out, so the same query
+with different parameters is one row), call count, total/mean/max/min
+exec time, rows, and buffer cache hit counts. This is the actual data
+source for "which queries exceeded a threshold, how often, how much
+resource" — log text isn't something the app can turn into a dashboard,
+but this view is queryable directly.
+
+- **`get_slow_query_stats(p_threshold_ms numeric default 200, p_limit
+  integer default 50)`** — admin-only (`is_admin()`). Returns query
+  shapes whose **mean** exec time is at or above `p_threshold_ms` (mean,
+  not max — a single unlucky slow call shouldn't flag an otherwise-fine
+  query the way a consistently-slow mean does), ordered by
+  `total_exec_time` (`calls × mean` — the actual cumulative database load
+  a query shape causes, which differs meaningfully from "is any single
+  call of it slow"). **Filtered to `userid::regrole::text = any(array
+  ['anon','authenticated','service_role'])`** — raw `pg_stat_statements`
+  on a managed-Postgres instance is dominated by Supabase's own internal
+  housekeeping (Realtime, background workers, the SQL editor itself
+  running as `postgres`), which would drown out anything actionable here;
+  also excludes its own query text (`query not ilike '%pg_stat_statements%'`)
+  and scopes to `current_database()`'s `dbid`. `queryid` comes back as
+  `text`, not a number — Postgres bigints can exceed JS's safe-integer
+  range. Backs Settings' "Query performance" panel
+  (`JS/Features/Settings/SettingsPage.js`, `JS/Models/QueryStatsModel.js`).
+- **`reset_slow_query_stats()`** — admin-only, calls
+  `pg_stat_statements_reset()`. Instance-wide, not scoped to a threshold
+  or query — the panel's own confirm-dialog copy says so explicitly
+  before an admin can trigger it.
+
+Both functions' owner (`postgres`, the role `apply_migration` runs
+`CREATE FUNCTION` as on this project) is a member of `pg_read_all_stats`,
+which is what lets a `SECURITY DEFINER` function read every role's
+`pg_stat_statements` rows, not just its own — verified directly
+(`pg_has_role('postgres', 'pg_read_all_stats', 'member')`) rather than
+assumed, since Supabase's managed `postgres` role is *not* a true
+Postgres superuser (`rolsuper = false`, though it does have
+`rolbypassrls = true`) and superuser is the more commonly-documented way
+to get this access.
+
+Grants: revoked from `public`/`anon`, granted to `authenticated` — same
+pattern as every other RPC here, verified via `has_function_privilege()`
+rather than assumed.
+
+**Verified end-to-end against live data, not just that the SQL parses:**
+ran the RPC's underlying query directly and got real, immediately
+actionable results — the Employee Manager directory listing
+(`employee_directory` view, paginated) was averaging ~230ms across
+~1,900 calls; two `proximity_cards`/`employees` listing queries were
+averaging 115–160ms across similar call counts. Not investigated further
+as part of this change (this feature is the *instrument* for finding
+that kind of thing, not a query-tuning pass itself) — worth a follow-up
+look, likely starting with whatever index(es) `employee_directory`'s
+`ORDER BY full_name` is or isn't using.
+
 ## Edge Functions
 
 - **`proximity-scan`** — for hardware/kiosk scanners that can't run the JS
@@ -466,6 +548,31 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-21 — Slow query logging fixed to the right roles + `pg_stat_statements` RPCs**
+- **Fixed a real bug from an earlier, cut-off session**: it had set
+  `log_min_duration_statement = 200` on the `postgres` role — which is
+  never the role live app traffic runs as (PostgREST impersonates
+  `anon`/`authenticated`/`service_role`, not `postgres` or
+  `authenticator` — see the new "Query performance" section above for
+  the full explanation). That meant the earlier session's slow-query
+  logging was silently capturing nothing for real requests. Corrected by
+  also setting it on `anon`, `authenticated`, and `service_role`, then
+  `NOTIFY pgrst, 'reload config'` (the earlier session's change hadn't
+  needed this, since a `postgres`-role setting takes effect immediately
+  on that connection — another sign it was never actually going to touch
+  app traffic). Verified via `pg_roles.rolconfig`, not assumed fixed.
+- New RPCs `get_slow_query_stats(p_threshold_ms, p_limit)` and
+  `reset_slow_query_stats()` — see "Query performance" above for the
+  full contract, the `pg_read_all_stats` ownership detail, and the real
+  findings (directory listing averaging ~230ms) turned up while
+  verifying this against live data.
+- Grants verified via `has_function_privilege()`: `anon` blocked,
+  `authenticated` allowed, matching every other RPC here.
+- Ran `get_advisors` (security) after — no new findings beyond the
+  pre-existing, already-accepted baseline (every `SECURITY DEFINER`
+  function here self-checks permissions internally, which the advisor
+  flags generically regardless of that).
 
 **2026-09-21 — Documented the audit log feature (DB side was already live, undocumented)**
 - No schema/RPC change — `audit_log`, `log_audit_event()`, `get_audit_log()`,
