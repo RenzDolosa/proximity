@@ -424,6 +424,52 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-19 — Offline remarks flag, Recent Activity IN/OUT, Scanner input no longer triggers Chrome's password UI**
+- **Offline unresolved-remarks flag** — `ScanResultCard.js`'s ⚠ unresolved-remark
+  banner already worked for a live scan (which gets `remarks_log` via
+  `to_jsonb()` of the full employee row) — it read `e.remarks_log`
+  generically and needed no changes at all. The gap was entirely in
+  `JS/Models/OfflineScanModel.js#classify()`: `get_scanner_offline_cache()`
+  has returned `remarks_log` on every row all along, but `classify()`'s
+  employee object left it out, so a matched employee with an open remark
+  silently showed no warning while the kiosk was offline. One field
+  added, no RPC/schema change needed.
+- **Recent Activity: IN/OUT badge** — `get_scan_feed()` has always
+  returned `direction`; `JS/Components/ScanFeed.js`'s `feedRowHTML()`
+  just wasn't rendering it. Added next to the result badge, same
+  active/suspended styling as the result card's own IN/OUT badge.
+  `prependPendingRow()` (the optimistic offline row) now passes
+  `classifyResult.direction` through too, so a queued-but-not-yet-synced
+  scan shows the same badge immediately rather than only after it syncs.
+- **Scanner & Test Scan code inputs no longer trigger Chrome's autofill/
+  "Update password?" prompts** — both `#ss-code` and `#ts-code` were
+  `type="password"`, presumably to mask a manually-typed code from
+  shoulder-surfing (no prior comment explained the choice, but that's a
+  reasonable thing to want on a kiosk). Chrome deliberately **ignores**
+  `autocomplete="off"` on `type="password"` fields specifically — a
+  documented Chrome behavior, not a bug in this app — which is exactly
+  why that attribute alone never suppressed the suggestions/save prompts.
+  Switched both to `type="text"` with a new `.masked-code-input` CSS
+  class (`-webkit-text-security: disc` — non-standard but supported by
+  every Chromium/WebKit browser; this app is already Chrome-first by
+  design, so the one real gap — Firefox falls back to plain, unmasked
+  text, having no equivalent property at all — is an accepted trade-off,
+  not silently broken masking). `autocomplete="off"` now actually works
+  since it's no longer being overridden; added `autocorrect="off"`,
+  `autocapitalize="off"`, `spellcheck="false"`, and
+  `data-lpignore`/`data-1p-ignore` (LastPass/1Password's own
+  ignore-this-field hints) alongside it for the same reason.
+- **Self-correction, not a new bug**: earlier in this same session, before
+  discovering the "Export to .xlsx ... + scan log entry delete" work
+  below was already live from a different session, a
+  `clear_employee_scan_log(p_employee_id)` RPC (whole-log nuke) was added
+  as a first attempt at "add a delete button to the scan log." Once the
+  already-deployed `delete_employee_scan_log(p_employee_id, p_scan_id)`
+  (a properly-scoped per-*row* delete — see its own entry below) turned
+  up, the whole-log version was strictly worse for the same need and
+  nothing in the deployed frontend ever called it, so it was dropped
+  rather than left as unused, confusing surface area in the database.
+
 **2026-09-19 — Export to .xlsx (Employee Manager, Proximity Cards, Scan Log) + scan log entry delete**
 - Vendored SheetJS `xlsx@0.18.5` (Apache-2.0) as `Public/Vendor/xlsx.mini.min.js`
   — the **mini** build (250KB) over the full build (881KB), since this app

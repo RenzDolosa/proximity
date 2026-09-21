@@ -209,7 +209,7 @@ the live project (`pg_policies`, `pg_proc` definitions, actual grants via
   Revoked from `anon`/`public`, granted to `authenticated` only, matching
   everything else here.
 - **Confirmed correct, no change needed:** every `SECURITY DEFINER`
-  function's actual body (`add_employee_remark`, `clear_employee_scan_log`,
+  function's actual body (`add_employee_remark`,
   `delete_employee_scan_log`, `delete_unassigned_proximity_cards`,
   `resolve_employee_remark`, `revoke_proximity_card`, `scan_proximity_code`,
   `get_scan_feed`, `get_scanner_offline_cache`, `get_scanner_offline_photos`,
@@ -356,6 +356,21 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-19 — Dropped a redundant, unused RPC (self-correction)**
+- `clear_employee_scan_log(p_employee_id)` — a whole-log-nuke function
+  added earlier this same session as a first attempt at "let an admin
+  delete scan log entries," before discovering the properly-scoped,
+  already-deployed `delete_employee_scan_log(p_employee_id, p_scan_id)`
+  (per-row delete — see its own entry below) was already live from a
+  different session. Nothing in the deployed frontend ever called the
+  whole-log version, so it was `DROP FUNCTION`-ed rather than left as
+  unused, confusing surface area. See root `README.md`'s matching
+  change log entry.
+- `get_scanner_offline_cache()`/`classify()` gap (no RPC change): the RPC
+  has returned `remarks_log` on every row all along — the client-side
+  `classify()` just wasn't passing it through. Pure frontend fix, see
+  root `README.md`.
 
 **2026-09-19 — `upload-employee-photo`: prefer a client-supplied `.webp` thumbnail over the server-side Drive fetch**
 - No schema change. `upload`'s request body gained optional

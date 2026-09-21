@@ -18,7 +18,9 @@ export async function renderTestScan() {
       <div class="panel test-scan-panel">
         <div class="test-scan-note">Results here are not logged — nothing is written to Recent Activity, scan history, or Employee Manager.</div>
         <div class="ts-topbar">
-          <input id="ts-code" type="password" class="mono" placeholder="Live Search — scan or type code…" autocomplete="off" autofocus />
+          <!-- Same type="text" + .masked-code-input fix as StandaloneScanner.js
+               — see its comment for why this replaced type="password". -->
+          <input id="ts-code" type="text" class="mono masked-code-input" placeholder="Live Search — scan or type code…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore autofocus />
         </div>
         <div class="ts-hero">
           <div class="ts-ring"><div class="ts-icon">${PROXIMITY_LOGO_SVG}</div></div>

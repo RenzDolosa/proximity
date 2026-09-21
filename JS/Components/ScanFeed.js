@@ -15,6 +15,7 @@ function feedRowHTML(row) {
       </div>
       <div>
         <span class="badge ${row.result}" style="margin-left:8px;">${esc(row.result)}</span>
+        ${row.direction ? `<span class="badge ${row.direction === 'out' ? 'suspended' : 'active'}" style="margin-left:6px;">${esc(row.direction.toUpperCase())}</span>` : ''}
         <div class="feed-time">${row.pending ? 'Queued — syncing…' : fmtTime(row.scanned_at)}</div>
       </div>
     </div>
@@ -66,6 +67,7 @@ export function prependPendingRow(targetId, classifyResult, scannerId, limit = 1
     scanner_id: scannerId,
     employee_name: e?.full_name || null,
     photo_thumb_b64: e?.photo_thumb_b64 || null,
+    direction: classifyResult.direction || null,
   });
   const existingRows = feedEl.querySelector('.empty-state') ? [] : Array.from(feedEl.children);
   feedEl.innerHTML = rowHTML + existingRows.slice(0, limit - 1).map((el) => el.outerHTML).join('');

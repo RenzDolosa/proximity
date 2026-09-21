@@ -194,3 +194,18 @@
 .ts-icon{width:clamp(46px, 6.5dvh, 72px);height:clamp(46px, 6.5dvh, 72px);border-radius:10px;background:var(--surface-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;z-index:1;padding:14%;box-sizing:border-box;color:var(--text);}
 .ts-label{text-align:center;font-weight:700;font-size:20px;letter-spacing:.5px;line-height:1.25;text-transform:none;}
 .ts-result-wrap{width:100%;margin-top:22px;}
+
+/* Masks a typed proximity code from shoulder-surfing without making the
+   field an actual type="password" input. Chrome deliberately IGNORES
+   autocomplete="off" on real password fields specifically (a documented
+   Chrome behavior, not a bug in this app) — that's what was triggering
+   autofill suggestions and "Update password?" save prompts on a field
+   that was never a real credential, on both the standalone Scanner and
+   Test Scan. -webkit-text-security is non-standard but supported by every
+   Chromium/WebKit browser (Chrome, Edge, Safari, Opera) — the one
+   realistic gap is Firefox, which has no equivalent and just shows the
+   code in plain text there; a reasonable trade-off for a kiosk app that's
+   Chrome-first by design (see this file and StandaloneScanner.js's own
+   Chrome DevTools-based offline-testing instructions elsewhere in this
+   repo), not silently broken masking. */
+.masked-code-input{-webkit-text-security:disc;}

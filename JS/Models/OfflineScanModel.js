@@ -175,7 +175,16 @@ export const OfflineScanModel = {
       // offlineAvatarHTML() (Utils/format.js) with no network request at
       // all, online or offline. See this file's top-of-file comment for
       // what this replaced.
-      employee: { full_name: row.full_name, employee_code: row.employee_code, department: row.department, position: row.position, photo_thumb_b64: row.photo_thumb_b64 },
+      //
+      // remarks_log: get_scanner_offline_cache() already returns it (it
+      // rides along same as every other column), but this object used to
+      // leave it out — ScanResultCard.js's unresolved-remarks flag reads
+      // e.remarks_log generically and already worked correctly for a live
+      // scan (which gets remarks_log via to_jsonb() of the full row); it
+      // just had nothing to read for an offline-classified one, so a
+      // matched employee with an open remark silently showed no warning
+      // at all while the kiosk was offline.
+      employee: { full_name: row.full_name, employee_code: row.employee_code, department: row.department, position: row.position, photo_thumb_b64: row.photo_thumb_b64, remarks_log: row.remarks_log || [] },
     };
   },
 

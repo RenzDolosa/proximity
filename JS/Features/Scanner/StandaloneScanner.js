@@ -50,7 +50,13 @@ function renderStandaloneScanner() {
       <div class="ss-result-wrap" id="ss-result"></div>
       <div class="ss-main">
         <div class="ss-topbar">
-          <input id="ss-code" type="password" class="mono" placeholder="Live Search — scan or type code…" autocomplete="off" autofocus />
+          <!-- type="text" + .masked-code-input (see scanner.css), NOT
+               type="password": a real password field is exactly what made
+               Chrome offer autofill suggestions and "Update password?"
+               prompts here — Chrome deliberately ignores autocomplete="off"
+               on type="password" specifically, which is why that attribute
+               alone never fixed it. -->
+          <input id="ss-code" type="text" class="mono masked-code-input" placeholder="Live Search — scan or type code…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore autofocus />
         </div>
       </div>
       <div class="ss-feed-col">
