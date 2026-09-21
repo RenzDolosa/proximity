@@ -22,6 +22,18 @@
 //   misread as "0 bytes available". Read by Settings' "Employee photos"
 //   capacity panel (JS/Features/Settings/SettingsPage.js).
 //
+// Errors: { error: string, code?: string }. `code` is only set for failures the
+// caller can't fix by retrying:
+//   503 google_reauth_required — Google rejected the stored refresh token
+//        (invalid_grant: revoked, expired, or the consent screen is in
+//        "Testing"). Access tokens renew silently on every call; a dead
+//        REFRESH token can only be replaced by a human re-consenting once —
+//        see README.md → "Refresh token stops working?".
+//   503 google_client_invalid — Google rejected the OAuth client itself
+//        (invalid_client / unauthorized_client: client deleted, secret rotated
+//        or mistyped). Needs the same admin fix path as above.
+//   Everything else stays a plain 4xx/500 with just `error`.
+//
 // Auth is per-action, not a single blanket check: "quota" is read-only
 // (just tells the caller how much room is left) so it's allowed for
 // anyone with Settings access at all — including Viewers — via
@@ -266,12 +278,29 @@ Deno.serve(async (req: Request) => {
 
     return json({ error: `Unknown action "${action}"` }, 400, cors);
   } catch (err) {
+    // 503 (upstream credential problem), not 500 (our bug): nothing is wrong
+    // with this function or the caller's request, and a stable `code` lets
+    // the UI show "re-authorize Google Drive" instead of a raw Google string.
+    if (err instanceof GoogleAuthError) {
+      return json({ error: err.message, code: err.code }, 503, cors);
+    }
     return json({ error: (err as Error).message }, 500, cors);
   }
 });
 
 function json(body: unknown, status: number, cors: Record<string, string>) {
   return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+}
+
+// A failure of the stored Google credentials themselves (as opposed to a
+// transient network/API error), carrying a stable machine-readable `code`.
+class GoogleAuthError extends Error {
+  code: "google_reauth_required" | "google_client_invalid";
+  constructor(code: "google_reauth_required" | "google_client_invalid", message: string) {
+    super(message);
+    this.name = "GoogleAuthError";
+    this.code = code;
+  }
 }
 
 // ---- Google OAuth (refresh token -> short-lived access token) ----
@@ -317,12 +346,32 @@ async function getGoogleAccessToken(clientId: string, clientSecret: string, refr
       grant_type: "refresh_token",
     }),
   });
-  const data = await res.json();
+  // .catch: a non-JSON body (proxy/HTML error page) must not mask the real
+  // HTTP status behind a JSON parse exception.
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    const googleError = String(data.error || "");
+    // Logged with Google's own wording: the response to the browser is
+    // deliberately friendlier, and function logs are where an admin looks
+    // to confirm which failure this really was. Contains no secrets.
+    console.error(`Google token refresh failed (HTTP ${res.status}): ${googleError || "no error code"} — ${data.error_description || "no description"}`);
     // A revoked/expired refresh token (e.g. the OAuth consent screen was
     // left in "Testing" mode, which caps tokens at 7 days — see README)
-    // shows up here as invalid_grant.
-    throw new Error(data.error_description || data.error || "Google authentication failed — the refresh token may be invalid or revoked.");
+    // shows up here as invalid_grant. There is no server-side way to mint a
+    // replacement: Google requires an interactive consent for that.
+    if (googleError === "invalid_grant") {
+      throw new GoogleAuthError(
+        "google_reauth_required",
+        "Google Drive access has expired or was revoked. An admin needs to re-authorize the connection (see Supabase/functions/upload-employee-photo/README.md → \"Refresh token stops working?\").",
+      );
+    }
+    if (googleError === "invalid_client" || googleError === "unauthorized_client") {
+      throw new GoogleAuthError(
+        "google_client_invalid",
+        "Google rejected this app's OAuth client credentials. An admin needs to check GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET (see Supabase/functions/upload-employee-photo/README.md).",
+      );
+    }
+    throw new Error(data.error_description || googleError || `Google authentication failed (HTTP ${res.status}).`);
   }
   // expires_in is Google's own stated lifetime in seconds (normally 3600).
   // Falling back to a conservative 1800s if it's ever absent from the
@@ -423,7 +472,14 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function concatBytes(parts: Uint8Array[]): Uint8Array {
+// Return type deliberately inferred, not annotated as `Uint8Array`: on
+// Deno/TypeScript 5.7+ a bare `Uint8Array` means Uint8Array<ArrayBufferLike>,
+// which fetch()'s BodyInit no longer accepts (it wants an ArrayBuffer-backed
+// one) — the inferred Uint8Array<ArrayBuffer> from `new Uint8Array(total)`
+// below is accepted, and on older toolchains still just infers plain
+// Uint8Array. This exact annotation made `deno check` fail in CI
+// (.github/workflows/deploy-supabase.yml), which skips the deploy job.
+function concatBytes(parts: Uint8Array[]) {
   const total = parts.reduce((n, p) => n + p.length, 0);
   const out = new Uint8Array(total);
   let offset = 0;

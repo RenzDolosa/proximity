@@ -125,3 +125,39 @@ check just reflects the latest run's result automatically.
   as advisory, tighten the severity guidance in the system prompt rather
   than changing the gating logic — the gating logic just trusts whatever
   severity Claude assigns.
+
+## What gets excluded from review
+
+`Public/Vendor/**`, `*.patch`, `*.wav` and `*.zip` are excluded from both the
+diff and the full-file context (`EXCLUDE_PATHSPECS` in `ai-review.mjs`).
+Vendored bundles are minified third-party code (each of the two currently in
+the repo is larger than the whole 150K diff budget), and a hand-delivered
+`.patch` file duplicates a diff that's already being reviewed — either one
+would push the code that actually changed out of the review window. Add
+paths there if another generated/vendored directory shows up.
+
+## Limitations — read before treating a green check as "safe"
+
+- **Only what's in the PR diff is reviewed.** Schema, RLS-policy and Edge
+  Function changes applied directly to the Supabase project (e.g. via the
+  Supabase MCP `apply_migration` / `deploy_edge_function`) never pass through
+  this pipeline, and there is no `Supabase/migrations/` folder in the repo to
+  review either. For anything touching auth/RLS, that's the bigger gap.
+- **The PR is model input.** A diff or comment containing instructions aimed
+  at the reviewer could try to talk it into approving. Findings are a strong
+  signal, not a proof; the "sensitive-area" findings exist precisely so a
+  human still looks at auth, payments and deletion.
+- **It fails closed.** A missing/invalid `ANTHROPIC_API_KEY`, an API outage or
+  a rate limit exits non-zero and blocks the required check, even though
+  nothing is wrong with the PR.
+- **Repo admins can bypass it.** `setup-branch-protection.sh` leaves
+  `enforce_admins` off (so a solo owner isn't locked out when the check is
+  broken), which also means the owner can merge past a red check or push
+  straight to `main`. Turn on "Include administrators" if you want the gate
+  to bind you too.
+- **Fork PRs won't run it.** `pull_request` workflows get no secrets from
+  forks, so the job fails there. That's the safe default — don't switch the
+  trigger to `pull_request_target` to "fix" it: that would run this job with
+  your secrets against untrusted fork content.
+- **Comments accumulate.** Every push re-posts inline comments; earlier ones
+  aren't resolved or de-duplicated.

@@ -18,7 +18,10 @@
 
 set -euo pipefail
 
-REPO_SLUG="$(git config --get remote.origin.url | sed -E 's#.*[:/]([^/]+/[^/]+)\.git#\1#')"
+# Handles https/ssh remotes with or without a trailing .git or slash — the
+# previous pattern required ".git" and, on a plain https://github.com/o/r
+# remote, matched nothing and passed the whole URL through as the "slug".
+REPO_SLUG="$(git config --get remote.origin.url | sed -E 's#^.*github\.com[:/]##; s#/$##; s#\.git$##')"
 BRANCH="${1:-main}"
 : "${GITHUB_TOKEN:?Set GITHUB_TOKEN to a personal access token with repo admin access first.}"
 

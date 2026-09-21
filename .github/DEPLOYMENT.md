@@ -33,6 +33,30 @@ broken it's caught immediately" — which is the property people usually
 actually want from "canary" in a setup this size. It's a deliberately
 honest substitute, not the real thing.
 
+## Things that make the pipeline quietly do nothing
+
+- **A failing `typecheck` job skips `deploy` entirely** (`needs: typecheck`).
+  The repo can then sit ahead of the live function with no deploy ever
+  attempted — the failed-run notification is the only signal. `typecheck` uses
+  `deno-version: v2.x`, i.e. the newest 2.x, so a Deno/TypeScript upgrade can
+  break a function that compiled last month (this happened with
+  `Uint8Array` → `fetch()` body typing; see `Supabase/README.md`'s
+  2026-09-21 entry). If a merged function change isn't live, check the
+  Actions tab before assuming it deployed.
+- **The `production` approval gate waits indefinitely** for a reviewer; an
+  unapproved run is just a pending job.
+- **It deploys every function that has an `index.ts`, not only the changed
+  one.** Today that is only `upload-employee-photo` (`proximity-scan` and
+  `admin-users` are docs-only stubs deployed by hand, so their source isn't
+  version-controlled here). Adding an `index.ts` for another function means
+  the next merge touching *any* function redeploys it too — make sure the
+  committed source matches what's live first (`supabase functions download
+  <slug>`).
+- **The smoke test is an `OPTIONS` request**: it proves the function boots,
+  not that its Google/Drive credentials still work.
+- **Verify a deploy landed**: `Supabase:list_edge_functions` should show the
+  version incremented and a fresh `updated_at`.
+
 ## One-time setup
 
 ### 1. Secrets
@@ -71,8 +95,10 @@ capable of driving branch create/merge if you want to add it later.
 
 There's no deploy pipeline here for the static frontend
 (`Public/`, `CSS/`, `JS/`) because there's no hosting target configured
-yet — it's been tested locally so far (`npx serve Public`, per the main
-README). Once you pick a host (GitHub Pages, Vercel, Netlify, etc.), a
+yet — it's been tested locally so far (`npx serve .` from the repo root and
+open `/Public/index.html`, per the main README §3 — *not* `npx serve Public`:
+`index.html` references `../CSS` and `../JS`, and `sw.js` lives at the repo
+root, so serving only `Public/` 404s all three). Once you pick a host (GitHub Pages, Vercel, Netlify, etc.), a
 `deploy-frontend.yml` workflow following the same shape (typecheck/lint →
 approval gate → deploy → smoke test) can be added — happy to build that
 once the target's decided.

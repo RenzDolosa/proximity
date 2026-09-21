@@ -424,6 +424,34 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-21 — Google Drive token expiry handling, `.github` hardening, doc drift fixes**
+- **Google Drive "token expired"**: the Edge Function already renews the
+  short-lived access token silently; what expires is the long-lived
+  *refresh token*, which Google will only re-issue after an interactive
+  consent — there is no server-side way to renew it automatically. So the
+  fix is two-sided: prevent it (OAuth consent screen must be **In
+  production**, not Testing, which caps refresh tokens at 7 days) and make
+  it obvious and quick to recover from. `upload-employee-photo` now returns
+  HTTP 503 + `code: "google_reauth_required"` with an actionable message
+  (Settings → Employee photos shows it too), logs Google's real error, and
+  `Supabase/functions/upload-employee-photo/README.md` has a causes/prevention/
+  re-issue runbook. Details: `Supabase/README.md`'s matching entry.
+- **CI**: `deno check` was failing on current Deno (`Uint8Array` → `fetch`
+  body typing in `concatBytes()`), which silently skips the deploy job —
+  fixed; see `Supabase/README.md`.
+- **`.github/scripts/ai-review.mjs`**: shell-injection fix (file names from a
+  PR were interpolated into an `execSync()` command line on a runner holding
+  `ANTHROPIC_API_KEY`; now `execFileSync` with argv), `-z` so non-ASCII file
+  names aren't silently dropped from the review context, and vendored
+  bundles / `.patch` / `.wav` / `.zip` excluded so they can't consume the
+  diff budget (`Public/Vendor/*` alone can exceed it).
+  `.github/scripts/setup-branch-protection.sh` now parses `origin` URLs
+  without a trailing `.git`.
+- **Docs**: `.github/DEPLOYMENT.md` said to run the frontend with
+  `npx serve Public`, which contradicts §3 above (index.html references
+  `../CSS` and `../JS`, and `/sw.js` lives at the repo root — serve the repo
+  root); corrected. `.github/AI_REVIEW.md` gained a Limitations section.
+
 **2026-09-19 — Offline remarks flag, Recent Activity IN/OUT, Scanner input no longer triggers Chrome's password UI**
 - **Offline unresolved-remarks flag** — `ScanResultCard.js`'s ⚠ unresolved-remark
   banner already worked for a live scan (which gets `remarks_log` via

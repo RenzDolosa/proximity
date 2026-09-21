@@ -342,6 +342,14 @@ outlasts the token isn't guaranteed unless that's addressed separately
   client-supplied value that fails a basic size/decode sanity check) is
   logged and returns `thumb_b64: null`, never fails the upload itself
   (`url`/`file_id` are already secured by that point regardless).
+  When Google itself rejects the stored OAuth credentials the function
+  answers **HTTP 503** with a stable `code` (`google_reauth_required` for
+  an expired/revoked refresh token, `google_client_invalid` for a bad OAuth
+  client) instead of a bare 500 — access tokens renew silently on every
+  call, but a dead *refresh* token can only be replaced by a human
+  re-consenting once. Causes, prevention, and the 2-minute re-issue steps
+  are in `functions/upload-employee-photo/README.md` → "Refresh token stops
+  working?".
 
 See `functions/proximity-scan/README.md`, `functions/admin-users/README.md`,
 and `functions/upload-employee-photo/README.md` for the request/response
@@ -356,6 +364,36 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-21 — `upload-employee-photo`: Google auth failures get a stable code; typecheck fix**
+- Reported as "Google Drive token expired". Root cause class: Google's
+  `invalid_grant` on the **refresh token** (not the access token, which
+  already renews itself silently on every call). Previously surfaced as a
+  bare 500 carrying Google's raw wording; now a 503 with
+  `code: "google_reauth_required"` (or `google_client_invalid`) and an
+  actionable message, and the underlying Google error is written to the
+  function log (`Google token refresh failed (HTTP 400): invalid_grant — …`)
+  so the cause can be confirmed rather than guessed. No client change was
+  needed: `EmployeesModel.js`'s upload/delete/quota paths already display
+  `body.error` verbatim.
+- `concatBytes()`'s explicit `: Uint8Array` return annotation made
+  `deno check` fail on Deno/TypeScript 5.7+ (`Uint8Array<ArrayBufferLike>`
+  is no longer a valid `fetch()` body). CI's typecheck job runs
+  `deno-version: v2.x` (newest 2.x), so this fails the `typecheck` job and
+  the dependent `deploy` job never runs — a plausible reason the repo can sit
+  ahead of the live function without any visible error. Return type is now
+  inferred; no runtime change.
+- **Drift as of this entry:** live `upload-employee-photo` was v36
+  (2026-09-19 02:37 UTC) and still had the original server-side `sz=w96`
+  thumbnail fetch, with no handling of the client-supplied
+  `thumb_base64` — i.e. the client sends a ~480px thumbnail that the live
+  function ignores. This repo's `index.ts` has the newer behavior. Run
+  `Supabase:list_edge_functions` / `get_edge_function` before assuming either
+  side is current.
+- `README.md` for the function rewritten: request/response contract now
+  includes `quota`, the thumbnail fields, the `thumbnail?id=…` URL format
+  (it still documented the retired `uc?export=view` URL), and the error-code
+  table.
 
 **2026-09-19 — Dropped a redundant, unused RPC (self-correction)**
 - `clear_employee_scan_log(p_employee_id)` — a whole-log-nuke function
