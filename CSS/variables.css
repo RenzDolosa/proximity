@@ -1,4 +1,10 @@
-/* Design tokens shared by every other stylesheet. */
+/* Design tokens shared by every other stylesheet. Dark is the default
+   (no attribute needed) — this is what the app has always looked like,
+   so every existing user/screenshot/kiosk sees zero visual change unless
+   they actively opt into light mode via Settings → Appearance
+   (JS/Utils/theme.js sets html[data-theme="light"] to switch; see
+   Public/index.html's inline head script for why that has to happen
+   there and not from a regular ES module). */
 :root{
   --bg: #10141B;
   --surface: #171D26;
@@ -19,4 +25,58 @@
   --radius: 3px;
   --sans: 'IBM Plex Sans', system-ui, sans-serif;
   --mono: 'IBM Plex Mono', 'SF Mono', monospace;
+
+  /* Below this line: colors that used to be hardcoded literals sprinkled
+     directly in base.css/components.css/auth.css/scanner.css instead of
+     tokens — harmless while there was only ever one theme, but each one
+     would have been a silent light-mode bug (a dark-navy decorative glow,
+     a near-black button hover state) if left as-is. Pulled into named
+     tokens here specifically so the light override block below can
+     reach them. Values below are exactly what those literals already
+     were — this block changes nothing visually on its own. */
+  --button-hover-border: #3D4756;
+  --button-hover-bg: #232B37;
+  --accent-hover: #71A0F5; /* button.primary:hover — a step brighter than --accent, same relationship kept in the light override below */
+  --accent-text-on-dim: #AFC7FA; /* legible text color for anything sitting on --accent-dim as a background — badge.role-admin and the selected search-result row */
+  --role-manager-bg: #2C3550;
+  --role-manager-text: #9FB3DE;
+  --role-viewer-bg: #26303B;
+  --decorative-glow: #17213A; /* the ambient radial-gradient blob behind the auth screen and Scanner */
+}
+
+:root[data-theme="light"]{
+  --bg: #F1F3F6;
+  --surface: #FFFFFF;
+  --surface-raised: #FFFFFF;
+  --border: #D8DEE7;
+  --border-soft: #E7EBF0;
+  --text: #1B222C;
+  --text-muted: #5B6474;
+  --text-faint: #8993A3;
+  /* accent/good/bad/warn are each a shade deeper than their dark-mode
+     value, not the same hue lightened — the dark-mode values are tuned
+     to read as bright TEXT on a near-black background (see the
+     .badge.matched-style "-dim background, bright text" pattern below);
+     used as-is on white, several fall short of WCAG AA's ~4.5:1 contrast
+     minimum for normal text. The *-dim tokens flip from "dark tinted
+     background behind bright text" to "pale tinted background behind
+     deep text" — same relationship, both ends of the contrast swapped
+     rather than just recoloring the background. */
+  --accent: #3568C4;
+  --accent-dim: #E4ECFC;
+  --good: #1E9A5A;
+  --good-dim: #E3F6EC;
+  --bad: #D93B41;
+  --bad-dim: #FBE4E5;
+  --warn: #B6790E;
+  --warn-dim: #FBF0DC;
+
+  --button-hover-border: #C7CFDA;
+  --button-hover-bg: #EDF0F4;
+  --accent-hover: #578AE8;
+  --accent-text-on-dim: #2F5FBF;
+  --role-manager-bg: #E7ECFA;
+  --role-manager-text: #3A5CAE;
+  --role-viewer-bg: #EDF0F4;
+  --decorative-glow: #C9D8F5;
 }

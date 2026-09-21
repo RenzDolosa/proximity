@@ -28,7 +28,7 @@
   display:flex;
   flex-direction:column;
   padding:20px clamp(16px, 4dvw, 28px) 40px;
-  background:radial-gradient(900px 500px at 50% 0%, #17213A 0%, transparent 65%), var(--bg);
+  background:radial-gradient(900px 500px at 50% 0%, var(--decorative-glow) 0%, transparent 65%), var(--bg);
   box-sizing:border-box;
   /* Establishes the stacking context .ss-bg-logo sits behind and
      .ss-header/.ss-layout sit in front of — see both below. */

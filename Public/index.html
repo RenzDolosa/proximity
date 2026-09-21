@@ -4,6 +4,19 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Proximity — ID &amp; Access Console</title>
+<!-- Applies a saved light-mode preference (JS/Utils/theme.js) before the
+     stylesheet below is even requested, so a returning user who chose
+     light mode never sees a one-frame flash of dark first. Deliberately
+     a plain, non-module, synchronous script — JS/main.js and everything
+     it imports is type="module", which defers until after the HTML is
+     parsed and the browser may have already started painting; by then
+     it would be too late to avoid the flash. Kept to these exact two
+     lines (read localStorage, set the attribute) in sync with
+     JS/Utils/theme.js's getTheme()/setTheme() by convention — see that
+     file's header comment for why it can't just import this instead. -->
+<script>
+(function(){try{if(localStorage.getItem('proximity-theme')==='light')document.documentElement.dataset.theme='light';}catch(e){}})();
+</script>
 <link rel="icon" type="image/svg+xml" href="Assets/Favicon/favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

@@ -10,6 +10,7 @@
 import { $, $$ } from '../../Utils/dom.js';
 import { esc, fmtTime, fmtBytes } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
+import { getTheme, setTheme } from '../../Utils/theme.js';
 import { settingsShowSounds, settingsShowPhotos, canManageScanSounds } from '../../Core/state.js';
 import { ScanSoundsModel, SOUND_KEYS, SOUND_LABELS, MAX_FILE_SIZE_BYTES } from '../../Models/ScanSoundsModel.js';
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
@@ -30,14 +31,22 @@ export async function renderSettings() {
   const content = $('#content');
   const showSounds = settingsShowSounds();
   const showPhotos = settingsShowPhotos();
-  // screens.js only routes here at all when canViewSettings() is true
-  // (which requires at least one of these) — this is just a defensive
-  // fallback, not the primary gate.
-  if (!showSounds && !showPhotos) { content.innerHTML = `<div class="empty-state">You don't have access to any Settings panels.</div>`; return; }
 
   content.innerHTML = `
-    ${!showSounds ? '' : `
     <div class="panel" style="padding:20px;max-width:720px;">
+      <h3 style="margin:0 0 4px;">Appearance</h3>
+      <p class="sub" style="margin:0 0 10px;">A personal preference for this browser — not shared with other accounts, and not saved to your profile, so it won't follow you to a different device or kiosk.</p>
+      <div class="sub-nav" id="theme-picker" role="group" aria-label="Theme">
+        <button type="button" data-theme-choice="dark">Dark</button>
+        <button type="button" data-theme-choice="light">Light</button>
+      </div>
+    </div>
+
+    ${(!showSounds && !showPhotos) ? `
+    <div class="empty-state" style="margin-top:16px;">You don't have access to any other Settings panels.</div>
+    ` : `
+    ${!showSounds ? '' : `
+    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;">
         <h3 style="margin:0 0 4px;">Scan sounds</h3>
         <div class="emp-meta mono" id="sound-storage-summary" style="white-space:nowrap;">${loaded ? '' : 'Loading…'}</div>
@@ -55,7 +64,7 @@ export async function renderSettings() {
     `}
 
     ${!showPhotos ? '' : `
-    <div class="panel" style="padding:20px;max-width:720px;margin-top:${showSounds ? '16px' : '0'};">
+    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
       <h3 style="margin:0 0 4px;">Employee photos</h3>
       <p class="sub" style="margin:0 0 10px;">
         Photos upload into the Google Drive account connected to the
@@ -65,7 +74,12 @@ export async function renderSettings() {
       <div id="photo-storage-body">${photoLoaded ? '' : 'Loading…'}</div>
     </div>
     `}
+    `}
   `;
+  paintThemePicker();
+  $$('button[data-theme-choice]', $('#theme-picker')).forEach((btn) => {
+    btn.addEventListener('click', () => { setTheme(btn.dataset.themeChoice); paintThemePicker(); });
+  });
   if (showSounds && loaded) { paintRows(); paintStorageSummary(); }
   if (showPhotos && photoLoaded) paintPhotoStorage();
 
@@ -99,6 +113,20 @@ export async function renderSettings() {
   // let each repaint itself as soon as its own data is back instead of
   // making the faster one wait on the slower.
   await Promise.all(tasks);
+}
+
+// Marks whichever button matches the CURRENT theme as .active — reads
+// getTheme() fresh each time rather than trusting a closure variable, so
+// this stays correct even if something else in the app ever changes the
+// theme out from under this page (it doesn't today, but this is the
+// cheap-and-safe way to write it regardless).
+function paintThemePicker() {
+  const picker = $('#theme-picker');
+  if (!picker) return;
+  const current = getTheme();
+  $$('button[data-theme-choice]', picker).forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.themeChoice === current);
+  });
 }
 
 // Mirrors paintStorageSummary()'s used-vs-cap framing, but the "cap" here

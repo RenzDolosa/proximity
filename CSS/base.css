@@ -23,10 +23,10 @@ button{
   font-weight:500;
   transition:background .12s ease,border-color .12s ease;
 }
-button:hover{border-color:#3D4756;background:#232B37;}
+button:hover{border-color:var(--button-hover-border);background:var(--button-hover-bg);}
 button:disabled{opacity:.4;cursor:not-allowed;}
 button.primary{background:var(--accent);border-color:var(--accent);color:#0B1220;font-weight:600;}
-button.primary:hover{background:#71A0F5;border-color:#71A0F5;}
+button.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);}
 button.danger{background:transparent;border-color:var(--bad);color:var(--bad);}
 button.danger:hover{background:var(--bad-dim);}
 button.ghost{background:transparent;border-color:transparent;color:var(--text-muted);padding:6px 10px;}

@@ -424,6 +424,37 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-21 — Settings: dark/light theme toggle**
+- Added an "Appearance" panel to Settings — always visible regardless of
+  access_scope (a personal display preference, not a privileged
+  operation), unlike the Scan sounds / Employee photos panels below it.
+  Dark stays the default — the app's only-ever-had-one look — with zero
+  visual change for anyone who doesn't touch the toggle.
+- `CSS/variables.css` gained a `:root[data-theme="light"]` override block
+  for every design token, plus several new tokens (`--button-hover-*`,
+  `--accent-hover`, `--accent-text-on-dim`, `--role-manager-*`,
+  `--role-viewer-bg`, `--decorative-glow`) for colors that used to be
+  hardcoded hex literals directly in base.css/components.css/auth.css/
+  scanner.css — harmless with only one theme, but each one would have
+  been a silent light-mode bug (a dark-navy decorative glow, unreadable
+  role badges) if left as-is. The `*-dim` badge tokens (`--good-dim`,
+  `--bad-dim`, etc.) flip relationship for light mode, not just lighten:
+  dark mode pairs a dark tinted background with bright text
+  (`.badge.matched`'s `background:var(--good-dim);color:var(--good)`);
+  used as-is on white, several of those bright text colors fall short of
+  WCAG AA contrast, so light mode pairs a pale tinted background with a
+  deepened text color instead — same visual pattern, both ends swapped.
+- `JS/Utils/theme.js` (new) is the shared source of truth for reading/
+  writing the preference (`localStorage`, key `proximity-theme`) after
+  the page has loaded — used by Settings' toggle. It is deliberately
+  NOT what avoids a flash of the wrong theme on load for a returning
+  light-mode user: it's an ES module, and this app's entire JS/main.js
+  tree is `type="module"`, which defers until after the HTML is parsed
+  and the browser may already be painting — too late. `Public/index.html`
+  gained a tiny inline, non-module `<script>` as the very first thing in
+  `<head>`, before the stylesheet link, duplicating just the
+  read-localStorage-and-set-the-attribute logic synchronously.
+
 **2026-09-21 — Google Drive token expiry handling, `.github` hardening, doc drift fixes**
 - **Google Drive "token expired"**: the Edge Function already renews the
   short-lived access token silently; what expires is the long-lived

@@ -53,9 +53,9 @@
 .badge.active,.badge.matched{background:var(--good-dim);color:var(--good);}
 .badge.inactive,.badge.unmatched,.badge.inactive_card,.badge.inactive_employee{background:var(--bad-dim);color:var(--bad);}
 .badge.suspended,.badge.unassigned_card{background:var(--warn-dim);color:var(--warn);}
-.badge.role-admin{background:var(--accent-dim);color:#AFC7FA;}
-.badge.role-manager{background:#2C3550;color:#9FB3DE;}
-.badge.role-viewer{background:#26303B;color:var(--text-muted);}
+.badge.role-admin{background:var(--accent-dim);color:var(--accent-text-on-dim);}
+.badge.role-manager{background:var(--role-manager-bg);color:var(--role-manager-text);}
+.badge.role-viewer{background:var(--role-viewer-bg);color:var(--text-muted);}
 
 table{width:100%;border-collapse:collapse;font-size:13px;}
 thead th{
@@ -135,7 +135,7 @@ td.row-actions{display:table-cell;}
 .search-result-item{padding:8px 10px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border-soft);display:flex;align-items:center;gap:8px;}
 .search-result-item:last-child{border-bottom:none;}
 .search-result-item:hover{background:var(--surface-raised);}
-.search-result-item.selected{background:var(--accent-dim);color:#AFC7FA;}
+.search-result-item.selected{background:var(--accent-dim);color:var(--accent-text-on-dim);}
 .tag-current{margin-left:auto;font-size:10px;text-transform:uppercase;letter-spacing:.3px;color:var(--text-faint);font-family:var(--sans);}
 .search-empty{padding:12px 10px;font-size:12.5px;color:var(--text-muted);}
 
