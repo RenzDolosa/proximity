@@ -27,7 +27,7 @@ export async function openScanLogModal(employeeId) {
   const overlay = openModal(`
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;">
       <h3 id="log-title" style="margin:0;">Scan log</h3>
-      <button class="ghost" id="log-export" style="flex:0 0 auto;padding:5px 10px;font-size:12px;">Export .xlsx</button>
+      <button class="ghost" id="log-export" style="flex:0 0 auto;padding:5px 10px;font-size:12px;">Export</button>
     </div>
     <div id="log-body" class="empty-state">Loading…</div>
     <div class="actions">

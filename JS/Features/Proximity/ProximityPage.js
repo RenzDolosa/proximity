@@ -32,7 +32,7 @@ export async function renderProximity() {
         </select>
       </div>
       <div style="display:flex;gap:8px;">
-        <button class="ghost" id="prox-export">Export .xlsx</button>
+        <button class="ghost" id="prox-export">Export</button>
         ${isAdminOrManager() ? `
           ${isAdmin() ? '<button class="ghost danger" id="prox-delete-all">Delete all</button>' : ''}
           <button class="ghost" id="prox-import">Import</button>

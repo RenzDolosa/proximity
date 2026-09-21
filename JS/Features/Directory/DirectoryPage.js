@@ -30,7 +30,7 @@ export async function renderDirectory() {
         <button class="ghost${unresolvedOnly ? ' active' : ''}" id="dir-unresolved-toggle" title="Show only employees with unresolved remarks">Unresolved remarks<span class="count-pill" id="dir-unresolved-count"></span></button>
       </div>
       <div style="display:flex;gap:8px;">
-        <button class="ghost" id="dir-export">Export .xlsx</button>
+        <button class="ghost" id="dir-export">Export</button>
         ${isAdminOrManager() ? `
           ${isAdmin() ? '<button class="ghost danger" id="dir-delete-all">Delete all</button>' : ''}
           <button class="ghost" id="dir-import">Import</button>
