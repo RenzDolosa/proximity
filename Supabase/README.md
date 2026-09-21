@@ -115,24 +115,6 @@ an admin swaps it out.
   Activity feed (see `scan_feed` above).
 - **`add_employee_remark(...)`** — appends a `{remark, created_by,
   created_by_id, created_at}` entry to `employees.remarks_log`.
-- **`delete_employee_scan_log(p_employee_id, p_scan_id)`** — added
-  2026-09-19. Deletes the matching `scan_events` row **and** prunes the
-  corresponding cached entry out of `employees.scan_logs` (keyed by the
-  `scan_id` field `trg_append_scan_log()` stores on every entry), in one
-  transaction — `scan_logs` is a cache of `scan_events`, not an
-  independent record, so deleting only one side would leave it
-  permanently out of sync (nothing else re-syncs it). `is_admin()`-gated
-  — stricter than `add_employee_remark`'s admin-or-manager bar, since
-  this removes an actual audit record rather than adding a note, the
-  same tier as deleting an employee or a card outright. Backs the
-  Scan Log modal's per-row delete button (root `README.md`'s matching
-  change log entry). Does **not** attempt to renumber the `direction`
-  (IN/OUT) of any entry appended after the deleted one — that's computed
-  once, at insert time, from `jsonb_array_length(scan_logs) % 2`, so a
-  deletion here can shift later entries' apparent parity relative to
-  what actually happened. Accepted as-is; see the change log entry for
-  why recomputing history wasn't worth it for a single-entry correction
-  tool.
 - **`is_admin()` / `is_admin_or_manager()`** — role helper functions used
   throughout RLS policies.
 - **`can_view_settings()` / `can_manage_scan_sounds()`** — the Settings
@@ -178,6 +160,83 @@ role that can't directly read `employees`, even if the view itself is
 grantable. The fix used here is `SECURITY DEFINER` functions (`get_scan_feed()`)
 rather than plain views, for anything that needs to join across a
 table a restricted role can't see directly.
+
+**2026-09-21 — Full RLS/RPC audit, one critical finding and fix.** An
+external review raised general concerns about several tables/functions
+without access to verify the live policies. Verified directly against
+the live project (`pg_policies`, `pg_proc` definitions, actual grants via
+`has_function_privilege`):
+- **Critical, confirmed and fixed — `profiles` self-privilege-escalation.**
+  `profiles_update_own_or_admin`'s RLS policy was `USING (id = auth.uid()
+  OR is_admin())` with no explicit `WITH CHECK`. Per standard Postgres RLS
+  semantics, an UPDATE policy with no `WITH CHECK` reuses `USING` for
+  both — which only ever constrained WHICH ROW could be touched, never
+  WHICH COLUMNS or VALUES. Net effect: any authenticated user, of any
+  role, could call `supabase.from('profiles').update({ role: 'admin'
+  }).eq('id', <their own auth.uid()>)` directly and it would succeed — a
+  `viewer` account could self-promote straight to `admin`, entirely
+  bypassing the app's UI. No trigger or other guard existed to catch
+  this (`profiles` only had `trg_profiles_updated_at`). **Fixed** with a
+  `BEFORE UPDATE` trigger (`prevent_self_privilege_escalation()`,
+  `trg_profiles_prevent_self_escalation`) that blocks a non-admin from
+  changing `role`/`access_scope`/`is_active` on any row, including their
+  own — a trigger, not a `WITH CHECK` expression, because comparing
+  proposed-NEW against actual-OLD column-by-column is exactly what
+  triggers are for and RLS's `WITH CHECK` can't cleanly do. Explicitly
+  exempts `auth.role() = 'service_role'`: `admin-users`' Edge Function
+  does real role/`access_scope` writes via `auth.admin.*`, which requires
+  the service-role key and therefore bypasses RLS — but triggers fire
+  regardless of RLS bypass, so without this exemption the admin panel's
+  own "change a user's role" feature would have broken the moment this
+  landed.
+- **Real, fixed — `scan_events` table was readable by ANY authenticated
+  user, regardless of role.** `get_scan_feed()` (the RPC the app actually
+  uses) was correctly gated by `is_admin() or can_view_scanner()` — but
+  the underlying `scan_events` table's own SELECT policy was `qual:
+  true`, so that RPC-level gate meant nothing: any authenticated client
+  could just skip the RPC and query `scan_events` directly to read every
+  scan across every employee. Confirmed via a full grep that the client
+  codebase never actually does this (always goes through `get_scan_feed()`/
+  `scan_proximity_code()`), so tightening it was a pure improvement with
+  no legitimate access path broken — the table's SELECT policy now
+  matches the RPC's own gate exactly (`is_admin() OR can_view_scanner()`).
+- **Real, fixed, low-severity — two permission-helper functions
+  (`can_manage_scan_sounds()`, `can_view_settings()`) were callable by
+  `anon`** (unauthenticated), unlike every other helper in this table,
+  which are all `authenticated`-only. Functionally harmless as found —
+  both `coalesce(..., false)` on a null `auth.uid()` for anon — but
+  inconsistent with the rest of this schema's lockdown for no reason.
+  Revoked from `anon`/`public`, granted to `authenticated` only, matching
+  everything else here.
+- **Confirmed correct, no change needed:** every `SECURITY DEFINER`
+  function's actual body (`add_employee_remark`, `clear_employee_scan_log`,
+  `delete_employee_scan_log`, `delete_unassigned_proximity_cards`,
+  `resolve_employee_remark`, `revoke_proximity_card`, `scan_proximity_code`,
+  `get_scan_feed`, `get_scanner_offline_cache`, `get_scanner_offline_photos`,
+  and every `is_*`/`can_view_*` helper) checks authorization via
+  `auth.uid()`-derived role/scope lookups, never a client-supplied
+  parameter, and fails closed (`raise exception` or `coalesce(..., false)`)
+  on anything unexpected. `get_scan_feed()`'s `p_scanner_id` in
+  particular — flagged by the external review as worth checking — is
+  confirmed to be a display filter only, not part of authorization; the
+  actual gate is `is_admin() or can_view_scanner()`, independent of that
+  parameter. Every function schema-qualifies its references and runs with
+  `SET search_path TO 'public'` (a hardened, non-mutable value — not the
+  literal empty-string convention Supabase's own docs show, but
+  equivalent in effect here since `public` has no attacker-plantable
+  objects; `public`'s default `CREATE` grant to `PUBLIC` was revoked at
+  project setup, per Supabase's own default Postgres role setup).
+- **Not fixed here, genuinely out of scope for a schema/RLS audit — flagged
+  for the account owner to action directly in the Supabase Dashboard:**
+  leaked-password protection (HaveIBeenPwned checking) is off in Auth
+  settings. A Dashboard toggle, not something a SQL migration can reach.
+- **Employee photos are public on Google Drive by design**, not a bug —
+  `upload-employee-photo` explicitly sets "anyone with the link can
+  view". Once a photo's Drive URL is known, Supabase RLS no longer
+  governs access to it at all; that's a deliberate, pre-existing
+  tradeoff for hot-linking Drive as a free photo host, not something this
+  audit pass changed. Worth reconsidering only if employee photos are
+  ever treated as confidential — not assumed here.
 
 ## Offline scanning
 
@@ -297,27 +356,6 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
-
-**2026-09-19 — New RPC `delete_employee_scan_log()`, backing the Scan Log modal's admin-only delete button**
-- New function `delete_employee_scan_log(p_employee_id uuid, p_scan_id
-  uuid) returns void` — see RPC section above for the full contract.
-  Deletes the `scan_events` row and prunes the matching `employees.scan_logs`
-  entry (matched by that entry's `scan_id` field) in the same transaction.
-- Grants: revoked from `public` and `anon` explicitly, granted to
-  `authenticated` — same pattern as every other RPC in this file, and
-  double-checked via `has_function_privilege()` rather than assumed
-  correct by analogy, same as `get_scanner_offline_photos()`'s entry
-  below did.
-- Permission check inside the function itself is `is_admin()`, not
-  `is_admin_or_manager()` — deliberately stricter than
-  `add_employee_remark()`/`resolve_employee_remark()`, since this
-  deletes an actual audit record (a real scan event) rather than adding
-  an annotation to one. Matches the tier `deleteEmployee()`/card-delete
-  already use client-side.
-- Ran `get_advisors` (security) afterward — no new findings beyond the
-  pre-existing, already-accepted baseline (every `SECURITY DEFINER`
-  function here self-checks permissions internally, which the advisor
-  can't see and flags generically regardless).
 
 **2026-09-19 — `upload-employee-photo`: prefer a client-supplied `.webp` thumbnail over the server-side Drive fetch**
 - No schema change. `upload`'s request body gained optional
