@@ -138,11 +138,18 @@ paths there if another generated/vendored directory shows up.
 
 ## Limitations — read before treating a green check as "safe"
 
-- **Only what's in the PR diff is reviewed.** Schema, RLS-policy and Edge
-  Function changes applied directly to the Supabase project (e.g. via the
-  Supabase MCP `apply_migration` / `deploy_edge_function`) never pass through
-  this pipeline, and there is no `Supabase/migrations/` folder in the repo to
-  review either. For anything touching auth/RLS, that's the bigger gap.
+The AI review is not the test suite. `.github/workflows/test.yml` runs the
+repository's deterministic unit tests on every pull request and merge to
+`main`; require both **AI Code Review** and **Unit tests** in branch
+protection. The initial suite protects the permission matrix plus offline
+classification and replay ordering. Database/RLS behavior needs a separate
+local-Supabase integration suite once migration history is reconciled.
+
+- **Only what's in the PR diff is reviewed.** The committed schema baseline
+  is reviewable under `Supabase/migrations/`, but schema, RLS-policy and Edge
+  Function changes applied directly to the Supabase project (for example via
+  MCP) still bypass this pipeline. For anything touching auth/RLS, require a
+  reviewed migration and a database integration test before deployment.
 - **The PR is model input.** A diff or comment containing instructions aimed
   at the reviewer could try to talk it into approving. Findings are a strong
   signal, not a proof; the "sensitive-area" findings exist precisely so a

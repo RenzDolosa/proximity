@@ -3,6 +3,7 @@
 // relinkEmployeeToNewCode-style logic stay isolated to the Models layer —
 // UI code never has to know how permissions or session data are derived.
 import { supabase } from './supabaseClient.js';
+import * as access from './accessControl.js';
 
 const VALID_ROUTES = ['directory', 'proximity', 'scanner', 'users', 'settings', 'audit'];
 const hashRoute = location.hash.replace('#', '');
@@ -20,20 +21,19 @@ export const appState = {
 export const isStandaloneScanner = new URLSearchParams(location.search).get('scanner') === '1';
 
 export function isAdmin() {
-  return appState.profile?.role === 'admin';
+  return access.isAdmin(appState.profile);
 }
 export function isAdminOrManager() {
-  return appState.profile?.role === 'admin' || appState.profile?.role === 'manager';
+  return access.isAdminOrManager(appState.profile);
 }
 export function canViewEmployeeManager() {
-  return isAdmin() || appState.profile?.role === 'manager' ||
-    ['all', 'employee_manager'].includes(appState.profile?.access_scope);
+  return access.canViewEmployeeManager(appState.profile);
 }
 export function canViewScanner() {
-  return isAdmin() || ['all', 'scanner'].includes(appState.profile?.access_scope);
+  return access.canViewScanner(appState.profile);
 }
 export function isScannerOnlyAccount() {
-  return canViewScanner() && !canViewEmployeeManager() && !isAdmin();
+  return access.isScannerOnlyAccount(appState.profile);
 }
 
 // Settings reuses the same role + access_scope model as the module gates
@@ -47,23 +47,23 @@ export function isScannerOnlyAccount() {
 // always can; anyone else needs an access_scope that covers at least one
 // Settings-relevant module.
 export function canViewSettings() {
-  return isAdmin() || ['all', 'employee_manager', 'scanner'].includes(appState.profile?.access_scope);
+  return access.canViewSettings(appState.profile);
 }
 // The "Scan sounds" panel is Scanner-related — shown when scope covers
 // Scanner (or admin).
 export function settingsShowSounds() {
-  return isAdmin() || ['all', 'scanner'].includes(appState.profile?.access_scope);
+  return access.settingsShowSounds(appState.profile);
 }
 // The "Employee photos" panel is Employee Manager-related — shown when
 // scope covers Employee Manager (or admin).
 export function settingsShowPhotos() {
-  return isAdmin() || ['all', 'employee_manager'].includes(appState.profile?.access_scope);
+  return access.settingsShowPhotos(appState.profile);
 }
 // Upload/replace/remove scan sounds — admins and managers (with a scope
 // that shows the panel in the first place); Viewers are always read-only
 // here regardless of scope.
 export function canManageScanSounds() {
-  return isAdmin() || (appState.profile?.role === 'manager' && settingsShowSounds());
+  return access.canManageScanSounds(appState.profile);
 }
 
 export async function loadProfile() {

@@ -42,6 +42,7 @@
 // change log entry for the full story.
 import { supabase } from '../Core/supabaseClient.js';
 import { idbGetCache, idbSetCache, idbEnqueue, idbGetQueue, idbRemoveFromQueue, idbCountQueue, idbGetPhotoCache, idbSetPhotoCache } from '../Utils/idb.js';
+import { classifyCachedScan, flushQueuedScans } from '../Core/offlineScanning.js';
 
 // Past this age, the cached lookup is old enough that a card revoked (or
 // an employee deactivated/reactivated) since the last refresh could still
@@ -157,35 +158,7 @@ export const OfflineScanModel = {
   // Pure, synchronous — mirrors scan_proximity_code()'s branching exactly
   // against the cached snapshot.
   classify(proximityCode, rows, pendingBumps) {
-    const row = rows.find((r) => r.proximity_code === proximityCode);
-    if (!row) return { result: 'unmatched', employee: null, offline: true };
-    if (!row.card_active) return { result: 'inactive_card', employee: null, offline: true };
-    if (!row.employee_id) return { result: 'unassigned_card', employee: null, offline: true };
-    if (row.employee_status !== 'active') return { result: 'inactive_employee', employee: null, offline: true };
-    const bump = pendingBumps.get(row.employee_id) || 0;
-    const direction = (row.scan_count + bump) % 2 === 0 ? 'in' : 'out';
-    return {
-      result: 'matched',
-      direction,
-      offline: true,
-      // photo_thumb_b64 rides along on the row by the time classify() sees
-      // it — merged in by getCacheMeta() above from the separate photo
-      // cache, not from get_scanner_offline_cache() itself anymore (see
-      // this file's top-of-file comment) — rendered directly via
-      // offlineAvatarHTML() (Utils/format.js) with no network request at
-      // all, online or offline. See this file's top-of-file comment for
-      // what this replaced.
-      //
-      // remarks_log: get_scanner_offline_cache() already returns it (it
-      // rides along same as every other column), but this object used to
-      // leave it out — ScanResultCard.js's unresolved-remarks flag reads
-      // e.remarks_log generically and already worked correctly for a live
-      // scan (which gets remarks_log via to_jsonb() of the full row); it
-      // just had nothing to read for an offline-classified one, so a
-      // matched employee with an open remark silently showed no warning
-      // at all while the kiosk was offline.
-      employee: { full_name: row.full_name, employee_code: row.employee_code, department: row.department, position: row.position, photo_thumb_b64: row.photo_thumb_b64, remarks_log: row.remarks_log || [] },
-    };
+    return classifyCachedScan(proximityCode, rows, pendingBumps);
   },
 
   async enqueue(proximity_code, scanner_id) {
@@ -219,51 +192,20 @@ export const OfflineScanModel = {
   // point wastes calls rather than making progress. Whatever didn't sync
   // stays queued, retried whole on the next attempt, same as before.
   async flushQueue(onProgress) {
-    const entries = (await idbGetQueue().catch(() => []))
-      .sort((a, b) => new Date(a.scanned_at) - new Date(b.scanned_at));
-    const total = entries.length;
-    if (!total) return { synced: 0, remaining: 0 };
-
-    const groups = new Map();
-    for (const entry of entries) {
-      if (!groups.has(entry.proximity_code)) groups.set(entry.proximity_code, []);
-      groups.get(entry.proximity_code).push(entry);
-    }
-
-    let synced = 0;
-    let stopped = false;
-    const syncOne = async (entry) => {
-      if (stopped) return false;
-      const { error } = await supabase.rpc('scan_proximity_code', {
+    const entries = await idbGetQueue().catch(() => []);
+    return flushQueuedScans({
+      entries,
+      onProgress,
+      send: async (entry) => {
+        const { error } = await supabase.rpc('scan_proximity_code', {
         p_proximity_code: entry.proximity_code,
         p_scanner_id: entry.scanner_id,
         p_scanned_at: entry.scanned_at,
         p_offline: true,
-      });
-      if (error) { stopped = true; return false; }
-      await idbRemoveFromQueue(entry.id).catch(() => {});
-      synced++;
-      onProgress?.(synced, total);
-      return true;
-    };
-    const syncGroup = async (groupEntries) => {
-      for (const entry of groupEntries) {
-        if (!(await syncOne(entry))) return; // this employee's remaining entries stay queued too, in order — never skip ahead within a group
-      }
-    };
-
-    // A handful of employees' queues in flight at once, not the whole
-    // roster at once — same bounded-concurrency reasoning as the old
-    // photo prefetch: fast, without turning a big backlog into a burst
-    // of simultaneous requests.
-    const FLUSH_CONCURRENCY = 6;
-    const groupArrays = [...groups.values()];
-    let i = 0;
-    const worker = async () => {
-      while (i < groupArrays.length) await syncGroup(groupArrays[i++]);
-    };
-    await Promise.all(Array.from({ length: Math.min(FLUSH_CONCURRENCY, groupArrays.length) }, worker));
-
-    return { synced, remaining: total - synced };
+        });
+        return error;
+      },
+      remove: (id) => idbRemoveFromQueue(id).catch(() => {}),
+    });
   },
 };

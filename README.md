@@ -414,6 +414,19 @@ Activity.
 
 ## 4. Suggested next steps
 
+### Automated tests
+
+Run the fast unit suite with `npm test`. It has no package dependencies and
+covers the client-side permission matrix, offline scan classification,
+direction alternation, and replay ordering/failure handling. GitHub Actions
+runs the same suite for every pull request and merge to `main`.
+
+These tests do not replace database integration tests: RLS policies, SQL
+RPCs, triggers, and audit writes must be verified against a clean local
+Supabase database after the migration baseline and its history are
+reconciled. Require both **Unit tests** and **AI Code Review** in GitHub
+branch protection before relying on them as merge gates.
+
 - Wire real hardware (RFID/NFC/QR readers) to call the `proximity-scan` Edge
   Function on each read.
 - Pull the live schema and Edge Function source into `Supabase/` (see that
