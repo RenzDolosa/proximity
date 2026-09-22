@@ -1,0 +1,80 @@
+From 7a3d85467f546b2f3cbc07246673f84d8e049658 Mon Sep 17 00:00:00 2001
+From: Claude <claude@anthropic.com>
+Date: Tue, 22 Sep 2026 00:30:12 +0000
+Subject: [PATCH] Fix: signing out leaves a stale route hash in the URL bar
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+showAuth() never touched location.hash — only render() (shell-only)
+keeps it in sync with appState.route, and that path is never reached
+on sign-out. Clears the hash in showAuth() itself, preserving
+pathname/search (so ?scanner=1 survives). Also closes a subtler
+follow-on bug: state.js seeds appState.route from location.hash once,
+at module load, so a stale admin-only hash from a previous sign-out
+could otherwise route the next sign-in on a shared browser straight to
+that admin-only page.
+---
+ JS/Core/screens.js | 15 +++++++++++++++
+ README.md          | 19 +++++++++++++++++++
+ 2 files changed, 34 insertions(+)
+
+diff --git a/JS/Core/screens.js b/JS/Core/screens.js
+index 3b491ab..4f81279 100644
+--- a/JS/Core/screens.js
++++ b/JS/Core/screens.js
+@@ -9,6 +9,21 @@ export function showAuth() {
+   $('#auth-screen').classList.remove('hidden');
+   $('#shell').classList.add('hidden');
+   $('#standalone-scanner').classList.add('hidden');
++  // Signing out (or landing here with no session at all) previously left
++  // whatever shell route hash was last in the URL untouched — e.g.
++  // signing out from #users left the address bar reading .../#users while
++  // the login screen was what actually showed. router.js's render() is
++  // what normally keeps the hash in sync with appState.route, but it's
++  // only ever called for the shell, never from here. Clearing it here,
++  // once, fixes both the visible symptom and a subtler follow-on bug:
++  // state.js seeds appState.route from location.hash exactly once, at
++  // module load — so on a shared browser, a stale #users left over from
++  // a previous session's sign-out could silently land the NEXT sign-in
++  // (a different account, after a reload) straight on an admin-only page
++  // instead of the default landing route. location.pathname + search is
++  // kept as-is, notably including the standalone Scanner's own
++  // `?scanner=1` query param — only the hash fragment is dropped.
++  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+ }
+ 
+ export function showShell() {
+diff --git a/README.md b/README.md
+index 69684b7..af1e416 100644
+--- a/README.md
++++ b/README.md
+@@ -444,6 +444,25 @@ file can drift from the live state between sessions.*
+ 
+ ### Change log (most recent first)
+ 
++**2026-09-21 — Sign-out no longer leaves a stale route hash in the URL bar**
++- Reported: signing out landed correctly on the login screen, but the
++  address bar kept showing whatever shell route was last open (e.g.
++  `.../#directory`) instead of clearing. Root cause: `showAuth()`
++  (`JS/Core/screens.js`) never touched `location.hash` at all — only
++  `render()` (shell-only, called from `showShell()`) keeps the hash in
++  sync with `appState.route`, and that path is never reached on
++  sign-out.
++- Fixed in `showAuth()` itself: clears the hash via
++  `history.replaceState()` (keeping `location.pathname`/`search` as-is,
++  notably including the standalone Scanner's own `?scanner=1` param —
++  only the hash fragment is dropped).
++- Same fix also closes a subtler, previously-unnoticed follow-on bug:
++  `state.js` seeds `appState.route` from `location.hash` exactly once,
++  at module load. On a shared browser, a stale admin-only hash left over
++  from one account's sign-out could have silently routed the *next*
++  sign-in (a different account, after a reload) straight to that
++  admin-only page instead of the default landing route.
++
+ **2026-09-21 — Settings: "Query performance" panel (slow query logging + pg_stat_statements dashboard)**
+ - **Corrected a real gap left by an earlier, cut-off session**: it had
+   already run `ALTER ROLE postgres SET log_min_duration_statement = 200`
+-- 
+2.43.0
+

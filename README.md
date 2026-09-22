@@ -444,6 +444,25 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-21 — Sign-out no longer leaves a stale route hash in the URL bar**
+- Reported: signing out landed correctly on the login screen, but the
+  address bar kept showing whatever shell route was last open (e.g.
+  `.../#directory`) instead of clearing. Root cause: `showAuth()`
+  (`JS/Core/screens.js`) never touched `location.hash` at all — only
+  `render()` (shell-only, called from `showShell()`) keeps the hash in
+  sync with `appState.route`, and that path is never reached on
+  sign-out.
+- Fixed in `showAuth()` itself: clears the hash via
+  `history.replaceState()` (keeping `location.pathname`/`search` as-is,
+  notably including the standalone Scanner's own `?scanner=1` param —
+  only the hash fragment is dropped).
+- Same fix also closes a subtler, previously-unnoticed follow-on bug:
+  `state.js` seeds `appState.route` from `location.hash` exactly once,
+  at module load. On a shared browser, a stale admin-only hash left over
+  from one account's sign-out could have silently routed the *next*
+  sign-in (a different account, after a reload) straight to that
+  admin-only page instead of the default landing route.
+
 **2026-09-21 — Settings: "Query performance" panel (slow query logging + pg_stat_statements dashboard)**
 - **Corrected a real gap left by an earlier, cut-off session**: it had
   already run `ALTER ROLE postgres SET log_min_duration_statement = 200`

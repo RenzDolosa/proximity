@@ -9,6 +9,21 @@ export function showAuth() {
   $('#auth-screen').classList.remove('hidden');
   $('#shell').classList.add('hidden');
   $('#standalone-scanner').classList.add('hidden');
+  // Signing out (or landing here with no session at all) previously left
+  // whatever shell route hash was last in the URL untouched — e.g.
+  // signing out from #users left the address bar reading .../#users while
+  // the login screen was what actually showed. router.js's render() is
+  // what normally keeps the hash in sync with appState.route, but it's
+  // only ever called for the shell, never from here. Clearing it here,
+  // once, fixes both the visible symptom and a subtler follow-on bug:
+  // state.js seeds appState.route from location.hash exactly once, at
+  // module load — so on a shared browser, a stale #users left over from
+  // a previous session's sign-out could silently land the NEXT sign-in
+  // (a different account, after a reload) straight on an admin-only page
+  // instead of the default landing route. location.pathname + search is
+  // kept as-is, notably including the standalone Scanner's own
+  // `?scanner=1` query param — only the hash fragment is dropped.
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
 }
 
 export function showShell() {
