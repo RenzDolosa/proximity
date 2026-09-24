@@ -114,6 +114,20 @@ an admin swaps it out.
   log for why that's a deliberate scope boundary, not an oversight).
 - **`get_scan_feed()`** — `SECURITY DEFINER` function backing the Recent
   Activity feed (see `scan_feed` above).
+- **`get_all_scan_events()`** — added 2026-09-21, backs Employee Manager's
+  "Export all scan logs" button (`JS/Models/ScanEventsModel.js#listAll`).
+  Full `scan_events` history (matched and unmatched — every scan attempt,
+  same source table `get_scan_feed()` reads, just without its `p_limit`),
+  newest first, capped at 100,000 rows as a safety valve rather than a
+  real limit at current volume (~700 rows). Gated to
+  `is_admin_or_manager()` — deliberately its OWN function rather than
+  `get_scan_feed()` called with a huge `p_limit`: that function is gated
+  to `is_admin() or can_view_scanner()` (correct for backing the live
+  feed, which scanner-only kiosk accounts must read) and is named/
+  defaulted (`p_limit integer default 25`) for "recent", not "everything"
+  — a full-organization export is a materially more sensitive capability,
+  same tier as Import/Delete-all on the same page, so it gets its own
+  purpose-built, purpose-gated function instead.
 - **`add_employee_remark(...)`** — appends a `{remark, created_by,
   created_by_id, created_at}` entry to `employees.remarks_log`.
 - **`is_admin()` / `is_admin_or_manager()`** — role helper functions used
@@ -548,6 +562,17 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-24 — `get_all_scan_events()` added; `REVOKE ... FROM PUBLIC` doesn't cover `anon` on this project**
+- Full writeup in root `README.md`'s matching 2026-09-24 entry. Schema-
+  level short version: this project has a default privilege
+  (`ALTER DEFAULT PRIVILEGES ... GRANT EXECUTE ON FUNCTIONS TO anon,
+  authenticated`) applied automatically at `CREATE FUNCTION` time,
+  separate from the `PUBLIC` pseudo-role — so `REVOKE EXECUTE ON FUNCTION
+  ... FROM PUBLIC` does NOT remove `anon`'s access on its own; it needs
+  its own explicit `REVOKE ... FROM anon`. Caught immediately via
+  `has_function_privilege('anon', ..., 'EXECUTE')` while locking down the
+  new function below, before it ever shipped un-audited.
 
 **2026-09-21 — Slow query logging fixed to the right roles + `pg_stat_statements` RPCs**
 - **Fixed a real bug from an earlier, cut-off session**: it had set

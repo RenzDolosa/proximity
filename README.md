@@ -74,7 +74,13 @@ JS/
     ProximityCardsModel.js
     ProfilesModel.js              callAdminUsers() invokes the admin-users Edge Function
     ScanEventsModel.js            scan() calls scan_proximity_code() RPC;
-                                   recentFeed() reads get_scan_feed()
+                                   recentFeed() reads get_scan_feed();
+                                   listAll() reads get_all_scan_events()
+                                   (added 2026-09-24, admin/manager-only,
+                                   the FULL scan_events history — backs
+                                   Directory/DirectoryPage.js's "Export
+                                   all scan logs" button, distinct from
+                                   recentFeed()'s "recent" scope)
                                    (EmployeesModel.uploadPhoto() below uses raw XHR, not
                                    supabase.functions.invoke(), specifically for upload progress)
     ScanSoundsModel.js             wraps the public `scan-sounds` Storage bucket
@@ -130,7 +136,12 @@ JS/
                                        shimmer while the function talks to Drive;
                                        toolbar Export .xlsx button, added
                                        2026-09-19, exports the current
-                                       search/filter view via Utils/xlsxExport.js)
+                                       search/filter view via Utils/xlsxExport.js;
+                                       toolbar "Export all scan logs" button,
+                                       added 2026-09-24, admin/manager-only —
+                                       the full org-wide scan_events history
+                                       via ScanEventsModel.listAll(), not any
+                                       one employee's scan_logs)
     Proximity/ProximityPage.js       (Proximity Cards; toolbar Export .xlsx
                                        button, added 2026-09-19, same pattern
                                        as Employee Manager's)
@@ -456,6 +467,35 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-24 — Employee Manager: "Export all scan logs" + a real anon-grant gap caught mid-build**
+- New toolbar button (admin/manager only, same gate as Import/Delete-all)
+  exports the FULL `scan_events` history — every scan attempt, matched or
+  not, across every employee — as one `.xlsx`, via a new `get_all_scan_events()`
+  RPC. Deliberately not the existing per-employee "Export" button inside
+  the Scan log modal (`ScanLogModal.js`, unchanged — still one employee at
+  a time from their already-loaded `scan_logs`) and deliberately not
+  `get_scan_feed()` with a huge `p_limit` either — see
+  `Supabase/README.md`'s RPC section for why a full-org export earned its
+  own purpose-built function instead of overloading the live-feed one.
+- **Caught while building it, not after**: the new function's `REVOKE
+  EXECUTE ... FROM PUBLIC` alone did NOT actually revoke `anon`'s access —
+  verified with `has_function_privilege()` right after applying the
+  migration, and it came back `true`. This project has a schema-level
+  default privilege (`ALTER DEFAULT PRIVILEGES ... GRANT EXECUTE ON
+  FUNCTIONS TO anon, authenticated`, standard on every new Supabase
+  project) that applies automatically at `CREATE FUNCTION` time,
+  independent of the `PUBLIC` pseudo-role — so revoking from `PUBLIC`
+  clears the ambient "everyone" grant but NOT that separately-applied
+  per-role one. Fixed with an explicit `REVOKE EXECUTE ... FROM anon`.
+  Re-verified every previous session's "locked down" claim
+  (`log_audit_event`, the 3 `trg_audit_*` functions) actually included
+  `anon` explicitly too, not just `public`/`authenticated` — they did,
+  confirmed via the same `has_function_privilege()` check — so this
+  appears to be specific to how this one migration was originally
+  written, not a systemic hole in the earlier fixes. Worth remembering
+  for any future `REVOKE`, though: `FROM PUBLIC` is not equivalent to
+  `FROM public, anon, authenticated` on this project.
 
 **2026-09-21 — Sign-out no longer leaves a stale route hash in the URL bar**
 - Reported: signing out landed correctly on the login screen, but the

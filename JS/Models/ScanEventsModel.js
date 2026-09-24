@@ -21,6 +21,18 @@ export const ScanEventsModel = {
     return supabase.rpc('scan_proximity_code', { p_proximity_code: proximity_code, p_scanner_id: scanner_id });
   },
 
+  // Backs Employee Manager's "Export all scan logs" button — the full
+  // scan_events history (matched and unmatched), not any one employee's
+  // scan_logs. Deliberately a separate RPC from recentFeed() above rather
+  // than that one with a huge p_limit — get_all_scan_events() has its own
+  // is_admin_or_manager() gate (a full-org export is a materially more
+  // sensitive capability than the live "recent activity" feed
+  // recentFeed() backs, which scanner-only kiosk accounts also need to
+  // read) — see Supabase/README.md's RPC section.
+  async listAll() {
+    return supabase.rpc('get_all_scan_events');
+  },
+
   // Same matching logic and permission gate as scan(), but never inserts
   // into scan_events — no Recent Activity entry, no scan_logs on the
   // employee, no change to Employee Manager's "Scans" count.
