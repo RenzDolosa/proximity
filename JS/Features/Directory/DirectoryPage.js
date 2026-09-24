@@ -33,6 +33,11 @@ export async function renderDirectory() {
       <div style="display:flex;gap:8px;">
         <button class="ghost" id="dir-export">Export</button>
         ${isAdminOrManager() ? `
+          <div class="filter-row" style="flex:0 0 auto;">
+            <input type="date" id="dir-scan-from" title="From date (optional)" />
+            <span class="emp-meta" style="flex:0 0 auto;">to</span>
+            <input type="date" id="dir-scan-to" title="To date (optional)" />
+          </div>
           <button class="ghost" id="dir-export-scans">Export all scan logs</button>
           ${isAdmin() ? '<button class="ghost danger" id="dir-delete-all">Delete all</button>' : ''}
           <button class="ghost" id="dir-import">Import</button>
@@ -102,8 +107,30 @@ export async function renderDirectory() {
   }
   if (isAdminOrManager()) {
     $('#dir-add').addEventListener('click', () => openEmployeeModal(null, renderDirectory));
+    // Same mutual-clamp behavior as the per-employee filter in
+    // ScanLogModal.js — picking a "from" after the current "to" (or vice
+    // versa) pulls the other bound along instead of silently producing an
+    // inverted, always-empty range.
+    $('#dir-scan-from').addEventListener('change', () => {
+      const toEl = $('#dir-scan-to');
+      if (toEl.value && $('#dir-scan-from').value > toEl.value) toEl.value = $('#dir-scan-from').value;
+    });
+    $('#dir-scan-to').addEventListener('change', () => {
+      const fromEl = $('#dir-scan-from');
+      if (fromEl.value && fromEl.value > $('#dir-scan-to').value) fromEl.value = $('#dir-scan-to').value;
+    });
     $('#dir-export-scans').addEventListener('click', async (e) => {
       const btn = e.currentTarget;
+      // Both optional — an empty side means "no lower/upper bound", not
+      // "today". Widened to the full local day (00:00:00.000 through
+      // 23:59:59.999) so the "to" day is inclusive; a bare date-only ISO
+      // string would otherwise mean midnight UTC and silently exclude
+      // that whole day for anyone not on UTC.
+      const fromVal = $('#dir-scan-from').value; // 'YYYY-MM-DD' or ''
+      const toVal = $('#dir-scan-to').value;
+      const from = fromVal ? new Date(`${fromVal}T00:00:00`).toISOString() : null;
+      const to = toVal ? new Date(`${toVal}T23:59:59.999`).toISOString() : null;
+
       // Round-trips to the server first (unlike the plain "Export" button
       // above, which exports whatever's already loaded client-side) — a
       // brief busy state here beats the button looking unresponsive for
@@ -111,13 +138,13 @@ export async function renderDirectory() {
       btn.disabled = true;
       const prevLabel = btn.textContent;
       btn.textContent = 'Exporting…';
-      const { data, error } = await ScanEventsModel.listAll();
+      const { data, error } = await ScanEventsModel.listAll({ from, to });
       btn.disabled = false;
       btn.textContent = prevLabel;
       if (error) { toast(error.message, 'error'); return; }
-      if (!data.length) { toast('No scan history to export yet.', 'error'); return; }
+      if (!data.length) { toast('No scan history to export for that range.', 'error'); return; }
       exportXlsx({
-        filename: `scan-logs-all-${todayStamp()}.xlsx`,
+        filename: `scan-logs-${fromVal || 'all'}_${toVal || 'all'}-${todayStamp()}.xlsx`,
         sheetName: 'Scan logs',
         columns: [
           { key: 'scanned_at', label: 'Scanned at' },

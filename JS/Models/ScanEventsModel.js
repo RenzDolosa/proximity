@@ -29,8 +29,13 @@ export const ScanEventsModel = {
   // sensitive capability than the live "recent activity" feed
   // recentFeed() backs, which scanner-only kiosk accounts also need to
   // read) — see Supabase/README.md's RPC section.
-  async listAll() {
-    return supabase.rpc('get_all_scan_events');
+  // from/to are optional ISO timestamps (either end omittable) that map
+  // straight onto get_all_scan_events()'s p_from/p_to — the RPC does the
+  // date filtering server-side rather than pulling the full history down
+  // and filtering client-side, so a narrow range on a large scan_events
+  // table doesn't round-trip rows the caller is just going to discard.
+  async listAll({ from = null, to = null } = {}) {
+    return supabase.rpc('get_all_scan_events', { p_from: from, p_to: to });
   },
 
   // Same matching logic and permission gate as scan(), but never inserts

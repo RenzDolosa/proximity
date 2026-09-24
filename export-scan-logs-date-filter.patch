@@ -1,0 +1,84 @@
+diff --git a/JS/Features/Directory/DirectoryPage.js b/JS/Features/Directory/DirectoryPage.js
+index cb0bcc8..672333d 100644
+--- a/JS/Features/Directory/DirectoryPage.js
++++ b/JS/Features/Directory/DirectoryPage.js
+@@ -33,6 +33,11 @@ export async function renderDirectory() {
+       <div style="display:flex;gap:8px;">
+         <button class="ghost" id="dir-export">Export</button>
+         ${isAdminOrManager() ? `
++          <div class="filter-row" style="flex:0 0 auto;">
++            <input type="date" id="dir-scan-from" title="From date (optional)" />
++            <span class="emp-meta" style="flex:0 0 auto;">to</span>
++            <input type="date" id="dir-scan-to" title="To date (optional)" />
++          </div>
+           <button class="ghost" id="dir-export-scans">Export all scan logs</button>
+           ${isAdmin() ? '<button class="ghost danger" id="dir-delete-all">Delete all</button>' : ''}
+           <button class="ghost" id="dir-import">Import</button>
+@@ -102,8 +107,30 @@ export async function renderDirectory() {
+   }
+   if (isAdminOrManager()) {
+     $('#dir-add').addEventListener('click', () => openEmployeeModal(null, renderDirectory));
++    // Same mutual-clamp behavior as the per-employee filter in
++    // ScanLogModal.js — picking a "from" after the current "to" (or vice
++    // versa) pulls the other bound along instead of silently producing an
++    // inverted, always-empty range.
++    $('#dir-scan-from').addEventListener('change', () => {
++      const toEl = $('#dir-scan-to');
++      if (toEl.value && $('#dir-scan-from').value > toEl.value) toEl.value = $('#dir-scan-from').value;
++    });
++    $('#dir-scan-to').addEventListener('change', () => {
++      const fromEl = $('#dir-scan-from');
++      if (fromEl.value && fromEl.value > $('#dir-scan-to').value) fromEl.value = $('#dir-scan-to').value;
++    });
+     $('#dir-export-scans').addEventListener('click', async (e) => {
+       const btn = e.currentTarget;
++      // Both optional — an empty side means "no lower/upper bound", not
++      // "today". Widened to the full local day (00:00:00.000 through
++      // 23:59:59.999) so the "to" day is inclusive; a bare date-only ISO
++      // string would otherwise mean midnight UTC and silently exclude
++      // that whole day for anyone not on UTC.
++      const fromVal = $('#dir-scan-from').value; // 'YYYY-MM-DD' or ''
++      const toVal = $('#dir-scan-to').value;
++      const from = fromVal ? new Date(`${fromVal}T00:00:00`).toISOString() : null;
++      const to = toVal ? new Date(`${toVal}T23:59:59.999`).toISOString() : null;
++
+       // Round-trips to the server first (unlike the plain "Export" button
+       // above, which exports whatever's already loaded client-side) — a
+       // brief busy state here beats the button looking unresponsive for
+@@ -111,13 +138,13 @@ export async function renderDirectory() {
+       btn.disabled = true;
+       const prevLabel = btn.textContent;
+       btn.textContent = 'Exporting…';
+-      const { data, error } = await ScanEventsModel.listAll();
++      const { data, error } = await ScanEventsModel.listAll({ from, to });
+       btn.disabled = false;
+       btn.textContent = prevLabel;
+       if (error) { toast(error.message, 'error'); return; }
+-      if (!data.length) { toast('No scan history to export yet.', 'error'); return; }
++      if (!data.length) { toast('No scan history to export for that range.', 'error'); return; }
+       exportXlsx({
+-        filename: `scan-logs-all-${todayStamp()}.xlsx`,
++        filename: `scan-logs-${fromVal || 'all'}_${toVal || 'all'}-${todayStamp()}.xlsx`,
+         sheetName: 'Scan logs',
+         columns: [
+           { key: 'scanned_at', label: 'Scanned at' },
+diff --git a/JS/Models/ScanEventsModel.js b/JS/Models/ScanEventsModel.js
+index 4fa626f..5cfd09e 100644
+--- a/JS/Models/ScanEventsModel.js
++++ b/JS/Models/ScanEventsModel.js
+@@ -29,8 +29,13 @@ export const ScanEventsModel = {
+   // sensitive capability than the live "recent activity" feed
+   // recentFeed() backs, which scanner-only kiosk accounts also need to
+   // read) — see Supabase/README.md's RPC section.
+-  async listAll() {
+-    return supabase.rpc('get_all_scan_events');
++  // from/to are optional ISO timestamps (either end omittable) that map
++  // straight onto get_all_scan_events()'s p_from/p_to — the RPC does the
++  // date filtering server-side rather than pulling the full history down
++  // and filtering client-side, so a narrow range on a large scan_events
++  // table doesn't round-trip rows the caller is just going to discard.
++  async listAll({ from = null, to = null } = {}) {
++    return supabase.rpc('get_all_scan_events', { p_from: from, p_to: to });
+   },
+ 
+   // Same matching logic and permission gate as scan(), but never inserts
