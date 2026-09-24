@@ -1,0 +1,37 @@
+# What Cloudflare Workers actually deploys as static assets — everything
+# else in the repo root is excluded here, gitignore-style syntax. This
+# file is what fixes the "Asset too large" build failure: without it,
+# Wrangler bundles the ENTIRE repo root (assets.directory in
+# wrangler.jsonc is "." — has to be, see that file's comment for why),
+# which once `npm install` runs during Cloudflare's build includes
+# node_modules — and wrangler's own dependency, workerd, ships a 127MB
+# binary, well past the Workers 25MB-per-file limit.
+#
+# Runtime-required, deliberately NOT excluded below: index.html (the root
+# redirect stub), Public/, JS/, CSS/, sw.js (the root-scoped Service
+# Worker — see JS/main.js's registration comment for why it has to live
+# at the root and not inside Public/).
+
+# The actual blocker — a Cloudflare/npm build artifact, never committed,
+# but present in Cloudflare's own build sandbox by the time Wrangler runs.
+node_modules
+
+# Everything below is real, committed, and fine to keep in git — just
+# none of it is something a browser ever fetches, so none of it belongs
+# on the public CDN either.
+.git
+.github
+.vscode
+Supabase
+db-tests
+test
+package.json
+package-lock.json
+README.md
+.gitignore
+.gitattributes
+gen_sounds.py
+*.patch
+proximity-scanner-remarks-instructions.md
+wrangler.jsonc
+.assetsignore

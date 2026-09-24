@@ -468,6 +468,31 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-24 — Cloudflare Workers deploy: "Asset too large" build failure, fixed**
+- No `wrangler.jsonc` had ever been committed, so Cloudflare's build
+  re-ran its zero-config setup wizard on every deploy attempt, defaulting
+  `assets.directory` to the entire repo root (`.`). Once Cloudflare's
+  build environment runs `npm install` (triggered by `package.json`
+  existing at all, for the test suite — see the "Automated tests" entry
+  below), that root now includes `node_modules` — and wrangler's own
+  dependency `workerd` ships a 127MB binary, well past the Workers 25MB
+  per-file limit. Build failed with "Asset too large" on
+  `node_modules/workerd/bin/workerd`.
+- Fixed with two new files, not by narrowing `assets.directory`:
+  `Public/index.html` loads `JS/`/`CSS/` as *siblings* (`../JS/main.js`),
+  not children, so the deploy root genuinely has to stay the repo root
+  for those relative paths to resolve — narrowing it to `Public/` alone
+  would break the app. `wrangler.jsonc` now commits that root explicitly
+  (stopping the wizard from re-running and re-guessing), and `.assetsignore`
+  (gitignore-style syntax, read from the same directory as
+  `assets.directory`) excludes everything that isn't actually part of the
+  served app: `node_modules` (the actual blocker), plus `.git`, `.github`,
+  `Supabase/`, `db-tests/`, `test/`, and other real-but-non-runtime files
+  that have no reason being served from the public CDN either.
+  `package.json` gained the `wrangler` devDependency and `deploy`/`preview`
+  scripts Cloudflare's wizard wanted to add, committed properly instead
+  of injected fresh on every build.
+
 **2026-09-24 — Employee Manager: "Export all scan logs" + a real anon-grant gap caught mid-build**
 - New toolbar button (admin/manager only, same gate as Import/Delete-all)
   exports the FULL `scan_events` history — every scan attempt, matched or

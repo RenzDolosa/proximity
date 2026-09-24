@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "proximity",
+  "compatibility_date": "2026-09-21",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    // Deliberately the repo root, not "Public" — Public/index.html loads
+    // JS/ and CSS/ as *siblings* (../JS/main.js, ../CSS/main.css), not
+    // children, so the deploy root has to encompass all of them together
+    // for those relative paths to resolve. See .assetsignore (in this
+    // same directory) for what's excluded from that root instead — that
+    // file, not narrowing this path, is what keeps node_modules and every
+    // other non-runtime folder out of the deployed bundle.
+    "directory": "."
+  }
+}
