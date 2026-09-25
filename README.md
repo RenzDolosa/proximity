@@ -468,6 +468,27 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-24 — Employee Manager: edit-save no longer resets scroll position, page number, or the search box**
+- Editing an employee and saving used `renderDirectory` — the full page
+  render — as its post-save callback. That function rebuilds the ENTIRE
+  toolbar via `content.innerHTML`, including a fresh, empty `#dir-search`
+  input (losing whatever was typed), and explicitly resets `page = 1`.
+  Destroying and recreating `.table-scroll` (the actual scrolling element)
+  as a new DOM node also resets its scroll offset to 0, same as any full
+  innerHTML replacement of a scrolled container would. Net effect: fix a
+  typo on page 3, scrolled halfway down, and saving bounced you to the
+  top of page 1 with your search cleared.
+- Fixed with a new `refreshDirectoryInPlace()`, used only for the
+  edit-save callback: refetches the roster, then repaints via
+  `paintDirectoryTable()` alone — the same function a pagination click or
+  typing in the search box already goes through today, neither of which
+  ever had this problem, since it only replaces `#dir-table-wrap`'s own
+  innerHTML. `.table-scroll` itself is never touched, so the browser
+  preserves its scroll offset automatically — no manual save/restore
+  needed. Add employee / Import / Delete all still use the full
+  `renderDirectory()` — landing back on a clean page 1 is reasonable for
+  those, where the fix would be disruptive for a routine single-field edit.
+
 **2026-09-24 — Cloudflare Workers deploy: "Asset too large" build failure, fixed**
 - No `wrangler.jsonc` had ever been committed, so Cloudflare's build
   re-ran its zero-config setup wizard on every deploy attempt, defaulting

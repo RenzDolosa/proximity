@@ -229,6 +229,28 @@ function subscribeToScans() {
     .subscribe();
 }
 
+// Refetches the roster and repaints, WITHOUT the full toolbar rebuild
+// renderDirectory() does. That distinction is what preserves page number,
+// the search box's current text, and scroll position across an edit-save
+// — paintDirectoryTable() alone only replaces #dir-table-wrap's own
+// innerHTML (already what a pagination click or typing in the search box
+// does today, neither of which bounces anyone back to page 1 or the top
+// of the screen). renderDirectory()'s full content.innerHTML rebuild is
+// what was actually losing all three: it recreates #dir-search from
+// scratch (empty, no value attribute — losing whatever was typed), and
+// explicitly sets `page = 1` outright. Used only for the edit-save path
+// below — Add/Import/Delete all still use the full renderDirectory(),
+// where landing back on page 1 with a clean toolbar is reasonable (a
+// newly added employee, or a bulk change, is a big enough event that
+// starting fresh isn't disruptive the way it is for "I fixed a typo in
+// someone's department and got kicked back to page 1" would be).
+async function refreshDirectoryInPlace() {
+  const { data, error } = await EmployeesModel.listDirectory();
+  if (error) { toast(error.message, 'error'); return; }
+  appState.employeesCache = data || [];
+  paintDirectoryTable($('#dir-search')?.value || '');
+}
+
 function paintDirectoryTable(filter) {
   const wrap = $('#dir-table-wrap');
   const f = filter.trim().toLowerCase();
@@ -290,7 +312,7 @@ function paintDirectoryTable(filter) {
   });
   $$('button[data-edit]', wrap).forEach((b) => b.addEventListener('click', () => {
     const emp = appState.employeesCache.find((e) => e.id === b.dataset.edit);
-    openEmployeeModal(emp, renderDirectory);
+    openEmployeeModal(emp, refreshDirectoryInPlace);
   }));
   wireCopyableCodes(wrap, 'Copied proximity code');
   $$('button[data-log]', wrap).forEach((b) => b.addEventListener('click', () => openScanLogModal(b.dataset.log)));
