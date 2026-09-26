@@ -468,6 +468,26 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-25 — Employee Manager: "Export all scan logs" date range moved into its own modal**
+- The two date inputs for scoping a scan-log export used to sit
+  permanently in the toolbar next to the button itself — taking up space
+  on every visit for what's an occasional action, and doing nothing for
+  the common case (export everything, no range) beyond sitting there
+  empty. New `Components/ExportScanLogsModal.js` follows the same
+  "modal owns the whole collect-input-then-act flow" pattern as
+  `RevokeCardModal.js`: clicking "Export all scan logs" now opens a small
+  modal with the From/To fields (same mutual-clamp behavior as before —
+  picking one bound past the other pulls it along rather than producing a
+  silently-inverted, always-empty range), and the actual fetch + `.xlsx`
+  export happens from inside it.
+- `DirectoryPage.js` lost the inline `#dir-scan-from`/`#dir-scan-to`
+  inputs and their standalone change/click handlers entirely — the
+  toolbar now just opens the modal. `ScanEventsModel` and `fmtTime` were
+  only ever used by that removed code path and are no longer imported
+  here; `exportXlsx`/`todayStamp` stay, since the plain "Export" button
+  (current page's visible rows, not the full scan history) still uses
+  them directly.
+
 **2026-09-24 — Employee Manager: edit-save no longer resets scroll position, page number, or the search box**
 - Editing an employee and saving used `renderDirectory` — the full page
   render — as its post-save callback. That function rebuilds the ENTIRE

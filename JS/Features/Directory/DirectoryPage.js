@@ -1,5 +1,5 @@
 import { $, $$ } from '../../Utils/dom.js';
-import { esc, initials, chunkArray, fmtTime } from '../../Utils/format.js';
+import { esc, initials, chunkArray } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
 import { wireCopyableCodes } from '../../Utils/clipboard.js';
 import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
@@ -7,11 +7,11 @@ import { appState, isAdmin, isAdminOrManager } from '../../Core/state.js';
 import { supabase } from '../../Core/supabaseClient.js';
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { ProximityCardsModel } from '../../Models/ProximityCardsModel.js';
-import { ScanEventsModel } from '../../Models/ScanEventsModel.js';
 import { openEmployeeModal } from '../../Components/EmployeeModal.js';
 import { openScanLogModal } from '../../Components/ScanLogModal.js';
 import { openRemarksModal } from '../../Components/RemarksModal.js';
 import { openImportModal } from '../../Components/ImportModal.js';
+import { openExportScanLogsModal } from '../../Components/ExportScanLogsModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
 import { openConfirmModal, openConfirmProgressModal } from '../../Components/ConfirmModal.js';
 
@@ -33,11 +33,6 @@ export async function renderDirectory() {
       <div style="display:flex;gap:8px;">
         <button class="ghost" id="dir-export">Export</button>
         ${isAdminOrManager() ? `
-          <div class="filter-row" style="flex:0 0 auto;">
-            <input type="date" id="dir-scan-from" title="From date (optional)" />
-            <span class="emp-meta" style="flex:0 0 auto;">to</span>
-            <input type="date" id="dir-scan-to" title="To date (optional)" />
-          </div>
           <button class="ghost" id="dir-export-scans">Export all scan logs</button>
           ${isAdmin() ? '<button class="ghost danger" id="dir-delete-all">Delete all</button>' : ''}
           <button class="ghost" id="dir-import">Import</button>
@@ -107,69 +102,7 @@ export async function renderDirectory() {
   }
   if (isAdminOrManager()) {
     $('#dir-add').addEventListener('click', () => openEmployeeModal(null, renderDirectory));
-    // Same mutual-clamp behavior as the per-employee filter in
-    // ScanLogModal.js — picking a "from" after the current "to" (or vice
-    // versa) pulls the other bound along instead of silently producing an
-    // inverted, always-empty range.
-    $('#dir-scan-from').addEventListener('change', () => {
-      const toEl = $('#dir-scan-to');
-      if (toEl.value && $('#dir-scan-from').value > toEl.value) toEl.value = $('#dir-scan-from').value;
-    });
-    $('#dir-scan-to').addEventListener('change', () => {
-      const fromEl = $('#dir-scan-from');
-      if (fromEl.value && fromEl.value > $('#dir-scan-to').value) fromEl.value = $('#dir-scan-to').value;
-    });
-    $('#dir-export-scans').addEventListener('click', async (e) => {
-      const btn = e.currentTarget;
-      // Both optional — an empty side means "no lower/upper bound", not
-      // "today". Widened to the full local day (00:00:00.000 through
-      // 23:59:59.999) so the "to" day is inclusive; a bare date-only ISO
-      // string would otherwise mean midnight UTC and silently exclude
-      // that whole day for anyone not on UTC.
-      const fromVal = $('#dir-scan-from').value; // 'YYYY-MM-DD' or ''
-      const toVal = $('#dir-scan-to').value;
-      const from = fromVal ? new Date(`${fromVal}T00:00:00`).toISOString() : null;
-      const to = toVal ? new Date(`${toVal}T23:59:59.999`).toISOString() : null;
-
-      // Round-trips to the server first (unlike the plain "Export" button
-      // above, which exports whatever's already loaded client-side) — a
-      // brief busy state here beats the button looking unresponsive for
-      // however long get_all_scan_events() takes to come back.
-      btn.disabled = true;
-      const prevLabel = btn.textContent;
-      btn.textContent = 'Exporting…';
-      const { data, error } = await ScanEventsModel.listAll({ from, to });
-      btn.disabled = false;
-      btn.textContent = prevLabel;
-      if (error) { toast(error.message, 'error'); return; }
-      if (!data.length) { toast('No scan history to export for that range.', 'error'); return; }
-      exportXlsx({
-        filename: `scan-logs-${fromVal || 'all'}_${toVal || 'all'}-${todayStamp()}.xlsx`,
-        sheetName: 'Scan logs',
-        columns: [
-          { key: 'scanned_at', label: 'Scanned at' },
-          { key: 'employee_name', label: 'Employee' },
-          { key: 'department', label: 'Department' },
-          { key: 'proximity_code', label: 'Proximity code', text: true },
-          { key: 'scanner_id', label: 'Scanner' },
-          { key: 'direction', label: 'Direction' },
-          { key: 'result', label: 'Result' },
-        ],
-        rows: data.map((s) => ({
-          scanned_at: fmtTime(s.scanned_at),
-          // A null employee_name means an unmatched/unassigned-card scan
-          // attempt (see scan_events.result) — genuinely no employee to
-          // show, not a data-loading gap, so this is a plain em dash
-          // rather than something that reads as an error.
-          employee_name: s.employee_name || '—',
-          department: s.department || '',
-          proximity_code: s.proximity_code || '',
-          scanner_id: s.scanner_id || '—',
-          direction: (s.direction || '—').toUpperCase(),
-          result: s.result || '',
-        })),
-      });
-    });
+    $('#dir-export-scans').addEventListener('click', () => openExportScanLogsModal());
     $('#dir-import').addEventListener('click', () => openImportModal({
       title: 'Import employees',
       description: 'One row per employee. proximity_code is matched against an existing unassigned card, or issued as a brand-new card if it doesn\'t exist yet.',
