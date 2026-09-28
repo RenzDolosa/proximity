@@ -30,28 +30,14 @@ export async function renderAnalytics() {
   if (!canViewScanner()) { content.innerHTML = `<div class="empty-state">You don't have access to this page.</div>`; return; }
 
   content.innerHTML = `
-    <div class="toolbar">
-      <div class="sub-nav" id="analytics-range" role="group" aria-label="Date range">
-        ${RANGE_OPTIONS.map((d) => `<button type="button" data-days="${d}" class="${d === selectedDays ? 'active' : ''}">${d}d</button>`).join('')}
-      </div>
-    </div>
     <div id="analytics-body">${loaded ? '' : 'Loading…'}</div>
   `;
-
-  $$('button[data-days]', $('#analytics-range')).forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const days = parseInt(btn.dataset.days, 10);
-      if (days === selectedDays) return;
-      selectedDays = days;
-      $$('button[data-days]', $('#analytics-range')).forEach((b) => b.classList.toggle('active', b === btn));
-      loadStats();
-    });
-  });
 
   // One delegated listener on the body node rather than per-card listeners:
   // paintBody() replaces every card on each fetch, so per-card wiring would
   // have to be redone every time (and would leak nothing, but be easy to miss).
   const bodyEl = $('#analytics-body');
+  bodyEl.addEventListener('click', onRangeClick);
   bodyEl.addEventListener('click', onDrillActivate);
   bodyEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') onDrillActivate(e);
@@ -63,6 +49,28 @@ export async function renderAnalytics() {
   // current selection runs underneath.
   if (loaded) paintBody();
   await loadStats();
+}
+
+// The range control lives inside the Daily trend panel, which paintBody()
+// rebuilds on every fetch, so it's wired by delegation on #analytics-body
+// (see renderAnalytics) rather than per-button. It still drives the whole
+// page — stat cards, chart and by-scanner table all use selectedDays.
+function rangeButtons() {
+  return `
+    <div class="sub-nav" role="group" aria-label="Date range">
+      ${RANGE_OPTIONS.map((d) => `<button type="button" data-days="${d}" class="${d === selectedDays ? 'active' : ''}">${d}d</button>`).join('')}
+    </div>`;
+}
+
+function onRangeClick(e) {
+  const btn = e.target.closest?.('button[data-days]');
+  if (!btn) return;
+  const days = parseInt(btn.dataset.days, 10);
+  if (days === selectedDays) return;
+  selectedDays = days;
+  // Highlight immediately; the numbers follow once the fetch resolves.
+  $$('button[data-days]', $('#analytics-body')).forEach((b) => b.classList.toggle('active', b === btn));
+  loadStats();
 }
 
 async function loadStats() {
@@ -101,7 +109,10 @@ function statCard(tone, value, label, filter) {
 function paintBody() {
   const body = $('#analytics-body');
   if (!body) return; // navigated away before the fetch resolved
-  if (statsError) { body.innerHTML = `<div class="empty-state">${esc(statsError)}</div>`; return; }
+  // Error state still offers the range buttons: they're no longer in the
+  // page shell, so without them a failed range (say 90d) would strand the
+  // user with no way to pick another one short of leaving the page.
+  if (statsError) { body.innerHTML = `<div class="empty-state">${esc(statsError)}</div>${rangeButtons()}`; return; }
   if (!stats) { body.innerHTML = 'Loading…'; return; }
 
   const s = stats.summary || {};
@@ -120,8 +131,13 @@ function paintBody() {
     </div>
 
     <div class="panel" style="padding:20px;margin-bottom:16px;">
-      <h3 style="margin:0 0 4px;">Daily trend</h3>
-      <p class="sub" style="margin:0 0 14px;">Total scans per day over the last ${s.days || selectedDays} days; the filled portion of each bar is the matched share. Hover a bar for exact counts.</p>
+      <div class="panel-head" style="margin-bottom:14px;">
+        <div>
+          <h3 style="margin:0 0 4px;">Daily trend</h3>
+          <p class="sub" style="margin:0;">Total scans per day over the last ${s.days || selectedDays} days; the filled portion of each bar is the matched share. Hover a bar for exact counts.</p>
+        </div>
+        ${rangeButtons()}
+      </div>
       ${renderTrendChart(stats.daily || [])}
     </div>
 

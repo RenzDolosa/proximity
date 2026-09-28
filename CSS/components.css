@@ -142,6 +142,11 @@ td.row-actions{display:table-cell;}
 .sub-nav{display:flex;gap:6px;margin-bottom:16px;}
 .sub-nav button{padding:6px 12px;font-size:12.5px;}
 .sub-nav button.active{border-color:var(--accent);color:var(--accent);}
+/* Panel title on the left, a control group (e.g. Scanner Analytics' 7d/14d/
+   30d/90d range) on the right; wraps under the title on narrow screens.
+   The control's own bottom margin is dropped so it aligns with the title. */
+.panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.panel-head .sub-nav{margin-bottom:0;flex-shrink:0;}
 
 .toast{
   position:fixed;bottom:20px;right:20px;background:var(--surface-raised);border:1px solid var(--border);

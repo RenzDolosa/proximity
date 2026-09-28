@@ -88,7 +88,7 @@ export async function renderSettings() {
     `}
 
     ${!isAdmin() ? '' : `
-    <div class="panel" style="padding:20px;max-width:920px;margin-top:16px;">
+    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
         <h3 style="margin:0 0 4px;">Query performance</h3>
         <div style="display:flex;align-items:center;gap:8px;">

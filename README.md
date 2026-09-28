@@ -516,6 +516,22 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-28 — Scanner Analytics: range buttons moved into the Daily trend panel**
+- The 7d/14d/30d/90d buttons now sit at the top-right of the Daily trend
+  panel header instead of in a toolbar above the stat cards; the empty
+  toolbar was removed with them, so the page now opens straight on the
+  stat cards. They still drive the *whole* page (stat cards, chart and
+  by-scanner table all read the same `selectedDays`), only their position
+  changed — worth knowing if the placement ever reads as "trend only".
+- Because the panel is rebuilt by `paintBody()` on every fetch, the
+  buttons are wired by delegation on `#analytics-body` (`onRangeClick`)
+  rather than per-button in the page shell. The error state also renders
+  the buttons: they're no longer in the shell, so without that a failed
+  range (e.g. 90d) would leave no way to pick another one.
+- New reusable `.panel-head` (`CSS/components.css`): title block on the
+  left, a control group on the right, wrapping under the title on narrow
+  screens.
+
 **2026-09-28 — Attendance: one-row toolbar; small shared scrollbar**
 - **Attendance toolbar** now matches Employee Manager and Proximity
   Cards: search, department and status on the left; From/To dates, Run
