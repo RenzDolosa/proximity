@@ -557,6 +557,33 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-28 — Dashboard: "On site now" table header now stays pinned**
+- **Reported**: scrolling the roster scrolled the whole page and the column
+  header went with it. **Root cause** (same one Attendance and Scanner
+  Analytics had): the table sits inside a `.panel`, not directly under
+  `#content`, so `.table-scroll` never got a bounded height. It grew to its
+  full content height, never scrolled itself, and `#content` scrolled instead
+  — leaving `thead th{position:sticky}` with no scroller to stick to (and the
+  pagination bar pushed off-screen).
+- **Fix, CSS + one id, no logic change**: `#dash-panel` (new id on the existing
+  panel) is now the bounded flex column that takes the rest of the screen
+  under the stat cards; only the row area scrolls, with the header, toolbar
+  and pagination fixed in place (`CSS/layout.css`, next to the equivalent
+  Attendance rule). The panel has a 320px floor so on a very short window
+  `#content` scrolls instead of the panel's children overlapping.
+- **Verified in a real browser, not assumed**: rendered the real
+  `CSS/*.css` plus the panel markup (with 50 fake rows) in headless
+  Chromium at 1920×945, 1280×720 and 1280×420, and measured. Before the fix:
+  the table area does not scroll, `#content` does, pagination is off-screen.
+  After: the table area scrolls (header offset stays at the container's top
+  edge), `#content` does not scroll, pagination is visible at both larger
+  sizes; at 1280×420 the 320px floor engages and `#content` scrolls, as
+  designed. Caveat: this is a replica of the markup with static data, not the
+  live page behind a Supabase login.
+- Known trade-off: on a small laptop screen the stat cards wrap onto extra
+  rows, which leaves the table area only a few rows tall (it still scrolls
+  correctly). Compacting the cards would be a separate change.
+
 **2026-09-28 — New pages: Dashboard and Alerts; new Settings panel: Scanners**
 - **Why these three**: the live database already had the backend for all of
   them (`get_dashboard_stats`, `get_onsite_roster`, `get_alerts`,

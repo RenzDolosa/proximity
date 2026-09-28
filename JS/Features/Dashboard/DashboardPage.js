@@ -34,7 +34,7 @@ export async function renderDashboard() {
   content.innerHTML = `
     <div class="auth-error hidden" id="dash-error" style="margin-bottom:12px;"></div>
     <div id="dash-stats">${loaded ? '' : 'Loading…'}</div>
-    <div class="panel" style="padding:20px;margin-top:16px;">
+    <div class="panel" id="dash-panel" style="padding:20px;margin-top:16px;">
       <div class="panel-head" style="margin-bottom:12px;">
         <div>
           <h3 style="margin:0 0 4px;">On site now</h3>
