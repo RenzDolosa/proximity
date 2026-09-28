@@ -15,11 +15,13 @@ import { $, $$ } from '../../Utils/dom.js';
 import { esc, fmtTime, fmtBytes } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
 import { getTheme, setTheme } from '../../Utils/theme.js';
-import { isAdmin, settingsShowSounds, settingsShowPhotos, canManageScanSounds } from '../../Core/state.js';
+import { appState, isAdmin, settingsShowSounds, settingsShowPhotos, canManageScanSounds } from '../../Core/state.js';
+import { ProfilesModel } from '../../Models/ProfilesModel.js';
 import { ScanSoundsModel, SOUND_KEYS, SOUND_LABELS, MAX_FILE_SIZE_BYTES } from '../../Models/ScanSoundsModel.js';
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { QueryStatsModel } from '../../Models/QueryStatsModel.js';
 import { openConfirmModal } from '../../Components/ConfirmModal.js';
+import { showModalError } from '../../Components/Modal.js';
 
 let soundsCache = {}; // key -> { updated_at, size } | null, once loaded
 let loaded = false;
@@ -50,6 +52,18 @@ export async function renderSettings() {
       <div class="sub-nav" id="theme-picker" role="group" aria-label="Theme">
         <button type="button" data-theme-choice="dark">Dark</button>
         <button type="button" data-theme-choice="light">Light</button>
+      </div>
+    </div>
+
+    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
+      <h3 style="margin:0 0 4px;">Change password</h3>
+      <p class="sub" style="margin:0 0 10px;">Update the password for your own account (${esc(appState.profile?.email || appState.session?.user?.email || '')}). This only changes what you sign in with — it's separate from an admin resetting someone else's password from Users &amp; Roles.</p>
+      <div class="field"><label>Current password</label><input id="cp-current" type="password" autocomplete="current-password" /></div>
+      <div class="field"><label>New password</label><input id="cp-new" type="password" placeholder="min. 6 characters" autocomplete="new-password" /></div>
+      <div class="field"><label>Confirm new password</label><input id="cp-confirm" type="password" autocomplete="new-password" /></div>
+      <div class="auth-error hidden" id="cp-error"></div>
+      <div style="display:flex;justify-content:flex-end;">
+        <button type="button" class="primary" id="cp-save">Update password</button>
       </div>
     </div>
 
@@ -120,6 +134,7 @@ export async function renderSettings() {
   $$('button[data-theme-choice]', $('#theme-picker')).forEach((btn) => {
     btn.addEventListener('click', () => { setTheme(btn.dataset.themeChoice); paintThemePicker(); });
   });
+  $('#cp-save').addEventListener('click', handleChangePassword);
   if (showSounds && loaded) { paintRows(); paintStorageSummary(); }
   if (showPhotos && photoLoaded) paintPhotoStorage();
   if (isAdmin()) {
@@ -265,6 +280,44 @@ function paintQueryStats() {
     </table>
     ${oldestSince ? `<div class="emp-meta" style="margin-top:8px;">Accumulated since ${esc(fmtTime(oldestSince))}${queryStats.length >= 50 ? ' — showing the top 50 by total time' : ''}</div>` : ''}
   `;
+}
+
+// Client-side validation mirrors ResetPasswordModal.js's (min. 6 chars) —
+// Supabase's own auth.updateUser() enforces the same floor server-side
+// regardless, so this is purely for fast feedback before a round-trip.
+async function handleChangePassword() {
+  const errorEl = $('#cp-error');
+  errorEl.classList.add('hidden');
+
+  const current = $('#cp-current').value;
+  const next = $('#cp-new').value;
+  const confirm = $('#cp-confirm').value;
+
+  if (!current) { showModalError($('#content'), '#cp-error', 'Enter your current password.'); return; }
+  if (!next || next.length < 6) { showModalError($('#content'), '#cp-error', 'New password must be at least 6 characters.'); return; }
+  if (next !== confirm) { showModalError($('#content'), '#cp-error', 'New password and confirmation don\'t match.'); return; }
+  if (next === current) { showModalError($('#content'), '#cp-error', 'New password must be different from your current one.'); return; }
+
+  const btn = $('#cp-save');
+  btn.disabled = true;
+  const email = appState.profile?.email || appState.session?.user?.email;
+  const { error } = await ProfilesModel.changePassword({ email, currentPassword: current, newPassword: next });
+  btn.disabled = false;
+
+  if (error) { showModalError($('#content'), '#cp-error', error); return; }
+
+  // A successful updateUser() fires a USER_UPDATED auth event, which
+  // main.js's onAuthStateChange listener doesn't special-case the way it
+  // does TOKEN_REFRESHED/same-user SIGNED_IN — it falls through to a full
+  // boot()/showShell() re-render of whatever page is open (this one).
+  // Harmless (Settings just redraws itself, appState.route is unchanged)
+  // but means the toast below can be immediately followed by this whole
+  // panel remounting — expected, not a bug, so it isn't worth threading a
+  // new special case into that shared listener for.
+  $('#cp-current').value = '';
+  $('#cp-new').value = '';
+  $('#cp-confirm').value = '';
+  toast('Password updated');
 }
 
 // Sums whatever's actually uploaded against TOTAL_CAPACITY. Reads

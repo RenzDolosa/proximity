@@ -72,7 +72,13 @@ JS/
     BaseModel.js                 reusable list/get/create/update/remove factory
     EmployeesModel.js             listDirectory() reads employee_directory view
     ProximityCardsModel.js
-    ProfilesModel.js              callAdminUsers() invokes the admin-users Edge Function
+    ProfilesModel.js              callAdminUsers() invokes the admin-users Edge
+                                   Function for admin-only account actions
+                                   (create/reset-someone-else's-password/delete);
+                                   changePassword() (added 2026-09-28) is the
+                                   separate self-service path — plain
+                                   supabase.auth.updateUser(), no Edge Function
+                                   involved — see Settings/SettingsPage.js
     ScanEventsModel.js            scan() calls scan_proximity_code() RPC;
                                    recentFeed() reads get_scan_feed();
                                    listAll() reads get_all_scan_events()
@@ -195,7 +201,16 @@ JS/
     Users/UsersPage.js               (Users & Roles, admin-only; delete wired
                                        through admin-users v3+ w/ self-delete guard)
     Users/userOptions.js             (shared role/access-scope option lists)
-    Settings/SettingsPage.js         (Settings — upload/replace/remove/
+    Settings/SettingsPage.js         (Settings — "Change password" panel (added
+                                       2026-09-28), visible to every signed-in
+                                       account regardless of role/scope since
+                                       it's account-level, not module-level —
+                                       re-authenticates with the current
+                                       password via a second signInWithPassword
+                                       before calling auth.updateUser(), so an
+                                       unattended already-logged-in kiosk
+                                       session can't be used to lock the real
+                                       owner out; upload/replace/remove/
                                        preview the 5 scan sounds, plus a read-only
                                        Google Drive storage-capacity panel for
                                        employee photos (whole-account quota, not
@@ -515,6 +530,39 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-28 — Settings: self-service "Change password"**
+- New panel in Settings, visible to every signed-in account unconditionally
+  — unlike "Scan sounds"/"Employee photos" below, this isn't gated by
+  `settingsShowSounds()`/`settingsShowPhotos()` (or even `canViewSettings()`
+  beyond Settings being reachable at all): changing your own password isn't
+  tied to any module's access_scope, so every account that can reach
+  Settings sees it, including a plain Viewer.
+- `ProfilesModel.changePassword({ email, currentPassword, newPassword })` —
+  re-authenticates via a second `supabase.auth.signInWithPassword()` call
+  first, and only calls `supabase.auth.updateUser({ password })` if that
+  succeeds. `updateUser()` on its own doesn't check the current password at
+  all (a valid session is the only thing it verifies), which would let
+  anyone at an unattended, already-signed-in session — a shared scanner
+  kiosk left logged in, specifically, the device class this app actually
+  runs on — silently change the password and lock the real owner out.
+  Wrong current password surfaces as a plain "Current password is
+  incorrect." rather than whatever raw error `signInWithPassword` returns.
+- Deliberately does **not** go through the `admin-users` Edge Function —
+  that function's `reset_password` action (`ResetPasswordModal.js`, Users &
+  Roles) is for an *admin* setting *someone else's* password via the
+  service-role key; this is a different, ordinary authenticated-user
+  operation that Supabase's client SDK already supports directly, so
+  routing it through a service-role function would add an unnecessary
+  privileged code path for something that never needed one.
+- A successful `updateUser()` fires a `USER_UPDATED` auth event that
+  `main.js`'s `onAuthStateChange` listener doesn't special-case (unlike
+  `TOKEN_REFRESHED` or a same-user `SIGNED_IN` — see that listener's own
+  comments), so it falls through to a full `boot()`/`showShell()`
+  re-render of whatever page is open. Harmless here (Settings just
+  redraws itself right after its own success toast) — noted rather than
+  "fixed" since threading a new special case into that shared listener
+  for one cosmetic redraw isn't worth the added surface area.
 
 **2026-09-28 — Scanner Analytics: range buttons moved into the Daily trend panel**
 - The 7d/14d/30d/90d buttons now sit at the top-right of the Daily trend

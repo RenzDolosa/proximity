@@ -38,6 +38,32 @@ export const ProfilesModel = {
     return { data };
   },
 
+  // Self-service password change for the CURRENTLY signed-in account —
+  // distinct from callAdminUsers('reset_password', ...) above, which is
+  // an admin setting someone ELSE's password via the service-role
+  // Edge Function. This never touches that function: supabase.auth
+  // .updateUser() already works for a user changing their own password
+  // from a valid session, no service-role privileges needed.
+  //
+  // Re-authenticates with the current password FIRST, via a second
+  // signInWithPassword call, before calling updateUser — Supabase's
+  // updateUser() itself doesn't require or check the current password at
+  // all (a valid session is the only thing it checks), so skipping this
+  // would let anyone at an unattended, already-logged-in session (a
+  // shared kiosk left open, in particular — the exact device class this
+  // app runs on) silently lock the real owner out by setting a new
+  // password nobody else knows. signInWithPassword failing here means
+  // wrong current password, not a session problem — the caller's session
+  // is already valid or this function couldn't have been reached.
+  async changePassword({ email, currentPassword, newPassword }) {
+    const { error: reauthError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+    if (reauthError) return { error: 'Current password is incorrect.' };
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) return { error: error.message };
+    return {};
+  },
+
   // Permanently deletes the login account (auth.users row, which cascades
   // to the profiles row). Server-side action, admin-only — enforced by the
   // admin-users function itself, not just by hiding the button here.
