@@ -2,13 +2,15 @@
 // #standalone-scanner) and only one is ever visible at a time. This module
 // owns that switch so main.js's auth-state handler stays a one-liner.
 import { $ } from '../Utils/dom.js';
-import { appState, isAdmin, canViewEmployeeManager, canViewScanner, canViewSettings, canViewAttendance } from './state.js';
+import { appState, isAdmin, canViewEmployeeManager, canViewScanner, canViewSettings, canViewAttendance, canViewDashboard, canViewAlerts } from './state.js';
 import { render } from './router.js';
+import { startAlertsBadge, stopAlertsBadge } from './alertsBadge.js';
 
 export function showAuth() {
   $('#auth-screen').classList.remove('hidden');
   $('#shell').classList.add('hidden');
   $('#standalone-scanner').classList.add('hidden');
+  stopAlertsBadge();
   // Signing out (or landing here with no session at all) previously left
   // whatever shell route hash was last in the URL untouched — e.g.
   // signing out from #users left the address bar reading .../#users while
@@ -35,12 +37,15 @@ export function showShell() {
   $('#nav-users').classList.toggle('hidden', !isAdmin());
   $('#nav-settings').classList.toggle('hidden', !canViewSettings());
   $('#nav-audit').classList.toggle('hidden', !isAdmin());
+  $('button[data-route="dashboard"]').classList.toggle('hidden', !canViewDashboard());
+  $('button[data-route="alerts"]').classList.toggle('hidden', !canViewAlerts());
   $('button[data-route="directory"]').classList.toggle('hidden', !canViewEmployeeManager());
   $('button[data-route="proximity"]').classList.toggle('hidden', !canViewEmployeeManager());
   $('button[data-route="scanner"]').classList.toggle('hidden', !canViewScanner());
   $('button[data-route="analytics"]').classList.toggle('hidden', !canViewScanner());
   $('button[data-route="attendance"]').classList.toggle('hidden', !canViewAttendance());
   // land on the first route this account is actually allowed to see
+  if ((appState.route === 'dashboard' && !canViewDashboard()) || (appState.route === 'alerts' && !canViewAlerts())) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users')));
   if (appState.route === 'directory' && !canViewEmployeeManager()) appState.route = canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users'));
   if (appState.route === 'scanner' && !canViewScanner()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users'));
   if (appState.route === 'analytics' && !canViewScanner()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users'));
@@ -48,6 +53,7 @@ export function showShell() {
   if (appState.route === 'settings' && !canViewSettings()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : (isAdmin() ? 'audit' : 'users'));
   if (appState.route === 'audit' && !isAdmin()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : 'users'));
   render();
+  startAlertsBadge();
 }
 
 // showStandaloneScanner is wired up in Features/Scanner/StandaloneScanner.js

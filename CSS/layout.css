@@ -84,3 +84,7 @@ nav.rail button.active .ic{color:var(--accent);}
    long scanner lists scroll inside it with the header pinned (same cap
    ScanDetailsModal uses for its table). */
 #analytics-body .table-scroll{max-height:min(420px, 50dvh);}
+
+/* Unread-alerts count on the sidebar's Alerts button (Core/alertsBadge.js). */
+nav.rail button .nav-badge{margin-left:auto;min-width:18px;padding:1px 6px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;font-weight:600;line-height:16px;text-align:center;}
+nav.rail button .nav-badge.hidden{display:none;}

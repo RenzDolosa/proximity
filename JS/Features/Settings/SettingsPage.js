@@ -15,7 +15,8 @@ import { $, $$ } from '../../Utils/dom.js';
 import { esc, fmtTime, fmtBytes } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
 import { getTheme, setTheme } from '../../Utils/theme.js';
-import { appState, isAdmin, settingsShowSounds, settingsShowPhotos, canManageScanSounds } from '../../Core/state.js';
+import { appState, isAdmin, settingsShowSounds, settingsShowPhotos, canManageScanSounds, canViewScannerRegistry } from '../../Core/state.js';
+import { scannersPanelHTML, mountScannersPanel } from '../../Components/ScannersPanel.js';
 import { ProfilesModel } from '../../Models/ProfilesModel.js';
 import { ScanSoundsModel, SOUND_KEYS, SOUND_LABELS, MAX_FILE_SIZE_BYTES } from '../../Models/ScanSoundsModel.js';
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
@@ -101,6 +102,8 @@ export async function renderSettings() {
     `}
     `}
 
+    ${canViewScannerRegistry() ? scannersPanelHTML() : ''}
+
     ${!isAdmin() ? '' : `
     <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
@@ -185,6 +188,7 @@ export async function renderSettings() {
     })());
   }
   if (isAdmin()) tasks.push(loadQueryStats());
+  if (canViewScannerRegistry()) tasks.push(mountScannersPanel());
 
   // Independent panels, each backed by its own API call — run them
   // concurrently rather than awaiting one before starting the other, and

@@ -1,5 +1,7 @@
 import { $, $$ } from '../Utils/dom.js';
 import { appState } from './state.js';
+import { renderDashboard } from '../Features/Dashboard/DashboardPage.js';
+import { renderAlerts } from '../Features/Alerts/AlertsPage.js';
 import { renderDirectory } from '../Features/Directory/DirectoryPage.js';
 import { renderProximity } from '../Features/Proximity/ProximityPage.js';
 import { renderTestScan } from '../Features/Scanner/TestScanPage.js';
@@ -10,6 +12,8 @@ import { renderSettings } from '../Features/Settings/SettingsPage.js';
 import { renderAuditLog } from '../Features/Audit/AuditLogPage.js';
 
 const titles = {
+  dashboard: ['Dashboard', 'Who is on site right now, plus scanner and card health'],
+  alerts: ['Alerts', 'Server-raised warnings — acknowledge them once handled'],
   directory: ['Employee Manager', 'View and edit the employee directory'],
   proximity: ['Proximity Cards', 'Issue and revoke proximity IDs, linked to employees'],
   scanner: ['Test Scan', 'Try a proximity ID against the live directory — results here are not logged'],
@@ -31,6 +35,8 @@ export function render() {
   const [title, sub] = titles[appState.route];
   $('#page-title').textContent = title;
   $('#page-sub').textContent = sub;
+  if (appState.route === 'dashboard') renderDashboard();
+  if (appState.route === 'alerts') renderAlerts();
   if (appState.route === 'directory') renderDirectory();
   if (appState.route === 'proximity') renderProximity();
   if (appState.route === 'scanner') renderTestScan();

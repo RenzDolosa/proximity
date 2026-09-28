@@ -114,6 +114,13 @@ JS/
                                    get_attendance_report(); passes the
                                    browser's time zone so "which day" matches
                                    the reader's calendar
+    DashboardModel.js               added 2026-09-28; wrappers over
+                                   get_dashboard_stats() / get_onsite_roster()
+    AlertsModel.js                  added 2026-09-28; get_alerts(),
+                                   get_unread_alert_count(),
+                                   acknowledge_alert(), acknowledge_all_alerts()
+    ScannersModel.js                added 2026-09-28; get_scanners() /
+                                   update_scanner()
   Components/                 reusable UI pieces used by more than one feature
     Modal.js                     shared openModal/closeModal scaffold — every
                                   dialog below is built on this
@@ -190,6 +197,19 @@ JS/
                                        page; date-range picker, 7/14/30/90 days,
                                        matching the RPC's own p_days clamp; see
                                        Supabase/README.md's change log)
+    Dashboard/DashboardPage.js       (Dashboard, added 2026-09-28 — admin/manager
+                                       only; headline stat cards from
+                                       get_dashboard_stats() plus the live "On
+                                       site now" roster from get_onsite_roster()
+                                       with search/department/view filters,
+                                       pagination, .xlsx export, 30s auto-refresh
+                                       while open; cards click through to the
+                                       page behind them)
+    Alerts/AlertsPage.js             (Alerts inbox, added 2026-09-28 — admin/manager
+                                       only; acknowledge one or all, "show
+                                       acknowledged" toggle; the unread count is
+                                       the badge on the sidebar button, kept
+                                       fresh by Core/alertsBadge.js)
     Attendance/AttendancePage.js     (Attendance, added 2026-09-28 — admin/manager
                                        only, mirrors get_attendance_report()'s
                                        is_admin_or_manager() gate; date-range
@@ -249,6 +269,12 @@ JS/
                                    Proximity ID column and Proximity Cards'
                                    Proximity code column
     csv.js                       parseCSV / toCSV, used by ImportModal.js
+    dashboard.js                  pure rules for Dashboard / Alerts / Scanners:
+                                   who counts as on site (active employees only,
+                                   stale = old IN), roster filtering, alert
+                                   severity colours, sidebar badge text, scanner
+                                   online/offline/disabled state — unit-tested
+                                   in test/dashboard.test.mjs
     attendance.js                 pure rules for the Attendance page: row
                                    status (complete / no OUT yet / check
                                    times), duration formatting, 31-day range
@@ -530,6 +556,50 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-28 — New pages: Dashboard and Alerts; new Settings panel: Scanners**
+- **Why these three**: the live database already had the backend for all of
+  them (`get_dashboard_stats`, `get_onsite_roster`, `get_alerts`,
+  `get_unread_alert_count`, `acknowledge_alert`, `acknowledge_all_alerts`,
+  `get_scanners`, `update_scanner`, plus the `alerts` and `scanners` tables)
+  with no caller anywhere in the client — the same "backend shipped, UI never
+  followed" gap the Audit Log and Scanner Analytics closed. No new migration
+  was needed; the RPCs were exercised against the live project under an
+  impersonated admin claim before wiring (stat keys, roster rows, alert
+  shape and scanner rows all match what the pages read).
+- **Dashboard** (`#dashboard`, admin/manager): on-site count, possibly-left
+  (old IN) count, 24h scans + match rate, scanners online, unread alerts,
+  open remarks, unassigned active cards; below them the on-site roster.
+  Roster semantics deliberately match the server's own stats: only *active*
+  employees count as on site or "possibly left"; an inactive employee whose
+  last scan was an IN only shows under "Everyone with a last IN", so the
+  headline never disagrees with `get_dashboard_stats().on_site_count`.
+- **Alerts** (`#alerts`, admin/manager): inbox over `get_alerts()`, with an
+  unread-count badge on the sidebar button (polled every 60s by
+  `Core/alertsBadge.js`, started in `showShell()` and stopped in
+  `showAuth()` so a sign-out never leaves a poller running). Alerts are raised
+  server-side only; the client can only acknowledge, and acknowledged rows are
+  kept (hidden by default, not deleted).
+- **Settings → Scanners** (`Components/ScannersPanel.js`): every scanner seen,
+  online/offline/disabled, last seen, 24h scans/matched/offline. Admins can set
+  a label or enable/disable a scanner (`update_scanner()`, audit-logged as
+  `scanner_updated`); anyone with Scanner scope gets a read-only view.
+  Disabling flips `scanners.is_enabled`, which `scan_proximity_code()`
+  already enforces: a disabled scanner's *live* scans are refused with "This
+  scanner has been disabled by an administrator", while *offline replays* are
+  still accepted (those swipes already happened, and refusing one would stall
+  the kiosk's stop-on-first-failure sync queue).
+- **Access rules** live in `Core/accessControl.js` (`canViewDashboard`,
+  `canViewAlerts`, `canViewScannerRegistry`, `canEditScannerRegistry`) so
+  they are unit-tested; every one is a UI convenience over the RPCs' own
+  gates, which remain the real boundary.
+- Tests: `test/dashboard.test.mjs` (9 new; suite is now 32). One of them
+  failed on first run — my own new "inactive employee" fixture correctly
+  showed up in an existing department filter — and the expectation was
+  fixed, not the code.
+- **Not changed, on purpose**: the default landing route is still Employee
+  Manager (Dashboard is one click away), so existing bookmarks and the
+  hash-restore behaviour are untouched.
 
 **2026-09-28 — Settings: self-service "Change password"**
 - New panel in Settings, visible to every signed-in account unconditionally

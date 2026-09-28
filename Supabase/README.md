@@ -65,6 +65,39 @@ an admin swaps it out.
 
 ## RPC
 
+- **`get_dashboard_stats(p_window_hours default 16)`** — one jsonb object for
+  the Dashboard: `on_site_count`, `stale_in_count`, `on_site[]`,
+  `by_department[]`, `scans_24h`, `matched_24h`, `employees_with_open_remarks`,
+  `unassigned_active_cards`, `scanners_total/online/disabled` (online = seen in
+  the last 10 minutes), `unread_alerts` (null unless admin/manager). Window is
+  clamped to 1..72. Gate: `is_admin()` or `can_view_employee_manager()`.
+  Client: `Models/DashboardModel.js`.
+- **`get_onsite_roster(p_stale_hours default 16)`** — every employee whose
+  *last* `scan_logs` entry is an `in` (any status), oldest IN first, with
+  `seconds_on_site` and `is_stale` (IN older than the window). Capped at
+  10,000 rows. Gate: `is_admin_or_manager()`. The client counts only
+  `status = 'active'` rows as on site, matching `get_dashboard_stats()`.
+- **`get_alerts(p_limit default 100, p_include_acknowledged default false)`**
+  → jsonb array (newest first, each row plus `acknowledged_by_name`; limit
+  clamped 1..500), **`get_unread_alert_count()`** (returns 0 for
+  non-admin/manager rather than raising), **`acknowledge_alert(p_id)`**,
+  **`acknowledge_all_alerts()`** (returns how many it acknowledged). Gate:
+  `is_admin_or_manager()`. Alerts are written by `raise_alert()` (e.g. kind
+  `unknown_card_scan`, deduplicated by `dedupe_key`), never by the client.
+  Table `alerts`: `id, created_at, kind, severity, message, detail jsonb,
+  dedupe_key, acknowledged_at, acknowledged_by`. Client:
+  `Models/AlertsModel.js`.
+- **`get_scanners()`** → jsonb array of registry rows with 24h
+  `scans_24h / matched_24h / offline_24h` (gate: `is_admin()` or
+  `can_view_scanner()`); **`update_scanner(p_scanner_id, p_enabled, p_label)`**
+  (admin only; `null` leaves a field unchanged, empty label clears it; writes
+  a `scanner_updated` audit event). `scan_proximity_code()` enforces
+  `is_enabled`: a disabled scanner's live scans raise "This scanner has been
+  disabled by an administrator", but `p_offline` replays are always accepted.
+  Table `scanners`: `scanner_id` (pk),
+  `label`, `is_enabled`, `first_seen_at`, `last_seen_at`. Client:
+  `Models/ScannersModel.js`.
+
 - **`scan_proximity_code(p_proximity_code, p_scanner_id, p_scanned_at, p_offline)`**
   — looks up the card, resolves the linked employee, classifies the
   result, inserts a `scan_events` row (even on failure), and a trigger
@@ -644,6 +677,24 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-28 — Dashboard / Alerts / Scanner-registry RPCs now documented and consumed by the client**
+- No schema change. The RPCs listed at the top of the RPC section above were
+  already live; the client now has callers for them (`DashboardPage.js`,
+  `AlertsPage.js`, `ScannersPanel.js`). Verified under an impersonated admin
+  claim: `get_onsite_roster(16)` returned 272 rows, `get_alerts(100,false)` 16,
+  `get_scanners()` 3, and the stats object carries the keys the page reads.
+- **Correction to my own work this session**: I twice created a function with
+  the same name as one already live (`export_scan_logs`, then a
+  `get_dashboard_stats(integer, text)` overload) because I had not listed the
+  live functions first; both were dropped within the same session, confirmed
+  by `pg_proc`. The overload case is the exact trap already documented under
+  the 2026-09-16 offline-scanner entry (a new signature creates a *second*
+  function). Always list `pg_proc` before adding an RPC.
+- **Still open**: the drift noted below is not closed by this — these RPCs and
+  the `alerts`/`scanners` tables still have no file in `Supabase/migrations/`.
+  Run `supabase db pull` before anyone runs `supabase db reset` from this
+  folder.
 
 **2026-09-28 — `get_scanner_scan_details()` added (Scanner Analytics drill-down); live/repo drift noted**
 - New read-only RPC + migration file `20260928080000_scanner_analytics_drilldown.sql`
