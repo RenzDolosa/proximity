@@ -5,7 +5,7 @@
 import { supabase } from './supabaseClient.js';
 import * as access from './accessControl.js';
 
-const VALID_ROUTES = ['directory', 'proximity', 'scanner', 'users', 'settings', 'audit'];
+const VALID_ROUTES = ['directory', 'proximity', 'scanner', 'analytics', 'users', 'settings', 'audit'];
 const hashRoute = location.hash.replace('#', '');
 
 export const appState = {

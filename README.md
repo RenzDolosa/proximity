@@ -98,6 +98,12 @@ JS/
                                    AuditLogModel.js, see Settings/SettingsPage.js's
                                    "Query performance" panel and
                                    Supabase/README.md's change log
+    ScannerStatsModel.js             added 2026-09-26; thin wrapper over
+                                   get_scanner_performance_stats() — an RPC
+                                   that was already live on the database with
+                                   no caller anywhere in the client until this
+                                   session; see Features/Analytics/AnalyticsPage.js
+                                   below and Supabase/README.md's change log
   Components/                 reusable UI pieces used by more than one feature
     Modal.js                     shared openModal/closeModal scaffold — every
                                   dialog below is built on this
@@ -160,6 +166,16 @@ JS/
                                        status pill shows online/offline, pending
                                        queued-scan count, and lookup-cache staleness;
                                        see Supabase/README.md's "Offline scanning")
+    Analytics/AnalyticsPage.js       (Scanner Analytics, added 2026-09-26 — same
+                                       gate as Test Scan/Scanner, canViewScanner();
+                                       summary stat cards, a dependency-free daily
+                                       trend chart, and a per-scanner match-rate
+                                       table, all over get_scanner_performance_stats()
+                                       — an RPC that was already live and secured
+                                       on the database with no caller until this
+                                       page; date-range picker, 7/14/30/90 days,
+                                       matching the RPC's own p_days clamp; see
+                                       Supabase/README.md's change log)
     Users/UsersPage.js               (Users & Roles, admin-only; delete wired
                                        through admin-users v3+ w/ self-delete guard)
     Users/userOptions.js             (shared role/access-scope option lists)
@@ -279,6 +295,7 @@ works fine under Five Server in dev without any extra setup).
 │  - Employee Manager     │        │  - proximity_cards    (Proximity table)  │
 │  - Proximity Cards      │        │  - scan_events        (Scanner log)      │
 │  - Test Scan / Scanner  │        │  - employee_directory (read view, SD)    │
+│  - Scanner Analytics    │        │                                          │
 │  - Users & Roles        │        │  - scan_feed          (read view, SD)    │
 │  - Settings             │        └──────────────────────────────────────────┘
 └──────────┬─────────────┘
@@ -460,13 +477,37 @@ branch protection before relying on them as merge gates.
 
 ---
 *Last reconciled against the live GitHub repo and live Supabase project on
-2026-09-21. If you're another Claude instance picking this project up: fetch
+2026-09-26. If you're another Claude instance picking this project up: fetch
 `github.com/RenzDolosa/proximity` fresh (via web_search + web_fetch, or the
 GitHub connector) and re-verify against `Supabase:list_tables` /
 `list_edge_functions` before making schema or Edge Function claims — this
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-26 — New page: Scanner Analytics**
+- New route `analytics`, gated by the same `canViewScanner()` boundary as
+  Test Scan/Scanner — admins and any account with `access_scope` `all` or
+  `scanner`. New nav entry between Test Scan and Users & Roles.
+- New `Features/Analytics/AnalyticsPage.js` + `Models/ScannerStatsModel.js`,
+  built entirely over `get_scanner_performance_stats()` — a `SECURITY
+  DEFINER` RPC that was already live and correctly secured on the database
+  from an earlier session, with no caller anywhere in the client and no
+  mention in `Supabase/README.md` until now. Same "backend shipped, UI
+  never followed up" gap as the Audit Log's 2026-09-21 entry — found by
+  cross-checking `list_tables`/`get_advisors` against the repo before
+  starting new work, not by guessing at a new feature from scratch.
+- 7/14/30/90-day range picker (matches the RPC's own `p_days` clamp);
+  summary stat cards (total scans, matched with a match-rate percentage,
+  and a count for every other `result` value, plus offline-captured
+  scans); a dependency-free daily trend chart (plain divs, inline-sized —
+  no canvas or charting library, same stance as the rest of this app);
+  and a by-scanner table (total, matched, match rate, last scan).
+- No schema, RLS, or grant changes — the RPC's own internal permission
+  check was already correct; re-ran `get_advisors` (security) before
+  wiring a caller to confirm nothing regressed. See `Supabase/README.md`'s
+  matching change log entry for the full RPC contract now documented
+  there for the first time.
 
 **2026-09-25 — Employee Manager: "Export all scan logs" date range moved into its own modal**
 - The two date inputs for scoping a scan-log export used to sit

@@ -128,6 +128,27 @@ an admin swaps it out.
   — a full-organization export is a materially more sensitive capability,
   same tier as Import/Delete-all on the same page, so it gets its own
   purpose-built, purpose-gated function instead.
+- **`get_scanner_performance_stats(p_days integer default 7)`** — applied
+  directly to the live database in an earlier session (not through a
+  committed migration) and left with no caller and no documentation until
+  2026-09-26 — see the change log entry below and root `README.md`'s
+  matching entry for the `Analytics/AnalyticsPage.js` page that was
+  actually missing. `p_days` is clamped to `[1, 90]` server-side. Returns
+  one `jsonb` object with three keys, all scoped to `scan_events` rows
+  within the window:
+  - `summary` — `total_scans`, and a count per `result` value (`matched`,
+    `unmatched`, `inactive_card`, `inactive_employee`, `unassigned_card`),
+    plus `offline_captured` (rows whose `raw_payload->>'captured_offline'`
+    is `true` — see `scan_proximity_code()`'s `p_offline` above), `since`,
+    and the clamped `days`.
+  - `by_scanner` — one row per distinct `scanner_id`, with `total`,
+    `matched`, `match_rate_pct`, and `last_scan_at`, ordered busiest first.
+  - `daily` — one row per calendar day with at least one scan, `total`
+    and `matched`, ordered oldest first.
+  Gated to `is_admin() or can_view_scanner()` — the same boundary as
+  `get_scan_feed()`/`get_scanner_offline_cache()`, since a scanner-scope
+  account already sees every individual scan result live and this is
+  just that same data aggregated, not a more sensitive capability.
 - **`add_employee_remark(...)`** — appends a `{remark, created_by,
   created_by_id, created_at}` entry to `employees.remarks_log`.
 - **`is_admin()` / `is_admin_or_manager()`** — role helper functions used
@@ -562,6 +583,23 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-26 — Documented `get_scanner_performance_stats()`; built the Scanner Analytics page it was always meant to back**
+- No schema/RPC change — `get_scanner_performance_stats(p_days)` was
+  already live, fully secured (`is_admin() or can_view_scanner()`, same
+  gate as `get_scan_feed()`), and returning exactly the summary/
+  by-scanner/daily shape documented above, from an earlier session's work
+  that never made it into this file or got a caller anywhere in the
+  client. Same "DB side already live, undocumented" pattern as the audit
+  log's 2026-09-21 entry. Added the RPC entry above and the client-side
+  `Analytics/AnalyticsPage.js` + `Models/ScannerStatsModel.js` — see root
+  `README.md`'s matching entry for the page itself.
+- Verified via `pg_get_functiondef()` and a fresh `get_advisors` (security)
+  pass before wiring a caller to it — no new findings; this function was
+  already part of the accepted `SECURITY DEFINER`-self-checks baseline.
+- No new RLS or grant changes: the page's own `canViewScanner()` guard is
+  a UI convenience only, the RPC's internal check is what actually
+  matters, and that check was already correct.
 
 **2026-09-24 — `get_all_scan_events()` added; `REVOKE ... FROM PUBLIC` doesn't cover `anon` on this project**
 - Full writeup in root `README.md`'s matching 2026-09-24 entry. Schema-

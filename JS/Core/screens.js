@@ -38,9 +38,11 @@ export function showShell() {
   $('button[data-route="directory"]').classList.toggle('hidden', !canViewEmployeeManager());
   $('button[data-route="proximity"]').classList.toggle('hidden', !canViewEmployeeManager());
   $('button[data-route="scanner"]').classList.toggle('hidden', !canViewScanner());
+  $('button[data-route="analytics"]').classList.toggle('hidden', !canViewScanner());
   // land on the first route this account is actually allowed to see
   if (appState.route === 'directory' && !canViewEmployeeManager()) appState.route = canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users'));
   if (appState.route === 'scanner' && !canViewScanner()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users'));
+  if (appState.route === 'analytics' && !canViewScanner()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users'));
   if (appState.route === 'settings' && !canViewSettings()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : (isAdmin() ? 'audit' : 'users'));
   if (appState.route === 'audit' && !isAdmin()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : 'users'));
   render();
