@@ -2,7 +2,7 @@
 // #standalone-scanner) and only one is ever visible at a time. This module
 // owns that switch so main.js's auth-state handler stays a one-liner.
 import { $ } from '../Utils/dom.js';
-import { appState, isAdmin, canViewEmployeeManager, canViewScanner, canViewSettings } from './state.js';
+import { appState, isAdmin, canViewEmployeeManager, canViewScanner, canViewSettings, canViewAttendance } from './state.js';
 import { render } from './router.js';
 
 export function showAuth() {
@@ -39,10 +39,12 @@ export function showShell() {
   $('button[data-route="proximity"]').classList.toggle('hidden', !canViewEmployeeManager());
   $('button[data-route="scanner"]').classList.toggle('hidden', !canViewScanner());
   $('button[data-route="analytics"]').classList.toggle('hidden', !canViewScanner());
+  $('button[data-route="attendance"]').classList.toggle('hidden', !canViewAttendance());
   // land on the first route this account is actually allowed to see
   if (appState.route === 'directory' && !canViewEmployeeManager()) appState.route = canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users'));
   if (appState.route === 'scanner' && !canViewScanner()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users'));
   if (appState.route === 'analytics' && !canViewScanner()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users'));
+  if (appState.route === 'attendance' && !canViewAttendance()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users')));
   if (appState.route === 'settings' && !canViewSettings()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : (isAdmin() ? 'audit' : 'users'));
   if (appState.route === 'audit' && !isAdmin()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : 'users'));
   render();

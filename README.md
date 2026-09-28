@@ -104,6 +104,10 @@ JS/
                                    no caller anywhere in the client until this
                                    session; see Features/Analytics/AnalyticsPage.js
                                    below and Supabase/README.md's change log
+    AttendanceModel.js              added 2026-09-28; thin wrapper over
+                                   get_attendance_report(); passes the
+                                   browser's time zone so "which day" matches
+                                   the reader's calendar
   Components/                 reusable UI pieces used by more than one feature
     Modal.js                     shared openModal/closeModal scaffold — every
                                   dialog below is built on this
@@ -176,6 +180,14 @@ JS/
                                        page; date-range picker, 7/14/30/90 days,
                                        matching the RPC's own p_days clamp; see
                                        Supabase/README.md's change log)
+    Attendance/AttendancePage.js     (Attendance, added 2026-09-28 — admin/manager
+                                       only, mirrors get_attendance_report()'s
+                                       is_admin_or_manager() gate; date-range
+                                       report of first IN / last OUT / time on
+                                       site per employee per day, name/department/
+                                       status filters, pagination, .xlsx export of
+                                       everything matching the filters; see
+                                       Supabase/README.md for how rows are derived)
     Users/UsersPage.js               (Users & Roles, admin-only; delete wired
                                        through admin-users v3+ w/ self-delete guard)
     Users/userOptions.js             (shared role/access-scope option lists)
@@ -208,6 +220,11 @@ JS/
                                    Proximity ID column and Proximity Cards'
                                    Proximity code column
     csv.js                       parseCSV / toCSV, used by ImportModal.js
+    attendance.js                 pure rules for the Attendance page: row
+                                   status (complete / no OUT yet / check
+                                   times), duration formatting, 31-day range
+                                   validation, filtering, summary — unit-tested
+                                   in test/attendance.test.mjs
     scanSounds.js                 loadScanSounds() / playScanSound() — shared by
                                    StandaloneScanner.js and TestScanPage.js
     idb.js                         hand-rolled minimal Promise wrapper around
@@ -477,13 +494,46 @@ branch protection before relying on them as merge gates.
 
 ---
 *Last reconciled against the live GitHub repo and live Supabase project on
-2026-09-26. If you're another Claude instance picking this project up: fetch
+2026-09-28. If you're another Claude instance picking this project up: fetch
 `github.com/RenzDolosa/proximity` fresh (via web_search + web_fetch, or the
 GitHub connector) and re-verify against `Supabase:list_tables` /
 `list_edge_functions` before making schema or Edge Function claims — this
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-28 — New page: Attendance (+ an Analytics correction)**
+- New route `attendance`, admin/manager only — the same gate as
+  "Export all scan logs", because it is that same per-employee history,
+  aggregated. New `canViewAttendance()` in `Core/accessControl.js` (mirrors
+  `is_admin_or_manager()`), wired through `state.js`, `screens.js` (nav
+  visibility + route fallback), `router.js`, and `index.html`.
+- New `Features/Attendance/AttendancePage.js`, `Models/AttendanceModel.js`,
+  and pure `Utils/attendance.js`, over the new `get_attendance_report()`
+  RPC (`Supabase/migrations/20260928000000_attendance_report.sql` — full
+  contract and design notes in `Supabase/README.md`). Default window is the
+  last 7 days; range is capped at 31 days client-side *and* server-side.
+  Stat cards, name/department/status filters, pagination, and an .xlsx
+  export of every row matching the filters (labelled with the range the
+  data was actually loaded for, not whatever the date inputs say after an
+  un-run edit). A superseded slow response is dropped rather than allowed to
+  overwrite a newer one.
+- Why derived from `scan_logs` and not `scan_events`: direction isn't a
+  column anywhere but `employees.scan_logs` — `trg_append_scan_log()`
+  assigns it from the log's length parity at insert time. Pairing follows
+  that sequence, not timestamps, so a backdated offline sync can't invert a
+  pair.
+- Tests: `test/attendance.test.mjs` (8 new; suite is now 14) covers the
+  permission rule and every pure helper, including a DST-spanning range.
+  Rendering was smoke-tested in a throwaway jsdom harness outside the repo
+  (permission guard, XSS escaping of names, filters, bad-range and server
+  error paths, empty state).
+- **Correction to 2026-09-26's Analytics page:** its "Unmatched" card could
+  only ever read 0 — `scan_proximity_code()` never stores unmatched scans
+  (`Supabase/README.md`'s `scan_events` row was wrong about this and is
+  fixed). The card now appears only if such rows exist, and a one-line note
+  explains the gap otherwise. Whether unmatched scans *should* be stored
+  is left open for the owner — see `Supabase/README.md`'s 2026-09-28 entry.
 
 **2026-09-26 — New page: Scanner Analytics**
 - New route `analytics`, gated by the same `canViewScanner()` boundary as

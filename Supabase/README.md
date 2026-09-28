@@ -22,7 +22,7 @@ supabase functions download upload-employee-photo --project-ref kjwttqmbcjvkivgm
 | `profiles`                   | One row per login account (`auth.users` 1:1). `role` = `admin` / `manager` / `viewer`. `access_scope` = `all` / `employee_manager` / `scanner` — which sections the account can open at all. `is_active` — soft-disable; checked at boot, force signs out if false or missing. |
 | `employees`                  | Master employee record. Requires `employee_code` **and** `proximity_card_id` (NOT NULL + unique — every employee has exactly one card). `status` = `active`/`inactive`/`suspended`. `scan_logs` jsonb — append-only, written by `trg_append_scan_log` on every matched scan. `remarks_log` jsonb — append-only notes, written via `add_employee_remark()`. `photo_url` / `photo_file_id` — Drive-hosted photo; `photo_file_id` changes to a fresh UUID on every replace (see Edge Functions below). `photo_thumb_b64` — small base64 thumbnail (added 2026-09-18), fetched server-side by `upload-employee-photo` at upload time; format is whatever Drive's `/thumbnail` endpoint returns (PNG or JPEG, not always JPEG despite this column's original 2026-09-18 write-up assuming so — client-side callers now sniff the real format rather than trusting a hardcoded label, see root `README.md`'s 2026-09-19 change log entry); feeds the offline Scanner's `offlineAvatarHTML()` with zero network requests — see "Offline scanning" below. |
 | `proximity_cards`             | Standalone card inventory. Does **not** require an employee — a card can be issued and sit unassigned until linked from Employee Manager. `is_active` + `revoke_reason` for revoked cards.               |
-| `scan_events`                 | FK to `employees` and `proximity_cards`. Every scan attempt is logged: `matched`, `unmatched`, `inactive_card`, `inactive_employee`, or `unassigned_card`.                                                |
+| `scan_events`                 | FK to `employees` and `proximity_cards`. One row per scan of a **recognised** card: `matched`, `inactive_card`, `inactive_employee`, or `unassigned_card`. Scans of a code that matches no card (`unmatched`) are **not stored** — `scan_proximity_code()` skips the insert (`if v_result <> 'unmatched'`), so `unmatched` rows never exist today even though the column's vocabulary allows it. (This file previously said every attempt was logged; corrected 2026-09-28 against the live function body. Whether to start storing them is a product decision — it means unbounded inserts from junk scans — not something a docs fix should decide.) Direction (IN/OUT) is **not a column here**: `trg_append_scan_log()` derives it from the parity of the employee's `scan_logs` length at insert time and stores it only in `employees.scan_logs`. |
 | `employee_directory` (view)  | Employee joined to required card + scan totals, for the Employee Manager grid. Runs `SECURITY DEFINER` so scanner-only / restricted roles still see joined rows under RLS. Read by `JS/Models/EmployeesModel.js#listDirectory`. |
 | `scan_feed` (view / function) | `get_scan_feed()` — `SECURITY DEFINER` function (originally a plain view, which silently dropped employee joins for scanner-only accounts under invoker RLS; replaced for that reason). Read by `JS/Models/ScanEventsModel.js#recentFeed`. |
 | `audit_log`                   | Append-only — RLS enabled with exactly one policy (`audit_log_select_admin`, `SELECT` only, `is_admin()`); no INSERT/UPDATE/DELETE policy exists at all, so nothing can write to it directly via PostgREST regardless of role. One row per destructive or permission-changing action: `actor_id`/`actor_name`, `action`, `entity_type`/`entity_id`, `detail` jsonb. Written only via `log_audit_event()` (`SECURITY DEFINER`, bypasses the table's own RLS the way every writer function here does), never a direct insert. See "Audit log" below. |
@@ -116,8 +116,9 @@ an admin swaps it out.
   Activity feed (see `scan_feed` above).
 - **`get_all_scan_events()`** — added 2026-09-21, backs Employee Manager's
   "Export all scan logs" button (`JS/Models/ScanEventsModel.js#listAll`).
-  Full `scan_events` history (matched and unmatched — every scan attempt,
-  same source table `get_scan_feed()` reads, just without its `p_limit`),
+  Full `scan_events` history (every stored row — recognised-card scans only,
+  see the `scan_events` table note above; same source table
+  `get_scan_feed()` reads, just without its `p_limit`),
   newest first, capped at 100,000 rows as a safety valve rather than a
   real limit at current volume (~700 rows). Gated to
   `is_admin_or_manager()` — deliberately its OWN function rather than
@@ -137,7 +138,8 @@ an admin swaps it out.
   one `jsonb` object with three keys, all scoped to `scan_events` rows
   within the window:
   - `summary` — `total_scans`, and a count per `result` value (`matched`,
-    `unmatched`, `inactive_card`, `inactive_employee`, `unassigned_card`),
+    `unmatched`, `inactive_card`, `inactive_employee`, `unassigned_card`;
+    `unmatched` is always 0 today, see the `scan_events` table note),
     plus `offline_captured` (rows whose `raw_payload->>'captured_offline'`
     is `true` — see `scan_proximity_code()`'s `p_offline` above), `since`,
     and the clamped `days`.
@@ -149,6 +151,44 @@ an admin swaps it out.
   `get_scan_feed()`/`get_scanner_offline_cache()`, since a scanner-scope
   account already sees every individual scan result live and this is
   just that same data aggregated, not a more sensitive capability.
+- **`get_attendance_report(p_from date, p_to date, p_tz text default 'Asia/Manila')`** —
+  added 2026-09-28 (`Supabase/migrations/20260928000000_attendance_report.sql`),
+  backs the Attendance page (`JS/Features/Attendance/AttendancePage.js` →
+  `JS/Models/AttendanceModel.js`). One row per employee per work day:
+  `employee_id`, `employee_code`, `full_name`, `department`, `work_date`,
+  `first_in`, `last_out`, `in_count`, `worked_seconds`, `open_punch`,
+  `anomaly`. Read-only; no schema change. How a row is built:
+  - **Source of truth is `employees.scan_logs`**, not `scan_events` — that
+    is the only place IN/OUT is stored (see the `scan_events` table note).
+    `scan_events` is only used to find *which* employees have any matched
+    scan in the window, so the JSONB expansion runs for them alone.
+  - **Pairing uses the log's own sequence** (`WITH ORDINALITY` + `lead()`),
+    not timestamp order: direction is assigned in insert order, so a
+    backdated offline sync can carry an earlier `scanned_at` than the entry
+    before it. Each `in` is paired with the very next entry if that entry
+    is an `out`.
+  - **A row belongs to the date of its IN, in `p_tz`** (the client passes
+    the browser's zone). An OUT after midnight stays on the IN's row; the
+    log is read one day past `p_to` so a shift starting on the last day
+    still finds its OUT.
+  - `worked_seconds` = sum of each IN→OUT gap that day (breaks scanned
+    out/in are excluded). `open_punch` = at least one IN with no following
+    OUT (expected while someone is still on shift, otherwise a missing
+    scan). `anomaly` = an OUT timestamped before its IN.
+  - **Bounds:** `p_to - p_from` must be ≤ 30 (31 days inclusive) — 723
+    employees × 31 days stays under the 25,000-row cap, so the cap can't
+    silently truncate a legitimate report; `p_tz` must exist in
+    `pg_timezone_names`; both dates required. Violations raise.
+  - **Gate:** `is_admin_or_manager()` — same as `get_all_scan_events()`,
+    since this is the same per-employee scan history, aggregated. `EXECUTE`
+    revoked from `PUBLIC`/`anon`, granted to `authenticated`.
+  - **Known limits (inherited, not introduced here):** the IN/OUT
+    alternation is per-employee parity, so one missed scan flips every later
+    direction until someone corrects the log; `delete_employee_scan_log()`
+    removes an entry without renumbering the stored directions of later
+    ones. The report surfaces both as `open_punch`/`anomaly` rather than
+    hiding them. Expanding `scan_logs` also grows with an employee's total
+    history — the scheduled archival job on the roadmap keeps that bounded.
 - **`add_employee_remark(...)`** — appends a `{remark, created_by,
   created_by_id, created_at}` entry to `employees.remarks_log`.
 - **`is_admin()` / `is_admin_or_manager()`** — role helper functions used
@@ -583,6 +623,32 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-28 — `get_attendance_report()` added; docs corrected about unmatched scans**
+- New read-only RPC + migration file `20260928000000_attendance_report.sql`
+  (applied to the live project via MCP as `attendance_report`; only the
+  baseline is otherwise in `Supabase/migrations/`, and only Edge Functions
+  auto-deploy, so this file is the version-controlled record). Full
+  contract in the RPC section above.
+- Verified against live data before wiring a client: the core query on
+  real September rows (night shifts crossing UTC midnight land on the
+  right Manila date; multiple IN/OUT pairs per day sum correctly), then
+  the real function under an impersonated admin claim, then the guard
+  paths (no auth context → `not permitted`, range > 31 days, unknown
+  time zone). `has_function_privilege()` confirms anon/PUBLIC can't
+  execute it. `get_advisors` (security): only the accepted
+  self-checking-`SECURITY DEFINER` baseline, now 23 functions instead
+  of 22.
+- **Doc correction, no behavior change:** this file claimed every scan
+  attempt (including `unmatched`) is stored in `scan_events`. The live
+  `scan_proximity_code()` never inserts `unmatched` — live data confirms
+  it (1,882 rows, all `matched`). Corrected the `scan_events` table row,
+  `get_all_scan_events()`, and `get_scanner_performance_stats()` entries.
+  The Scanner Analytics page had an "Unmatched" card that could only ever
+  read 0 because of this; it now appears only if such rows exist.
+- Not changed, deliberately: whether `scan_proximity_code()` *should*
+  store unmatched scans. That is a product/security call (useful signal vs.
+  unbounded junk inserts from any scanner-scope account) for the owner.
 
 **2026-09-26 — Documented `get_scanner_performance_stats()`; built the Scanner Analytics page it was always meant to back**
 - No schema/RPC change — `get_scanner_performance_stats(p_days)` was

@@ -5,7 +5,7 @@
 import { supabase } from './supabaseClient.js';
 import * as access from './accessControl.js';
 
-const VALID_ROUTES = ['directory', 'proximity', 'scanner', 'analytics', 'users', 'settings', 'audit'];
+const VALID_ROUTES = ['directory', 'proximity', 'scanner', 'analytics', 'attendance', 'users', 'settings', 'audit'];
 const hashRoute = location.hash.replace('#', '');
 
 export const appState = {
@@ -25,6 +25,9 @@ export function isAdmin() {
 }
 export function isAdminOrManager() {
   return access.isAdminOrManager(appState.profile);
+}
+export function canViewAttendance() {
+  return access.canViewAttendance(appState.profile);
 }
 export function canViewEmployeeManager() {
   return access.canViewEmployeeManager(appState.profile);

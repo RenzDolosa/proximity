@@ -77,12 +77,14 @@ function paintBody() {
     <div class="stat-grid" style="margin-bottom:16px;">
       <div class="stat-card accent"><div class="stat-value">${total}</div><div class="stat-label">Total scans</div></div>
       <div class="stat-card good"><div class="stat-value">${s.matched || 0}</div><div class="stat-label">Matched (${matchRate}%)</div></div>
-      <div class="stat-card bad"><div class="stat-value">${s.unmatched || 0}</div><div class="stat-label">Unmatched</div></div>
+      ${s.unmatched ? `<div class="stat-card bad"><div class="stat-value">${s.unmatched}</div><div class="stat-label">Unmatched</div></div>` : ''}
       <div class="stat-card bad"><div class="stat-value">${s.inactive_card || 0}</div><div class="stat-label">Inactive card</div></div>
       <div class="stat-card bad"><div class="stat-value">${s.inactive_employee || 0}</div><div class="stat-label">Inactive employee</div></div>
       <div class="stat-card warn"><div class="stat-value">${s.unassigned_card || 0}</div><div class="stat-label">Unassigned card</div></div>
       <div class="stat-card"><div class="stat-value">${s.offline_captured || 0}</div><div class="stat-label">Captured offline</div></div>
     </div>
+
+    ${s.unmatched ? '' : `<p class="sub" style="margin:-6px 0 16px;">Scans of unknown codes aren't stored by the scanner, so they can't be counted here — only recognised cards (including revoked ones) appear.</p>`}
 
     <div class="panel" style="padding:20px;margin-bottom:16px;">
       <h3 style="margin:0 0 4px;">Daily trend</h3>
