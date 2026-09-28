@@ -1,5 +1,6 @@
 import { $ } from '../Utils/dom.js';
 import { esc, fmtTime } from '../Utils/format.js';
+import { wireDateRangeOrdering } from '../Utils/dateRange.js';
 import { toast } from '../Utils/toast.js';
 import { exportXlsx, todayStamp } from '../Utils/xlsxExport.js';
 import { isAdmin } from '../Core/state.js';
@@ -151,16 +152,8 @@ export async function openScanLogModal(employeeId) {
       <div id="log-list" style="max-height:340px;overflow-y:auto;"></div>
     `;
 
-    $('#log-date-from', overlay).addEventListener('change', () => {
-      const toEl = $('#log-date-to', overlay);
-      if (toEl.value && $('#log-date-from', overlay).value > toEl.value) toEl.value = $('#log-date-from', overlay).value;
-      paintList();
-    });
-    $('#log-date-to', overlay).addEventListener('change', () => {
-      const fromEl = $('#log-date-from', overlay);
-      if (fromEl.value && fromEl.value > $('#log-date-to', overlay).value) fromEl.value = $('#log-date-to', overlay).value;
-      paintList();
-    });
+    // Inverted range → swap the two dates into order (Utils/dateRange.js), then repaint.
+    wireDateRangeOrdering($('#log-date-from', overlay), $('#log-date-to', overlay), paintList);
     $('#log-scanner', overlay).addEventListener('change', paintList);
     $('#log-clear', overlay).addEventListener('click', () => {
       $('#log-date-from', overlay).value = '';

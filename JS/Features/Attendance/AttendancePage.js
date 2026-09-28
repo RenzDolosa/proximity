@@ -7,6 +7,7 @@
 // Utils/attendance.js so they're unit-tested rather than buried here.
 import { $ } from '../../Utils/dom.js';
 import { esc, fmtTime } from '../../Utils/format.js';
+import { wireDateRangeOrdering } from '../../Utils/dateRange.js';
 import { toast } from '../../Utils/toast.js';
 import { canViewAttendance } from '../../Core/state.js';
 import { renderPagination } from '../../Components/Pagination.js';
@@ -42,7 +43,7 @@ export async function renderAttendance() {
       <div class="field" style="margin:0;"><label>From</label><input type="date" id="att-from" value="${esc(range.from)}" /></div>
       <div class="field" style="margin:0;"><label>To</label><input type="date" id="att-to" value="${esc(range.to)}" /></div>
       <button class="primary" id="att-run" style="align-self:flex-end;">Run report</button>
-      <button class="ghost" id="att-export" style="align-self:flex-end;" disabled>Export .xlsx</button>
+      <button class="ghost" id="att-export" style="align-self:flex-end;" disabled>Export</button>
     </div>
     <div class="auth-error hidden" id="att-error" style="margin-bottom:12px;"></div>
     <div id="att-body">${loaded ? '' : 'Loading…'}</div>
@@ -50,17 +51,9 @@ export async function renderAttendance() {
 
   $('#att-run').addEventListener('click', runReport);
   $('#att-export').addEventListener('click', exportRows);
-  // Same mutual clamp as the scan-log export modal: picking a "from" after
-  // the current "to" (or vice versa) pulls the other bound along instead of
-  // leaving an inverted, always-invalid range.
-  $('#att-from').addEventListener('change', () => {
-    const to = $('#att-to');
-    if (to.value && $('#att-from').value > to.value) to.value = $('#att-from').value;
-  });
-  $('#att-to').addEventListener('change', () => {
-    const from = $('#att-from');
-    if (from.value && from.value > $('#att-to').value) from.value = $('#att-to').value;
-  });
+  // Same behaviour as the scan-log export modal: an inverted range (from
+  // after to) is swapped into order rather than left always-invalid.
+  wireDateRangeOrdering($('#att-from'), $('#att-to'));
 
   // Stale-while-revalidate, same as AuditLogPage.js: paint what we already
   // have immediately, then refresh for the range currently shown.

@@ -8,6 +8,7 @@
 // whole collect-input-then-act flow" pattern as RevokeCardModal.js.
 import { $ } from '../Utils/dom.js';
 import { fmtTime } from '../Utils/format.js';
+import { wireDateRangeOrdering } from '../Utils/dateRange.js';
 import { openModal, closeModal, setModalLocked } from './Modal.js';
 import { ScanEventsModel } from '../Models/ScanEventsModel.js';
 import { exportXlsx, todayStamp } from '../Utils/xlsxExport.js';
@@ -40,18 +41,9 @@ export function openExportScanLogsModal() {
 
     $('#esl-cancel', overlay).addEventListener('click', () => { finish({ confirmed: false }); closeModal(overlay); });
 
-    // Same mutual-clamp behavior the inline toolbar fields used to have —
-    // picking a "from" after the current "to" (or vice versa) pulls the
-    // other bound along instead of silently producing an inverted,
-    // always-empty range.
-    $('#esl-from', overlay).addEventListener('change', () => {
-      const toEl = $('#esl-to', overlay);
-      if (toEl.value && $('#esl-from', overlay).value > toEl.value) toEl.value = $('#esl-from', overlay).value;
-    });
-    $('#esl-to', overlay).addEventListener('change', () => {
-      const fromEl = $('#esl-from', overlay);
-      if (fromEl.value && fromEl.value > $('#esl-to', overlay).value) fromEl.value = $('#esl-to', overlay).value;
-    });
+    // An inverted range (from after to) would be silently empty, so the two
+    // values are swapped into order instead — see Utils/dateRange.js.
+    wireDateRangeOrdering($('#esl-from', overlay), $('#esl-to', overlay));
 
     $('#esl-ok', overlay).addEventListener('click', async () => {
       const errEl = $('#esl-error', overlay);

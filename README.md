@@ -218,6 +218,11 @@ JS/
     dom.js                       $ / $$
     format.js                    esc / initials / fmtTime
     toast.js                     toast notifications
+    dateRange.js                  shared from/to date-input behaviour: an
+                                   inverted range is swapped into order
+                                   (orderDateRange, wireDateRangeOrdering);
+                                   used by Attendance, Export scan logs and
+                                   the per-employee Scan log
     scanDetails.js                pure helpers for the Analytics drill-down:
                                    the filter list (mirrors the RPC's closed
                                    p_filter list), result labels, titles, cap
@@ -510,6 +515,24 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-28 — Date ranges: an inverted from/to now swaps instead of overwriting**
+- Picking a "from" later than the "to" (or a "to" earlier than the "from")
+  used to overwrite the *other* date with the one just picked, silently
+  discarding a date the person had chosen. It now swaps the two, so from
+  28/09/2026 then to 21/09/2026 becomes from 21/09/2026, to 28/09/2026.
+  An empty end, or a same-day range, is left alone.
+- The same clamp was copy-pasted in three places (`AttendancePage.js`,
+  `ExportScanLogsModal.js`, `ScanLogModal.js`); all three now call one
+  helper, `Utils/dateRange.js` (`orderDateRange()` plus
+  `wireDateRangeOrdering(fromEl, toEl, onChange)`), so a future date-range
+  field gets the behaviour by calling it once. Behaviour is otherwise
+  unchanged — Attendance's own 31-day cap and `validateRange()` still apply.
+- Client-only: no schema, RPC or dependency change.
+- Tests: `test/date-range.test.mjs` (5 new; suite is now 24) — the swap,
+  a year boundary, same-day/empty ranges, both change directions on stand-in
+  inputs, and a null element. A throwaway jsdom run against the real
+  Attendance page confirmed the swapped dates are what the RPC receives.
 
 **2026-09-28 — Scanner Analytics: click a stat card or scanner to see the scans behind it**
 - Every stat card on Scanner Analytics (Total, Matched, Unmatched when
