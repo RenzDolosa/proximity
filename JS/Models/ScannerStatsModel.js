@@ -17,4 +17,18 @@ export const ScannerStatsModel = {
     const clamped = Math.max(1, Math.min(90, days || 7));
     return supabase.rpc('get_scanner_performance_stats', { p_days: clamped });
   },
+
+  // The rows behind a stat card / scanner row on the Analytics page, via
+  // get_scanner_scan_details() (same permission gate and window as get()
+  // above, so a card's number and the list it opens count the same rows).
+  // filter must be one of Utils/scanDetails.js's FILTERS keys — the RPC
+  // raises on anything else. days is clamped exactly like get(); limit is
+  // clamped server-side to 1..1000, total_count on every row is the
+  // uncapped match count.
+  async details({ days = 7, filter = 'all', scannerId = null, limit = 500 } = {}) {
+    const clamped = Math.max(1, Math.min(90, days || 7));
+    return supabase.rpc('get_scanner_scan_details', {
+      p_days: clamped, p_filter: filter, p_scanner_id: scannerId, p_limit: limit,
+    });
+  },
 };

@@ -15,6 +15,8 @@ import { $, $$ } from '../../Utils/dom.js';
 import { esc, fmtTime } from '../../Utils/format.js';
 import { canViewScanner } from '../../Core/state.js';
 import { ScannerStatsModel } from '../../Models/ScannerStatsModel.js';
+import { openScanDetailsModal } from '../../Components/ScanDetailsModal.js';
+import { canDrillDown } from '../../Utils/scanDetails.js';
 
 const RANGE_OPTIONS = [7, 14, 30, 90];
 
@@ -29,7 +31,7 @@ export async function renderAnalytics() {
 
   content.innerHTML = `
     <div class="toolbar">
-      <div class="sub">Scan activity and scanner health over time. Read-only — nothing here can be edited.</div>
+      <div class="sub">Scan activity and scanner health over time. Read-only — nothing here can be edited. Click a number or a scanner to see the scans behind it.</div>
       <div class="sub-nav" id="analytics-range" role="group" aria-label="Date range">
         ${RANGE_OPTIONS.map((d) => `<button type="button" data-days="${d}" class="${d === selectedDays ? 'active' : ''}">${d}d</button>`).join('')}
       </div>
@@ -45,6 +47,15 @@ export async function renderAnalytics() {
       $$('button[data-days]', $('#analytics-range')).forEach((b) => b.classList.toggle('active', b === btn));
       loadStats();
     });
+  });
+
+  // One delegated listener on the body node rather than per-card listeners:
+  // paintBody() replaces every card on each fetch, so per-card wiring would
+  // have to be redone every time (and would leak nothing, but be easy to miss).
+  const bodyEl = $('#analytics-body');
+  bodyEl.addEventListener('click', onDrillActivate);
+  bodyEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') onDrillActivate(e);
   });
 
   // Stale-while-revalidate, same pattern as AuditLogPage.js/UsersPage.js:
@@ -63,6 +74,31 @@ async function loadStats() {
   paintBody();
 }
 
+// Opens the details modal for whichever [data-drill] card/row was activated.
+// The window comes from the stats currently on screen (stats.summary.days),
+// not selectedDays: after clicking a range button the highlighted range
+// changes immediately but the numbers stay on the old range until the fetch
+// resolves, and a drill-down must list the rows those numbers counted.
+function onDrillActivate(e) {
+  const el = e.target.closest?.('[data-drill]');
+  if (!el || !stats) return;
+  if (e.type === 'keydown') e.preventDefault(); // Space would otherwise scroll the page
+  openScanDetailsModal({
+    days: stats.summary?.days || selectedDays,
+    filter: el.dataset.drill,
+    scannerId: el.dataset.scanner || null,
+  });
+}
+
+// A stat card that opens its underlying scans when clicked. A card showing 0
+// has nothing behind it, so it renders as a plain (non-interactive) card.
+function statCard(tone, value, label, filter) {
+  const cls = `stat-card${tone ? ` ${tone}` : ''}`;
+  const inner = `<div class="stat-value">${value}</div><div class="stat-label">${label}</div>`;
+  if (!canDrillDown(value)) return `<div class="${cls}">${inner}</div>`;
+  return `<div class="${cls} clickable" data-drill="${filter}" role="button" tabindex="0" title="Show these scans">${inner}</div>`;
+}
+
 function paintBody() {
   const body = $('#analytics-body');
   if (!body) return; // navigated away before the fetch resolved
@@ -75,13 +111,13 @@ function paintBody() {
 
   body.innerHTML = `
     <div class="stat-grid" style="margin-bottom:16px;">
-      <div class="stat-card accent"><div class="stat-value">${total}</div><div class="stat-label">Total scans</div></div>
-      <div class="stat-card good"><div class="stat-value">${s.matched || 0}</div><div class="stat-label">Matched (${matchRate}%)</div></div>
-      ${s.unmatched ? `<div class="stat-card bad"><div class="stat-value">${s.unmatched}</div><div class="stat-label">Unmatched</div></div>` : ''}
-      <div class="stat-card bad"><div class="stat-value">${s.inactive_card || 0}</div><div class="stat-label">Inactive card</div></div>
-      <div class="stat-card bad"><div class="stat-value">${s.inactive_employee || 0}</div><div class="stat-label">Inactive employee</div></div>
-      <div class="stat-card warn"><div class="stat-value">${s.unassigned_card || 0}</div><div class="stat-label">Unassigned card</div></div>
-      <div class="stat-card"><div class="stat-value">${s.offline_captured || 0}</div><div class="stat-label">Captured offline</div></div>
+      ${statCard('accent', total, 'Total scans', 'all')}
+      ${statCard('good', s.matched || 0, `Matched (${matchRate}%)`, 'matched')}
+      ${s.unmatched ? statCard('bad', s.unmatched, 'Unmatched', 'unmatched') : ''}
+      ${statCard('bad', s.inactive_card || 0, 'Inactive card', 'inactive_card')}
+      ${statCard('bad', s.inactive_employee || 0, 'Inactive employee', 'inactive_employee')}
+      ${statCard('warn', s.unassigned_card || 0, 'Unassigned card', 'unassigned_card')}
+      ${statCard('', s.offline_captured || 0, 'Captured offline', 'offline')}
     </div>
 
     ${s.unmatched ? '' : `<p class="sub" style="margin:-6px 0 16px;">Scans of unknown codes aren't stored by the scanner, so they can't be counted here — only recognised cards (including revoked ones) appear.</p>`}
@@ -139,7 +175,7 @@ function renderScannerTable(byScanner) {
       <thead><tr><th>Scanner</th><th class="col-shrink">Total</th><th class="col-shrink">Matched</th><th class="col-shrink">Match rate</th><th class="col-shrink">Last scan</th></tr></thead>
       <tbody>
         ${byScanner.map((r) => `
-          <tr>
+          <tr class="clickable-row" data-drill="all" data-scanner="${esc(r.scanner_id || '')}" tabindex="0" title="Show this scanner's scans">
             <td class="mono">${esc(r.scanner_id || '—')}</td>
             <td class="col-shrink mono">${r.total}</td>
             <td class="col-shrink mono">${r.matched}</td>

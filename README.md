@@ -115,6 +115,10 @@ JS/
     ProximityCardModal.js
     UserModal.js
     ResetPasswordModal.js
+    ScanDetailsModal.js           the scans behind an Analytics stat card or
+                                  scanner row (added 2026-09-28) — read-only
+                                  list + Export .xlsx, over
+                                  get_scanner_scan_details()
     ScanLogModal.js               per-employee scan log, date/scanner filters;
                                   Export .xlsx button next to the title (added
                                   2026-09-19, exports the full filtered set,
@@ -214,6 +218,11 @@ JS/
     dom.js                       $ / $$
     format.js                    esc / initials / fmtTime
     toast.js                     toast notifications
+    scanDetails.js                pure helpers for the Analytics drill-down:
+                                   the filter list (mirrors the RPC's closed
+                                   p_filter list), result labels, titles, cap
+                                   notice, and canDrillDown() — zero-count
+                                   cards aren't clickable
     clipboard.js                  wireCopyableCodes(wrap, label) — click-to-copy
                                    for [data-copy-code] elements (.copyable-code
                                    in CSS/base.css); shared by Employee Manager's
@@ -501,6 +510,35 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-28 — Scanner Analytics: click a stat card or scanner to see the scans behind it**
+- Every stat card on Scanner Analytics (Total, Matched, Unmatched when
+  present, Inactive card, Inactive employee, Unassigned card, Captured
+  offline) now opens a details dialog listing the actual scans that card
+  counted — time, employee (name, code, department), card, scanner, result,
+  an "offline" tag — newest first, with Export .xlsx. Rows in the By scanner
+  table do the same for that one scanner. Cards showing 0 stay plain (nothing
+  behind them); cards and rows are keyboard-operable (Tab, Enter/Space).
+- The dialog uses the window the *displayed* numbers were loaded for
+  (`stats.summary.days`), not the highlighted range button, so clicking a card
+  right after switching 7d → 30d still lists what that card was counting.
+- Read-only, so the page's "nothing here can be edited" promise still holds
+  (no delete affordance, unlike `ScanLogModal.js`).
+- New: `Components/ScanDetailsModal.js`, `Utils/scanDetails.js`,
+  `ScannerStatsModel.details()`, and the `get_scanner_scan_details()` RPC
+  (`Supabase/migrations/20260928080000_scanner_analytics_drilldown.sql`;
+  gate, window and contract in `Supabase/README.md`). Small CSS additions in
+  `CSS/components.css` (`.stat-card.clickable`, `.clickable-row`). No new
+  dependencies.
+- Tests: `test/scan-details.test.mjs` (5 new; suite is now 19), including one
+  that fails if the UI's filter list drifts from the RPC's. A throwaway jsdom
+  harness outside the repo also exercised the real page + modal: click and
+  Enter/Space activation, zero-count cards inert, employee names and a
+  scanner id shaped like `<img onerror>` rendered as text, the RPC arguments
+  sent, close behaviour.
+- Live/repo drift found on the way (undocumented live RPCs with no UI, and
+  migrations applied live but not committed) is written up in
+  `Supabase/README.md`'s 2026-09-28 entry.
 
 **2026-09-28 — New page: Attendance (+ an Analytics correction)**
 - New route `attendance`, admin/manager only — the same gate as

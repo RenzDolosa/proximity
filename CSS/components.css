@@ -162,6 +162,13 @@ td.row-actions{display:table-cell;}
 .stat-card.good .stat-value{color:var(--good);}
 .stat-card.bad .stat-value{color:var(--bad);}
 .stat-card.warn .stat-value{color:var(--warn);}
+/* Analytics drill-down: a stat card / scanner row that opens the scans behind
+   it (JS/Features/Analytics/AnalyticsPage.js). Zero-count cards are rendered
+   without .clickable, so they never look interactive. */
+.stat-card.clickable{cursor:pointer;transition:border-color .12s,background .12s;}
+.stat-card.clickable:hover,.stat-card.clickable:focus-visible{border-color:var(--accent);background:var(--surface-raised);}
+.clickable-row{cursor:pointer;}
+.clickable-row:hover td,.clickable-row:focus-visible td{background:var(--surface-raised);}
 
 /* Each .trend-col is one day. .trend-bar's own height (set inline, in px)
    is that day's total relative to the busiest day in the window;

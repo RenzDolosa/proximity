@@ -151,6 +151,27 @@ an admin swaps it out.
   `get_scan_feed()`/`get_scanner_offline_cache()`, since a scanner-scope
   account already sees every individual scan result live and this is
   just that same data aggregated, not a more sensitive capability.
+- **`get_scanner_scan_details(p_days integer default 7, p_filter text default 'all', p_scanner_id text default null, p_limit integer default 500)`** —
+  added 2026-09-28 (`Supabase/migrations/20260928080000_scanner_analytics_drilldown.sql`),
+  the row-level twin of `get_scanner_performance_stats()`: backs the
+  click-to-see-details behaviour on the Scanner Analytics stat cards and
+  scanner rows (`Components/ScanDetailsModal.js`). Same gate
+  (`is_admin() or can_view_scanner()`) and the same window expression
+  (`now() - p_days days`, `p_days` clamped `[1, 90]`) as the stats RPC, so a
+  card's number and the list it opens count the same rows (a scan that lands
+  between the two calls is the only possible difference). `p_filter` is a
+  closed list — `all`, `matched`, `unmatched`, `inactive_card`,
+  `inactive_employee`, `unassigned_card`, `offline` (rows whose
+  `raw_payload->>'captured_offline'` is `true`) — and anything else raises;
+  it is compared against `scan_events.result`, never built into SQL.
+  `p_scanner_id` optionally scopes to one scanner. `p_limit` is clamped
+  `[1, 1000]`; every row carries `total_count`, the *uncapped* match count.
+  Returns `scan_id, scanned_at, employee_name, employee_code, department,
+  proximity_code, scanner_id, result, captured_offline, total_count`, newest
+  first (employee columns are null for a card with no employee). Exposes
+  employee names to scanner-scope accounts, which `get_scan_feed()` already
+  does for the same accounts. `REVOKE`d from `PUBLIC`/`anon`, `GRANT`ed to
+  `authenticated` only.
 - **`get_attendance_report(p_from date, p_to date, p_tz text default 'Asia/Manila')`** —
   added 2026-09-28 (`Supabase/migrations/20260928000000_attendance_report.sql`),
   backs the Attendance page (`JS/Features/Attendance/AttendancePage.js` →
@@ -623,6 +644,32 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-28 — `get_scanner_scan_details()` added (Scanner Analytics drill-down); live/repo drift noted**
+- New read-only RPC + migration file `20260928080000_scanner_analytics_drilldown.sql`
+  (applied to the live project via MCP as `scanner_analytics_drilldown`).
+  Full contract in the RPC section above. No table, RLS or existing-grant
+  changes.
+- Verified live before wiring the client: `has_function_privilege()` is
+  false for `anon` and `PUBLIC`, true for `authenticated`; under an
+  impersonated admin claim the list totals equal the stat-card counts for
+  `all`, `matched`, `inactive_employee` and `offline`; `p_limit` caps rows
+  while `total_count` stays uncapped; an unknown user is refused with `not
+  permitted`; an injection-shaped `p_filter` is rejected with `unknown scan
+  filter`.
+- **Drift found while doing this — live is ahead of the repo.**
+  `supabase_migrations.schema_migrations` on the live project lists
+  `onsite_roster` and `dashboard_scanner_registry_alerts` (both
+  2026-09-28), and `get_all_scan_events_add_date_filter`,
+  `export_scan_logs_rpc` / `drop_redundant_export_scan_logs_rpc`
+  (2026-09-24); none of them has a file in `Supabase/migrations/`. The live
+  project also has RPCs with no caller in the client and no entry in this
+  file: `get_dashboard_stats`, `get_onsite_roster`, `get_alerts`,
+  `get_unread_alert_count`, `get_scanners` (plus `alerts` and `scanners`
+  tables they read). Same "backend shipped, UI never followed" pattern as
+  the Audit Log and Scanner Analytics. Not reconciled here — `supabase db
+  pull` (or `Supabase:list_tables` + `pg_get_functiondef`) is the way to
+  capture them before anyone runs `supabase db reset` from this folder.
 
 **2026-09-28 — `get_attendance_report()` added; docs corrected about unmatched scans**
 - New read-only RPC + migration file `20260928000000_attendance_report.sql`
