@@ -59,3 +59,28 @@ nav.rail button.active .ic{color:var(--accent);}
 }
 .table-scroll table{width:100%;}
 .table-scroll thead th{position:sticky;top:0;background:var(--bg);z-index:1;}
+
+/* Sticky table headers on pages whose table is NOT a direct child of
+   #content. Employee Manager / Proximity Cards / Users / Audit Log put
+   .toolbar + .table-scroll + pagination straight under #content (a bounded
+   flex column), so .table-scroll absorbs the overflow and scrolls itself —
+   which is what makes `.table-scroll thead th{position:sticky}` above
+   actually stick. Attendance and Scanner Analytics nest their table one
+   level down (#att-body / #analytics-body → .panel), so .table-scroll's
+   flex sizing never applied: it grew to full content height, never
+   scrolled itself, and #content scrolled instead — leaving the sticky
+   header with no scroller to stick to. Fixed here with CSS only, no
+   markup or JS changes. */
+
+/* Attendance: make #att-body the bounded flex column .table-scroll needs.
+   Everything else in it (stat cards, filters, pagination, footnote) stays
+   its natural height; only the table area flexes and scrolls. */
+#att-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;}
+#att-body > *{flex:0 0 auto;}
+#att-body > .table-scroll{flex:1 1 auto;}
+
+/* Analytics: the table shares a long page with stat cards and a chart, so
+   it can't fill "the rest of the screen" — cap its height instead and let
+   long scanner lists scroll inside it with the header pinned (same cap
+   ScanDetailsModal uses for its table). */
+#analytics-body .table-scroll{max-height:min(420px, 50dvh);}

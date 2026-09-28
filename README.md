@@ -516,6 +516,23 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-28 — Sticky table headers on Attendance and Scanner Analytics**
+- Reported: unlike Employee Manager and Proximity Cards, the header row
+  scrolled away on both pages. Root cause: `.table-scroll thead th
+  {position:sticky}` (`CSS/layout.css`) only works when `.table-scroll`
+  is itself the scroller. On the table-first pages it's a direct child of
+  `#content` (a bounded flex column), so it absorbs the overflow and
+  scrolls. Attendance and Analytics nest the table one level deeper
+  (`#att-body`, and `.panel` inside `#analytics-body`), so `.table-scroll`
+  never got a bounded height, grew to full content height, and `#content`
+  scrolled instead — leaving the sticky header nothing to stick to.
+- Fixed with CSS only (`CSS/layout.css`, no markup/JS change):
+  `#att-body` is now a bounded flex column so its table area scrolls with
+  the stat cards, filters and pagination pinned around it; Analytics'
+  by-scanner table gets a `max-height: min(420px, 50dvh)` instead, since
+  it shares a long page with stat cards and a chart and can't fill "the
+  rest of the screen" the way a table-first page does.
+
 **2026-09-28 — Date ranges: an inverted from/to now swaps instead of overwriting**
 - Picking a "from" later than the "to" (or a "to" earlier than the "from")
   used to overwrite the *other* date with the one just picked, silently

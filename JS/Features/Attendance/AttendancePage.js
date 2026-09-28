@@ -40,8 +40,8 @@ export async function renderAttendance() {
       <div class="sub">Time on site per employee per day, from IN/OUT scans. A day belongs to the date of its IN scan, so a shift that runs past midnight stays on one row. Read-only.</div>
     </div>
     <div class="filter-row" style="margin-bottom:14px;flex-wrap:wrap;">
-      <div class="field" style="margin:0;"><label>From</label><input type="date" id="att-from" value="${esc(range.from)}" /></div>
-      <div class="field" style="margin:0;"><label>To</label><input type="date" id="att-to" value="${esc(range.to)}" /></div>
+      <div class="field" style="margin:0;"><input type="date" id="att-from" value="${esc(range.from)}" /></div>
+      <div class="field" style="margin:0;"><input type="date" id="att-to" value="${esc(range.to)}" /></div>
       <button class="primary" id="att-run" style="align-self:flex-end;">Run report</button>
       <button class="ghost" id="att-export" style="align-self:flex-end;" disabled>Export</button>
     </div>
@@ -137,11 +137,6 @@ function paintBody() {
 
     <div class="table-scroll"><div id="att-table-wrap"></div></div>
     <div id="att-pagination"></div>
-    <p class="sub" style="margin-top:12px;">
-      <b>No OUT yet</b> is normal for someone still on shift, and otherwise means a missing OUT scan.
-      <b>Check times</b> means an OUT is timestamped before its IN (usually a backdated offline sync).
-      Time on site is the sum of each IN to its following OUT, so breaks that were scanned out and in are excluded.
-    </p>
   `;
 
   // The search box repaints only the table, never the whole body — a full
