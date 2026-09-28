@@ -180,3 +180,18 @@ td.row-actions{display:table-cell;}
 .trend-bar{width:100%;display:flex;flex-direction:column-reverse;border-radius:2px 2px 0 0;overflow:hidden;background:var(--bad-dim);min-height:2px;}
 .trend-bar-matched{width:100%;background:var(--accent);}
 .trend-day{margin-top:4px;font-size:9.5px;color:var(--text-faint);font-family:var(--mono);white-space:nowrap;}
+/* Small, shared scrollbar — one rule for every scroller in the app (table
+   areas, modals, the sidebar, #content) instead of per-component styling,
+   so anything new that scrolls picks it up for free. Colors come from the
+   theme tokens (CSS/variables.css), so it follows light/dark mode.
+   scrollbar-width/-color are the standard properties (Firefox, and
+   Chromium 121+); the ::-webkit-scrollbar rules cover older Chromium and
+   Safari. Chromium 121+ ignores the webkit ones once the standard
+   properties are set, so the two sets are deliberately kept visually
+   equivalent (thin, transparent track, muted thumb). */
+*{scrollbar-width:thin;scrollbar-color:var(--text-faint) transparent;}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--text-faint);border-radius:999px;}
+::-webkit-scrollbar-thumb:hover{background:var(--text-muted);}

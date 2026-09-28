@@ -37,18 +37,35 @@ export async function renderAttendance() {
 
   content.innerHTML = `
     <div class="toolbar">
-      <div class="sub">Time on site per employee per day, from IN/OUT scans. A day belongs to the date of its IN scan, so a shift that runs past midnight stays on one row. Read-only.</div>
-    </div>
-    <div class="filter-row" style="margin-bottom:14px;flex-wrap:wrap;">
-      <div class="field" style="margin:0;"><input type="date" id="att-from" value="${esc(range.from)}" /></div>
-      <div class="field" style="margin:0;"><input type="date" id="att-to" value="${esc(range.to)}" /></div>
-      <button class="primary" id="att-run" style="align-self:flex-end;">Run report</button>
-      <button class="ghost" id="att-export" style="align-self:flex-end;" disabled>Export</button>
+      <div class="filter-row">
+        <input class="search" id="att-q" type="search" placeholder="Search name or code…" value="${esc(filters.query)}" />
+        <select id="att-dept">
+          <option value="">All departments</option>
+        </select>
+        <select id="att-status">
+          <option value="">All statuses</option>
+          ${Object.entries(STATUS_LABEL).map(([k, v]) => `<option value="${k}" ${k === filters.status ? 'selected' : ''}>${esc(v)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="filter-row">
+        <input type="date" id="att-from" value="${esc(range.from)}" />
+        <input type="date" id="att-to" value="${esc(range.to)}" />
+        <button class="primary" id="att-run">Run report</button>
+        <button class="ghost" id="att-export" disabled>Export</button>
+      </div>
     </div>
     <div class="auth-error hidden" id="att-error" style="margin-bottom:12px;"></div>
     <div id="att-body">${loaded ? '' : 'Loading…'}</div>
   `;
 
+  // Search/department/status live in the persistent page shell above (same
+  // one-row toolbar as Employee Manager and Proximity Cards), not inside
+  // #att-body, so painting the results never replaces them: the search
+  // <input> keeps focus and caret while typing, and the handlers are wired
+  // once here instead of being re-bound on every paintBody().
+  $('#att-q').addEventListener('input', (e) => { filters.query = e.target.value; page = 1; paintTable(); });
+  $('#att-dept').addEventListener('change', (e) => { filters.department = e.target.value; page = 1; paintBody(); });
+  $('#att-status').addEventListener('change', (e) => { filters.status = e.target.value; page = 1; paintBody(); });
   $('#att-run').addEventListener('click', runReport);
   $('#att-export').addEventListener('click', exportRows);
   // Same behaviour as the scan-log export modal: an inverted range (from
@@ -105,12 +122,21 @@ function paintBody() {
   const exportBtn = $('#att-export');
   if (exportBtn) exportBtn.disabled = !rowsCache.length;
 
+  // Department choices come from the loaded report, so they're refreshed
+  // here (into the persistent toolbar's <select>) every time the data or a
+  // filter changes — including down to just "All departments" when a new
+  // range comes back empty.
+  const departments = [...new Set(rowsCache.map((r) => r.department || '').filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const deptEl = $('#att-dept');
+  if (deptEl) {
+    deptEl.innerHTML = `<option value="">All departments</option>${departments.map((d) => `<option value="${esc(d)}" ${d === filters.department ? 'selected' : ''}>${esc(d)}</option>`).join('')}`;
+  }
+
   if (!rowsCache.length) {
     body.innerHTML = `<div class="empty-state">No IN/OUT scans recorded in this range.</div>`;
     return;
   }
 
-  const departments = [...new Set(rowsCache.map((r) => r.department || '').filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const shown = filterRows(rowsCache, filters);
   const sum = summarize(shown);
 
@@ -123,27 +149,10 @@ function paintBody() {
       <div class="stat-card bad"><div class="stat-value">${sum.anomalies}</div><div class="stat-label">Check times</div></div>
     </div>
 
-    <div class="filter-row" style="margin-bottom:12px;">
-      <input class="search" id="att-q" type="search" placeholder="Search name or code…" value="${esc(filters.query)}" />
-      <select id="att-dept">
-        <option value="">All departments</option>
-        ${departments.map((d) => `<option value="${esc(d)}" ${d === filters.department ? 'selected' : ''}>${esc(d)}</option>`).join('')}
-      </select>
-      <select id="att-status">
-        <option value="">All statuses</option>
-        ${Object.entries(STATUS_LABEL).map(([k, v]) => `<option value="${k}" ${k === filters.status ? 'selected' : ''}>${esc(v)}</option>`).join('')}
-      </select>
-    </div>
-
     <div class="table-scroll"><div id="att-table-wrap"></div></div>
     <div id="att-pagination"></div>
   `;
 
-  // The search box repaints only the table, never the whole body — a full
-  // repaint would replace the <input> mid-typing and drop focus/caret.
-  $('#att-q').addEventListener('input', (e) => { filters.query = e.target.value; page = 1; paintTable(); });
-  $('#att-dept').addEventListener('change', (e) => { filters.department = e.target.value; page = 1; paintBody(); });
-  $('#att-status').addEventListener('change', (e) => { filters.status = e.target.value; page = 1; paintBody(); });
   paintTable();
 }
 

@@ -31,7 +31,6 @@ export async function renderAnalytics() {
 
   content.innerHTML = `
     <div class="toolbar">
-      <div class="sub">Scan activity and scanner health over time. Read-only — nothing here can be edited. Click a number or a scanner to see the scans behind it.</div>
       <div class="sub-nav" id="analytics-range" role="group" aria-label="Date range">
         ${RANGE_OPTIONS.map((d) => `<button type="button" data-days="${d}" class="${d === selectedDays ? 'active' : ''}">${d}d</button>`).join('')}
       </div>
@@ -119,8 +118,6 @@ function paintBody() {
       ${statCard('warn', s.unassigned_card || 0, 'Unassigned card', 'unassigned_card')}
       ${statCard('', s.offline_captured || 0, 'Captured offline', 'offline')}
     </div>
-
-    ${s.unmatched ? '' : `<p class="sub" style="margin:-6px 0 16px;">Scans of unknown codes aren't stored by the scanner, so they can't be counted here — only recognised cards (including revoked ones) appear.</p>`}
 
     <div class="panel" style="padding:20px;margin-bottom:16px;">
       <h3 style="margin:0 0 4px;">Daily trend</h3>

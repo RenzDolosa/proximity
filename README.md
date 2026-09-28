@@ -516,6 +516,30 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-28 — Attendance: one-row toolbar; small shared scrollbar**
+- **Attendance toolbar** now matches Employee Manager and Proximity
+  Cards: search, department and status on the left; From/To dates, Run
+  report and Export on the right, all in one `.toolbar` row. Previously
+  the dates/buttons sat in their own row above the stat cards and the
+  search/department/status filters were rebuilt inside `#att-body`,
+  underneath them.
+- **Structural change behind it** (`AttendancePage.js`): the filters moved
+  out of `paintBody()` into the persistent page shell. Nothing that
+  matters to the user changes, but `paintBody()` no longer replaces the
+  search `<input>` (so typing can't lose focus), the three filter
+  handlers are wired once in `renderAttendance()` instead of on every
+  paint, and `paintBody()` now only refreshes the department `<option>`s
+  from the loaded report (down to just "All departments" if a range comes
+  back empty). The filters now stay visible on an empty range too.
+- **Small scrollbar**: one shared rule in `CSS/components.css` styles
+  every scroller in the app (tables, modals, sidebar, page) as thin with
+  a transparent track and muted thumb, using the theme tokens so it
+  follows light/dark. Standard `scrollbar-width`/`scrollbar-color` plus
+  `::-webkit-scrollbar` fallbacks for older Chromium/Safari.
+- Known, pre-existing and left as-is: typing in the search box repaints
+  only the table, not the stat cards, so the summary numbers don't follow
+  the search text until a department/status change repaints them.
+
 **2026-09-28 — Sticky table headers on Attendance and Scanner Analytics**
 - Reported: unlike Employee Manager and Proximity Cards, the header row
   scrolled away on both pages. Root cause: `.table-scroll thead th
