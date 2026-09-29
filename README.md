@@ -557,6 +557,53 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-28 — Three fixes: Alerts nav flash, Attendance's default date, password-manager interference**
+- **Alerts always showed "Loading…" on nav click.** `renderAlerts()` had no
+  `loaded` guard (every other page — Dashboard, Attendance, Audit Log — does),
+  so switching to Alerts from the sidebar rebuilt `#al-body` as `Loading…`
+  every single time, even when the last fetch was seconds old. `load()` is
+  now split into `load()` (fetch) + `paint(rows)` (render from a cached
+  `rowsCache`), matching the stale-while-revalidate pattern already used
+  elsewhere: a repeat visit paints the cached rows instantly and refreshes
+  underneath, instead of flashing empty.
+- **Attendance's default range could go stale for a long-lived tab.**
+  `let range = defaultRange()` ran once at module import — first page load —
+  and was never recomputed after that except when "Run report" actually ran.
+  Leave a tab open across midnight without ever touching the date pickers,
+  and "today" silently kept meaning whatever day the tab happened to load.
+  Fixed with a `userSetRange` flag: false until the user actually changes
+  either date input (a `change` listener sets it), and every render
+  recomputes `range = defaultRange()` from *today* until then — so the
+  default always tracks the real current date, and stops doing so exactly
+  once the user has picked their own range, which then survives navigating
+  away and back (unchanged from before).
+  Verified with a jsdom harness against the real modules (a stub
+  `Core/supabaseClient.js`, not a live Supabase call): default before any
+  interaction stayed pinned to "today" across two renders; picking a range
+  and running the report, then re-rendering (simulating leaving the page and
+  coming back), kept the picked range rather than reverting to today.
+- **Change password: browser/extension autofill interference.** The fields
+  already had the spec-correct `autocomplete="current-password"` /
+  `"new-password"` tokens, but had no `name` attributes and weren't inside a
+  `<form>` — both of which browser and password-manager-extension heuristics
+  lean on alongside `autocomplete`, and third-party managers (LastPass,
+  1Password, Bitwarden) are documented to disregard `new-password` outright
+  and fill a saved current password into all three fields. Fixed: the three
+  fields now sit in a real `<form>` with distinct `name`s, a hidden
+  off-screen `username` field ahead of them (gives autofill heuristics a
+  login-shaped anchor to key off instead of guessing), and
+  `data-lpignore`/`data-1p-ignore`/`data-bwignore`/`data-form-type="other"` to
+  opt out of the extensions that ignore the autocomplete spec. The Update
+  button is now `type="submit"` with an explicit `submit` handler
+  (`e.preventDefault()` then the existing save logic) so Enter in any field
+  still submits instead of hard-reloading the page now that it's a real
+  form. Not verified against an actual password manager extension — no
+  browser with one installed in this environment — so treat this as the
+  standard, well-documented mitigation rather than a confirmed fix; if a
+  specific manager still misbehaves, say which one.
+- Ran the full test suite (32/32) and re-checked every relative import
+  resolves against its target's actual exports after all three changes.
+
 **2026-09-28 — Dashboard: "On site now" table header now stays pinned**
 - **Reported**: scrolling the roster scrolled the whole page and the column
   header went with it. **Root cause** (same one Attendance and Scanner

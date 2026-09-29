@@ -59,13 +59,28 @@ export async function renderSettings() {
     <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
       <h3 style="margin:0 0 4px;">Change password</h3>
       <p class="sub" style="margin:0 0 10px;">Update the password for your own account (${esc(appState.profile?.email || appState.session?.user?.email || '')}). This only changes what you sign in with — it's separate from an admin resetting someone else's password from Users &amp; Roles.</p>
-      <div class="field"><label>Current password</label><input id="cp-current" type="password" autocomplete="current-password" /></div>
-      <div class="field"><label>New password</label><input id="cp-new" type="password" placeholder="min. 6 characters" autocomplete="new-password" /></div>
-      <div class="field"><label>Confirm new password</label><input id="cp-confirm" type="password" autocomplete="new-password" /></div>
-      <div class="auth-error hidden" id="cp-error"></div>
-      <div style="display:flex;justify-content:flex-end;">
-        <button type="button" class="primary" id="cp-save">Update password</button>
-      </div>
+      <form id="cp-form" autocomplete="off">
+        <!-- A hidden, off-screen (not display:none — some managers skip those) username field
+             gives Chrome/Firefox's own heuristics a "sign-in form" shape to anchor on, which
+             stops them second-guessing autocomplete="current-password" below on a page that
+             isn't actually the login screen. It's never read; ProfilesModel.changePassword()
+             gets the email from appState. -->
+        <input type="text" name="username" autocomplete="username" value="${esc(appState.profile?.email || '')}"
+               style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;" tabindex="-1" aria-hidden="true" />
+        <div class="field"><label>Current password</label>
+          <input id="cp-current" name="current-password" type="password" autocomplete="current-password"
+                 data-lpignore="true" data-1p-ignore data-bwignore="true" data-form-type="other" /></div>
+        <div class="field"><label>New password</label>
+          <input id="cp-new" name="new-password" type="password" placeholder="min. 6 characters" autocomplete="new-password"
+                 data-lpignore="true" data-1p-ignore data-bwignore="true" data-form-type="other" /></div>
+        <div class="field"><label>Confirm new password</label>
+          <input id="cp-confirm" name="new-password-confirm" type="password" autocomplete="new-password"
+                 data-lpignore="true" data-1p-ignore data-bwignore="true" data-form-type="other" /></div>
+        <div class="auth-error hidden" id="cp-error"></div>
+        <div style="display:flex;justify-content:flex-end;">
+          <button type="submit" class="primary" id="cp-save">Update password</button>
+        </div>
+      </form>
     </div>
 
     ${(!showSounds && !showPhotos) ? `
@@ -137,7 +152,10 @@ export async function renderSettings() {
   $$('button[data-theme-choice]', $('#theme-picker')).forEach((btn) => {
     btn.addEventListener('click', () => { setTheme(btn.dataset.themeChoice); paintThemePicker(); });
   });
-  $('#cp-save').addEventListener('click', handleChangePassword);
+  // A real <form> (see the comment above) needs its own submit handler —
+  // Enter in any single field inside a <form> submits it even with no
+  // explicit listener on the button — or the page would hard-reload.
+  $('#cp-form').addEventListener('submit', (e) => { e.preventDefault(); handleChangePassword(); });
   if (showSounds && loaded) { paintRows(); paintStorageSummary(); }
   if (showPhotos && photoLoaded) paintPhotoStorage();
   if (isAdmin()) {

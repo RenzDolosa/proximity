@@ -23,6 +23,12 @@ import {
 const STATUS_BADGE = { complete: 'matched', open: 'unassigned_card', anomaly: 'inactive_card' };
 
 let range = defaultRange();
+// True once the user has actually touched a date input. Before that, every
+// render recomputes range = defaultRange() from *today* (see below) — a
+// module-level `range` set once at import time would otherwise go stale:
+// leave this tab open across midnight and "today" silently means whatever
+// day the page happened to first load, not the day it actually is now.
+let userSetRange = false;
 let rowsCache = [];   // the last successfully loaded report, unfiltered
 let loaded = false;   // distinguishes "never fetched" from "fetched, zero rows"
 let loadedRange = null; // the range rowsCache actually covers (may differ from the inputs mid-edit)
@@ -34,6 +40,11 @@ let requestSeq = 0;   // drops a slow, superseded response instead of letting it
 export async function renderAttendance() {
   const content = $('#content');
   if (!canViewAttendance()) { content.innerHTML = `<div class="empty-state">You don't have access to this page.</div>`; return; }
+
+  // Keep the default anchored to *today* until the user picks their own
+  // range — once they do, their choice is what "unless the date picker is
+  // used" means, and it survives navigating away and back within this tab.
+  if (!userSetRange) range = defaultRange();
 
   content.innerHTML = `
     <div class="toolbar">
@@ -68,6 +79,8 @@ export async function renderAttendance() {
   $('#att-status').addEventListener('change', (e) => { filters.status = e.target.value; page = 1; paintBody(); });
   $('#att-run').addEventListener('click', runReport);
   $('#att-export').addEventListener('click', exportRows);
+  $('#att-from').addEventListener('change', () => { userSetRange = true; });
+  $('#att-to').addEventListener('change', () => { userSetRange = true; });
   // Same behaviour as the scan-log export modal: an inverted range (from
   // after to) is swapped into order rather than left always-invalid.
   wireDateRangeOrdering($('#att-from'), $('#att-to'));

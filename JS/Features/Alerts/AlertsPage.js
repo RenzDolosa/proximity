@@ -12,6 +12,10 @@ import { refreshAlertsBadge } from '../../Core/alertsBadge.js';
 
 let showAcked = false;
 let requestSeq = 0;
+let rowsCache = [];  // the last successfully loaded page, so a nav-away/back
+                      // re-render can paint instantly instead of flashing
+                      // "Loading…" over content that's still perfectly valid
+let loaded = false;  // distinguishes "never fetched" from "fetched, zero rows"
 
 export async function renderAlerts() {
   const content = $('#content');
@@ -28,11 +32,18 @@ export async function renderAlerts() {
       </div>
     </div>
     <div class="auth-error hidden" id="al-error" style="margin-bottom:12px;"></div>
-    <div class="table-scroll"><div id="al-body">Loading…</div></div>
+    <div class="table-scroll"><div id="al-body">${loaded ? '' : 'Loading…'}</div></div>
   `;
   $('#al-show-acked').addEventListener('change', (e) => { showAcked = e.target.checked; load(); });
   $('#al-refresh').addEventListener('click', load);
   $('#al-ack-all').addEventListener('click', ackAll);
+  // Same stale-while-revalidate pattern as Attendance/Dashboard: paint the
+  // last loaded page immediately (so re-opening this tab from the sidebar
+  // never shows a "Loading…" flash for data it already has), then refresh
+  // in the background. Switching "Show acknowledged" still goes through
+  // load() -> Loading is fine there since the previous rows may not match
+  // the new toggle at all.
+  if (loaded) paint(rowsCache);
   await load();
 }
 
@@ -57,11 +68,16 @@ async function load() {
   const seq = ++requestSeq;
   const { data, error } = await AlertsModel.list({ includeAcknowledged: showAcked });
   if (seq !== requestSeq) return;
+  if (error) { showError(error.message); if (!loaded) { const b = $('#al-body'); if (b) b.innerHTML = ''; } return; }
+  showError('');
+  rowsCache = data || [];
+  loaded = true;
+  paint(rowsCache);
+}
+
+function paint(rows) {
   const body = $('#al-body');
   if (!body) return;
-  if (error) { showError(error.message); body.innerHTML = ''; return; }
-  showError('');
-  const rows = data || [];
   const unread = rows.filter((a) => !a.acknowledged_at).length;
   $('#al-ack-all').disabled = unread === 0;
   refreshAlertsBadge();
