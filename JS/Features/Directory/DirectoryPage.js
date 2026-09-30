@@ -133,10 +133,23 @@ export async function renderDirectory() {
 
   const { data, error } = await EmployeesModel.listDirectory();
   if (error) { $('#dir-table-wrap').innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
-  appState.employeesCache = data || [];
+  const next = data || [];
+  // Repainting the table recreates every row's DOM node, including each
+  // <img>, so a repeat visit to Employee Manager used to tear down and
+  // reload every already-loaded photo TWICE per click: once for the
+  // "paint from cache" line above (unavoidable — it's what shows anything
+  // before this fetch resolves), then again here once the fetch came back
+  // — even when the fetch returned byte-for-byte the same roster, which is
+  // the common case. Skipping this second repaint when nothing actually
+  // changed cuts that to once, and leaves already-decoded photos alone on
+  // every visit where nobody else edited the roster in the meantime.
+  const changed = !loaded || JSON.stringify(next) !== JSON.stringify(appState.employeesCache);
+  appState.employeesCache = next;
   loaded = true;
-  page = 1;
-  paintDirectoryTable($('#dir-search')?.value || '');
+  if (changed) {
+    page = 1;
+    paintDirectoryTable($('#dir-search')?.value || '');
+  }
   subscribeToScans();
 }
 

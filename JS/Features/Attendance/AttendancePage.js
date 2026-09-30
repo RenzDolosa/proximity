@@ -155,11 +155,11 @@ function paintBody() {
 
   body.innerHTML = `
     <div class="stat-grid" style="margin-bottom:14px;">
-      <div class="stat-card accent"><div class="stat-value">${sum.employees}</div><div class="stat-label">Employees</div></div>
-      <div class="stat-card"><div class="stat-value">${sum.days}</div><div class="stat-label">Employee-days</div></div>
-      <div class="stat-card good"><div class="stat-value">${esc(fmtDuration(sum.workedSeconds))}</div><div class="stat-label">Total time on site</div></div>
-      <div class="stat-card warn"><div class="stat-value">${sum.open}</div><div class="stat-label">No OUT yet</div></div>
-      <div class="stat-card bad"><div class="stat-value">${sum.anomalies}</div><div class="stat-label">Check times</div></div>
+      <div class="stat-card accent" title="Distinct employees who have at least one row below, after the current search/department/status filters."><div class="stat-value">${sum.employees}</div><div class="stat-label">Employees</div></div>
+      <div class="stat-card" title="Total rows shown — one per employee per day, so one employee working several days in the range contributes several rows."><div class="stat-value">${sum.days}</div><div class="stat-label">Employee-days</div></div>
+      <div class="stat-card good" title="Sum of every IN&#8594;OUT gap across the rows shown. Breaks that were scanned out and back in are excluded, and a day with no OUT yet contributes 0 until it's closed."><div class="stat-value">${esc(fmtDuration(sum.workedSeconds))}</div><div class="stat-label">Total time on site</div></div>
+      <div class="stat-card warn" title="Rows with an IN and no following OUT. Normal for someone still on shift; otherwise it usually means a missed OUT scan."><div class="stat-value">${sum.open}</div><div class="stat-label">No OUT yet</div></div>
+      <div class="stat-card bad" title="Rows where an OUT is timestamped before its IN — almost always a backdated offline sync landing out of order, not an actual time-travel shift."><div class="stat-value">${sum.anomalies}</div><div class="stat-label">Check times</div></div>
     </div>
 
     <div class="table-scroll"><div id="att-table-wrap"></div></div>

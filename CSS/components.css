@@ -175,6 +175,15 @@ td.row-actions{display:table-cell;}
 .clickable-row{cursor:pointer;}
 .clickable-row:hover td,.clickable-row:focus-visible td{background:var(--surface-raised);}
 
+/* Dashboard's "On site by department" chips (Features/Dashboard/DashboardPage.js
+   + Components/DepartmentRosterModal.js) — inline text-styled buttons so they
+   sit naturally inside the .emp-meta summary line instead of looking like a
+   row of pills. */
+.dept-chip{background:none;border:none;padding:0;margin:0;font:inherit;color:inherit;cursor:pointer;}
+.dept-chip:hover,.dept-chip:focus-visible{color:var(--accent);}
+.dept-chip strong{text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:2px;}
+.dept-chip:hover strong,.dept-chip:focus-visible strong{text-decoration-color:currentColor;}
+
 /* Each .trend-col is one day. .trend-bar's own height (set inline, in px)
    is that day's total relative to the busiest day in the window;
    .trend-bar-matched is the matched share *within* that bar (set inline,

@@ -549,13 +549,68 @@ branch protection before relying on them as merge gates.
 
 ---
 *Last reconciled against the live GitHub repo and live Supabase project on
-2026-09-28. If you're another Claude instance picking this project up: fetch
+2026-09-29. If you're another Claude instance picking this project up: fetch
 `github.com/RenzDolosa/proximity` fresh (via web_search + web_fetch, or the
 GitHub connector) and re-verify against `Supabase:list_tables` /
 `list_edge_functions` before making schema or Edge Function claims — this
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-29 — Four small fixes: department drill-down, photo reload, stat-card tooltips, password autofill**
+- **Dashboard: "On site by department" is now clickable.** Each department
+  in that summary line was plain text; it's now a `.dept-chip` button that
+  opens `Components/DepartmentRosterModal.js` — a read-only list of exactly
+  the live, active employees counted in that chip (same `filterRoster(...,
+  { view: 'live' })` the chip's own number comes from, so the two can never
+  disagree), with an .xlsx export. Purely a client-side filter of the
+  roster `DashboardPage.js` already has loaded — no new RPC, no fetch.
+- **Employee Manager: photos were being torn down and reloaded twice on
+  every visit, even when nothing changed.** `renderDirectory()` always
+  repainted the whole table twice per click — once immediately from
+  `appState.employeesCache` (needed, so the page isn't blank while the
+  fetch is in flight), then again once `EmployeesModel.listDirectory()`
+  resolved, unconditionally, even when the fetch came back byte-for-byte
+  identical to the cache (the common case: nobody else edited the roster
+  between visits). Every repaint replaces `#dir-table-wrap`'s `innerHTML`,
+  which destroys and recreates every `<img>`, so each visit re-fetched
+  every visible photo from Google Drive twice regardless of whether
+  anything actually changed. Fixed by comparing the fetch result against
+  the cache (`JSON.stringify` equality) and skipping the second repaint
+  when they match — down to one repaint per visit, and zero when nothing
+  changed since last time. The very first repaint (from cache, before the
+  fetch resolves) is unavoidable within this app's per-route
+  `content.innerHTML` navigation model and wasn't touched. Verified with a
+  jsdom harness against the real module: captured the `<img>` node
+  reference mid-render (after the sync cache-paint, before the awaited
+  fetch resolves) and confirmed it survives an unchanged fetch but is
+  correctly replaced when the fetched data differs.
+- **Attendance: hover text added to all five stat cards** (Employees,
+  Employee-days, Total time on site, No OUT yet, Check times) — plain
+  `title` attributes, same idiom already used elsewhere in this app (the
+  "offline" scan badge, the unresolved-remarks toggle). Wording matches the
+  explanatory paragraph already under the table.
+- **Settings: Change password no longer invites the browser's own
+  autofill/save-password prompt.** The 2026-09-28 fix below used the
+  spec-correct `autocomplete="current-password"` specifically *to*
+  cooperate with the browser's built-in password manager — which is
+  exactly what a signed-in, unattended kiosk account doesn't want offered
+  here. Current password's `autocomplete` is now `new-password` too (the
+  standard, if unintuitive, cross-browser way to say "don't suggest a
+  saved password, don't offer to save this one" — there's no dedicated
+  token for that), and the hidden anchor `username` field is removed
+  entirely, since it existed only to help the autofill it's now trying to
+  suppress and its presence alongside a password field is part of what
+  triggers Chrome's post-submit "Save this password?" prompt. The
+  extension opt-outs (`data-lpignore`/`data-1p-ignore`/`data-bwignore`)
+  are unchanged. Same caveat as before: not verified against a real
+  browser + password-manager extension in this sandboxed environment.
+- Ran the full test suite (32/32, unchanged — none of these four touch
+  anything unit-tested) after all four changes, and smoke-tested each in a
+  throwaway jsdom harness outside the repo: chip click → modal → correct
+  row count and export enabled; the photo-repaint comparison above; the
+  five tooltip strings render on their cards; the three password fields'
+  `autocomplete` values and the removed hidden field.
 
 **2026-09-28 — Three fixes: Alerts nav flash, Attendance's default date, password-manager interference**
 - **Alerts always showed "Loading…" on nav click.** `renderAlerts()` had no

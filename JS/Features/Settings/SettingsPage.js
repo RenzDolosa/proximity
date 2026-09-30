@@ -60,15 +60,22 @@ export async function renderSettings() {
       <h3 style="margin:0 0 4px;">Change password</h3>
       <p class="sub" style="margin:0 0 10px;">Update the password for your own account (${esc(appState.profile?.email || appState.session?.user?.email || '')}). This only changes what you sign in with — it's separate from an admin resetting someone else's password from Users &amp; Roles.</p>
       <form id="cp-form" autocomplete="off">
-        <!-- A hidden, off-screen (not display:none — some managers skip those) username field
-             gives Chrome/Firefox's own heuristics a "sign-in form" shape to anchor on, which
-             stops them second-guessing autocomplete="current-password" below on a page that
-             isn't actually the login screen. It's never read; ProfilesModel.changePassword()
-             gets the email from appState. -->
-        <input type="text" name="username" autocomplete="username" value="${esc(appState.profile?.email || '')}"
-               style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;" tabindex="-1" aria-hidden="true" />
         <div class="field"><label>Current password</label>
-          <input id="cp-current" name="current-password" type="password" autocomplete="current-password"
+          <!-- autocomplete="new-password" here is deliberate, not a typo: it's the
+               standard cross-browser way to tell Chrome/Firefox/Edge/Safari "don't
+               suggest a saved password for this field, and don't offer to save
+               whatever's typed here" — there's no dedicated autocomplete token for
+               "password field, no autofill, no save prompt", and the spec-correct
+               "current-password" is exactly what invites both of those. This also
+               drops the earlier hidden username field entirely: it existed only to
+               anchor the browser's OWN autofill (the thing we're now suppressing),
+               and removing it also helps avoid Chrome's post-submit "Save this
+               password?" prompt, which keys off seeing a username+password pair
+               together. Not verified against a real browser + password-manager
+               extension in this sandboxed environment — same caveat as the
+               2026-09-28 entry below; if a specific browser or manager still
+               offers to fill or save this field, say which one. -->
+          <input id="cp-current" name="current-password" type="password" autocomplete="new-password"
                  data-lpignore="true" data-1p-ignore data-bwignore="true" data-form-type="other" /></div>
         <div class="field"><label>New password</label>
           <input id="cp-new" name="new-password" type="password" placeholder="min. 6 characters" autocomplete="new-password"

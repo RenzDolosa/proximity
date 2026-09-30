@@ -14,6 +14,7 @@ import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
 import { fmtDuration } from '../../Utils/attendance.js';
 import { summarizeRoster, filterRoster } from '../../Utils/dashboard.js';
 import { DashboardModel } from '../../Models/DashboardModel.js';
+import { openDepartmentRosterModal } from '../../Components/DepartmentRosterModal.js';
 
 const REFRESH_MS = 30000;
 
@@ -124,12 +125,21 @@ function paintStats() {
       ${statCard('Open remarks', stats.employees_with_open_remarks, { route: 'directory' })}
       ${statCard('Unassigned active cards', stats.unassigned_active_cards, { route: 'proximity' })}
     </div>
-    ${sum.byDepartment.length ? `<div class="emp-meta" style="margin-top:10px;">On site by department: ${sum.byDepartment.map((d) => `<strong>${esc(d.department)}</strong> ${d.count}`).join(' · ')}</div>` : ''}
+    ${sum.byDepartment.length ? `<div class="emp-meta" style="margin-top:10px;">On site by department: ${sum.byDepartment.map((d) => `<button type="button" class="dept-chip" data-dept="${esc(d.department)}"><strong>${esc(d.department)}</strong> ${d.count}</button>`).join(' · ')}</div>` : ''}
   `;
   el.querySelectorAll('[data-goto]').forEach((card) => {
     const go = () => { appState.route = card.dataset.goto; import('../../Core/router.js').then((m) => m.render()); };
     card.addEventListener('click', go);
     card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+  });
+  // Same "live" definition as the count itself (filterRoster's view:'live'),
+  // so the modal never shows a different set of people than the number
+  // just clicked.
+  el.querySelectorAll('[data-dept]').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const department = chip.dataset.dept;
+      openDepartmentRosterModal(department, filterRoster(roster, { department, view: 'live' }));
+    });
   });
 }
 
