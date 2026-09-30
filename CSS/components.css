@@ -119,6 +119,26 @@ td.row-actions{display:table-cell;}
   overflow:hidden;
 }
 .avatar img{width:100%;height:100%;object-fit:cover;}
+
+/* Employee Manager's hover-to-enlarge preview (Utils/avatarPreview.js).
+   .avatar-photo marks just the real-photo <img> in DirectoryPage.js's row
+   markup (not the plain-initials fallback, and not other pages' avatars —
+   ScanFeed/ScanResultCard/EmployeeModal are untouched), so the zoom cursor
+   and hover behavior only ever appear where they're wired up.
+   .avatar-preview is appended to <body>, entirely outside the table's own
+   layout — position:fixed so hovering can never change the row's height
+   or the Employee column's width, and so it isn't clipped by
+   .table-scroll's own overflow:auto the way an absolutely-positioned
+   element nested inside it would be. */
+.avatar-photo{cursor:zoom-in;}
+.avatar-preview{
+  position:fixed;width:300px;height:300px;border-radius:8px;overflow:hidden;
+  border:1px solid var(--border);box-shadow:0 10px 28px rgba(0,0,0,.35);
+  background:var(--surface-raised);z-index:70;pointer-events:none;
+}
+.avatar-preview.hidden{display:none;}
+.avatar-preview img{width:100%;height:100%;object-fit:cover;display:block;}
+
 .emp-line{display:flex;align-items:center;gap:12px;}
 .emp-name{font-weight:600;font-size:15px;}
 .emp-meta{color:var(--text-muted);font-size:12.5px;margin-top:2px;}

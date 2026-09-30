@@ -14,6 +14,7 @@ import { openImportModal } from '../../Components/ImportModal.js';
 import { openExportScanLogsModal } from '../../Components/ExportScanLogsModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
 import { openConfirmModal, openConfirmProgressModal } from '../../Components/ConfirmModal.js';
+import { wireAvatarPreview } from '../../Utils/avatarPreview.js';
 
 let page = 1;
 let pageSize = 50;
@@ -43,6 +44,8 @@ export async function renderDirectory() {
     <div class="table-scroll"><div id="dir-table-wrap">${loaded ? '' : 'Loading…'}</div></div>
     <div id="dir-pagination"></div>
   `;
+  wireAvatarPreview($('#dir-table-wrap'), $('.table-scroll'));
+
   $('#dir-search').addEventListener('input', (e) => { page = 1; paintDirectoryTable(e.target.value); });
   $('#dir-unresolved-toggle').addEventListener('click', (e) => {
     unresolvedOnly = !unresolvedOnly;
@@ -232,7 +235,7 @@ function paintDirectoryTable(filter) {
       <tbody>
         ${rows.map((e) => `
           <tr>
-            <td><div class="emp-line"><div class="avatar">${e.photo_url ? `<img src="${esc(e.photo_url)}" alt="" />` : esc(initials(e.full_name))}</div><div><div style="font-weight:600">${esc(e.full_name)}</div><div class="emp-meta">${esc(e.email || '')}</div></div></div></td>
+            <td><div class="emp-line"><div class="avatar">${e.photo_url ? `<img class="avatar-photo" src="${esc(e.photo_url)}" alt="" />` : esc(initials(e.full_name))}</div><div><div style="font-weight:600">${esc(e.full_name)}</div><div class="emp-meta">${esc(e.email || '')}</div></div></div></td>
             <td class="mono">${esc(e.employee_code)}</td>
             <td>${esc(e.department || '—')}</td>
             <td>${esc(e.position || '—')}</td>

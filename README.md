@@ -280,6 +280,17 @@ JS/
                                    times), duration formatting, 31-day range
                                    validation, filtering, summary — unit-tested
                                    in test/attendance.test.mjs
+    avatarPreview.js              added 2026-09-29; Employee Manager's
+                                   hover-to-100px-preview for row photos —
+                                   DOM/layout only, no pure logic to unit-test
+                                   (see Components/ for why this isn't there:
+                                   it's small and single-purpose, but every
+                                   other file that opens a floating UI element
+                                   lives in Utils/ or Components/ by what it
+                                   touches, not by size; this one is DOM
+                                   positioning, not a dialog, so Utils/ fit
+                                   better than adding a Components/ entry for
+                                   something with no form/actions)
     scanSounds.js                 loadScanSounds() / playScanSound() — shared by
                                    StandaloneScanner.js and TestScanPage.js
     idb.js                         hand-rolled minimal Promise wrapper around
@@ -549,13 +560,57 @@ branch protection before relying on them as merge gates.
 
 ---
 *Last reconciled against the live GitHub repo and live Supabase project on
-2026-09-29. If you're another Claude instance picking this project up: fetch
+2026-09-29 (twice — see the change log's two 2026-09-29 entries). If you're another Claude instance picking this project up: fetch
 `github.com/RenzDolosa/proximity` fresh (via web_search + web_fetch, or the
 GitHub connector) and re-verify against `Supabase:list_tables` /
 `list_edge_functions` before making schema or Edge Function claims — this
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-09-29 — Employee Manager: hover a row's photo for a 300x300px preview**
+- Hovering a row's photo in the Employee table now shows the same photo at
+  100x100px in a floating preview, positioned next to the avatar (flips to
+  the opposite side rather than running off the right edge of the window,
+  and clamps vertically so a row near the top/bottom of a short window still
+  gets a fully on-screen preview).
+- **The actual ask** — that the 44px avatar's own column width and row
+  height must not change — is what ruled out the obvious approach
+  (`transform: scale()` on the avatar itself, or an absolutely-positioned
+  element as a sibling within the cell): both stay inside the table's own
+  layout and box model, and `.table-scroll` is `overflow:auto` (see
+  `CSS/layout.css`), so anything `position:absolute` nested inside it gets
+  clipped at the scroller's edge exactly the way an `<img>` would — a
+  preview meant to sit "outside the column" can't actually render there
+  from inside a clipped, scrolling ancestor. New `Utils/avatarPreview.js`
+  instead appends a single floating element straight to `<body>`,
+  `position:fixed`, entirely outside the table's DOM subtree and therefore
+  outside both its layout (can never affect column width or row height —
+  there's nothing left in the table to affect) and `.table-scroll`'s clip.
+- Reuses the row's own already-loaded `<img src>` for the preview instead
+  of requesting the photo a second time — same reasoning as the photo
+  double-repaint fix a few entries below (2026-09-29 — Four small fixes):
+  don't make the browser redo work it already did.
+- Scoped narrowly on purpose: a new `.avatar-photo` class marks only
+  Employee Manager's real-photo `<img>` (not the initials fallback, and not
+  `avatarHTML()` itself, which several other places share —
+  `ScanFeed.js`, `ScanResultCard.js`, `EmployeeModal.js` — none of which
+  asked for or need a hover preview). Delegated listeners on
+  `#dir-table-wrap` (call once per full `renderDirectory()`, same pattern
+  as `wireCopyableCodes()`) so the preview keeps working after
+  `paintDirectoryTable()` rebuilds the table body, without needing to be
+  rewired on every repaint.
+- Tests: no new pure logic to unit-test (this is DOM positioning, not a
+  rule), so verified instead with a jsdom harness against the real modules
+  outside the repo: exactly one `.avatar-photo` renders (only the row that
+  actually has a photo); the preview element lives in `<body>`, not inside
+  the table; the hovered row's own column width and row height are
+  identical before and after hover; the preview flips sides near the
+  viewport's right edge; it hides on `.table-scroll`'s own scroll event and
+  on `mouseout`; hovering an initials-only avatar (no photo) never opens
+  one; and navigating away and back (a fresh `renderDirectory()`, which
+  recreates `#dir-table-wrap` from scratch) never leaves more than one
+  `.avatar-preview` element behind in `<body>`.
 
 **2026-09-29 — Four small fixes: department drill-down, photo reload, stat-card tooltips, password autofill**
 - **Dashboard: "On site by department" is now clickable.** Each department
