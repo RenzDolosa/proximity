@@ -21,6 +21,7 @@ import { ProfilesModel } from '../../Models/ProfilesModel.js';
 import { ScanSoundsModel, SOUND_KEYS, SOUND_LABELS, MAX_FILE_SIZE_BYTES } from '../../Models/ScanSoundsModel.js';
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { QueryStatsModel } from '../../Models/QueryStatsModel.js';
+import { ScanArchiveModel } from '../../Models/ScanArchiveModel.js';
 import { openConfirmModal } from '../../Components/ConfirmModal.js';
 import { showModalError } from '../../Components/Modal.js';
 
@@ -40,6 +41,11 @@ let queryStats = null; // array once loaded, else null
 let queryStatsError = null;
 let queryStatsLoaded = false;
 let queryThresholdMs = 200; // matches the server-side default in get_slow_query_stats() / the log_min_duration_statement set on anon/authenticated/service_role — see Supabase/README.md
+
+let archiveStatus = null; // { live_count, oldest_live_scanned_at, archive_count, last_archived_at, last_run } once loaded, else null
+let archiveStatusError = null;
+let archiveStatusLoaded = false;
+let archiveRunning = false;
 
 export async function renderSettings() {
   const content = $('#content');
@@ -153,6 +159,27 @@ export async function renderSettings() {
       </p>
       <div id="qs-body">${queryStatsLoaded ? '' : 'Loading…'}</div>
     </div>
+
+    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <h3 style="margin:0 0 4px;">Scan data archival</h3>
+        <button type="button" class="ghost" id="sa-run" ${archiveRunning ? 'disabled' : ''}>${archiveRunning ? 'Running…' : 'Run archival now'}</button>
+      </div>
+      <p class="sub" style="margin:0 0 10px;">
+        A daily scheduled job (pg_cron, 03:00 UTC) moves scan_events rows
+        older than 180 days into scan_events_archive — same data, just out
+        of the table the scanner and live Dashboard/Analytics pages read
+        from, so it stays fast as history accumulates. Nothing is deleted:
+        "Export all scan logs" in Employee Manager still reaches archived
+        rows for an old date range. 180 days is comfortably past every
+        other feature's own lookback (Attendance caps at 31 days, Scanner
+        Analytics at 90), so the scheduled job can never remove a row
+        anything else might still ask for. "Run archival now" runs the
+        exact same job on demand — useful right after changing the
+        schedule, or just to see it work.
+      </p>
+      <div id="sa-body">${archiveStatusLoaded ? '' : 'Loading…'}</div>
+    </div>
     `}
   `;
   paintThemePicker();
@@ -186,6 +213,21 @@ export async function renderSettings() {
       toast('Query statistics reset');
       loadQueryStats();
     });
+    if (archiveStatusLoaded) paintArchiveStatus();
+    $('#sa-run').addEventListener('click', async () => {
+      archiveRunning = true;
+      const btn = $('#sa-run');
+      btn.disabled = true;
+      btn.textContent = 'Running…';
+      const { data, error } = await ScanArchiveModel.runNow();
+      archiveRunning = false;
+      const btnAfter = $('#sa-run'); // re-query: a repaint between the two awaits above could have replaced this node
+      if (btnAfter) { btnAfter.disabled = false; btnAfter.textContent = 'Run archival now'; }
+      if (error) { toast(error.message, 'error'); return; }
+      const row = Array.isArray(data) ? data[0] : data;
+      toast(row?.archived_count ? `Archived ${row.archived_count} scan${row.archived_count === 1 ? '' : 's'}` : 'Nothing to archive — already current');
+      loadArchiveStatus();
+    });
   }
 
   const tasks = [];
@@ -213,6 +255,7 @@ export async function renderSettings() {
     })());
   }
   if (isAdmin()) tasks.push(loadQueryStats());
+  if (isAdmin()) tasks.push(loadArchiveStatus());
   if (canViewScannerRegistry()) tasks.push(mountScannersPanel());
 
   // Independent panels, each backed by its own API call — run them
@@ -308,6 +351,39 @@ function paintQueryStats() {
       </tbody>
     </table>
     ${oldestSince ? `<div class="emp-meta" style="margin-top:8px;">Accumulated since ${esc(fmtTime(oldestSince))}${queryStats.length >= 50 ? ' — showing the top 50 by total time' : ''}</div>` : ''}
+  `;
+}
+
+async function loadArchiveStatus() {
+  const { data, error } = await ScanArchiveModel.status();
+  archiveStatusError = error ? error.message : null;
+  archiveStatus = error ? null : data;
+  archiveStatusLoaded = true;
+  paintArchiveStatus();
+}
+
+function paintArchiveStatus() {
+  const body = $('#sa-body');
+  if (!body) return; // panel not in the DOM (non-admin) — shouldn't happen since loadArchiveStatus() is only ever called when isAdmin()
+  if (archiveStatusError) { body.innerHTML = `<div class="empty-state">${esc(archiveStatusError)}</div>`; return; }
+  if (!archiveStatus) { body.innerHTML = 'Loading…'; return; }
+  const s = archiveStatus;
+  const lastRun = s.last_run;
+  body.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card accent"><div class="stat-value">${s.live_count.toLocaleString()}</div><div class="stat-label">Live scan_events</div></div>
+      <div class="stat-card"><div class="stat-value">${s.archive_count.toLocaleString()}</div><div class="stat-label">Archived</div></div>
+    </div>
+    <p class="emp-meta" style="margin-top:10px;">
+      ${s.oldest_live_scanned_at ? `Oldest live row: ${esc(fmtTime(s.oldest_live_scanned_at))}.` : 'No live scan rows yet.'}
+      ${s.last_archived_at ? ` Last row moved to the archive at ${esc(fmtTime(s.last_archived_at))}.` : ''}
+    </p>
+    ${lastRun ? `
+      <p class="emp-meta" style="margin-top:4px;">
+        Last scheduled run: <span class="badge ${lastRun.status === 'succeeded' ? 'matched' : 'inactive_card'}">${esc(lastRun.status || 'unknown')}</span>
+        ${lastRun.started_at ? ` started ${esc(fmtTime(lastRun.started_at))}` : ''}${lastRun.message ? ` — ${esc(lastRun.message)}` : ''}
+      </p>
+    ` : `<p class="emp-meta" style="margin-top:4px;">The scheduled job hasn't run yet since this status was last checked (it runs once daily at 03:00 UTC).</p>`}
   `;
 }
 

@@ -23,6 +23,7 @@ supabase functions download upload-employee-photo --project-ref kjwttqmbcjvkivgm
 | `employees`                  | Master employee record. Requires `employee_code` **and** `proximity_card_id` (NOT NULL + unique — every employee has exactly one card). `status` = `active`/`inactive`/`suspended`. `scan_logs` jsonb — append-only, written by `trg_append_scan_log` on every matched scan. `remarks_log` jsonb — append-only notes, written via `add_employee_remark()`. `photo_url` / `photo_file_id` — Drive-hosted photo; `photo_file_id` changes to a fresh UUID on every replace (see Edge Functions below). `photo_thumb_b64` — small base64 thumbnail (added 2026-09-18), fetched server-side by `upload-employee-photo` at upload time; format is whatever Drive's `/thumbnail` endpoint returns (PNG or JPEG, not always JPEG despite this column's original 2026-09-18 write-up assuming so — client-side callers now sniff the real format rather than trusting a hardcoded label, see root `README.md`'s 2026-09-19 change log entry); feeds the offline Scanner's `offlineAvatarHTML()` with zero network requests — see "Offline scanning" below. |
 | `proximity_cards`             | Standalone card inventory. Does **not** require an employee — a card can be issued and sit unassigned until linked from Employee Manager. `is_active` + `revoke_reason` for revoked cards.               |
 | `scan_events`                 | FK to `employees` and `proximity_cards`. One row per scan of a **recognised** card: `matched`, `inactive_card`, `inactive_employee`, or `unassigned_card`. Scans of a code that matches no card (`unmatched`) are **not stored** — `scan_proximity_code()` skips the insert (`if v_result <> 'unmatched'`), so `unmatched` rows never exist today even though the column's vocabulary allows it. (This file previously said every attempt was logged; corrected 2026-09-28 against the live function body. Whether to start storing them is a product decision — it means unbounded inserts from junk scans — not something a docs fix should decide.) Direction (IN/OUT) is **not a column here**: `trg_append_scan_log()` derives it from the parity of the employee's `scan_logs` length at insert time and stores it only in `employees.scan_logs`. |
+| `scan_events_archive`        | Added 2026-09-30. Same shape as `scan_events`, minus foreign keys (deliberately — see below) plus `archived_at`. Rows older than 180 days are moved here by `archive_old_scan_events()` on a daily `pg_cron` schedule, so `scan_events` itself stays small as it accumulates (10,368 rows after 3 days live — see root `README.md`'s change log). Not a soft-delete: nothing is lost, `get_all_scan_events()` reads both tables so an admin's date-range export still reaches old rows. No FK to `employees`/`proximity_cards` (unlike `scan_events`, which cascades on delete) — an audit trail that disappeared when its parent row did would defeat the point of archiving it. Same read policy as `scan_events` (`is_admin() OR can_view_scanner()`); no write policy at all, since only `archive_old_scan_events()` (`SECURITY DEFINER`) ever writes here. |
 | `employee_directory` (view)  | Employee joined to required card + scan totals, for the Employee Manager grid. Runs `SECURITY DEFINER` so scanner-only / restricted roles still see joined rows under RLS. Read by `JS/Models/EmployeesModel.js#listDirectory`. |
 | `scan_feed` (view / function) | `get_scan_feed()` — `SECURITY DEFINER` function (originally a plain view, which silently dropped employee joins for scanner-only accounts under invoker RLS; replaced for that reason). Read by `JS/Models/ScanEventsModel.js#recentFeed`. |
 | `audit_log`                   | Append-only — RLS enabled with exactly one policy (`audit_log_select_admin`, `SELECT` only, `is_admin()`); no INSERT/UPDATE/DELETE policy exists at all, so nothing can write to it directly via PostgREST regardless of role. One row per destructive or permission-changing action: `actor_id`/`actor_name`, `action`, `entity_type`/`entity_id`, `detail` jsonb. Written only via `log_audit_event()` (`SECURITY DEFINER`, bypasses the table's own RLS the way every writer function here does), never a direct insert. See "Audit log" below. |
@@ -149,11 +150,13 @@ an admin swaps it out.
   Activity feed (see `scan_feed` above).
 - **`get_all_scan_events()`** — added 2026-09-21, backs Employee Manager's
   "Export all scan logs" button (`JS/Models/ScanEventsModel.js#listAll`).
-  Full `scan_events` history (every stored row — recognised-card scans only,
-  see the `scan_events` table note above; same source table
-  `get_scan_feed()` reads, just without its `p_limit`),
-  newest first, capped at 100,000 rows as a safety valve rather than a
-  real limit at current volume (~700 rows). Gated to
+  Full scan history — every stored row across BOTH `scan_events` and
+  `scan_events_archive` (unioned as of 2026-09-30, see that table's note
+  above; recognised-card scans only, see the `scan_events` table note
+  above; same source `get_scan_feed()` reads, just without its
+  `p_limit` or the archive union — that function is "recent", this one is
+  "everything, ever"), newest first, capped at 100,000 rows as a safety
+  valve rather than a real limit at current volume. Gated to
   `is_admin_or_manager()` — deliberately its OWN function rather than
   `get_scan_feed()` called with a huge `p_limit`: that function is gated
   to `is_admin() or can_view_scanner()` (correct for backing the live
@@ -161,7 +164,12 @@ an admin swaps it out.
   defaulted (`p_limit integer default 25`) for "recent", not "everything"
   — a full-organization export is a materially more sensitive capability,
   same tier as Import/Delete-all on the same page, so it gets its own
-  purpose-built, purpose-gated function instead.
+  purpose-built, purpose-gated function instead. `#variable_conflict
+  use_column` is required on this one specifically: several of its OUT
+  parameters (`proximity_code`, `scanner_id`, `result`, `scanned_at`)
+  share a name with a column in the `UNION ALL` subquery that feeds it,
+  which PL/pgSQL otherwise reports as ambiguous — same pragma, same
+  reason, as `get_attendance_report()` below.
 - **`get_scanner_performance_stats(p_days integer default 7)`** — applied
   directly to the live database in an earlier session (not through a
   committed migration) and left with no caller and no documentation until
@@ -243,6 +251,37 @@ an admin swaps it out.
     ones. The report surfaces both as `open_punch`/`anomaly` rather than
     hiding them. Expanding `scan_logs` also grows with an employee's total
     history — the scheduled archival job on the roadmap keeps that bounded.
+- **`archive_old_scan_events(p_older_than_days integer default 180)`** —
+  added 2026-09-30 (`Supabase/migrations/20260930000000_scan_events_archival.sql`),
+  backs the Settings → "Scan data archival" panel and a daily `pg_cron`
+  job (`archive-old-scan-events`, `0 3 * * *`, UTC). Moves every
+  `scan_events` row with `scanned_at` older than the cutoff into
+  `scan_events_archive`, atomically (a single `DELETE ... RETURNING`
+  feeding an `INSERT`, so a failure can't delete without archiving).
+  `p_older_than_days` is floored at 90 regardless of what's passed, so
+  neither a bad manual argument nor a future schedule edit can shrink the
+  window below what `get_scanner_performance_stats()`/
+  `get_scanner_scan_details()` (both capped at 90 days) might still need —
+  only `get_all_scan_events()` has no day cap, which is why it's the one
+  function below updated to read both tables. **Callable two ways**, with
+  two different permission contexts: pg_cron's scheduled call has no
+  PostgREST request behind it, so `auth.uid()` is null — there's no caller
+  to check, so it proceeds; an admin's on-demand run from Settings is a
+  real request, so `auth.uid()` is set and must belong to an admin (same
+  as every other admin-only RPC here). `EXECUTE` revoked from
+  `PUBLIC`/`anon`, granted to `authenticated` (the internal `is_admin()`
+  check is what actually gates it for that path). Deliberately does not
+  touch `employees.scan_logs` (also unbounded, also on the roadmap, but
+  backs `get_attendance_report()`/`get_onsite_roster()`'s direction
+  derivation — trimming it safely needs its own pass) or
+  `employees.remarks_log` (39 entries total as of 2026-09-30 — not a
+  growth problem yet).
+- **`get_scan_archive_status()`** — added 2026-09-30, read-only, admin-only.
+  Returns live/archived row counts, the oldest live row's `scanned_at`, the
+  most recent `archived_at`, and (best-effort — wrapped in its own
+  exception handler, since `cron.job_run_details` is pg_cron's own table,
+  not something this app controls the shape of) the scheduled job's most
+  recent run from `cron.job_run_details`.
 - **`add_employee_remark(...)`** — appends a `{remark, created_by,
   created_by_id, created_at}` entry to `employees.remarks_log`.
 - **`is_admin()` / `is_admin_or_manager()`** — role helper functions used
@@ -677,6 +716,52 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-09-30 — Scan-data archival: `scan_events_archive` + `archive_old_scan_events()` + daily `pg_cron` schedule**
+- New table `scan_events_archive`, new functions `archive_old_scan_events(p_older_than_days default 180)`
+  and `get_scan_archive_status()`, `get_all_scan_events()` updated to union
+  both tables. Full contracts above. Migration:
+  `Supabase/migrations/20260930000000_scan_events_archival.sql`.
+- `pg_cron` was not previously installed on this project —
+  `CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA extensions` (its
+  control functions land in a fixed `cron` schema regardless of the
+  `WITH SCHEMA` target; that clause only affects the extension's own
+  catalog bookkeeping, kept out of `public` so it isn't exposed to
+  PostgREST). Scheduling is idempotent — the migration unschedules any
+  existing job of the same name before scheduling fresh, so re-running it
+  can't produce two daily jobs.
+- **Real bug caught before shipping, not after:** the first version of the
+  updated `get_all_scan_events()` failed with "column reference ... is
+  ambiguous" — several of its `RETURNS TABLE` OUT parameter names
+  (`proximity_code`, `scanner_id`, `result`, `scanned_at`) collided with
+  same-named columns in the new `UNION ALL` subquery, which PL/pgSQL can't
+  disambiguate on its own. Fixed with `#variable_conflict use_column`
+  (same pragma `get_attendance_report()` already uses, for the same
+  reason) rather than qualifying every reference by hand.
+- **Verified against real data, not just that it ran without error:**
+  inserted one synthetic `scan_events` row 200 days old with
+  `employee_id = null` first (confirmed `trg_append_scan_log()` is a
+  no-op for a null employee_id or non-`matched` result, so this couldn't
+  mutate any real employee's `scan_logs`), then confirmed, in order: a
+  non-admin's call is refused; an admin's call moves exactly that one row;
+  it's gone from `scan_events` and present in `scan_events_archive` with
+  `raw_payload` intact; `get_all_scan_events()` with a date range covering
+  it returns it correctly; a normal recent-range export (4,377 rows) is
+  unaffected; `get_scan_archive_status()` reports consistent counts.
+  Deleted the synthetic row from the archive afterward. `get_advisors`
+  (security): 34 findings, the 2 new ones being this entry's own
+  functions, both matching the existing accepted
+  self-checking-`SECURITY DEFINER` baseline — no regressions.
+- Settings → "Scan data archival" panel (admin-only, same `isAdmin()` gate
+  as "Query performance" next to it): live/archived counts, oldest live
+  row, last scheduled run (best-effort, see `get_scan_archive_status()`
+  above), and a "Run archival now" button for an on-demand run with the
+  same 180-day default. New `JS/Models/ScanArchiveModel.js`. No new pure
+  logic to unit-test (this is RPC calls + a stat panel, not a rule), so
+  verified instead with a jsdom harness: panel renders, counts display,
+  the button runs/restores correctly on both success and the error path.
+- Deliberately out of scope, see `archive_old_scan_events()` above:
+  `employees.scan_logs` and `employees.remarks_log`.
 
 **2026-09-28 — Dashboard / Alerts / Scanner-registry RPCs now documented and consumed by the client**
 - No schema change. The RPCs listed at the top of the RPC section above were

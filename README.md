@@ -121,6 +121,10 @@ JS/
                                    acknowledge_alert(), acknowledge_all_alerts()
     ScannersModel.js                added 2026-09-28; get_scanners() /
                                    update_scanner()
+    ScanArchiveModel.js             added 2026-09-30; wrappers over
+                                   get_scan_archive_status() /
+                                   archive_old_scan_events() — backs
+                                   Settings' "Scan data archival" panel
   Components/                 reusable UI pieces used by more than one feature
     Modal.js                     shared openModal/closeModal scaffold — every
                                   dialog below is built on this
@@ -548,6 +552,11 @@ branch protection before relying on them as merge gates.
 - Set up a scheduled job to purge or archive very old `scan_events` rows if
   scan volume gets large; `employees.scan_logs` and `employees.remarks_log`
   are unbounded jsonb and should also get an archival/trim policy at scale.
+  **`scan_events` done 2026-09-30** (`archive_old_scan_events()`, daily
+  `pg_cron`, see Supabase/README.md's change log) — `employees.scan_logs`
+  and `employees.remarks_log` are still open; `scan_logs` backs IN/OUT
+  direction for Attendance/the on-site roster, so trimming it needs its
+  own careful pass rather than reusing this one.
 - Replace the placeholder SVGs in `Public/Assets/Favicon` and
   `Public/Assets/Icon` with real brand assets.
 - The kiosk's Supabase session token still needs network to silently
@@ -560,7 +569,7 @@ branch protection before relying on them as merge gates.
 
 ---
 *Last reconciled against the live GitHub repo and live Supabase project on
-2026-09-29 (twice — see the change log's two 2026-09-29 entries). If you're another Claude instance picking this project up: fetch
+2026-09-30. If you're another Claude instance picking this project up: fetch
 `github.com/RenzDolosa/proximity` fresh (via web_search + web_fetch, or the
 GitHub connector) and re-verify against `Supabase:list_tables` /
 `list_edge_functions` before making schema or Edge Function claims — this
@@ -568,9 +577,40 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-09-30 — Scan-data archival job, on a daily schedule**
+- `scan_events` had grown to 10,368 rows in 3 days of live use (~3,400/day)
+  with no retention policy — this was on the roadmap as a "someday" item;
+  the growth rate made it concrete. New table `scan_events_archive`, new
+  functions `archive_old_scan_events()` / `get_scan_archive_status()`,
+  `get_all_scan_events()` updated to read both tables so an admin's export
+  still reaches old data — full detail in `Supabase/README.md`'s matching
+  entry, including a real ambiguous-column bug (`#variable_conflict
+  use_column`) caught and fixed before shipping, and the verification
+  steps (a synthetic 200-day-old row, moved and confirmed end-to-end, then
+  removed).
+- New daily `pg_cron` job (`archive-old-scan-events`, 03:00 UTC) — this
+  project's first use of `pg_cron`, not previously installed.
+  180-day default retention is well past every other feature's own
+  lookback (Attendance: 31 days; Scanner Analytics: 90), chosen
+  specifically so the scheduled job can never remove a row any existing
+  feature might still need; `archive_old_scan_events()` also floors its
+  own argument at 90 so this can't be weakened by accident later.
+- New Settings → "Scan data archival" panel (admin-only, same place and
+  gate as "Query performance" next to it): live/archived counts, oldest
+  live row, the scheduled job's last run, and a "Run archival now" button
+  for an on-demand run. New `JS/Models/ScanArchiveModel.js`.
+- Deliberately not touched: `employees.scan_logs` and
+  `employees.remarks_log` — both still unbounded jsonb, both still on the
+  roadmap above, neither a problem this pass solves (see that entry for
+  why `scan_logs` specifically needs its own careful pass rather than
+  reuse of this one).
+- Also fixed in passing: a change-log entry from 2026-09-29 said the
+  hover-preview feature's header was 300x300px while its own body text
+  still said 100x100px (the code is 300 — only the prose had drifted).
+
 **2026-09-29 — Employee Manager: hover a row's photo for a 300x300px preview**
 - Hovering a row's photo in the Employee table now shows the same photo at
-  100x100px in a floating preview, positioned next to the avatar (flips to
+  300x300px in a floating preview, positioned next to the avatar (flips to
   the opposite side rather than running off the right edge of the window,
   and clamps vertically so a row near the top/bottom of a short window still
   gets a fully on-screen preview).
