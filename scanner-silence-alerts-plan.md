@@ -1,0 +1,281 @@
+# Plan: proactive "scanner went silent" alerting
+
+**Status:** not started. This is a plan only — nothing in this document has
+been implemented. Written 2026-10-01. Delete this file once the work lands
+(update `README.md`'s roadmap bullet in the same commit), same as
+`scan-logs-trim-plan.md` and `expiring-proximity-cards-plan.md` before it.
+
+**Read `Supabase/README.md`'s `get_dashboard_stats()` / `get_alerts()`
+entries, `JS/Components/ScannersPanel.js`, and `JS/Utils/dashboard.js`'s
+`scannerState()` before touching anything.** This plan adds alerting on
+top of state this app already tracks — it does not introduce a new
+concept, and most of its job is making sure that's still true once it's
+done.
+
+## The gap this closes
+
+`public.scanners` already tracks `last_seen_at` for every scanner, and the
+Settings → Scanners panel already computes `online` / `offline` /
+`disabled` / `never` from it (`scannerState()`, a 10-minute online window).
+The Dashboard already shows "Scanners online X / Y" from
+`get_dashboard_stats()`. **All of this is passive.** If a kiosk loses power,
+gets unplugged, or drops off Wi-Fi, nothing happens — the only way anyone
+finds out is an admin happening to open Settings or the Dashboard and
+noticing a number looks wrong. For a system whose own stated purpose is
+"permission-based access with... hardware/kiosk scanner integrations,"
+a scanner silently going dark with no proactive notice is the access-control
+equivalent of the exact gap the expiring-cards plan closed for forgotten
+revocations: a real risk that depends entirely on a human remembering to
+go look.
+
+This plan adds one thing: when an enabled scanner that has scanned before
+goes quiet for longer than expected, raise an alert through the Alerts
+feature that already exists — the same feature `scan_proximity_code()`
+already uses for `unknown_card_scan` / `inactive_employee_scan` today.
+
+## What this is NOT
+
+- **Not a new monitoring page.** The alert shows up in the existing Alerts
+  page (`JS/Features/Alerts/AlertsPage.js`) and the existing Dashboard
+  unread-alerts badge, both unchanged. No new nav item.
+- **Not a schema change.** Every field this needs
+  (`scanners.last_seen_at`, `scanners.is_enabled`, `scanners.first_seen_at`)
+  already exists. This is a new function plus a cron schedule — nothing to
+  migrate, nothing to backfill.
+- **Not a change to what "online"/"offline" means in the Scanners panel.**
+  `scannerState()`'s 10-minute window stays exactly as-is for that display.
+  The alerting threshold below is deliberately a separate, much longer
+  number — see "The actual design problem" for why conflating the two
+  would be a mistake, not a simplification.
+- **Not auto-resolving.** Like every other alert in this system, a
+  scanner-silence alert is acknowledged manually (`acknowledge_alert()`),
+  never auto-cleared just because the scanner came back online. An optional
+  "it's back" notice is Phase 2, not required for a correct first version.
+
+## The actual design problem: don't cry wolf
+
+The hard part of this feature is not the mechanism (a cron job calling
+`raise_alert()` is nothing new — three other features in this codebase
+already do exactly that). The hard part is the threshold, and getting it
+wrong in either direction defeats the feature:
+
+- **Too short**, and this fires for every scanner that's simply unused for
+  a while — overnight, a weekend, a kiosk in a rarely-visited entrance.
+  An admin who gets paged for normal quiet hours will mute the whole
+  feature within a week, which is worse than not building it.
+- **Too long**, and a kiosk that's actually been dark for hours goes
+  unnoticed for most of a shift, which is the exact failure mode this
+  plan exists to prevent.
+
+This plan does **not** try to solve this with per-scanner learned
+baselines (e.g. "alert if quieter than this scanner's usual pattern") —
+that's real complexity for a v1 that doesn't need it yet. Instead:
+
+- The threshold is a single global default, **separate from and much
+  larger than** `scannerState()`'s 10-minute "online" window — default
+  **60 minutes** of silence before a scanner is considered alert-worthy.
+  A scanner going quiet for 20–40 minutes during a lull shows as "Offline"
+  in the Scanners panel (that's fine, that's what the panel is for) without
+  generating an alert that lands in someone's inbox-equivalent.
+- Only scanners that are **enabled** (`is_enabled = true`) and have
+  **scanned at least once before** (`last_seen_at is not null`) are
+  eligible. A disabled scanner going quiet is expected, not a failure — the
+  admin disabled it on purpose. A scanner that has *never* reported
+  (`last_seen_at is null`) was never alive to go silent; flagging it would
+  just mean "someone provisioned this kiosk but it hasn't scanned its first
+  card yet," which is a deploy-in-progress state, not an outage.
+- **Re-alerting uses `raise_alert()`'s existing dedupe mechanism**
+  (`p_dedupe_key`/`p_dedupe_minutes`, the same parameters
+  `scan_proximity_code()` already uses to avoid flooding the Alerts page
+  from repeated scans of the same bad card) — keyed per scanner
+  (`'scanner-silent:' || scanner_id`), deduped for **180 minutes**. A
+  scanner that's been down for 8 hours gets re-flagged roughly every 3
+  hours rather than either spamming one alert per cron run or only ever
+  alerting once and then going silent on the silence itself.
+
+If the 60-minute default turns out wrong for a specific real deployment
+(a scanner that's legitimately idle for 90+ minutes on a normal day, say),
+the fix is making `p_silence_minutes` an admin-editable setting later
+(Phase 2), not hand-tuning the hardcoded number per environment.
+
+## Design
+
+### The function
+
+```sql
+CREATE OR REPLACE FUNCTION public.check_scanner_silence(p_silence_minutes integer DEFAULT 60)
+RETURNS TABLE(scanners_flagged integer)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  -- Same two-caller permission split as archive_old_scan_events() /
+  -- trim_employee_scan_logs() / expire_proximity_cards(): pg_cron's
+  -- scheduled call has no PostgREST request behind it (auth.uid() is
+  -- null, proceed); an admin's on-demand run from Settings is a real
+  -- request and must actually be an admin.
+  v_minutes integer := greatest(15, coalesce(p_silence_minutes, 60)); -- floored well above scannerState()'s 10-minute online window, so this can never fire for a scanner the UI would still call "online"
+  v_count integer := 0;
+  r record;
+begin
+  if auth.uid() is not null and not public.is_admin() then
+    raise exception 'not permitted to check scanner silence';
+  end if;
+
+  for r in
+    select scanner_id, label, last_seen_at
+    from public.scanners
+    where is_enabled = true
+      and last_seen_at is not null
+      and last_seen_at <= now() - make_interval(mins => v_minutes)
+  loop
+    perform public.raise_alert(
+      'scanner_went_silent', 'warning',
+      coalesce(r.label, r.scanner_id) || ' has not reported in over ' || v_minutes || ' minutes',
+      jsonb_build_object('scanner_id', r.scanner_id, 'label', r.label, 'last_seen_at', r.last_seen_at, 'silence_minutes', v_minutes),
+      'scanner-silent:' || r.scanner_id, 180
+    );
+    v_count := v_count + 1;
+  end loop;
+
+  return query select v_count;
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION public.check_scanner_silence(integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.check_scanner_silence(integer) FROM anon;
+GRANT EXECUTE ON FUNCTION public.check_scanner_silence(integer) TO authenticated;
+```
+
+Note `v_count` here is "how many alerts this run attempted," not
+"how many *new* alerts were created" — `raise_alert()`'s own dedupe check
+means most calls on a persistently-silent scanner are no-ops after the
+first. That distinction doesn't need to be surfaced precisely; the Settings
+panel (below) reads the real count straight from `public.alerts`, not from
+this return value, for exactly that reason.
+
+### The schedule — deliberately NOT daily, unlike every prior job
+
+```sql
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'check-scanner-silence') THEN
+    PERFORM cron.unschedule('check-scanner-silence');
+  END IF;
+END $$;
+
+SELECT cron.schedule(
+  'check-scanner-silence',
+  '*/15 * * * *', -- every 15 minutes, not daily
+  $$SELECT public.check_scanner_silence(60)$$
+);
+```
+
+**Read this carefully before copying the other two jobs' `0 3 * * *` /
+`10 3 * * *` pattern out of habit: that pattern is wrong here.** Archiving
+old scans and trimming old history are correctness-over-time housekeeping —
+once a day, off-peak, is exactly right, because nothing is lost by waiting.
+A scanner outage is the opposite: it's time-sensitive by definition, and
+checking it once a day would mean a kiosk that died at 3:05am stays
+unflagged until the *next* day's run — most of a full business day with no
+notice. Every 15 minutes is cheap (the query is a straight index scan over
+however many distinct scanners this system has, almost certainly well
+under a thousand rows) and keeps the alert's latency close to the
+60-minute threshold itself, not hours past it.
+
+### UI — mostly nothing, by design
+
+- **Alerts page:** zero changes needed. `alertKindLabel()` in
+  `JS/Utils/dashboard.js` already turns any `kind` string into a readable
+  label generically (`scanner_went_silent` → "Scanner went silent") — this
+  is the same reason `unknown_card_scan` and `inactive_employee_scan`
+  already display correctly today with no per-kind switch statement to
+  maintain. Confirm this stays true rather than assuming it — read the
+  actual function before relying on it.
+- **Dashboard unread-alerts badge:** zero changes needed —
+  `get_dashboard_stats()`'s `unread_alerts` and `get_unread_alert_count()`
+  already count every unacknowledged row regardless of `kind`.
+- **Settings page:** add a small "Scanner health check" panel, same place
+  and pattern as "Scan data archival" / "Scan log trimming" right above
+  it: how many scanners are currently past the silence threshold (a live
+  read, not cached — `select count(*) from scanners where is_enabled and
+  last_seen_at <= now() - interval '60 minutes'`), the scheduled job's last
+  run (same best-effort `cron.job_run_details` read as the other two
+  panels), and a "Check now" button. New `get_scanner_silence_status()`
+  RPC mirroring `get_scan_archive_status()` / `get_scan_logs_trim_status()`'s
+  shape, and either a new `JS/Models/ScannerSilenceModel.js` or a couple of
+  added methods on the existing `JS/Models/ScannersModel.js` — use
+  judgment on which reads more naturally once written.
+
+## Checklist for whoever implements this
+
+- [ ] Migration: `check_scanner_silence(p_silence_minutes integer default 60)`,
+      grants, `pg_cron` schedule (`check-scanner-silence`, `*/15 * * * *`
+      — note the frequency, not the other two jobs' daily pattern).
+- [ ] `get_scanner_silence_status()` RPC for the Settings panel.
+- [ ] Verify against live data, in rolled-back transactions where
+      destructive, before considering this done:
+  - A synthetic scanner row with `is_enabled = true` and `last_seen_at`
+    90 minutes ago gets an alert raised with `kind = 'scanner_went_silent'`
+    and the right `dedupe_key`.
+  - A **disabled** scanner with the same stale `last_seen_at` does **not**
+    get flagged.
+  - A scanner with `last_seen_at is null` (never scanned) does **not** get
+    flagged.
+  - A scanner seen 40 minutes ago (stale enough to show "Offline" in the
+    Scanners panel, per `scannerState()`'s 10-minute window, but under
+    this feature's 60-minute threshold) does **not** get flagged — this is
+    the test that actually proves the two thresholds are independent, not
+    just documented as independent.
+  - Calling `check_scanner_silence()` twice in a row for the same stale
+    scanner raises only one alert row (the second call is a no-op via
+    `raise_alert()`'s own dedupe, not new logic this function needs to
+    implement itself).
+  - An unprivileged caller is refused, same pattern as the other three
+    jobs' refusal tests.
+  - `has_function_privilege()` confirms `anon`/`PUBLIC` blocked,
+    `authenticated` allowed.
+- [ ] Settings panel + status RPC + model wrapper, same place/pattern as
+      the archival, trim, and Scanners panels already there.
+- [ ] Confirm (don't assume) that `alertKindLabel()` and the Dashboard's
+      unread-alert counting really do need zero changes for a new `kind` —
+      read both before writing the migration, not after.
+- [ ] `README.md` and `Supabase/README.md` change-log entries — match the
+      detail level of the `scan_events` archival, `scan_logs` trim, and
+      expiring-cards plan entries as the bar, including the reasoning for
+      why this job runs every 15 minutes rather than daily like the others.
+- [ ] Update `README.md`'s roadmap with a bullet for this, mark it done the
+      way the other scheduled jobs are marked done, and delete this file
+      once that bullet is updated.
+
+## Phase 2 (optional, separable, do after Phase 1 is live)
+
+- **"Scanner recovered" notice:** when a scanner that currently has an
+  unacknowledged `scanner_went_silent` alert reports a scan again, raise a
+  single `info`-severity `scanner_recovered` alert (deduped so it only
+  fires once per recovery, not once per scan afterward) — most naturally
+  added inside `scan_proximity_code()` itself, which already calls
+  `raise_alert()` for other conditions and already runs on every single
+  scan, rather than waiting for the next 15-minute cron tick.
+- **Admin-configurable threshold:** expose `p_silence_minutes` as a
+  Settings-editable value instead of a hardcoded default, once there's
+  real experience with whether 60 minutes is right across this
+  deployment's actual scanners.
+- **Per-scanner expected cadence:** genuinely future work, not this
+  plan's problem to solve — see "The actual design problem" above for why
+  a single global threshold is the deliberate choice for v1.
+
+## Explicitly out of scope
+
+- Per-scanner learned/historical baselines for "normal" quiet periods —
+  see "The actual design problem."
+- Email/SMS/push notification — this reuses the existing in-app Alerts
+  feature only, same boundary the expiring-cards plan drew for itself.
+- Any change to `scannerState()`'s 10-minute "online" definition or the
+  Scanners panel's display — this plan adds a second, independent,
+  longer threshold; it does not touch the existing one.
+- Auto-acknowledging or auto-deleting a silence alert when the scanner
+  comes back — alerts in this system are acknowledged by a person, always;
+  Phase 2's "recovered" notice is a *new* alert, not a mutation of the old
+  one.

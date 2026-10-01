@@ -579,6 +579,12 @@ branch protection before relying on them as merge gates.
   scan-data archival and scan-log trim jobs, and a checklist are in
   `expiring-proximity-cards-plan.md` at the repo root. Delete that file
   and update this bullet once it ships.
+- **Proactive "scanner went silent" alerting** — not started. The Scanners
+  panel and Dashboard already track online/offline per scanner, but purely
+  passively (someone has to look). Full design (a `pg_cron` job every 15
+  minutes, not daily — see the plan for why), the dedupe/threshold
+  reasoning, and a checklist are in `scanner-silence-alerts-plan.md` at the
+  repo root. Delete that file and update this bullet once it ships.
 
 ---
 *Last reconciled against the live GitHub repo and live Supabase project on
@@ -589,6 +595,23 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-10-01 — Plan written: proactive "scanner went silent" alerting**
+- No code shipped in this entry — see `scanner-silence-alerts-plan.md`
+  (repo root) for the proposed feature: a `pg_cron` job that notices when
+  an enabled scanner that has scanned before goes quiet for over an hour,
+  and raises an alert through the existing Alerts feature
+  (`raise_alert()`) rather than leaving staleness something an admin only
+  discovers by happening to look at Settings → Scanners or the Dashboard.
+  No schema change needed — it reads fields `public.scanners` already has.
+  Grounded against the live `scanners` table, `scannerState()`'s existing
+  10-minute "online" window, `raise_alert()`'s dedupe parameters, and
+  `alertKindLabel()`'s generic kind-to-label formatting before writing, so
+  the plan is specific about why its alerting threshold must be a separate,
+  much larger number than the panel's existing online/offline threshold,
+  and why — unlike every `pg_cron` job in this app so far — it needs to run
+  every 15 minutes rather than once a day. Written so another AI (or a
+  future session) can implement it directly from the plan.
 
 **2026-10-01 — Plan written: time-limited proximity cards; AI review config fixed**
 - No code shipped in this entry — see `expiring-proximity-cards-plan.md`

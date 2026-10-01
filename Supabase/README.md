@@ -752,6 +752,21 @@ git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
 
+**2026-10-01 — Plan written (not implemented): proactive scanner-silence alerting**
+- `scanner-silence-alerts-plan.md` (repo root) proposes
+  `check_scanner_silence(p_silence_minutes default 60)`, a `pg_cron` job
+  running every 15 minutes (not daily, unlike `archive_old_scan_events()` /
+  `trim_employee_scan_logs()` below — see the plan for why time-sensitivity
+  changes the right schedule) that raises a `scanner_went_silent` alert via
+  the existing `raise_alert()` for any enabled scanner that has scanned
+  before but gone quiet past the threshold. No schema change — reads
+  `scanners.is_enabled`/`last_seen_at` as they already exist. Deliberately
+  keeps this threshold independent from `scannerState()`'s existing
+  10-minute online/offline window used by the Scanners panel, rather than
+  reusing it. No functions or migrations have been written yet — this entry
+  exists purely so a future session querying this file's change log knows
+  the plan exists before starting similar work from scratch.
+
 **2026-10-01 — Plan written (not implemented): time-limited proximity cards**
 - `expiring-proximity-cards-plan.md` (repo root) proposes `proximity_cards.expires_at`
   plus a daily `pg_cron` job, `expire_proximity_cards()`, following the exact
