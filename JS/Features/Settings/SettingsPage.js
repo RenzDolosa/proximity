@@ -22,6 +22,7 @@ import { ScanSoundsModel, SOUND_KEYS, SOUND_LABELS, MAX_FILE_SIZE_BYTES } from '
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { QueryStatsModel } from '../../Models/QueryStatsModel.js';
 import { ScanArchiveModel } from '../../Models/ScanArchiveModel.js';
+import { ScanLogsTrimModel } from '../../Models/ScanLogsTrimModel.js';
 import { openConfirmModal } from '../../Components/ConfirmModal.js';
 import { showModalError } from '../../Components/Modal.js';
 
@@ -46,6 +47,11 @@ let archiveStatus = null; // { live_count, oldest_live_scanned_at, archive_count
 let archiveStatusError = null;
 let archiveStatusLoaded = false;
 let archiveRunning = false;
+
+let trimStatus = null; // { total_entries, employees_with_entries, max_entries_for_one_employee, last_run } once loaded, else null
+let trimStatusError = null;
+let trimStatusLoaded = false;
+let trimRunning = false;
 
 export async function renderSettings() {
   const content = $('#content');
@@ -180,6 +186,25 @@ export async function renderSettings() {
       </p>
       <div id="sa-body">${archiveStatusLoaded ? '' : 'Loading…'}</div>
     </div>
+
+    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <h3 style="margin:0 0 4px;">Scan log trimming</h3>
+        <button type="button" class="ghost" id="st-run" ${trimRunning ? 'disabled' : ''}>${trimRunning ? 'Running…' : 'Run trim now'}</button>
+      </div>
+      <p class="sub" style="margin:0 0 10px;">
+        A daily scheduled job (pg_cron, 03:10 UTC) removes entries older
+        than 180 days from each employee's scan log history
+        (employees.scan_logs), the per-employee record behind the Scan log
+        dialog and the Attendance/on-site-roster calculations. Nothing is
+        lost: every entry's scan still lives in Export all scan logs
+        (which reaches archived scans too). IN/OUT direction for new scans
+        does not depend on this history's length, so trimming it never
+        affects a scan going forward. "Run trim now" runs the exact same
+        job on demand.
+      </p>
+      <div id="st-body">${trimStatusLoaded ? '' : 'Loading…'}</div>
+    </div>
     `}
   `;
   paintThemePicker();
@@ -228,6 +253,23 @@ export async function renderSettings() {
       toast(row?.archived_count ? `Archived ${row.archived_count} scan${row.archived_count === 1 ? '' : 's'}` : 'Nothing to archive — already current');
       loadArchiveStatus();
     });
+    if (trimStatusLoaded) paintTrimStatus();
+    $('#st-run').addEventListener('click', async () => {
+      trimRunning = true;
+      const btn = $('#st-run');
+      btn.disabled = true;
+      btn.textContent = 'Running…';
+      const { data, error } = await ScanLogsTrimModel.runNow();
+      trimRunning = false;
+      const btnAfter = $('#st-run'); // re-query: a repaint between the two awaits above could have replaced this node
+      if (btnAfter) { btnAfter.disabled = false; btnAfter.textContent = 'Run trim now'; }
+      if (error) { toast(error.message, 'error'); return; }
+      const row = Array.isArray(data) ? data[0] : data;
+      toast(row?.entries_removed
+        ? `Trimmed ${row.entries_removed} entr${row.entries_removed === 1 ? 'y' : 'ies'} across ${row.employees_trimmed} employee${row.employees_trimmed === 1 ? '' : 's'}`
+        : 'Nothing to trim — already current');
+      loadTrimStatus();
+    });
   }
 
   const tasks = [];
@@ -256,6 +298,7 @@ export async function renderSettings() {
   }
   if (isAdmin()) tasks.push(loadQueryStats());
   if (isAdmin()) tasks.push(loadArchiveStatus());
+  if (isAdmin()) tasks.push(loadTrimStatus());
   if (canViewScannerRegistry()) tasks.push(mountScannersPanel());
 
   // Independent panels, each backed by its own API call — run them
@@ -384,6 +427,36 @@ function paintArchiveStatus() {
         ${lastRun.started_at ? ` started ${esc(fmtTime(lastRun.started_at))}` : ''}${lastRun.message ? ` — ${esc(lastRun.message)}` : ''}
       </p>
     ` : `<p class="emp-meta" style="margin-top:4px;">The scheduled job hasn't run yet since this status was last checked (it runs once daily at 03:00 UTC).</p>`}
+  `;
+}
+
+async function loadTrimStatus() {
+  const { data, error } = await ScanLogsTrimModel.status();
+  trimStatusError = error ? error.message : null;
+  trimStatus = error ? null : data;
+  trimStatusLoaded = true;
+  paintTrimStatus();
+}
+
+function paintTrimStatus() {
+  const body = $('#st-body');
+  if (!body) return; // panel not in the DOM (non-admin) — shouldn't happen since loadTrimStatus() is only ever called when isAdmin()
+  if (trimStatusError) { body.innerHTML = `<div class="empty-state">${esc(trimStatusError)}</div>`; return; }
+  if (!trimStatus) { body.innerHTML = 'Loading…'; return; }
+  const s = trimStatus;
+  const lastRun = s.last_run;
+  body.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card accent"><div class="stat-value">${s.total_entries.toLocaleString()}</div><div class="stat-label">Entries, all employees</div></div>
+      <div class="stat-card"><div class="stat-value">${s.employees_with_entries.toLocaleString()}</div><div class="stat-label">Employees with history</div></div>
+      <div class="stat-card"><div class="stat-value">${s.max_entries_for_one_employee.toLocaleString()}</div><div class="stat-label">Most on one employee</div></div>
+    </div>
+    ${lastRun ? `
+      <p class="emp-meta" style="margin-top:10px;">
+        Last scheduled run: <span class="badge ${lastRun.status === 'succeeded' ? 'matched' : 'inactive_card'}">${esc(lastRun.status || 'unknown')}</span>
+        ${lastRun.started_at ? ` started ${esc(fmtTime(lastRun.started_at))}` : ''}${lastRun.message ? ` — ${esc(lastRun.message)}` : ''}
+      </p>
+    ` : `<p class="emp-meta" style="margin-top:10px;">The scheduled job hasn't run yet since this status was last checked (it runs once daily at 03:10 UTC).</p>`}
   `;
 }
 

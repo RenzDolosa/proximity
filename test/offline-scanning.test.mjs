@@ -21,6 +21,24 @@ test('offline classification mirrors server result branches and direction altern
   assert.deepEqual(first.employee.remarks_log, [{ resolved: false }]);
 });
 
+// Phase 0 of the scan_logs trim plan (Supabase/migrations/
+// 20261001040000_scan_logs_parity_counter.sql) moved get_scanner_offline_cache()'s
+// scan_count field from jsonb_array_length(employees.scan_logs) to a durable
+// counter (scan_parity_count) that a future trim of scan_logs never
+// decreases. This file only ever sees whatever number lands in the
+// scan_count field — it has no idea which source produced it — which is
+// exactly the point: the client-side arithmetic needed zero changes when
+// the server-side source changed. This case pins that by using a scan_count
+// larger than the row's actual history, standing in for an employee whose
+// scan_logs array has since been trimmed shorter than their true scan
+// count.
+test('direction parity uses whatever scan_count the cache reports, independent of any array length', () => {
+  const trimmedButStillOdd = classifyCachedScan('CARD-1', [{ ...matchedRow, scan_count: 141 }], new Map());
+  assert.equal(trimmedButStillOdd.direction, 'out'); // 141 is odd regardless of how many entries actually remain in scan_logs
+  const trimmedButStillEven = classifyCachedScan('CARD-1', [{ ...matchedRow, scan_count: 140 }], new Map());
+  assert.equal(trimmedButStillEven.direction, 'in');
+});
+
 test('queue replay preserves chronological order per card while allowing other cards to progress', async () => {
   const entries = [
     { id: 'b-2', proximity_code: 'B', scanned_at: '2026-09-22T00:00:03Z' },

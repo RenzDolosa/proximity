@@ -121,6 +121,11 @@ JS/
                                    acknowledge_alert(), acknowledge_all_alerts()
     ScannersModel.js                added 2026-09-28; get_scanners() /
                                    update_scanner()
+    ScanLogsTrimModel.js            added 2026-10-01; wrappers over
+                                     get_scan_logs_trim_status()/
+                                     trim_employee_scan_logs() — backs
+                                     Settings' "Scan log trimming" panel,
+                                     same pattern as ScanArchiveModel.js
     ScanArchiveModel.js             added 2026-09-30; wrappers over
                                    get_scan_archive_status() /
                                    archive_old_scan_events() — backs
@@ -553,10 +558,12 @@ branch protection before relying on them as merge gates.
   scan volume gets large; `employees.scan_logs` and `employees.remarks_log`
   are unbounded jsonb and should also get an archival/trim policy at scale.
   **`scan_events` done 2026-09-30** (`archive_old_scan_events()`, daily
-  `pg_cron`, see Supabase/README.md's change log) — `employees.scan_logs`
-  and `employees.remarks_log` are still open; `scan_logs` backs IN/OUT
-  direction for Attendance/the on-site roster, so trimming it needs its
-  own careful pass rather than reusing this one.
+  `pg_cron`, see Supabase/README.md's change log). **`employees.scan_logs`
+  done 2026-10-01** (`trim_employee_scan_logs()`, daily `pg_cron`, plus a
+  prerequisite fix — `employees.scan_parity_count` — so trimming it can't
+  silently flip IN/OUT direction; see Supabase/README.md's change log for
+  both). `employees.remarks_log` is still open — 40 entries total across
+  723 employees as of 2026-10-01, not yet a real growth problem.
 - Replace the placeholder SVGs in `Public/Assets/Favicon` and
   `Public/Assets/Icon` with real brand assets.
 - The kiosk's Supabase session token still needs network to silently
@@ -576,6 +583,55 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-10-01 — `employees.scan_logs` trimming: a durable parity counter first, then a daily trim job**
+- Same shape of problem as `scan_events` (unbounded, append-only jsonb,
+  growing forever — 729 employees, 12,792 entries total, max 137 on one
+  employee as of this writing) but a different fix, because `scan_logs`'
+  array length was load-bearing: `trg_append_scan_log()` derived each new
+  scan's IN/OUT direction from the parity of the array's *current length*,
+  and the offline scanner mirrored the identical arithmetic client-side
+  (`JS/Core/offlineScanning.js`, fed by `get_scanner_offline_cache()`'s
+  `scan_count` field). Trimming old entries straight out of that array
+  would have silently flipped every future scan's direction for every
+  employee whose array just got shorter — a failure with no error, no
+  crash, just the wrong badge forever after.
+- **Fixed first, shipped and verified on its own, before any trimming
+  code**: a new `employees.scan_parity_count` column that only ever
+  increments, backfilled from each employee's scan count at migration
+  time so the change is a no-op in effect — continuity, not a reset.
+  `trg_append_scan_log()` and `get_scanner_offline_cache()` now read/write
+  that counter instead of the array's length; `get_scanner_offline_cache()`
+  keeps the field named `scan_count` on the wire specifically so
+  `JS/Core/offlineScanning.js` needed **zero changes**, offline scanning
+  included. `delete_employee_scan_log()` deliberately left alone — it
+  already only removed one entry, and not touching the counter there means
+  a deleted entry no longer shifts anything downstream at all.
+- Verified directly against live data before moving on: a brand-new
+  employee still alternates in/out/in from their first scan; an existing
+  employee's next scan continued their exact pre-migration parity; a
+  synthetic trim correctly left the counter untouched; an unprivileged
+  caller is refused.
+- **Then** `trim_employee_scan_logs()`: removes entries older than the
+  retention window (default 180 days, floored at 90 like
+  `archive_old_scan_events()`) straight out of each employee's array — no
+  archive table needed here, unlike `scan_events`, since every entry
+  carries a `scan_id` pointing back to a real `scan_events` row (now
+  possibly in `scan_events_archive`), so nothing is lost that isn't
+  already stored elsewhere. Scoped to employees who actually have
+  something to trim. New daily `pg_cron` job (`trim-employee-scan-logs`,
+  03:10 UTC — 10 minutes after the archival job so the two don't start at
+  the same instant).
+- New Settings → "Scan log trimming" panel, same place and pattern as
+  "Scan data archival" right above it: total entries, employees with
+  history, the largest single history, the scheduled job's last run, and
+  a "Run trim now" button. New `JS/Models/ScanLogsTrimModel.js`.
+- `employees.remarks_log` deliberately not touched — same call as the
+  `scan_events` archival pass made for it, for the same reason: 40 entries
+  total, not a real problem yet, and unlike `scan_logs` it has no other
+  copy anywhere, so trimming it for real would need its own archive table.
+- Full RPC contracts, the parity-counter migration, and the verification
+  steps are in `Supabase/README.md`'s matching entry.
 
 **2026-09-30 — Scan-data archival job, on a daily schedule**
 - `scan_events` had grown to 10,368 rows in 3 days of live use (~3,400/day)

@@ -20,7 +20,7 @@ supabase functions download upload-employee-photo --project-ref kjwttqmbcjvkivgm
 | Table                       | Purpose                                                                                                                                                                                                    |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `profiles`                   | One row per login account (`auth.users` 1:1). `role` = `admin` / `manager` / `viewer`. `access_scope` = `all` / `employee_manager` / `scanner` — which sections the account can open at all. `is_active` — soft-disable; checked at boot, force signs out if false or missing. |
-| `employees`                  | Master employee record. Requires `employee_code` **and** `proximity_card_id` (NOT NULL + unique — every employee has exactly one card). `status` = `active`/`inactive`/`suspended`. `scan_logs` jsonb — append-only, written by `trg_append_scan_log` on every matched scan. `remarks_log` jsonb — append-only notes, written via `add_employee_remark()`. `photo_url` / `photo_file_id` — Drive-hosted photo; `photo_file_id` changes to a fresh UUID on every replace (see Edge Functions below). `photo_thumb_b64` — small base64 thumbnail (added 2026-09-18), fetched server-side by `upload-employee-photo` at upload time; format is whatever Drive's `/thumbnail` endpoint returns (PNG or JPEG, not always JPEG despite this column's original 2026-09-18 write-up assuming so — client-side callers now sniff the real format rather than trusting a hardcoded label, see root `README.md`'s 2026-09-19 change log entry); feeds the offline Scanner's `offlineAvatarHTML()` with zero network requests — see "Offline scanning" below. |
+| `employees`                  | Master employee record. Requires `employee_code` **and** `proximity_card_id` (NOT NULL + unique — every employee has exactly one card). `status` = `active`/`inactive`/`suspended`. `scan_logs` jsonb — append-only, written by `trg_append_scan_log` on every matched scan, and trimmed of entries older than 180 days by `trim_employee_scan_logs()` on a daily schedule (added 2026-10-01; see that function's entry and the change log). `scan_parity_count` integer (added 2026-10-01) — a durable, only-ever-incrementing counter that `trg_append_scan_log()` now reads for IN/OUT parity instead of `jsonb_array_length(scan_logs)`, so trimming `scan_logs` can never shift any future scan's direction; backfilled at migration time from each employee's count then, and never decreased afterward, including by the trim job. `remarks_log` jsonb — append-only notes, written via `add_employee_remark()`. `photo_url` / `photo_file_id` — Drive-hosted photo; `photo_file_id` changes to a fresh UUID on every replace (see Edge Functions below). `photo_thumb_b64` — small base64 thumbnail (added 2026-09-18), fetched server-side by `upload-employee-photo` at upload time; format is whatever Drive's `/thumbnail` endpoint returns (PNG or JPEG, not always JPEG despite this column's original 2026-09-18 write-up assuming so — client-side callers now sniff the real format rather than trusting a hardcoded label, see root `README.md`'s 2026-09-19 change log entry); feeds the offline Scanner's `offlineAvatarHTML()` with zero network requests — see "Offline scanning" below. |
 | `proximity_cards`             | Standalone card inventory. Does **not** require an employee — a card can be issued and sit unassigned until linked from Employee Manager. `is_active` + `revoke_reason` for revoked cards.               |
 | `scan_events`                 | FK to `employees` and `proximity_cards`. One row per scan of a **recognised** card: `matched`, `inactive_card`, `inactive_employee`, or `unassigned_card`. Scans of a code that matches no card (`unmatched`) are **not stored** — `scan_proximity_code()` skips the insert (`if v_result <> 'unmatched'`), so `unmatched` rows never exist today even though the column's vocabulary allows it. (This file previously said every attempt was logged; corrected 2026-09-28 against the live function body. Whether to start storing them is a product decision — it means unbounded inserts from junk scans — not something a docs fix should decide.) Direction (IN/OUT) is **not a column here**: `trg_append_scan_log()` derives it from the parity of the employee's `scan_logs` length at insert time and stores it only in `employees.scan_logs`. |
 | `scan_events_archive`        | Added 2026-09-30. Same shape as `scan_events`, minus foreign keys (deliberately — see below) plus `archived_at`. Rows older than 180 days are moved here by `archive_old_scan_events()` on a daily `pg_cron` schedule, so `scan_events` itself stays small as it accumulates (10,368 rows after 3 days live — see root `README.md`'s change log). Not a soft-delete: nothing is lost, `get_all_scan_events()` reads both tables so an admin's date-range export still reaches old rows. No FK to `employees`/`proximity_cards` (unlike `scan_events`, which cascades on delete) — an audit trail that disappeared when its parent row did would defeat the point of archiving it. Same read policy as `scan_events` (`is_admin() OR can_view_scanner()`); no write policy at all, since only `archive_old_scan_events()` (`SECURITY DEFINER`) ever writes here. |
@@ -282,6 +282,41 @@ an admin swaps it out.
   exception handler, since `cron.job_run_details` is pg_cron's own table,
   not something this app controls the shape of) the scheduled job's most
   recent run from `cron.job_run_details`.
+- **`trim_employee_scan_logs(p_older_than_days integer default 180)`** —
+  added 2026-10-01 (`Supabase/migrations/20261001041500_scan_logs_trim_job.sql`),
+  backs the Settings → "Scan log trimming" panel and a daily `pg_cron` job
+  (`trim-employee-scan-logs`, `10 3 * * *`, UTC — 10 minutes after
+  `archive-old-scan-events` so the two don't start in the same instant).
+  For every employee with a non-empty `scan_logs`, rebuilds the array
+  keeping only entries whose `scanned_at` is at or after the cutoff — a
+  plain filter-and-replace, not an archive-then-delete like
+  `archive_old_scan_events()`, because every `scan_logs` entry carries a
+  `scan_id` pointing back to a real `scan_events` row (now possibly in
+  `scan_events_archive`), so nothing is lost that isn't already stored
+  elsewhere. Only rewrites a row that actually shrinks — an employee whose
+  oldest entry is already newer than the cutoff is left untouched. Same
+  90-day floor and same two-caller permission split (pg_cron with no
+  `auth.uid()`, or an admin on demand) as `archive_old_scan_events()`;
+  `EXECUTE` revoked from `PUBLIC`/`anon`, granted to `authenticated`.
+  Returns `employees_trimmed, entries_removed, cutoff`.
+  **Requires `scan_parity_count` (added in the same change, see the
+  `employees` table row above) to be safe at all** — without it, shrinking
+  `scan_logs` would silently flip IN/OUT direction for every active
+  employee going forward, since direction used to be derived from the
+  array's own length. That column was migrated, backfilled, and verified
+  (continuity for a fresh employee, an existing employee, and
+  `get_scanner_offline_cache()`'s `scan_count`) before this function was
+  written — see the change log entry below for the verification steps.
+  Deliberately does not touch `employees.remarks_log` (40 entries total as
+  of 2026-10-01 — not a growth problem yet, and unlike `scan_logs` it has
+  no other copy anywhere, so trimming it for real would need its own
+  archive table).
+- **`get_scan_logs_trim_status()`** — added 2026-10-01, read-only,
+  admin-only. Returns the total `scan_logs` entry count across every
+  employee, how many employees have any entries, the largest single
+  employee history, and (same best-effort pattern as
+  `get_scan_archive_status()`) the trim job's most recent
+  `cron.job_run_details` run.
 - **`add_employee_remark(...)`** — appends a `{remark, created_by,
   created_by_id, created_at}` entry to `employees.remarks_log`.
 - **`is_admin()` / `is_admin_or_manager()`** — role helper functions used
@@ -716,6 +751,89 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-10-01 — `employees.scan_logs` trimming: `scan_parity_count` first, then `trim_employee_scan_logs()` + daily `pg_cron`**
+- `scan_logs` is the same shape of unbounded-growth problem `scan_events`
+  was (729 employees, 12,792 entries total, max 137 on one employee as of
+  this migration) but could not be solved the same way, because the
+  array's *length* was load-bearing: `trg_append_scan_log()` computed each
+  new scan's IN/OUT `direction` from `jsonb_array_length(scan_logs) % 2`
+  at insert time, and `JS/Core/offlineScanning.js` mirrored the identical
+  arithmetic client-side from `get_scanner_offline_cache()`'s `scan_count`
+  field. Trimming entries out of that array, as-is, would have silently
+  flipped direction for every active employee going forward the moment
+  their array got shorter — no error, no crash, just a wrong badge from
+  then on. `get_attendance_report()` and `get_onsite_roster()` read the
+  *stored* `direction` string out of each entry rather than recomputing
+  it, so they were never at risk from this — confirmed by inspecting both
+  function bodies before writing anything.
+- **Phase 0, shipped and verified alone first**
+  (`20261001040000_scan_logs_parity_counter.sql`): new
+  `employees.scan_parity_count integer not null default 0`, backfilled to
+  each employee's current `jsonb_array_length(scan_logs)` so the migration
+  is a no-op in effect — the very next scan computes the same direction
+  the old array-length arithmetic would have. `trg_append_scan_log()` now
+  reads/increments this counter instead of the array's length;
+  `get_scanner_offline_cache()` now sources `scan_count` from it too —
+  **the field keeps its existing name on the wire**, so
+  `JS/Core/offlineScanning.js` needed zero changes. `delete_employee_scan_log()`
+  deliberately left alone: it already only ever removed one entry
+  (an admin-triggered, one-row event), and not touching the counter there
+  means a deleted entry no longer shifts anything downstream at all —
+  strictly better than before, not a regression to fix.
+  - Verified directly against live data, in rolled-back transactions where
+    destructive, before Phase 1 was written: backfill was exact (0
+    employees where `scan_parity_count <> jsonb_array_length(scan_logs)`,
+    checked across all 729); a brand-new employee inserted end-to-end
+    still alternated `in, out, in` across three scans with the counter
+    tracking each one; a real employee with existing history had their
+    next scan continue the exact alternation their pre-migration array
+    length would have produced; `get_scanner_offline_cache()`'s
+    `scan_count` matched `scan_parity_count` exactly for the employees
+    with the most history.
+- **Phase 1** (`20261001041500_scan_logs_trim_job.sql`): new
+  `trim_employee_scan_logs(p_older_than_days integer default 180)` and
+  `get_scan_logs_trim_status()` — full contracts in the RPC section above
+  — plus a daily `pg_cron` job (`trim-employee-scan-logs`, `10 3 * * *`
+  UTC, 10 minutes after `archive-old-scan-events` so the two never start
+  in the same instant). No archive table, unlike `scan_events_archive`:
+  every `scan_logs` entry already points back to a real `scan_events` row
+  (possibly archived since 2026-09-30), so a plain filter-and-replace per
+  employee loses nothing.
+  - Verified: a synthetic 400-day-old entry prepended to a real employee's
+    `scan_logs` (in a rolled-back transaction) was removed by a call at
+    the default 180-day window, reporting `employees_trimmed: 1,
+    entries_removed: 1`, with `scan_parity_count` left exactly unchanged
+    by the trim (confirming parity really is decoupled from array length
+    now); an unprivileged caller is refused with `not permitted to run
+    scan-log trimming`; `has_function_privilege()` confirms `anon`/`PUBLIC`
+    blocked and `authenticated` allowed on both new functions; the cron
+    job's `jobname`/`schedule`/`command` were read back from `cron.job`
+    after scheduling.
+- New Settings → "Scan log trimming" panel, same place (right below "Scan
+  data archival") and pattern: total entries across every employee,
+  employees with any history, the largest single history, the scheduled
+  job's last run, and a "Run trim now" button. New
+  `JS/Models/ScanLogsTrimModel.js`. Verified in a jsdom simulation of the
+  real `SettingsPage.js` with mocked RPCs: the panel renders the status
+  figures, clicking "Run trim now" calls `trim_employee_scan_logs` and
+  then reloads status.
+- Client-side test: `test/offline-scanning.test.mjs` gained a case pinning
+  that `classifyCachedScan()`'s direction math treats `scan_count` as an
+  opaque number from the cache — it has no idea whether that number came
+  from array length or the new counter, which is exactly the point (suite
+  is now 33).
+- Deliberately not touched: `employees.remarks_log` — same call the
+  `scan_events` archival pass already made for it, re-confirmed still true
+  (40 entries total across 723 employees, max 3 on any one, as of
+  2026-10-01). Unlike `scan_logs`, a remark has no other copy anywhere, so
+  trimming it for real would need its own archive table — a different
+  piece of work, not an extension of this one.
+- Not done in this pass (optional, separable per the original plan): a
+  `get_employee_scan_history()` RPC so `ScanLogModal.js`'s per-employee
+  view spans `scan_events ∪ scan_events_archive` the way `get_all_scan_events()`
+  already does, closing the one remaining gap between a single employee's
+  trimmed-view history and the roster-wide export.
 
 **2026-09-30 — Scan-data archival: `scan_events_archive` + `archive_old_scan_events()` + daily `pg_cron` schedule**
 - New table `scan_events_archive`, new functions `archive_old_scan_events(p_older_than_days default 180)`
