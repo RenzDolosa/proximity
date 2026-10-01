@@ -573,6 +573,12 @@ branch protection before relying on them as merge gates.
   still get signed out. Consider a longer JWT expiry for scanner-only
   accounts specifically (Supabase Auth settings) if outages routinely run
   longer than an hour.
+- **Time-limited proximity cards** (contractor/visitor badges that expire
+  automatically instead of needing a manual revoke) — not started.
+  Full design, a daily `pg_cron` job following the same convention as the
+  scan-data archival and scan-log trim jobs, and a checklist are in
+  `expiring-proximity-cards-plan.md` at the repo root. Delete that file
+  and update this bullet once it ships.
 
 ---
 *Last reconciled against the live GitHub repo and live Supabase project on
@@ -583,6 +589,25 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-10-01 — Plan written: time-limited proximity cards; AI review config fixed**
+- No code shipped in this entry — see `expiring-proximity-cards-plan.md`
+  (repo root) for the proposed feature: proximity cards that carry an
+  optional `expires_at` and auto-revoke on a daily `pg_cron` schedule,
+  for contractor/visitor badges that today only ever expire if an admin
+  remembers to revoke them manually. Grounded against the live
+  `scan_proximity_code()`, `get_scanner_offline_cache()`, and
+  `proximity_cards` schema before writing, and designed to reuse the
+  existing `is_active`/`revoked_at` revoke path and the existing Alerts
+  feature (`raise_alert()`) rather than introducing new state or a new
+  notification channel. Written so another AI (or a future session) can
+  implement it directly from the plan.
+- Fixed `.github/workflows/ai-review.yml`, `.github/scripts/ai-review.mjs`,
+  and `.github/AI_REVIEW.md`: all three referenced `claude-opus-5`, which
+  is not a valid model string (the current Opus model is
+  `claude-opus-5-5`) — the AI review job was almost certainly failing at
+  the API call on every PR, not just reviewing poorly. Updated all three
+  to `claude-opus-5-5`.
 
 **2026-10-01 — `employees.scan_logs` trimming: a durable parity counter first, then a daily trim job**
 - Same shape of problem as `scan_events` (unbounded, append-only jsonb,

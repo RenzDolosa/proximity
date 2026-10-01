@@ -752,6 +752,18 @@ git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
 
+**2026-10-01 — Plan written (not implemented): time-limited proximity cards**
+- `expiring-proximity-cards-plan.md` (repo root) proposes `proximity_cards.expires_at`
+  plus a daily `pg_cron` job, `expire_proximity_cards()`, following the exact
+  convention of `archive_old_scan_events()` / `trim_employee_scan_logs()`
+  below. Also specifies updating `scan_proximity_code()`,
+  `get_scanner_offline_cache()`, and `test_scan_proximity_code()` to treat
+  a past-due `expires_at` as inactive, so an expired card can't still scan
+  for up to a day while waiting on the cron sweep. No schema or function
+  changes have been made yet — this entry exists purely so a future session
+  querying this file's change log knows the plan exists before starting
+  similar work from scratch.
+
 **2026-10-01 — `employees.scan_logs` trimming: `scan_parity_count` first, then `trim_employee_scan_logs()` + daily `pg_cron`**
 - `scan_logs` is the same shape of unbounded-growth problem `scan_events`
   was (729 employees, 12,792 entries total, max 137 on one employee as of

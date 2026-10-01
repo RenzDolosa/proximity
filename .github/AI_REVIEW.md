@@ -115,7 +115,7 @@ check just reflects the latest run's result automatically.
 ## Tuning
 
 - **Model**: set via `AI_REVIEW_MODEL` in `.github/workflows/ai-review.yml`
-  (defaults to `claude-opus-5`). Swap to `claude-sonnet-5` for lower
+  (defaults to `claude-opus-5-5`). Swap to `claude-sonnet-5` for lower
   cost/latency if review quality is holding up fine for your PR sizes.
 - **What counts as "sensitive"**: edit the auth/payment/deletion list in
   the system prompt in `ai-review.mjs` if your definition of "sensitive

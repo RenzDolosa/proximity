@@ -18,7 +18,7 @@ const {
   PR_NUMBER,
   BASE_SHA,
   HEAD_SHA,
-  AI_REVIEW_MODEL = 'claude-opus-5',
+  AI_REVIEW_MODEL = 'claude-opus-5-5', // fixed 2026-10-01 — 'claude-opus-5' was never a valid model string
 } = process.env;
 
 for (const [name, val] of Object.entries({ ANTHROPIC_API_KEY, GITHUB_TOKEN, GITHUB_REPOSITORY, PR_NUMBER, BASE_SHA, HEAD_SHA })) {
