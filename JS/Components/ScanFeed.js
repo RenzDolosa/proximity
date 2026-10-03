@@ -4,6 +4,7 @@
 import { $ } from '../Utils/dom.js';
 import { esc, offlineAvatarHTML, fmtTime } from '../Utils/format.js';
 import { ScanEventsModel } from '../Models/ScanEventsModel.js';
+import { OfflineScanModel } from '../Models/OfflineScanModel.js';
 
 function feedRowHTML(row) {
   return `
@@ -45,7 +46,12 @@ export async function loadScanFeed(targetId = 'scan-feed', limit = 10, scannerId
     return;
   }
   if (!data.length) { feedEl.innerHTML = `<div class="empty-state">No scans yet.</div>`; return; }
-  feedEl.innerHTML = data.map((row) => feedRowHTML(row)).join('');
+  // The feed RPC carries no thumbnails; resolve them from the local photo
+  // cache so a feed refresh costs a few hundred bytes per row, not ~8 KB.
+  const { byEmployeeId } = await OfflineScanModel.getPhotoCache();
+  feedEl.innerHTML = data
+    .map((row) => feedRowHTML({ ...row, photo_thumb_b64: byEmployeeId[row.employee_id] || null }))
+    .join('');
 }
 
 // Matched online scans already return the exact row needed for this

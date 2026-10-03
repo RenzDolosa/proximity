@@ -25,7 +25,7 @@ supabase functions download upload-employee-photo --project-ref kjwttqmbcjvkivgm
 | `scan_events`                 | FK to `employees` and `proximity_cards`. One row per scan of a **recognised** card: `matched`, `inactive_card`, `inactive_employee`, or `unassigned_card`. Scans of a code that matches no card (`unmatched`) are **not stored** — `scan_proximity_code()` skips the insert (`if v_result <> 'unmatched'`), so `unmatched` rows never exist today even though the column's vocabulary allows it. (This file previously said every attempt was logged; corrected 2026-09-28 against the live function body. Whether to start storing them is a product decision — it means unbounded inserts from junk scans — not something a docs fix should decide.) Direction (IN/OUT) is **not a column here**: `trg_append_scan_log()` derives it from the parity of the employee's `scan_logs` length at insert time and stores it only in `employees.scan_logs`. |
 | `scan_events_archive`        | Added 2026-09-30. Same shape as `scan_events`, minus foreign keys (deliberately — see below) plus `archived_at`. Rows older than 180 days are moved here by `archive_old_scan_events()` on a daily `pg_cron` schedule, so `scan_events` itself stays small as it accumulates (10,368 rows after 3 days live — see root `README.md`'s change log). Not a soft-delete: nothing is lost, `get_all_scan_events()` reads both tables so an admin's date-range export still reaches old rows. No FK to `employees`/`proximity_cards` (unlike `scan_events`, which cascades on delete) — an audit trail that disappeared when its parent row did would defeat the point of archiving it. Same read policy as `scan_events` (`is_admin() OR can_view_scanner()`); no write policy at all, since only `archive_old_scan_events()` (`SECURITY DEFINER`) ever writes here. |
 | `employee_directory` (view)  | Employee joined to required card + scan totals, for the Employee Manager grid. Runs `SECURITY DEFINER` so scanner-only / restricted roles still see joined rows under RLS. Read by `JS/Models/EmployeesModel.js#listDirectory`. |
-| `scan_feed` (view / function) | `get_scan_feed()` — `SECURITY DEFINER` function (originally a plain view, which silently dropped employee joins for scanner-only accounts under invoker RLS; replaced for that reason). Read by `JS/Models/ScanEventsModel.js#recentFeed`. |
+| `scan_feed` (view / function) | `get_scan_feed()` — `SECURITY DEFINER` function (originally a plain view, which silently dropped employee joins for scanner-only accounts under invoker RLS; replaced for that reason). Read by `JS/Models/ScanEventsModel.js#recentFeed`, which since 2026-10-03 calls `get_scan_feed_compact()` (no thumbnails, no proximity codes) instead. |
 | `audit_log`                   | Append-only — RLS enabled with exactly one policy (`audit_log_select_admin`, `SELECT` only, `is_admin()`); no INSERT/UPDATE/DELETE policy exists at all, so nothing can write to it directly via PostgREST regardless of role. One row per destructive or permission-changing action: `actor_id`/`actor_name`, `action`, `entity_type`/`entity_id`, `detail` jsonb. Written only via `log_audit_event()` (`SECURITY DEFINER`, bypasses the table's own RLS the way every writer function here does), never a direct insert. See "Audit log" below. |
 
 Relationship direction: `employees.proximity_card_id → proximity_cards.id`.
@@ -117,13 +117,24 @@ an admin swaps it out.
   `{"captured_offline": true}` purely for audit visibility — e.g. spotting
   that a since-revoked card was actually tapped while the kiosk was
   offline, before the cache caught up. See "Offline scanning" below.
-- **`scan_proximity_code_compact(...)`** — added 2026-10-03 as a
-  security-invoker wrapper around the live `scan_proximity_code()`. It
-  delegates classification, scanner enablement, authorization, and writes
-  to the existing RPC, then omits `scan_logs` and resolved remarks from
-  the API response and includes the event timestamp. The client uses this
-  wrapper so repeated scans do not transfer each employee's accumulated
-  scan history.
+- **`scan_proximity_code_compact(p_proximity_code, p_scanner_id, p_scanned_at, p_offline, p_include_photo)`**
+  — added 2026-10-03 as a security-invoker wrapper around the live
+  `scan_proximity_code()`. It delegates classification, scanner enablement,
+  authorization, and writes to the existing RPC, then rebuilds the
+  `employee` object from an **allowlist** (`id`, `employee_code`,
+  `full_name`, `department`, `position`, `status`, `photo_url`,
+  `photo_file_id`, and unresolved `remarks_log` entries only) — so
+  `scan_logs`, resolved remarks, `email`, `phone` and the audit columns are
+  never sent to the kiosk, and a column added to `employees` later does not
+  leak into scan responses by default. The event timestamp is included.
+  `p_include_photo` (default `true`, added the same day in
+  `20261003083051_scan_payload_photo_split.sql`) controls whether
+  `photo_thumb_b64` rides along; the standalone scanner passes `false`
+  because it already holds every thumbnail locally and re-attaches the right
+  one (`OfflineScanModel.withCachedPhoto()`). Measured on live data: the
+  full RPC response averaged ~15.5 KB, the compact response with photo ~9.3
+  KB, and without photo ~0.5 KB. Offline-queue replay also passes `false`
+  since it discards the response.
 - **`get_scanner_offline_cache()`** — added 2026-09-16. Returns a trimmed
   `proximity_cards` ⨝ `employees` projection (code, active flags,
   employee id/name/code/department/position, and current `scan_count` for
@@ -179,8 +190,21 @@ an admin swaps it out.
   for an assigned card; unassigned cards take a null status. Additional
   remarks are optional and are also saved as the card's `revoke_reason`.
   Admin/manager role and Employee Manager scope are checked server-side.
-- **`get_scan_feed()`** — `SECURITY DEFINER` function backing the Recent
-  Activity feed (see `scan_feed` above).
+- **`get_scan_feed()`** — `SECURITY DEFINER` function that backed the Recent
+  Activity feed (see `scan_feed` above). **Legacy as of 2026-10-03:** it
+  returns `photo_thumb_b64` and `photo_url` on every row (~88 KB for 10
+  rows on live data). It is kept only so clients deployed before
+  `get_scan_feed_compact()` keep working; drop it in a follow-up migration
+  once no deployed client calls it.
+- **`get_scan_feed_compact(p_limit, p_scanner_id)`** — added 2026-10-03
+  (`20261003083051_scan_payload_photo_split.sql`). Same permission gate
+  (`is_admin() or can_view_scanner()`), same ordering and operator filter as
+  `get_scan_feed()`, but returns only `id`, `scanner_id`, `result`,
+  `scanned_at`, `employee_id`, `employee_name` and `direction` — the fields
+  the Recent Activity row actually renders — and clamps `p_limit` to 1–100.
+  No thumbnails and no proximity codes; `ScanFeed.js` resolves each row's
+  photo from the kiosk's local photo cache by `employee_id`. ~2.6 KB for 10
+  rows on live data (vs ~88 KB).
 - **`get_all_scan_events()`** — added 2026-09-21, backs Employee Manager's
   "Export all scan logs" button (`JS/Models/ScanEventsModel.js#listAll`).
   Full scan history — every stored row across BOTH `scan_events` and
@@ -825,6 +849,66 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-10-03 (pass 2) — remove thumbnails and unused PII from live scan/feed responses; close an `anon` grant**
+- Pass 1 (below) removed `scan_logs` from scan responses, but measuring live
+  data showed the thumbnail was still ~92% of what remained: a compact scan
+  response averaged ~9.3 KB (~7.7 KB of it `photo_thumb_b64`), and one
+  10-row `get_scan_feed()` call returned ~88 KB, because every row repeated
+  the thumbnail. The kiosk already syncs all thumbnails locally and
+  incrementally (`get_scanner_offline_photo_updates()`), so neither
+  response needs to carry one.
+- `20261003083051_scan_payload_photo_split.sql` (applied live; additive and
+  backward compatible): `scan_proximity_code_compact` gains
+  `p_include_photo boolean DEFAULT true` and an employee-field allowlist;
+  new `get_scan_feed_compact()` (see RPC section). Adding the parameter
+  changed the function signature, so the old 4-argument function is
+  dropped in the same transaction and the grants re-applied — otherwise
+  Postgres keeps both overloads and the new one inherits default execute
+  grants (same trap as the 2026-09-16 `scan_proximity_code` overload).
+- Verified against live data inside a transaction that always aborts (the
+  scan RPC writes): one matched scan 15,502 B (raw RPC) → 9,259 B (compact
+  with photo) → **487 B** (`p_include_photo => false`); 10-row feed 88,019 B
+  → **2,630 B**. Confirmed afterwards that no `scan_events` row or
+  `scan_logs` entry was left behind.
+- Client: `ScanEventsModel.scan()` passes `p_include_photo: false` and
+  `recentFeed()` calls `get_scan_feed_compact()`; the offline-queue replay
+  also passes `false`. `OfflineScanModel.withCachedPhoto()` re-attaches the
+  thumbnail from an in-memory copy of the IndexedDB photo cache and, when the
+  scanned employee has a `photo_file_id` the cache lacks or holds a
+  different version of (new hire, replaced photo), triggers the incremental
+  photo sync immediately (throttled to once per 2 minutes, de-duplicated
+  with the 30-minute timer) instead of waiting up to 30 minutes.
+  Trade-off: that first scan of a brand-new photo shows initials; the next
+  scan shows the photo.
+- `20261003083312_revoke_proximity_card_revoke_anon.sql` (applied live):
+  the Oct 3 `revoke_proximity_card(uuid, text, text)` migration revoked
+  `PUBLIC` but not `anon`, and Supabase's default privileges grant `anon`
+  execute directly, so the security advisor flagged it as anonymously
+  callable. The function's own admin/manager check already rejected
+  anonymous callers, so this was defense in depth, not an open hole. No
+  `SECURITY DEFINER` function in `public` is anon-executable now. Reminder
+  for every future `DROP`/`CREATE` of a function: `REVOKE ... FROM PUBLIC`
+  **and** `FROM anon`.
+- **Migration history drift (not fixed here):** the live
+  `supabase_migrations.schema_migrations` does not contain
+  `20261003025504_reduce_scan_rpc_payloads` or
+  `20261003060125_revoke_card_employee_status`, although both are live
+  (they were applied outside the tracked history), and the repo's older
+  migration filenames use different version numbers than the live history
+  (for example `20260930000000_scan_events_archival` vs live
+  `20260930091040`). `supabase db push` / `migration up` against this
+  project would therefore try to re-run files that already took effect.
+  Reconcile with `supabase migration repair` before introducing any
+  automated migration deploy. The two files added here use the live
+  version numbers.
+- Remaining egress candidates, not changed: `get_scanner_offline_cache_compact()`
+  is refreshed every 5 minutes per kiosk and returns the whole card roster
+  each time (a `scanned_since`-style incremental sync would be the next
+  step, but the payload is only ~0.6 KB per employee without photos);
+  `get_dashboard_stats()` / `get_onsite_roster()` polling (already paused
+  while the tab is hidden); Storage and Realtime were not the main
+  contributors in the sampled 24 hours of logs.
 
 **2026-10-03 — Supabase egress investigation: reduce repeated scan payloads**
 - The provided billing screenshot is filtered to **All projects**. Its

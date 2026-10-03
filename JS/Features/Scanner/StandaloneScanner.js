@@ -232,6 +232,10 @@ function renderStandaloneScanner() {
       // meant Supabase-specifically-down, Drive-still-reachable) is dead
       // code once there's nothing left to prefetch or race.
     }
+    // Online results arrive without photo_thumb_b64 (see ScanEventsModel.scan());
+    // put the locally cached thumbnail back before anything renders. Offline
+    // results already got theirs from getCacheMeta()'s merge.
+    if (!offlineHandled && !error && data) data = await OfflineScanModel.withCachedPhoto(data);
     clearTimeout(fadeTimer);
     clearTimeout(clearTimer);
     resultWrap.classList.remove('fade-out');
@@ -377,6 +381,9 @@ function fmtAge(ms) {
 function initOfflineSupport(operatorName) {
   if (offlineSupportInited) { renderOfflineStatus(); return flushIfPendingShared; }
   offlineSupportInited = true;
+  // Load the local thumbnails into memory now so the first scan's result card
+  // and the feed don't wait on an IndexedDB read (see OfflineScanModel.getPhotoCache()).
+  OfflineScanModel.getPhotoCache().catch(() => {});
 
   const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 min — cheap single RPC call, keeps the cache fresh through a normal shift without waiting on a reload
   // A photo only changes when someone re-uploads one (rare, admin-driven)

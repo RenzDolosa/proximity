@@ -41,6 +41,32 @@ export function mergePhotoUpdates(current, updates) {
   return { byEmployeeId, fileIdsByEmployeeId };
 }
 
+// The live scan RPC deliberately omits photo_thumb_b64 (the kiosk already
+// holds every thumbnail locally — see OfflineScanModel.refreshPhotoCache()),
+// so the result card gets its photo from that local cache instead. Returns
+// `data` untouched when there is nothing to attach, so callers can use it
+// unconditionally.
+export function attachCachedPhoto(data, photosByEmployeeId = {}) {
+  const employee = data?.employee;
+  if (!employee || employee.photo_thumb_b64 || !employee.id) return data;
+  const thumb = photosByEmployeeId[employee.id];
+  return thumb ? { ...data, employee: { ...employee, photo_thumb_b64: thumb } } : data;
+}
+
+// True when the employee has a photo on the server that the local cache
+// either lacks entirely (new hire, first photo) or holds a different version
+// of (photo replaced) — the signal to run the incremental photo sync now
+// instead of waiting for the 30-minute timer. photo_file_id changes on every
+// replacement, which is what makes this comparable without downloading
+// anything.
+export function photoNeedsRefresh(data, photoCache) {
+  const employee = data?.employee;
+  if (!employee?.id || !employee.photo_file_id) return false;
+  const cachedFileId = photoCache?.fileIdsByEmployeeId?.[employee.id];
+  const cachedThumb = photoCache?.byEmployeeId?.[employee.id];
+  return !cachedThumb || cachedFileId !== employee.photo_file_id;
+}
+
 export function groupQueuedScans(entries) {
   const groups = new Map();
   for (const entry of [...entries].sort((a, b) => new Date(a.scanned_at) - new Date(b.scanned_at))) {

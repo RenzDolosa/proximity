@@ -4,9 +4,11 @@
 // to be shown.
 //
 // Always renders the photo from photo_thumb_b64 (offlineAvatarHTML — see
-// Utils/format.js), even for a live/online scan. Both scan RPCs return that
-// field in their compact employee projection, so one code path renders
-// identically online or offline.
+// Utils/format.js), even for a live/online scan, so one code path renders
+// identically online or offline. The standalone scanner's live RPC omits that
+// field and the scanner re-attaches it from its local photo cache
+// (OfflineScanModel.withCachedPhoto()) before calling this; Test Scan's RPC
+// still includes it.
 import { esc, offlineAvatarHTML } from '../Utils/format.js';
 
 const LABELS = {

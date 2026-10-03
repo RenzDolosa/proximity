@@ -604,6 +604,30 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-03 (pass 2) — scanner no longer downloads thumbnails per scan or per feed refresh**
+- After the first egress pass, live measurements showed thumbnails were still
+  ~92% of every scan response (~9.3 KB) and every Recent Activity load
+  (~88 KB per 10 rows). The standalone scanner now asks for responses
+  without photos (`scan_proximity_code_compact(..., p_include_photo => false)`,
+  new `get_scan_feed_compact()`) and renders thumbnails from its local
+  IndexedDB photo cache: one scan ≈ 0.5 KB, one feed load ≈ 2.6 KB.
+  Offline-queue replay no longer downloads a thumbnail per queued scan
+  either. Scan responses also stopped carrying `email`, `phone` and audit
+  columns (explicit field allowlist).
+- `OfflineScanModel.withCachedPhoto()` re-attaches the cached thumbnail and
+  syncs the photo cache immediately (throttled) when the scanned employee
+  has a photo the kiosk lacks or an out-of-date one. New pure helpers
+  `attachCachedPhoto()` / `photoNeedsRefresh()` in `JS/Core/offlineScanning.js`
+  are covered by `test/offline-scanning.test.mjs`.
+- Deploy order: the database migration
+  (`Supabase/migrations/20261003083051_scan_payload_photo_split.sql`) is
+  already live and backward compatible, so merging this client change is
+  safe at any time; older cached clients keep using the legacy
+  `get_scan_feed()` until it is dropped in a follow-up.
+- Also closed an `anon` execute grant on `revoke_proximity_card()` and
+  documented live-vs-repo migration history drift — full details in
+  `Supabase/README.md`'s change log.
+
 **2026-10-03 — Supabase egress investigation and scan-response reduction**
 - The billing screenshot is filtered to **All projects**, so its 6.34 GB
   total egress (about 0.01 GB cached) is organization-wide, not attributable

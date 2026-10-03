@@ -14,11 +14,20 @@ export const ScanEventsModel = {
     // meant scanner-only accounts saw every matched scan's employee_name
     // come back null, since RLS on `employees` silently dropped the joined
     // row for them.
-    return supabase.rpc('get_scan_feed', { p_limit: limit, p_scanner_id: scannerId });
+    // get_scan_feed_compact() returns no thumbnails or proximity codes — the
+    // feed resolves photos from the kiosk's local cache by employee_id (see
+    // ScanFeed.js). The original get_scan_feed() remains for older clients.
+    return supabase.rpc('get_scan_feed_compact', { p_limit: limit, p_scanner_id: scannerId });
   },
 
   async scan(proximity_code, scanner_id) {
-    return supabase.rpc('scan_proximity_code_compact', { p_proximity_code: proximity_code, p_scanner_id: scanner_id });
+    // p_include_photo: false — the result card's thumbnail comes from the
+    // kiosk's local photo cache (OfflineScanModel.withCachedPhoto()).
+    return supabase.rpc('scan_proximity_code_compact', {
+      p_proximity_code: proximity_code,
+      p_scanner_id: scanner_id,
+      p_include_photo: false,
+    });
   },
 
   // Backs Employee Manager's "Export all scan logs" button — the full

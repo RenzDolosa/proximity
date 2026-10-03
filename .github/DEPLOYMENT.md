@@ -102,3 +102,31 @@ root, so serving only `Public/` 404s all three). Once you pick a host (GitHub Pa
 `deploy-frontend.yml` workflow following the same shape (typecheck/lint →
 approval gate → deploy → smoke test) can be added — happy to build that
 once the target's decided.
+
+## Database migrations are not deployed by CI
+
+Nothing in `.github/workflows/` applies `Supabase/migrations/*.sql`; the
+Edge Function workflow deploys functions only. Migrations have been applied
+to the live project by hand (Supabase MCP / dashboard) and the files here
+are the reviewed record of what was applied. Two consequences worth knowing
+before you trust the folder as a source of truth:
+
+- **The live migration history and this folder don't line up.** Some files
+  here use version numbers different from the live
+  `supabase_migrations.schema_migrations` rows, and at least two
+  (`20261003025504_reduce_scan_rpc_payloads`,
+  `20261003060125_revoke_card_employee_status`) are live but absent from that
+  table. Running `supabase db push` today would try to re-apply them. Use
+  `supabase migration repair` to reconcile before adding a migration deploy
+  job.
+- **A green AI review doesn't cover a live-only change.** A migration applied
+  before its PR is reviewed bypasses `.github/workflows/ai-review.yml`
+  entirely (see `.github/AI_REVIEW.md` → Limitations). When a change has to be
+  applied live first (urgent security fix, backward-compatible additive
+  change), commit the identical SQL under the live version number in the same
+  PR so review still happens, just after the fact.
+- **After every function `DROP`/`CREATE`, run the security advisor.** A
+  re-created function gets Supabase's default grants again, and
+  `REVOKE ... FROM PUBLIC` does not remove the direct `anon` grant — revoke
+  from `anon` explicitly (this is how `revoke_proximity_card()` ended up
+  anon-executable on 2026-10-03).

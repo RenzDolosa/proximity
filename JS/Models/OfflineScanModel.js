@@ -43,7 +43,7 @@
 // change log entry for the full story.
 import { supabase } from '../Core/supabaseClient.js';
 import { idbGetCache, idbSetCache, idbEnqueue, idbGetQueue, idbRemoveFromQueue, idbCountQueue, idbGetPhotoCache, idbSetPhotoCache } from '../Utils/idb.js';
-import { classifyCachedScan, flushQueuedScans, mergePhotoUpdates } from '../Core/offlineScanning.js';
+import { attachCachedPhoto, classifyCachedScan, flushQueuedScans, mergePhotoUpdates, photoNeedsRefresh } from '../Core/offlineScanning.js';
 
 // Past this age, the cached lookup is old enough that a card revoked (or
 // an employee deactivated/reactivated) since the last refresh could still
@@ -97,6 +97,55 @@ function isNetworkError(error) {
 // race at all. classify() below just reads row.photo_thumb_b64 straight
 // through.
 
+// In-memory copy of the IndexedDB photo cache. The scan result card and the
+// Recent Activity feed both need thumbnails on every render; re-reading a
+// multi-megabyte structured clone out of IndexedDB each time would trade
+// network cost for CPU cost. Invalidated whenever refreshPhotoCache() writes.
+let photoMemo = null;
+// Bumped on every photo-cache write so a getPhotoCache() read that started
+// before the write can't re-memoize the pre-write snapshot after the memo was
+// invalidated (it would then serve stale thumbnails until the next sync).
+let photoGeneration = 0;
+// employee_id -> photo_file_id we've already triggered an on-demand sync for
+// this page session. Some employees legitimately have a photo_file_id but no
+// stored thumbnail (thumbnail generation failed at upload), and a sync can
+// never satisfy them — without this, every scan of such a person would
+// re-trigger the sync.
+const photoSyncAttempted = new Map();
+// One photo sync at a time: the 30-minute timer and the "this scanned
+// employee's photo is missing/stale" trigger below can otherwise overlap and
+// both read-modify-write the same IndexedDB record.
+let photoRefreshInFlight = null;
+let lastPhotoRefreshRequestAt = 0;
+const PHOTO_REFRESH_REQUEST_GAP_MS = 2 * 60 * 1000;
+
+async function fetchAndStorePhotoUpdates() {
+  const current = await idbGetPhotoCache();
+  const { data, error } = await supabase.rpc('get_scanner_offline_photo_updates', {
+    p_known_photo_ids: current?.fileIdsByEmployeeId || {},
+  });
+  if (error) return { error };
+  if (!data || !Array.isArray(data.photos) || !Array.isArray(data.removed)) {
+    return { error: new Error('Unexpected response from get_scanner_offline_photo_updates') };
+  }
+  if (
+    data.photos.some((photo) => (
+      !photo
+      || typeof photo.employee_id !== 'string'
+      || typeof photo.photo_thumb_b64 !== 'string'
+      || (photo.photo_file_id !== null && typeof photo.photo_file_id !== 'string')
+    ))
+    || data.removed.some((employeeId) => typeof employeeId !== 'string')
+  ) {
+    return { error: new Error('Invalid photo update data from get_scanner_offline_photo_updates') };
+  }
+  const next = mergePhotoUpdates(current, data);
+  await idbSetPhotoCache({ ...next, syncedAt: new Date().toISOString() });
+  photoGeneration += 1;
+  photoMemo = null;
+  return { data: true };
+}
+
 export const OfflineScanModel = {
   isNetworkError,
 
@@ -111,28 +160,59 @@ export const OfflineScanModel = {
   // top-of-file comment. Sends only the known employee/photo ids and gets
   // back thumbnails that changed since the previous refresh.
   async refreshPhotoCache() {
-    const current = await idbGetPhotoCache();
-    const { data, error } = await supabase.rpc('get_scanner_offline_photo_updates', {
-      p_known_photo_ids: current?.fileIdsByEmployeeId || {},
-    });
-    if (error) return { error };
-    if (!data || !Array.isArray(data.photos) || !Array.isArray(data.removed)) {
-      return { error: new Error('Unexpected response from get_scanner_offline_photo_updates') };
+    if (!photoRefreshInFlight) {
+      photoRefreshInFlight = fetchAndStorePhotoUpdates().finally(() => { photoRefreshInFlight = null; });
     }
-    if (
-      data.photos.some((photo) => (
-        !photo
-        || typeof photo.employee_id !== 'string'
-        || typeof photo.photo_thumb_b64 !== 'string'
-        || (photo.photo_file_id !== null && typeof photo.photo_file_id !== 'string')
-      ))
-      || data.removed.some((employeeId) => typeof employeeId !== 'string')
-    ) {
-      return { error: new Error('Invalid photo update data from get_scanner_offline_photo_updates') };
+    return photoRefreshInFlight;
+  },
+
+  // { byEmployeeId, fileIdsByEmployeeId } — the locally synced thumbnails.
+  // Memoized (see photoMemo above); an unreadable IndexedDB yields an empty
+  // cache without memoizing the failure, so the next call retries the read.
+  async getPhotoCache() {
+    if (photoMemo) return photoMemo;
+    const generation = photoGeneration;
+    try {
+      const stored = await idbGetPhotoCache();
+      const loaded = {
+        byEmployeeId: stored?.byEmployeeId || {},
+        fileIdsByEmployeeId: stored?.fileIdsByEmployeeId || {},
+      };
+      if (generation === photoGeneration) photoMemo = loaded;
+      return loaded;
+    } catch {
+      return { byEmployeeId: {}, fileIdsByEmployeeId: {} };
     }
-    const next = mergePhotoUpdates(current, data);
-    await idbSetPhotoCache({ ...next, syncedAt: new Date().toISOString() });
-    return { data: true };
+  },
+
+  // The live scan RPC no longer carries photo_thumb_b64 (scan_proximity_code_
+  // compact(p_include_photo => false)). This puts the locally cached
+  // thumbnail back onto a matched result so ScanResultCard / the hero photo
+  // render exactly as before, and — when the server has a photo this kiosk
+  // doesn't (new hire) or a newer one (replaced) — kicks off the incremental
+  // photo sync in the background, throttled, so the NEXT scan of that person
+  // has it. Never throws and never delays the result: a missing photo just
+  // renders as initials.
+  async withCachedPhoto(data) {
+    if (data?.result !== 'matched' || !data.employee) return data;
+    const cache = await OfflineScanModel.getPhotoCache();
+    const { id, photo_file_id: fileId } = data.employee;
+    if (photoNeedsRefresh(data, cache) && photoSyncAttempted.get(id) !== fileId
+        && OfflineScanModel.requestPhotoRefresh()) {
+      photoSyncAttempted.set(id, fileId);
+    }
+    return attachCachedPhoto(data, cache.byEmployeeId);
+  },
+
+  // Returns true only when a sync was actually started (online and outside
+  // the throttle window), so callers can tell a skipped request from a real one.
+  requestPhotoRefresh() {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+    const now = Date.now();
+    if (now - lastPhotoRefreshRequestAt < PHOTO_REFRESH_REQUEST_GAP_MS) return false;
+    lastPhotoRefreshRequestAt = now;
+    OfflineScanModel.refreshPhotoCache().catch(() => {});
+    return true;
   },
 
   async getCacheMeta() {
@@ -218,6 +298,9 @@ export const OfflineScanModel = {
         p_scanner_id: entry.scanner_id,
         p_scanned_at: entry.scanned_at,
         p_offline: true,
+        // The replay ignores the response body, so never download thumbnails
+        // for a backlog of queued scans.
+        p_include_photo: false,
         });
         return error;
       },

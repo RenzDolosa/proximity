@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyCachedScan, flushQueuedScans, groupQueuedScans, mergePhotoUpdates } from '../JS/Core/offlineScanning.js';
+import { attachCachedPhoto, classifyCachedScan, flushQueuedScans, groupQueuedScans, mergePhotoUpdates, photoNeedsRefresh } from '../JS/Core/offlineScanning.js';
 
 const matchedRow = {
   proximity_code: 'CARD-1', card_active: true, employee_id: 'employee-1',
@@ -105,4 +105,36 @@ test('queue replay stops after an RPC failure and keeps unsynced entries', async
   });
   assert.deepEqual(removed, ['a-1']);
   assert.deepEqual(result, { synced: 1, remaining: 1 });
+});
+
+// scan_proximity_code_compact(p_include_photo => false) omits the thumbnail;
+// the scanner puts the locally cached one back before rendering.
+test('attachCachedPhoto restores a cached thumbnail without mutating or overriding', () => {
+  const live = { result: 'matched', employee: { id: 'employee-1', full_name: 'Ari' } };
+  const filled = attachCachedPhoto(live, { 'employee-1': 'thumb-1' });
+  assert.equal(filled.employee.photo_thumb_b64, 'thumb-1');
+  assert.equal(live.employee.photo_thumb_b64, undefined); // input untouched
+
+  // a thumbnail the server did send is never overwritten by the cache
+  const sent = { result: 'matched', employee: { id: 'employee-1', photo_thumb_b64: 'server' } };
+  assert.equal(attachCachedPhoto(sent, { 'employee-1': 'cached' }), sent);
+
+  // nothing to attach: same object back, safe for unconditional use
+  assert.equal(attachCachedPhoto(live, {}), live);
+  const unmatched = { result: 'unmatched', employee: null };
+  assert.equal(attachCachedPhoto(unmatched, { 'employee-1': 'x' }), unmatched);
+  assert.equal(attachCachedPhoto(null, {}), null);
+});
+
+test('photoNeedsRefresh flags new, replaced and legacy-cache photos but not photo-less employees', () => {
+  const cache = { byEmployeeId: { e1: 't1' }, fileIdsByEmployeeId: { e1: 'f1' } };
+  const scan = (employee) => ({ result: 'matched', employee });
+
+  assert.equal(photoNeedsRefresh(scan({ id: 'e1', photo_file_id: 'f1' }), cache), false); // current
+  assert.equal(photoNeedsRefresh(scan({ id: 'e1', photo_file_id: 'f2' }), cache), true);  // photo replaced
+  assert.equal(photoNeedsRefresh(scan({ id: 'e2', photo_file_id: 'f9' }), cache), true);  // new hire, not cached
+  assert.equal(photoNeedsRefresh(scan({ id: 'e3', photo_file_id: null }), cache), false); // never had a photo: nothing to sync
+  assert.equal(photoNeedsRefresh(scan({ id: 'e1', photo_file_id: 'f1' }), { byEmployeeId: { e1: 't1' } }), true); // legacy cache without file ids
+  assert.equal(photoNeedsRefresh({ result: 'unmatched', employee: null }, cache), false);
+  assert.equal(photoNeedsRefresh(scan({ id: 'e1', photo_file_id: 'f1' }), null), true);
 });
