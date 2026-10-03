@@ -4,7 +4,7 @@ import { supabase } from '../../Core/supabaseClient.js';
 import { appState, canViewScanner } from '../../Core/state.js';
 import { ScanEventsModel } from '../../Models/ScanEventsModel.js';
 import { renderScanResult } from '../../Components/ScanResultCard.js';
-import { loadScanFeed, prependPendingRow } from '../../Components/ScanFeed.js';
+import { loadScanFeed, prependPendingRow, prependScanEvent } from '../../Components/ScanFeed.js';
 import { PROXIMITY_LOGO_SVG } from '../../Components/ProximityLogo.js';
 import { photoDataUri } from '../../Utils/image.js';
 import { loadScanSounds, playScanSound, scanSoundsLoaded, initAudioUnlock } from '../../Utils/scanSounds.js';
@@ -108,11 +108,10 @@ function renderStandaloneScanner() {
   // always present and instant (that's the whole reason it exists — see
   // the 2026-09-18 change log) but a 96px thumbnail sized for a 44-64px
   // avatar reads as visibly blurry blown up to fill this much bigger
-  // stage; photoUrl is only ever present for an ONLINE scan
-  // (scan_proximity_code()'s to_jsonb(employees) response includes the
-  // full row — the offline lookup cache deliberately dropped photo_url
-  // as dead weight once nothing else read it, see this file's own change
-  // log) and sharp, but not guaranteed to load at all. Upgrading is
+  // stage; photoUrl is only ever present for an ONLINE scan (the compact
+  // scan RPC keeps photo_url for this purpose — the offline lookup cache
+  // deliberately omits it as dead weight) and sharp, but not guaranteed to
+  // load at all. Upgrading is
   // purely additive: if photoUrl never loads — offline, Drive
   // unreachable, slow network — the thumbnail just keeps showing, so
   // there's no way this can regress the offline case photo_thumb_b64
@@ -292,6 +291,8 @@ function renderStandaloneScanner() {
       const pendingBefore = await OfflineScanModel.queueCount();
       if (pendingBefore > 0) {
         await flushPendingQueue();
+      } else if (data.result === 'matched' && data.scan_id && data.scanned_at) {
+        prependScanEvent('ss-feed', data, operatorName, 10);
       } else {
         loadScanFeed('ss-feed', 10, operatorName);
       }

@@ -1,9 +1,10 @@
 // In-shell "Test Scan" page. Same lookup logic and result UI as the real,
-// door-facing standalone scanner, but calls test_scan_proximity_code()
-// instead of scan_proximity_code() — nothing is written to scan_events, so
-// a test scan never shows up in Recent Activity, an employee's scan_logs,
-// or Employee Manager's "Scans" count. Use the "Open live scanner ↗" link
-// to launch the real, logging scanner for a reader station.
+// door-facing standalone scanner, but calls the compact wrapper around
+// test_scan_proximity_code() instead of the logging scan RPC — nothing is
+// written to scan_events, so a test scan never shows up in Recent Activity,
+// an employee's scan_logs, or Employee Manager's "Scans" count. Use the
+// "Open live scanner ↗" link to launch the real, logging scanner for a
+// reader station.
 import { $ } from '../../Utils/dom.js';
 import { esc } from '../../Utils/format.js';
 import { ScanEventsModel } from '../../Models/ScanEventsModel.js';

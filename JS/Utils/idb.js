@@ -11,11 +11,10 @@ const DB_NAME = 'proximity-offline';
 const DB_VERSION = 2;
 const STORE_CACHE = 'lookupCache'; // single record, key 'lookup': { rows, syncedAt }
 const STORE_QUEUE = 'scanQueue'; // one record per queued offline scan attempt
-// Single record, key 'photos': { byEmployeeId: { [employee_id]: photo_thumb_b64 }, syncedAt }.
+// Single record, key 'photos': { byEmployeeId, fileIdsByEmployeeId, syncedAt }.
 // Kept in its own store, refreshed on its own (much longer) interval —
 // see Models/OfflineScanModel.js's refreshPhotoCache() and
-// Supabase/README.md's change log entry on splitting
-// get_scanner_offline_cache() from get_scanner_offline_photos().
+// Supabase/README.md's change log entry on incremental photo updates.
 const STORE_PHOTOS = 'photoCache';
 
 function openDB() {

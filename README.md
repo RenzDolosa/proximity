@@ -79,7 +79,8 @@ JS/
                                    separate self-service path — plain
                                    supabase.auth.updateUser(), no Edge Function
                                    involved — see Settings/SettingsPage.js
-    ScanEventsModel.js            scan() calls scan_proximity_code() RPC;
+    ScanEventsModel.js            scan() and testScan() call compact wrappers
+                                   around the live scan RPCs;
                                    recentFeed() reads get_scan_feed();
                                    listAll() reads get_all_scan_events()
                                    (added 2026-09-24, admin/manager-only,
@@ -187,7 +188,7 @@ JS/
                                        button, added 2026-09-19, same pattern
                                        as Employee Manager's)
     Scanner/TestScanPage.js          (in-shell "Test Scan" — calls the
-                                       non-logging test_scan_proximity_code() RPC,
+                                       non-logging compact test-scan RPC,
                                        which now also returns a read-only `direction`
                                        preview (see Supabase/README.md) so IN/OUT
                                        badges and sounds show up here too, not just
@@ -501,14 +502,13 @@ blip — three independent pieces make that true:
   supply one — see that function's `index.ts` and the 2026-09-19 change
   log entries below). Two different paths carry it from there, split by
   how often each consumer actually needs a refresh: `get_scan_feed()`
-  still returns `photo_thumb_b64` directly (Recent Activity re-fetches
-  the whole feed often enough that a per-row column costs nothing extra),
-  while `get_scanner_offline_photos()` — split out from
-  `get_scanner_offline_cache()`, see that change log entry — returns it
-  separately as a sparse `[{employee_id, photo_thumb_b64}]` array for the
-  Scanner's own card/employee lookup cache, refreshed only every 30
-  minutes (`OfflineScanModel.js`) instead of riding along in that lookup's
-  much more frequent 5-minute refresh. The Scanner's result card and Recent
+  returns `photo_thumb_b64` for initial feed loads, while the standalone
+  scanner prepends a matched scan's RPC result rather than re-fetching the
+  same recent rows after every scan. The offline scanner's
+  `get_scanner_offline_photo_updates()` RPC returns only thumbnails whose
+  `photo_file_id` changed (or IDs whose photo was removed), not the full
+  roster on every 30-minute refresh. The Scanner's result card and Recent
+  Activity render it via `Utils/format.js`'s `offlineAvatarHTML()` — a
   Activity render it via `Utils/format.js`'s `offlineAvatarHTML()` — a
   `data:` URI labeled with the byte-sniffed real mime type (never assumed
   — some earlier rows are PNG or JPEG from before this function existed),
@@ -603,6 +603,28 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-10-03 — Supabase egress investigation and scan-response reduction**
+- The billing screenshot is filtered to **All projects**, so its 6.34 GB
+  total egress (about 0.01 GB cached) is organization-wide, not attributable
+  to Proximity. Repository review found the scan RPC returned
+  `to_jsonb(employee)`
+  on every successful scan, including the growing `scan_logs` history, and
+  the standalone scanner fetched the latest 10 feed rows (with thumbnails)
+  again after each matched scan. Its 30-minute offline-photo refresh also
+  downloaded every thumbnail on every pass. The dashboard refreshed both
+  stats and roster every 30 seconds, including while its browser tab was
+  hidden.
+- Reduced scan RPC responses to omit scan history and resolved remarks,
+  made offline photo refreshes incremental by `photo_file_id`, prepended
+  matched scans already returned by the RPC instead of downloading the feed
+  again, and stopped dashboard polling while the tab is hidden.
+- Select the Proximity project in Supabase Usage before measuring the
+  effect. The screenshot alone cannot establish how much of the total these
+  paths contribute. `Supabase/migrations/20261003025504_reduce_scan_rpc_payloads.sql`
+  must be applied to the live project before deploying the client changes;
+  migration history and project-filtered usage should then be checked
+  before attributing the remaining egress.
 
 **2026-10-02 — Proactive "scanner went silent" alerting, implemented (plan from 2026-10-01)**
 - **The backend (`check_scanner_silence()`, `get_scanner_silence_status()`,

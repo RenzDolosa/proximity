@@ -1,5 +1,5 @@
-// The live activity feed and the scan_proximity_code RPC that both the
-// in-shell Scanner page and the standalone scanner tab call.
+// The live activity feed and compact scan RPC wrappers used by the
+// in-shell Scanner page and the standalone scanner tab.
 import { supabase } from '../Core/supabaseClient.js';
 
 export const ScanEventsModel = {
@@ -18,7 +18,7 @@ export const ScanEventsModel = {
   },
 
   async scan(proximity_code, scanner_id) {
-    return supabase.rpc('scan_proximity_code', { p_proximity_code: proximity_code, p_scanner_id: scanner_id });
+    return supabase.rpc('scan_proximity_code_compact', { p_proximity_code: proximity_code, p_scanner_id: scanner_id });
   },
 
   // Backs Employee Manager's "Export all scan logs" button — the full
@@ -42,6 +42,6 @@ export const ScanEventsModel = {
   // into scan_events — no Recent Activity entry, no scan_logs on the
   // employee, no change to Employee Manager's "Scans" count.
   async testScan(proximity_code) {
-    return supabase.rpc('test_scan_proximity_code', { p_proximity_code: proximity_code });
+    return supabase.rpc('test_scan_proximity_code_compact', { p_proximity_code: proximity_code });
   },
 };

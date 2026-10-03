@@ -108,8 +108,8 @@ an admin swaps it out.
   → `in`, odd → `out`) — a plain in/out toggle per employee, not tied to
   any real door-side sensor. `p_scanned_at` (default `now()`) and
   `p_offline` (default `false`) were added 2026-09-16 — both optional and
-  backward compatible, so the existing 2-arg calls from
-  `proximity-scan`/`JS/Models/ScanEventsModel.js#scan` are untouched.
+  backward compatible for existing callers such as the
+  `proximity-scan` Edge Function.
   `p_scanned_at` lets a scan captured offline and replayed later keep its
   true original timestamp (the `trg_append_scan_log` trigger reads
   `NEW.scanned_at`, so `scan_logs` inherits the correct time too);
@@ -117,27 +117,48 @@ an admin swaps it out.
   `{"captured_offline": true}` purely for audit visibility — e.g. spotting
   that a since-revoked card was actually tapped while the kiosk was
   offline, before the cache caught up. See "Offline scanning" below.
+- **`scan_proximity_code_compact(...)`** — added 2026-10-03 as a
+  security-invoker wrapper around the live `scan_proximity_code()`. It
+  delegates classification, scanner enablement, authorization, and writes
+  to the existing RPC, then omits `scan_logs` and resolved remarks from
+  the API response and includes the event timestamp. The client uses this
+  wrapper so repeated scans do not transfer each employee's accumulated
+  scan history.
 - **`get_scanner_offline_cache()`** — added 2026-09-16. Returns a trimmed
   `proximity_cards` ⨝ `employees` projection (code, active flags,
   employee id/name/code/department/position, and current `scan_count` for
   direction parity) as a single `jsonb` array, for
-  `JS/Models/OfflineScanModel.js` to cache client-side in IndexedDB. Same
+  `JS/Models/OfflineScanModel.js` to cache client-side in IndexedDB through
+  `get_scanner_offline_cache_compact()`. Same
   permission gate as the real scan RPC — deliberately trimmed to only the
   fields offline classification needs, not full employee rows, even
   though the calling roles (scanner-scope, in particular) couldn't
   otherwise `SELECT` `employees` directly at all. Did briefly also carry
   `photo_thumb_b64` (2026-09-18–2026-09-19); see
   `get_scanner_offline_photos()` immediately below for why that moved out.
+- **`get_scanner_offline_cache_compact()`** — added 2026-10-03 as a
+  security-invoker wrapper around the live lookup RPC. It preserves that
+  RPC's card/employee fields and access checks while returning only
+  unresolved remarks; the offline classifier never displays resolved ones.
 - **`get_scanner_offline_photos()`** — added 2026-09-19. Split out of
   `get_scanner_offline_cache()` above: returns a **sparse**
   `[{employee_id, photo_thumb_b64}]` array — only employees who actually
   have a thumbnail on file, not the whole roster — so the lookup RPC
   above can stay small and get refreshed every 5 minutes without a
   growing photo payload riding along on every single one of those
-  refreshes. Same permission gate. Client-side, refreshed on its own
-  30-minute interval rather than 5 (`StandaloneScanner.js`), merged back
-  into the lookup cache's rows by `employee_id` at read time
-  (`OfflineScanModel.getCacheMeta()`) — see "Offline scanning" below.
+  refreshes. Same permission gate. This full-snapshot RPC remains for
+  compatibility; the standalone scanner now uses
+  `get_scanner_offline_photo_updates(p_known_photo_ids)` instead, so it
+  only downloads changed thumbnails and deleted-photo IDs on its 30-minute
+  refresh (`StandaloneScanner.js`).
+- **`get_scanner_offline_photo_updates(p_known_photo_ids)`** — added
+  2026-10-03. Accepts the kiosk's small employee-id → `photo_file_id` map
+  and returns changed photo thumbnails plus IDs whose photo was removed.
+  Uses `photo_file_id`, which changes on each photo replacement, to avoid
+  retransmitting the full thumbnail roster when nothing changed. Same
+  scanner permission gate; only `authenticated` and `service_role` can
+  execute it. On first sync or a legacy cache without file IDs, it returns
+  all current thumbnails.
 - **`test_scan_proximity_code(...)`** — same lookup/classification logic
   (including the same `direction` preview on a matched result, added
   2026-09-15 — see change log), but never writes to `scan_events` or
@@ -146,6 +167,11 @@ an admin swaps it out.
   the real activity log. Does **not** take the offline-related params
   above — Test Scan has no offline support (see root `README.md`'s change
   log for why that's a deliberate scope boundary, not an oversight).
+- **`test_scan_proximity_code_compact(p_proximity_code)`** — added
+  2026-10-03 as a security-invoker wrapper around the live test-scan RPC.
+  It removes `scan_logs` and resolved remarks from the result; when
+  `scan_parity_count` is present, it also uses that durable count for the
+  direction preview after old scan logs have been trimmed.
 - **`get_scan_feed()`** — `SECURITY DEFINER` function backing the Recent
   Activity feed (see `scan_feed` above).
 - **`get_all_scan_events()`** — added 2026-09-21, backs Employee Manager's
@@ -792,6 +818,46 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-10-03 — Supabase egress investigation: reduce repeated scan payloads**
+- The provided billing screenshot is filtered to **All projects**. Its
+  6.34 GB total egress (about 0.01 GB cached) is organization-wide, not
+  Proximity-only. The small cached share suggests most traffic was uncached,
+  but the screenshot does not identify which project or endpoint
+  contributed each byte.
+- The committed scan RPCs used `to_jsonb(v_employee)` in every response.
+  A matched scan therefore sent the employee's append-only `scan_logs` and
+  resolved `remarks_log` history along with fields the scanner displays.
+  The standalone scanner also re-requested its latest 10 feed rows after
+  each matched scan, re-sending thumbnail data for older scans. Its
+  30-minute offline-photo refresh also downloaded every employee thumbnail
+  each time, even when no photo had changed.
+- `20261003025504_reduce_scan_rpc_payloads.sql` omits scan history from
+  both scan RPC results, retains only unresolved remarks for display,
+  returns scan timestamps for the scanner feed, and corrects test-scan
+  direction calculation to use `scan_parity_count` after log trimming. The
+  scanner now prepends the authoritative matched result and scan timestamp
+  to its feed when the server returns that timestamp, falling back to the
+  existing feed request if an older RPC response is still deployed.
+- Added `get_scanner_offline_photo_updates()`: it sends only changed photo
+  thumbnails (based on `photo_file_id`) and removed-photo IDs after the
+  first full sync. The frequently refreshed offline lookup also omits
+  resolved remarks.
+- Dashboard polling now pauses in hidden tabs and refreshes when a tab
+  becomes visible again. It still calls both documented stats and roster
+  RPCs every 30 seconds while visible; the stats contract includes an
+  `on_site[]` field the page does not read, so the live function's actual
+  payload and that redundant snapshot remain candidates to inspect using
+  Supabase API logs / project observability.
+- This repository does not auto-deploy database migrations. Apply the
+  migration to the live project **before deploying the client changes**,
+  select the Proximity project in Supabase Usage, then compare endpoint
+  response sizes and uncached egress after the next usage refresh. Do not
+  attribute the screenshot's full 6.34 GB to this project.
+- The separate `proximity-scan` Edge Function still calls the legacy
+  `scan_proximity_code()` RPC; its source is not tracked here. If hardware
+  readers still use that endpoint, update its deployed source to call the
+  compact wrapper as a follow-up.
 
 **2026-10-02 — Implemented: proactive scanner-silence alerting (plan from 2026-10-01)**
 - See the `check_scanner_silence()` / `get_scanner_silence_status()` RPC

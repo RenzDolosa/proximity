@@ -48,6 +48,25 @@ export async function loadScanFeed(targetId = 'scan-feed', limit = 10, scannerId
   feedEl.innerHTML = data.map((row) => feedRowHTML(row)).join('');
 }
 
+// Matched online scans already return the exact row needed for this
+// operator-scoped feed. Prepending it avoids downloading the same recent
+// rows (including their photo thumbnails) again after every scan.
+export function prependScanEvent(targetId, scan, scannerId, limit = 10) {
+  const feedEl = $('#' + targetId);
+  if (!feedEl) return;
+  const employee = scan.employee || {};
+  const rowHTML = feedRowHTML({
+    result: scan.result,
+    scanner_id: scannerId,
+    scanned_at: scan.scanned_at,
+    employee_name: employee.full_name || null,
+    photo_thumb_b64: employee.photo_thumb_b64 || null,
+    direction: scan.direction || null,
+  });
+  const existingRows = feedEl.querySelector('.empty-state') ? [] : Array.from(feedEl.children);
+  feedEl.innerHTML = rowHTML + existingRows.slice(0, limit - 1).map((el) => el.outerHTML).join('');
+}
+
 // Optimistic local row for a scan made while offline. Nothing was
 // actually written to scan_events yet — OfflineScanModel just queued the
 // raw attempt in IndexedDB — so this is never authoritative and never
