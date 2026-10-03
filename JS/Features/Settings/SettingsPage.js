@@ -23,6 +23,7 @@ import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { QueryStatsModel } from '../../Models/QueryStatsModel.js';
 import { ScanArchiveModel } from '../../Models/ScanArchiveModel.js';
 import { ScanLogsTrimModel } from '../../Models/ScanLogsTrimModel.js';
+import { ScannerSilenceModel } from '../../Models/ScannerSilenceModel.js';
 import { openConfirmModal } from '../../Components/ConfirmModal.js';
 import { showModalError } from '../../Components/Modal.js';
 
@@ -52,6 +53,11 @@ let trimStatus = null; // { total_entries, employees_with_entries, max_entries_f
 let trimStatusError = null;
 let trimStatusLoaded = false;
 let trimRunning = false;
+
+let silenceStatus = null; // { silence_minutes, total_scanners, enabled_scanners, silent_now, last_run } once loaded, else null
+let silenceStatusError = null;
+let silenceStatusLoaded = false;
+let silenceChecking = false;
 
 export async function renderSettings() {
   const content = $('#content');
@@ -205,6 +211,28 @@ export async function renderSettings() {
       </p>
       <div id="st-body">${trimStatusLoaded ? '' : 'Loading…'}</div>
     </div>
+
+    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <h3 style="margin:0 0 4px;">Scanner silence alerts</h3>
+        <button type="button" class="ghost" id="ss-run" ${silenceChecking ? 'disabled' : ''}>${silenceChecking ? 'Checking…' : 'Check now'}</button>
+      </div>
+      <p class="sub" style="margin:0 0 10px;">
+        A scheduled job (pg_cron, every 15 minutes) raises an alert for
+        any enabled scanner that hasn't reported in over 60 minutes — a
+        kiosk whose tab crashed, lost power, or fell off the network
+        would otherwise go unnoticed until someone physically checks it.
+        Independent of the Dashboard's own 10-minute "online" indicator
+        (Utils/dashboard.js's scannerState()) — that's a glance-level
+        status for a page you're already looking at; this is what
+        actually notifies someone who isn't. Re-raising the same alert
+        every 15 minutes while a scanner stays silent would just be
+        noise, so each one is deduplicated (one alert per scanner, until
+        it reports again). "Check now" runs the exact same job on
+        demand.
+      </p>
+      <div id="ss-body">${silenceStatusLoaded ? '' : 'Loading…'}</div>
+    </div>
     `}
   `;
   paintThemePicker();
@@ -270,6 +298,23 @@ export async function renderSettings() {
         : 'Nothing to trim — already current');
       loadTrimStatus();
     });
+    if (silenceStatusLoaded) paintSilenceStatus();
+    $('#ss-run').addEventListener('click', async () => {
+      silenceChecking = true;
+      const btn = $('#ss-run');
+      btn.disabled = true;
+      btn.textContent = 'Checking…';
+      const { data, error } = await ScannerSilenceModel.checkNow();
+      silenceChecking = false;
+      const btnAfter = $('#ss-run'); // re-query: a repaint between the two awaits above could have replaced this node
+      if (btnAfter) { btnAfter.disabled = false; btnAfter.textContent = 'Check now'; }
+      if (error) { toast(error.message, 'error'); return; }
+      const row = Array.isArray(data) ? data[0] : data;
+      toast(row?.scanners_flagged
+        ? `${row.scanners_flagged} scanner${row.scanners_flagged === 1 ? '' : 's'} flagged as silent`
+        : 'All enabled scanners have reported recently — nothing flagged');
+      loadSilenceStatus();
+    });
   }
 
   const tasks = [];
@@ -299,6 +344,7 @@ export async function renderSettings() {
   if (isAdmin()) tasks.push(loadQueryStats());
   if (isAdmin()) tasks.push(loadArchiveStatus());
   if (isAdmin()) tasks.push(loadTrimStatus());
+  if (isAdmin()) tasks.push(loadSilenceStatus());
   if (canViewScannerRegistry()) tasks.push(mountScannersPanel());
 
   // Independent panels, each backed by its own API call — run them
@@ -457,6 +503,37 @@ function paintTrimStatus() {
         ${lastRun.started_at ? ` started ${esc(fmtTime(lastRun.started_at))}` : ''}${lastRun.message ? ` — ${esc(lastRun.message)}` : ''}
       </p>
     ` : `<p class="emp-meta" style="margin-top:10px;">The scheduled job hasn't run yet since this status was last checked (it runs once daily at 03:10 UTC).</p>`}
+  `;
+}
+
+async function loadSilenceStatus() {
+  const { data, error } = await ScannerSilenceModel.status();
+  silenceStatusError = error ? error.message : null;
+  silenceStatus = error ? null : data;
+  silenceStatusLoaded = true;
+  paintSilenceStatus();
+}
+
+function paintSilenceStatus() {
+  const body = $('#ss-body');
+  if (!body) return; // panel not in the DOM (non-admin) — shouldn't happen since loadSilenceStatus() is only ever called when isAdmin()
+  if (silenceStatusError) { body.innerHTML = `<div class="empty-state">${esc(silenceStatusError)}</div>`; return; }
+  if (!silenceStatus) { body.innerHTML = 'Loading…'; return; }
+  const s = silenceStatus;
+  const lastRun = s.last_run;
+  body.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card${s.silent_now > 0 ? ' warn' : ' accent'}"><div class="stat-value">${s.silent_now.toLocaleString()}</div><div class="stat-label">Silent right now</div></div>
+      <div class="stat-card"><div class="stat-value">${s.enabled_scanners.toLocaleString()}</div><div class="stat-label">Enabled scanners</div></div>
+      <div class="stat-card"><div class="stat-value">${s.total_scanners.toLocaleString()}</div><div class="stat-label">Total scanners</div></div>
+    </div>
+    <p class="emp-meta" style="margin-top:10px;">Threshold: ${s.silence_minutes} minutes with no scan.${s.silent_now > 0 ? ' See Alerts for which scanner(s) and when.' : ''}</p>
+    ${lastRun ? `
+      <p class="emp-meta" style="margin-top:4px;">
+        Last scheduled run: <span class="badge ${lastRun.status === 'succeeded' ? 'matched' : 'inactive_card'}">${esc(lastRun.status || 'unknown')}</span>
+        ${lastRun.started_at ? ` started ${esc(fmtTime(lastRun.started_at))}` : ''}${lastRun.message ? ` — ${esc(lastRun.message)}` : ''}
+      </p>
+    ` : `<p class="emp-meta" style="margin-top:4px;">The scheduled job hasn't run yet since this status was last checked (it runs every 15 minutes).</p>`}
   `;
 }
 

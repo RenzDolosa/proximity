@@ -126,6 +126,11 @@ JS/
                                      trim_employee_scan_logs() — backs
                                      Settings' "Scan log trimming" panel,
                                      same pattern as ScanArchiveModel.js
+    ScannerSilenceModel.js          added 2026-10-02; wrappers over
+                                     get_scanner_silence_status()/
+                                     check_scanner_silence() — backs
+                                     Settings' "Scanner silence alerts"
+                                     panel, same pattern as the two above
     ScanArchiveModel.js             added 2026-09-30; wrappers over
                                    get_scan_archive_status() /
                                    archive_old_scan_events() — backs
@@ -250,7 +255,11 @@ JS/
                                        admin-only unlike the two panels above) —
                                        pg_stat_statements via get_slow_query_stats(),
                                        adjustable threshold, Reset stats button;
-                                       see Supabase/README.md's change log)
+                                       "Scan data archival", "Scan log trimming",
+                                       and "Scanner silence alerts" panels
+                                       (admin-only, same status+"run/check now"
+                                       pattern across all three); see
+                                       Supabase/README.md's change log)
     Audit/AuditLogPage.js            (Audit Log, admin-only — read-only table over
                                        get_audit_log(); describeEvent() translates
                                        each row's raw {action, entity_type, detail}
@@ -579,16 +588,15 @@ branch protection before relying on them as merge gates.
   scan-data archival and scan-log trim jobs, and a checklist are in
   `expiring-proximity-cards-plan.md` at the repo root. Delete that file
   and update this bullet once it ships.
-- **Proactive "scanner went silent" alerting** — not started. The Scanners
-  panel and Dashboard already track online/offline per scanner, but purely
-  passively (someone has to look). Full design (a `pg_cron` job every 15
-  minutes, not daily — see the plan for why), the dedupe/threshold
-  reasoning, and a checklist are in `scanner-silence-alerts-plan.md` at the
-  repo root. Delete that file and update this bullet once it ships.
+- ~~Proactive "scanner went silent" alerting~~ — **done 2026-10-02**
+  (`check_scanner_silence()`, every-15-minute `pg_cron`, Settings →
+  "Scanner silence alerts" — see this section's change log entry and
+  `Supabase/README.md`'s matching one). `scanner-silence-alerts-plan.md`
+  deleted per its own checklist.
 
 ---
 *Last reconciled against the live GitHub repo and live Supabase project on
-2026-09-30. If you're another Claude instance picking this project up: fetch
+2026-10-02. If you're another Claude instance picking this project up: fetch
 `github.com/RenzDolosa/proximity` fresh (via web_search + web_fetch, or the
 GitHub connector) and re-verify against `Supabase:list_tables` /
 `list_edge_functions` before making schema or Edge Function claims — this
@@ -596,13 +604,39 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
-**2026-10-01 — Plan written: proactive "scanner went silent" alerting**
-- No code shipped in this entry — see `scanner-silence-alerts-plan.md`
-  (repo root) for the proposed feature: a `pg_cron` job that notices when
-  an enabled scanner that has scanned before goes quiet for over an hour,
-  and raises an alert through the existing Alerts feature
-  (`raise_alert()`) rather than leaving staleness something an admin only
-  discovers by happening to look at Settings → Scanners or the Dashboard.
+**2026-10-02 — Proactive "scanner went silent" alerting, implemented (plan from 2026-10-01)**
+- **The backend (`check_scanner_silence()`, `get_scanner_silence_status()`,
+  and the `check-scanner-silence` cron job) was already live on the
+  Supabase project before this entry** — built directly against the
+  database with no corresponding migration file, and no client-side work
+  at all (the Alerts page already displayed any alert kind generically,
+  including this one, via `alertKindLabel()`'s fallback — so alerts were
+  silently already being raised with nowhere admin-facing to configure
+  or check on them). This entry is both the migration-file reconciliation
+  and the first commit of any kind for this feature.
+- **One real bug found and fixed while verifying the live behavior
+  instead of trusting it matched the plan**: both functions filtered on
+  `scanners.last_seen_at is not null`, meant to exclude a scanner that
+  "was provisioned but never scanned" (the plan's own stated rationale).
+  That state is unreachable in this schema — `last_seen_at` is `NOT NULL`
+  with a `DEFAULT now()`, and a `scanners` row is only ever created by
+  `scan_proximity_code()`'s own upsert, which happens on a scan, not on
+  any separate registration step. The check was always vacuously true
+  and excluded nothing; removed, with the reasoning written into the
+  migration directly so it isn't rediscovered the same way twice.
+- Verified against live data, not just read: ran `check_scanner_silence()`
+  twice in a row inside a rolled-back transaction, against synthetic
+  enabled/disabled/under-threshold scanner rows — confirmed exactly one
+  alert for the one scanner that should have been flagged (dedupe working
+  across the two calls), and that disabled and under-threshold scanners
+  were correctly excluded.
+- New Settings → "Scanner silence alerts" panel, same place/pattern as
+  "Scan data archival" and "Scan log trimming" right above it: a stat
+  grid (silent now / enabled / total), last-scheduled-run status, and a
+  "Check now" button for an on-demand run. New
+  `JS/Models/ScannerSilenceModel.js`.
+- `Supabase/migrations/20261002000000_scanner_silence_alerts.sql` —
+  the committed migration this plan never got before now.
   No schema change needed — it reads fields `public.scanners` already has.
   Grounded against the live `scanners` table, `scannerState()`'s existing
   10-minute "online" window, `raise_alert()`'s dedupe parameters, and

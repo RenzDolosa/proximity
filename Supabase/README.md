@@ -317,6 +317,47 @@ an admin swaps it out.
   employee history, and (same best-effort pattern as
   `get_scan_archive_status()`) the trim job's most recent
   `cron.job_run_details` run.
+- **`check_scanner_silence(p_silence_minutes integer default 60)`** —
+  implemented 2026-10-02
+  (`Supabase/migrations/20261002000000_scanner_silence_alerts.sql`;
+  originally planned the day before in `scanner-silence-alerts-plan.md`,
+  deleted once shipped). Backs Settings → "Scanner silence alerts" and a
+  `pg_cron` job (`check-scanner-silence`, `*/15 * * * *`, UTC — every 15
+  minutes, not daily like the archive/trim jobs above: a scanner outage
+  is time-sensitive in a way overnight housekeeping is not). For every
+  `scanners` row with `is_enabled = true` and `last_seen_at` at or before
+  the cutoff, raises a `scanner_went_silent` alert via `raise_alert()`
+  with `dedupe_key = 'scanner-silent:' || scanner_id` and a 180-minute
+  dedupe window — re-raising the same alert every 15 minutes while a
+  scanner stays silent would just be noise. `p_silence_minutes` floored
+  at 15, well above `scannerState()`'s own 10-minute "online" window
+  (`JS/Utils/dashboard.js`) — the two are deliberately independent
+  thresholds, not the same number reused in two places; this can never
+  fire for a scanner the rest of the app still displays as online. Same
+  two-caller permission split as the archive/trim functions above
+  (`auth.uid()` null → pg_cron, proceed; set → must be admin). `EXECUTE`
+  revoked from `PUBLIC`/`anon`, granted to `authenticated`.
+  **A real bug was found and fixed during this implementation, not just
+  assumed correct from the plan**: both this function and
+  `get_scanner_silence_status()` below originally also filtered on
+  `last_seen_at is not null`, meant to exclude a scanner that "was
+  provisioned but never scanned". That state is unreachable in this
+  schema — `scanners.last_seen_at` is `NOT NULL` with `DEFAULT now()`,
+  and `scan_proximity_code()`'s own upsert
+  (`insert ... on conflict (scanner_id) do update set last_seen_at =
+  now()`) is the *only* path that ever creates a `scanners` row, so a row
+  literally cannot exist without a real scan having already created it.
+  The check was always vacuously true; removed. Verified correct by
+  actually running it (not just reading it): inside a rolled-back
+  transaction, synthetic enabled/disabled/under-threshold scanner rows
+  confirmed exactly one alert for the one that should have fired, and
+  that calling it twice in a row produced no duplicate (dedupe working).
+- **`get_scanner_silence_status(p_silence_minutes integer default 60)`**
+  — implemented 2026-10-02, read-only, admin-only. Returns total/enabled
+  scanner counts, how many are currently silent at the given threshold,
+  and (same best-effort `cron.job_run_details` pattern as
+  `get_scan_archive_status()`/`get_scan_logs_trim_status()`) the
+  scheduled job's most recent run.
 - **`add_employee_remark(...)`** — appends a `{remark, created_by,
   created_by_id, created_at}` entry to `employees.remarks_log`.
 - **`is_admin()` / `is_admin_or_manager()`** — role helper functions used
@@ -746,26 +787,26 @@ contracts each client-side caller relies on.
 *Last reconciled against `Supabase:list_tables` (verbose),
 `Supabase:list_edge_functions`, `storage.buckets`, and
 `pg_get_functiondef()` on the live `kjwttqmbcjvkivgmwuev` project,
-2026-09-21. Re-verify against those before trusting this file blindly in a
+2026-10-02. Re-verify against those before trusting this file blindly in a
 future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
 
-**2026-10-01 — Plan written (not implemented): proactive scanner-silence alerting**
-- `scanner-silence-alerts-plan.md` (repo root) proposes
-  `check_scanner_silence(p_silence_minutes default 60)`, a `pg_cron` job
-  running every 15 minutes (not daily, unlike `archive_old_scan_events()` /
-  `trim_employee_scan_logs()` below — see the plan for why time-sensitivity
-  changes the right schedule) that raises a `scanner_went_silent` alert via
-  the existing `raise_alert()` for any enabled scanner that has scanned
-  before but gone quiet past the threshold. No schema change — reads
-  `scanners.is_enabled`/`last_seen_at` as they already exist. Deliberately
-  keeps this threshold independent from `scannerState()`'s existing
-  10-minute online/offline window used by the Scanners panel, rather than
-  reusing it. No functions or migrations have been written yet — this entry
-  exists purely so a future session querying this file's change log knows
-  the plan exists before starting similar work from scratch.
+**2026-10-02 — Implemented: proactive scanner-silence alerting (plan from 2026-10-01)**
+- See the `check_scanner_silence()` / `get_scanner_silence_status()` RPC
+  entries above for the full contract, the dead-code bug found and fixed
+  while verifying the already-live implementation against this schema
+  (not the plan's assumption about it), and how it was verified.
+- **Reconciliation, same pattern as past gaps in this file**: the backend
+  was already fully live on the project — function bodies, grants, and
+  the `check-scanner-silence` cron job all existed — before any migration
+  file or client-side code existed for it at all.
+  `Supabase/migrations/20261002000000_scanner_silence_alerts.sql` is the
+  first commit of any kind for this feature, written to reproduce the
+  live state exactly (with the one fix above applied).
+- `scanner-silence-alerts-plan.md` deleted per its own instruction, now
+  that the work it described has shipped.
 
 **2026-10-01 — Plan written (not implemented): time-limited proximity cards**
 - `expiring-proximity-cards-plan.md` (repo root) proposes `proximity_cards.expires_at`
