@@ -48,7 +48,7 @@ export const EmployeesModel = {
 
   // Used by the Proximity Cards page to show who a card belongs to.
   async listForCardAssignment() {
-    return supabase.from('employees').select('id, full_name, employee_code, proximity_card_id');
+    return supabase.from('employees').select('id, full_name, employee_code, status, proximity_card_id');
   },
 
   async createEmployee(payload) {

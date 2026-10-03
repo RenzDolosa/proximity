@@ -43,8 +43,12 @@ export const ProximityCardsModel = {
     return supabase.from('proximity_cards').insert(rows).select('id, proximity_code');
   },
 
-  async revoke(id) {
-    return supabase.from('proximity_cards').update({ is_active: false, revoked_at: new Date().toISOString() }).eq('id', id);
+  async revoke(id, employeeStatus, additionalRemarks) {
+    return supabase.rpc('revoke_proximity_card', {
+      p_card_id: id,
+      p_employee_status: employeeStatus,
+      p_additional_remarks: additionalRemarks,
+    });
   },
 
   async renew(id) {

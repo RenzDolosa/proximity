@@ -6,6 +6,7 @@ import { appState } from '../Core/state.js';
 import { EmployeesModel } from '../Models/EmployeesModel.js';
 import { ProximityCardsModel } from '../Models/ProximityCardsModel.js';
 import { fileToWebp, fileToOfflineThumbWebp, blobToBase64 } from '../Utils/image.js';
+import { EMPLOYEE_STATUSES } from '../Utils/employeeStatus.js';
 
 // Opens instantly — the two network calls this needs (unassigned cards +
 // who's linked to what) load in the background *after* the modal is
@@ -50,7 +51,7 @@ export async function openEmployeeModal(emp, onSaved) {
     </div>
     <div class="field"><label>Status</label>
       <select id="f-status">
-        ${['active', 'inactive', 'suspended'].map((s) => `<option value="${s}" ${emp?.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+        ${EMPLOYEE_STATUSES.map((s) => `<option value="${s}" ${emp?.status === s ? 'selected' : ''}>${s}</option>`).join('')}
       </select>
     </div>
     <div class="field">

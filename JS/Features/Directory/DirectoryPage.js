@@ -7,6 +7,7 @@ import { appState, isAdmin, isAdminOrManager } from '../../Core/state.js';
 import { supabase } from '../../Core/supabaseClient.js';
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { ProximityCardsModel } from '../../Models/ProximityCardsModel.js';
+import { EMPLOYEE_STATUSES } from '../../Utils/employeeStatus.js';
 import { openEmployeeModal } from '../../Components/EmployeeModal.js';
 import { openScanLogModal } from '../../Components/ScanLogModal.js';
 import { openRemarksModal } from '../../Components/RemarksModal.js';
@@ -117,7 +118,7 @@ export async function renderDirectory() {
         { key: 'position', label: 'position' },
         { key: 'email', label: 'email' },
         { key: 'phone', label: 'phone' },
-        { key: 'status', label: 'status (active/inactive/suspended)' },
+        { key: 'status', label: `status (${EMPLOYEE_STATUSES.join('/')})` },
       ],
       sampleRow: {
         full_name: 'Jordan Cruz', employee_code: 'EMP-1044', proximity_code: 'PRX-00099',
@@ -383,7 +384,7 @@ async function importEmployees(records, onProgress) {
     claimedCodes.set(codeKey, line);
     claimedEmployeeCodes.set(empCodeKey, line);
     claimedEmployeeNames.set(nameKey, line);
-    const status = ['active', 'inactive', 'suspended'].includes((r.status || '').trim()) ? r.status.trim() : 'active';
+    const status = EMPLOYEE_STATUSES.includes((r.status || '').trim()) ? r.status.trim() : 'active';
     pending.push({
       line, codeKey, proximity_code,
       payload: {

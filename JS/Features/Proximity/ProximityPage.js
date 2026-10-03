@@ -177,10 +177,11 @@ function paintProximityTable() {
     const id = b.dataset.revoke;
     const card = cardsCache.find((c) => c.id === id);
     const employee = assignedByCard.get(id);
-    const { confirmed, error } = await openRevokeCardModal(card, employee);
-    if (!confirmed) return;
+    const { confirmed, employeeStatus, error } = await openRevokeCardModal(card, employee);
     if (error) { toast(error.message, 'error'); return; }
+    if (!confirmed) return;
     if (card) { card.is_active = false; card.revoked_at = new Date().toISOString(); }
+    if (employee && employeeStatus) employee.status = employeeStatus;
     toast('Card revoked');
     paintProximityTable();
   }));
