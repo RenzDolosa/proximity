@@ -26,10 +26,13 @@ let page = 1;
 let pageSize = 50;
 let requestSeq = 0;
 let timer = null;
+let visibilityHandler = null;
 
 export async function renderDashboard() {
   const content = $('#content');
   clearInterval(timer);
+  if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
+  visibilityHandler = null;
   if (!isAdminOrManager()) { content.innerHTML = `<div class="empty-state">You don't have access to this page.</div>`; return; }
 
   content.innerHTML = `
@@ -72,8 +75,13 @@ export async function renderDashboard() {
   // itself the moment the DOM it paints into is gone.
   timer = setInterval(() => {
     if (appState.route !== 'dashboard' || !$('#dash-table')) { clearInterval(timer); return; }
+    if (document.hidden) return;
     load();
   }, REFRESH_MS);
+  visibilityHandler = () => {
+    if (!document.hidden && appState.route === 'dashboard' && $('#dash-table')) load();
+  };
+  document.addEventListener('visibilitychange', visibilityHandler);
 }
 
 function showError(message) {

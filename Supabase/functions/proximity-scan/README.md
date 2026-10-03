@@ -15,11 +15,17 @@ Content-Type: application/json
 ```
 
 Calls the `scan_proximity_code(p_proximity_code, p_scanner_id)` RPC
-server-side — the same one `JS/Models/ScanEventsModel.js#scan` calls
-directly from the browser for the in-app scanner. This function exists so
-hardware/kiosk readers that can only POST JSON (no Supabase JS SDK) can
-still log a scan.
+server-side. The in-app scanner now uses the compact
+`scan_proximity_code_compact(...)` wrapper instead. This deployed Edge
+Function's source is not in the repo, so its current response still uses
+the legacy RPC result shape until the source is downloaded and updated.
+This function exists so hardware/kiosk readers that can only POST JSON (no
+Supabase JS SDK) can still log a scan.
 
 **Response** — the RPC's result shape:
 `{ result: 'matched' | 'unmatched' | 'inactive_card' | 'inactive_employee', employee?, direction? }`
 — matches what `JS/Components/ScanResultCard.js#renderScanResult` expects.
+The legacy result can include the full employee row (including scan and
+remark history). If this endpoint is active, it remains a possible egress
+source; capture its deployed source and switch it to the compact wrapper
+before considering scanner egress fully addressed.

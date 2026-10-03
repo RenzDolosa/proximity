@@ -5,7 +5,7 @@
 //   online, so a scan can still be classified with the network down
 // - a queue of raw scan attempts made while offline, replayed strictly in
 //   order (one at a time, never in parallel) once back online, through
-//   the real scan_proximity_code() RPC
+//   the compact wrapper over the real scan_proximity_code() RPC
 //
 // The RPC is always the source of truth for what actually gets written —
 // classify() below is shown to the operator in the moment as immediate
@@ -30,11 +30,12 @@
 // frequent lookup — card/employee status, nothing else — but embedding
 // every employee's thumbnail in it coupled a payload that needs to stay
 // small and frequent to one that will only grow and doesn't need
-// refreshing nearly that often. Thumbnails now come from their own RPC,
-// get_scanner_offline_photos() (sparse — only employees who actually
-// have one), cached separately (idb.js's photoCache store) and on a much
-// longer interval, since a photo only changes when someone re-uploads
-// one. getCacheMeta() below merges the two caches back together by
+// refreshing nearly that often. Thumbnails now come from
+// get_scanner_offline_photo_updates(), cached separately (idb.js's
+// photoCache store) and refreshed on a much longer interval, since a photo
+// only changes when someone re-uploads one. The RPC accepts known file IDs
+// and returns only changed thumbnails or removed-photo IDs. getCacheMeta()
+// below merges the caches by
 // employee_id before handing rows to classify(), so classify() itself
 // stays exactly as it was — still just reads row.photo_thumb_b64 off
 // whatever row it's given, with no idea the photo came from a different
@@ -42,7 +43,7 @@
 // change log entry for the full story.
 import { supabase } from '../Core/supabaseClient.js';
 import { idbGetCache, idbSetCache, idbEnqueue, idbGetQueue, idbRemoveFromQueue, idbCountQueue, idbGetPhotoCache, idbSetPhotoCache } from '../Utils/idb.js';
-import { classifyCachedScan, flushQueuedScans } from '../Core/offlineScanning.js';
+import { classifyCachedScan, flushQueuedScans, mergePhotoUpdates } from '../Core/offlineScanning.js';
 
 // Past this age, the cached lookup is old enough that a card revoked (or
 // an employee deactivated/reactivated) since the last refresh could still
@@ -100,22 +101,37 @@ export const OfflineScanModel = {
   isNetworkError,
 
   async refreshCache() {
-    const { data, error } = await supabase.rpc('get_scanner_offline_cache');
+    const { data, error } = await supabase.rpc('get_scanner_offline_cache_compact');
     if (error) return { error };
     await idbSetCache({ rows: data, syncedAt: new Date().toISOString() });
     return { data: true };
   },
 
   // Separate from refreshCache() above on purpose — see this file's
-  // top-of-file comment. Sparse response (only employees who actually
-  // have a thumbnail), stored as a plain employee_id -> b64 map so
-  // getCacheMeta()'s merge below is an O(1) lookup per row rather than a
-  // find() per row.
+  // top-of-file comment. Sends only the known employee/photo ids and gets
+  // back thumbnails that changed since the previous refresh.
   async refreshPhotoCache() {
-    const { data, error } = await supabase.rpc('get_scanner_offline_photos');
+    const current = await idbGetPhotoCache();
+    const { data, error } = await supabase.rpc('get_scanner_offline_photo_updates', {
+      p_known_photo_ids: current?.fileIdsByEmployeeId || {},
+    });
     if (error) return { error };
-    const byEmployeeId = Object.fromEntries((data || []).map((r) => [r.employee_id, r.photo_thumb_b64]));
-    await idbSetPhotoCache({ byEmployeeId, syncedAt: new Date().toISOString() });
+    if (!data || !Array.isArray(data.photos) || !Array.isArray(data.removed)) {
+      return { error: new Error('Unexpected response from get_scanner_offline_photo_updates') };
+    }
+    if (
+      data.photos.some((photo) => (
+        !photo
+        || typeof photo.employee_id !== 'string'
+        || typeof photo.photo_thumb_b64 !== 'string'
+        || (photo.photo_file_id !== null && typeof photo.photo_file_id !== 'string')
+      ))
+      || data.removed.some((employeeId) => typeof employeeId !== 'string')
+    ) {
+      return { error: new Error('Invalid photo update data from get_scanner_offline_photo_updates') };
+    }
+    const next = mergePhotoUpdates(current, data);
+    await idbSetPhotoCache({ ...next, syncedAt: new Date().toISOString() });
     return { data: true };
   },
 
@@ -197,7 +213,7 @@ export const OfflineScanModel = {
       entries,
       onProgress,
       send: async (entry) => {
-        const { error } = await supabase.rpc('scan_proximity_code', {
+        const { error } = await supabase.rpc('scan_proximity_code_compact', {
         p_proximity_code: entry.proximity_code,
         p_scanner_id: entry.scanner_id,
         p_scanned_at: entry.scanned_at,

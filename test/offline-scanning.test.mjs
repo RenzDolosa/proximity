@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyCachedScan, flushQueuedScans, groupQueuedScans } from '../JS/Core/offlineScanning.js';
+import { classifyCachedScan, flushQueuedScans, groupQueuedScans, mergePhotoUpdates } from '../JS/Core/offlineScanning.js';
 
 const matchedRow = {
   proximity_code: 'CARD-1', card_active: true, employee_id: 'employee-1',
@@ -37,6 +37,38 @@ test('direction parity uses whatever scan_count the cache reports, independent o
   assert.equal(trimmedButStillOdd.direction, 'out'); // 141 is odd regardless of how many entries actually remain in scan_logs
   const trimmedButStillEven = classifyCachedScan('CARD-1', [{ ...matchedRow, scan_count: 140 }], new Map());
   assert.equal(trimmedButStillEven.direction, 'in');
+});
+
+test('photo sync replaces legacy snapshots, merges changes, and removes stale photos', () => {
+  const fullSync = mergePhotoUpdates(null, {
+    photos: [
+      { employee_id: 'employee-1', photo_file_id: 'file-1', photo_thumb_b64: 'thumb-1' },
+      { employee_id: 'employee-2', photo_file_id: 'file-2', photo_thumb_b64: 'thumb-2' },
+    ],
+    removed: [],
+  });
+  assert.deepEqual(fullSync, {
+    byEmployeeId: { 'employee-1': 'thumb-1', 'employee-2': 'thumb-2' },
+    fileIdsByEmployeeId: { 'employee-1': 'file-1', 'employee-2': 'file-2' },
+  });
+
+  const incremental = mergePhotoUpdates(fullSync, {
+    photos: [{ employee_id: 'employee-1', photo_file_id: 'file-2', photo_thumb_b64: 'thumb-2' }],
+    removed: ['employee-2'],
+  });
+  assert.deepEqual(incremental, {
+    byEmployeeId: { 'employee-1': 'thumb-2' },
+    fileIdsByEmployeeId: { 'employee-1': 'file-2' },
+  });
+
+  const legacy = mergePhotoUpdates({ byEmployeeId: { stale: 'old-thumb' } }, {
+    photos: [{ employee_id: 'employee-3', photo_file_id: 'file-3', photo_thumb_b64: 'thumb-3' }],
+    removed: [],
+  });
+  assert.deepEqual(legacy, {
+    byEmployeeId: { 'employee-3': 'thumb-3' },
+    fileIdsByEmployeeId: { 'employee-3': 'file-3' },
+  });
 });
 
 test('queue replay preserves chronological order per card while allowing other cards to progress', async () => {

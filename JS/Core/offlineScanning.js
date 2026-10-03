@@ -25,6 +25,22 @@ export function classifyCachedScan(proximityCode, rows, pendingBumps = new Map()
   };
 }
 
+export function mergePhotoUpdates(current, updates) {
+  const hasSnapshot = Boolean(current?.fileIdsByEmployeeId);
+  const byEmployeeId = hasSnapshot ? { ...current.byEmployeeId } : {};
+  const fileIdsByEmployeeId = hasSnapshot ? { ...current.fileIdsByEmployeeId } : {};
+
+  for (const photo of updates.photos) {
+    byEmployeeId[photo.employee_id] = photo.photo_thumb_b64;
+    fileIdsByEmployeeId[photo.employee_id] = photo.photo_file_id;
+  }
+  for (const employeeId of updates.removed) {
+    delete byEmployeeId[employeeId];
+    delete fileIdsByEmployeeId[employeeId];
+  }
+  return { byEmployeeId, fileIdsByEmployeeId };
+}
+
 export function groupQueuedScans(entries) {
   const groups = new Map();
   for (const entry of [...entries].sort((a, b) => new Date(a.scanned_at) - new Date(b.scanned_at))) {

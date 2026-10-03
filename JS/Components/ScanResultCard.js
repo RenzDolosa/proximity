@@ -4,12 +4,9 @@
 // to be shown.
 //
 // Always renders the photo from photo_thumb_b64 (offlineAvatarHTML — see
-// Utils/format.js), even for a live/online scan: both scan_proximity_code()
-// and test_scan_proximity_code() return the full employee row via
-// to_jsonb(), which now includes photo_thumb_b64 like every other column,
-// so there's no reason to special-case "online" here to use the
-// Drive-URL-based avatarHTML() instead — one code path renders identically
-// online or offline.
+// Utils/format.js), even for a live/online scan. Both scan RPCs return that
+// field in their compact employee projection, so one code path renders
+// identically online or offline.
 import { esc, offlineAvatarHTML } from '../Utils/format.js';
 
 const LABELS = {
@@ -24,9 +21,8 @@ export function renderScanResult(data) {
   const result = data.result;
   if (result === 'matched' && data.employee) {
     const e = data.employee;
-    // Both scan RPCs return the full employee row (via to_jsonb), so
-    // remarks_log rides along on every matched scan — no extra fetch
-    // needed to flag it right here at the point of contact.
+    // Both scan RPCs include only unresolved remarks, which are the entries
+    // this result card can display — no extra fetch is needed.
     const unresolved = (e.remarks_log || []).filter((r) => !r.resolved);
     return `
       <div class="result-card matched">
