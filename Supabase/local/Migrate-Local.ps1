@@ -131,9 +131,34 @@ Ok 'source connection string looks well-formed'
 
 # Local server reachable?
 $env:PGCLIENTENCODING = 'UTF8'
-& psql -U $LocalUser -d postgres -c 'select 1' *> $null
-if ($LASTEXITCODE -ne 0) {
-  Die "cannot connect to the local PostgreSQL server as '$LocalUser'. Is the service running? (Get-Service postgresql*)`n       If it prompts for a password, set `$env:PGPASSWORD first."
+# Windows PowerShell 5.1 wraps a native executable's stderr in ErrorRecords
+# whenever a stream is redirected, and with $ErrorActionPreference = 'Stop'
+# that turns an ordinary psql exit-1 into a raw NativeCommandError that
+# terminates the script BEFORE the diagnostic below can run — so the operator
+# sees a stack trace instead of being told what to do. Relax the preference
+# around native calls and judge them solely by $LASTEXITCODE, which is the
+# only trustworthy signal for a native process anyway.
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$probe = & psql -U $LocalUser -d postgres -c 'select 1' 2>&1
+$probeCode = $LASTEXITCODE
+$ErrorActionPreference = $prevEap
+
+if ($probeCode -ne 0) {
+  $hint = if ("$probe" -match 'password authentication failed') {
+@"
+The local 'postgres' password is wrong or not set. In THIS window:
+           `$env:PGPASSWORD = '<the superuser password you chose in the PostgreSQL installer>'
+       That is the LOCAL password, not the Supabase one. Supabase reads its own
+       from the connection string, so the two do not collide.
+"@
+  } elseif ("$probe" -match 'could not connect|refused|No such host') {
+@"
+The server is not reachable. Check the service:
+           Get-Service postgresql*
+"@
+  } else { "psql said: $probe" }
+  Die "cannot connect to the local PostgreSQL server as '$LocalUser'.`n       $hint"
 }
 Ok "local server reachable as '$LocalUser'"
 
@@ -198,8 +223,15 @@ Step 4 "Restore into '$TargetDb'"
 # throw away a restore that is otherwise complete. Everything is logged so a
 # real failure is still visible.
 $restoreLog = Join-Path $OutDir 'restore.log'
-& pg_restore --no-owner --dbname "postgresql://$LocalUser@localhost/$TargetDb" $dumpFile *>&1 |
+# Same PowerShell 5.1 stderr-wrapping trap as the preflight probe above: this
+# call redirects, and pg_restore is EXPECTED to write errors here (the missing
+# extensions), so without relaxing the preference the script would abort on a
+# restore that is actually fine.
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+& pg_restore --no-owner --dbname "postgresql://$LocalUser@localhost/$TargetDb" $dumpFile 2>&1 |
   Tee-Object -FilePath $restoreLog | Out-Null
+$ErrorActionPreference = $prevEap
 
 $errors = Select-String -Path $restoreLog -Pattern '^pg_restore: error' -ErrorAction SilentlyContinue
 $expected = 'pg_cron|pg_graphql|pgjwt|supabase_vault|must be owner|already exists'
