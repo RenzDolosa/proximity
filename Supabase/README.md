@@ -930,7 +930,8 @@ git commits here since nothing is deployed *from* this repo yet.*
   filenames use different version numbers than live. Apply files directly, then
   `supabase migration repair`.
 - Full decision framework (quota restriction vs. project loss, the three
-  options and their real costs) in `docs/SUPABASE_EXIT_RUNBOOK.md`.
+  options and their real costs) in `docs/SUPABASE_QUOTA_DECISION.md`; the staged
+  cutover plan is `docs/SUPABASE_EXIT_RUNBOOK.md`.
 
 **2026-10-05 — Migration drift is now a failing-CI condition, not a paragraph**
 - Measured, not asserted: applying `Supabase/migrations/*.sql` in filename

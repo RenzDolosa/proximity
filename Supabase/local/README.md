@@ -55,6 +55,6 @@ tools **17+** — an older `pg_dump` refuses to dump a 17 server.
 It writes a `MANIFEST.md` listing what it could *not* capture (storage object
 bytes, Edge Function source, secrets, auth provider config). Read it.
 
-See `docs/SUPABASE_EXIT_RUNBOOK.md` for when and why to run this, and why its
+See `docs/SUPABASE_QUOTA_DECISION.md` for when and why to run this, and why its
 `inventory/public-functions.sql` output is also the raw material for closing
 the Phase 0 schema drift above.

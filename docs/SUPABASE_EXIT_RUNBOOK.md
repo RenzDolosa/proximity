@@ -1,207 +1,263 @@
-# Supabase quota deadline — decision and exit runbook
+# Supabase Exit / Continuity Runbook
 
-**Trigger:** the Renz Dolosa organization went over its Free-plan egress quota
-(7.779 GB against a 5 GB allowance) in the 11 Sep – 11 Oct 2026 cycle. Grace
-period ends **03 Nov 2026**; after that the Fair Use Policy applies and
-requests to projects return **HTTP 402**.
+> **Read `SUPABASE_QUOTA_DECISION.md` before committing to the dates below.**
+> This document is the *how* of leaving Supabase, and it is sound. The decision
+> brief is the *whether* and *when*, and it raises two things that change this
+> plan's premise: (1) the dashboard notice is a quota restriction conditional on
+> *remaining* over quota — it returns 402, it does not delete the project —
+> and (2) the egress fix that would bring the org back under quota is already
+> merged and, as of 2026-10-05, almost certainly **not applied** to the live
+> database, because no workflow in `.github/workflows/` applies migrations.
+> Applying one file may remove the deadline entirely, and ~$25/mo for Pro
+> removes it outright. Both are worth trying before committing an
+> access-control system to a four-week platform migration.
+>
+> The P0 backup in this document is correct and urgent either way. Do that now;
+> decide the cutover date after re-measuring egress.
 
-**Last updated:** 2026-10-05. Companion to `LOCAL_DATABASE_ARCHITECTURE.md`.
+## Deadline
 
----
+**Target: migrate the Proximity production dependency before 03 Nov 2026.**
 
-## 1. Read the banner precisely before choosing a plan
+Do not wait for the restriction to occur. Treat 2026-10-20 as the internal cutover target and keep the remaining time as rollback/verification buffer.
 
-The dashboard says projects will be restricted *"if your organization remains
-over quota"*, and that restricted requests return 402.
+Supabase currently documents that Fair Use restrictions can make project APIs return HTTP 402, and Free projects are also subject to pausing. The exact restriction mechanism for this account should be confirmed from the billing/usage notices, but the architecture should not depend on continued hosted Supabase availability.
 
-Two things follow, and both change the plan:
+## Immediate objective
 
-- **This is a quota restriction, not a project deletion or a 90-day pause.**
-  Those are different mechanisms with different recovery paths. Nothing here
-  says data is deleted on 03 Nov. The risk being managed is *the app stops
-  serving*, not *the data is gone*.
-- **"Remains over quota" is a conditional.** Dropping back under 5 GB per
-  cycle removes the trigger. That is a configuration-and-deploy problem, not a
-  platform-migration problem.
+Preserve the current application and data first. Architecture cleanup comes second.
 
-An emergency migration off Supabase to solve a **$25/month bill** would be the
-most expensive and highest-risk way to fix this. Price the cheap options first.
-
----
-
-## 2. The finding that probably resolves this
-
-**The egress fix is already written and is almost certainly not applied.**
-
-`Supabase/migrations/20261005000000_incremental_scanner_cache_and_dashboard_pulse.sql`
-(merged 2026-10-05, commit `5a1d49e`) targets what the analysis identified as
-the dominant egress source:
-
-| Path | Before | After |
-|---|---|---|
-| Scanner lookup cache, per kiosk | whole roster (~430 KB) every 5 min ≈ **3.7 GB/cycle** | only employees changed since last sync |
-| Dashboard, per open tab | 2 RPCs every 30 s, roster downloaded ~twice | 1 small RPC; roster only when it changed |
-
-**Nothing in CI applies migrations.** `.github/workflows/deploy-supabase.yml`
-triggers only on `Supabase/functions/**` and deploys only Edge Functions.
-Verified 2026-10-05: no workflow runs `db push`, `migration up`, or
-`apply_migration`.
-
-Both clients were deliberately written to fall back to the old RPCs on
-`PGRST202` when the new functions are absent — which is exactly the state the
-project is in if the migration was never applied. **So the fix is deployed in
-the browser and inert in the database, and egress is still running at the old
-rate.**
-
-### Do this first
-
-1. Apply the migration to the live project (`supabase db push` is unsafe here —
-   see §5 on history drift; apply the file directly via the SQL editor or MCP).
-2. In **Usage**, switch the filter from *All projects* to **Proximity**. The
-   7.779 GB figure is organization-wide and has never been attributed to a
-   single project.
-3. Watch uncached egress over the next 48 hours.
-
-If that lands under 5 GB/cycle, the 03 Nov deadline stops applying and the
-local-database work in `LOCAL_DATABASE_ARCHITECTURE.md` proceeds on its own
-merits rather than under duress.
-
----
-
-## 3. The three options, cheapest first
-
-| | Option | Cost | Time | Risk | Removes deadline? |
-|---|---|---|---|---|---|
-| **A** | Apply the egress migration, get back under quota | 0 | hours | low | yes, if it works |
-| **B** | Upgrade to Pro | ~$25/mo, 250 GB egress | minutes | none | yes, immediately |
-| **C** | Migrate off Supabase before 03 Nov | engineering weeks | weeks | **high** | yes |
-
-**Recommended: A, with B as the immediate safety net.**
-
-B is worth buying on its own merits even if A succeeds. $25 converts a hard
-deadline into no deadline, which buys the time to do C properly instead of in
-four weeks. An access-control system is a bad thing to rush a platform
-migration on — if the cutover goes wrong, nobody badges in.
-
-Do **not** choose C because of this deadline. Choose C because sites must keep
-operating while partitioned from the Internet, which is the real requirement
-in `LOCAL_DATABASE_ARCHITECTURE.md` and is unrelated to billing.
-
----
-
-## 4. P0 regardless of which option you pick
-
-**Take a complete backup this week.** It is free, read-only, reversible, and
-the only item on this page that is irreversible if skipped.
-
-```bash
-./Supabase/local/export-project.sh "postgresql://postgres:PASS@db.<ref>.supabase.co:5432/postgres"
-```
-
-Use the **direct** connection string (port 5432, not the 6543 pooler), and
-PostgreSQL client tools **17 or newer** — an older `pg_dump` refuses to dump a
-17 server, which is the most common failure here.
-
-The script captures schema (three forms), data, `auth.users`, roles,
-extensions, every function definition, RLS policies, triggers, live migration
-history, pg_cron jobs, realtime publication membership, storage bucket config,
-object listings, and row counts for restore verification. It writes a
-`MANIFEST.md` recording what it did **not** capture.
-
-### What the script cannot capture — do these by hand
-
-- **Storage object bytes** (the `scan-sounds` files; the listing is captured,
-  the bytes are not)
-- **Edge Function source** — `supabase functions download <name>`; confirm it
-  matches `Supabase/functions/` in the repo
-- **Secrets**: Edge Function env vars, and the Google Drive credentials
-  `upload-employee-photo` uses. Not in the database, not recoverable after
-  project loss.
-- **Auth provider config**, SMTP, redirect URLs, JWT secret, API keys
-- Employee photos live in **Google Drive**, not Supabase Storage — unaffected
-  by anything happening to this project, but inventory the folder
-
----
-
-## 5. The backup is also the schema reconciliation
-
-`inventory/public-functions.sql` from that export contains every live function
-definition — including the nine RPCs and the `alerts` / `scanners` tables that
-`test/schema-drift.test.mjs` currently allowlists as missing from
-`Supabase/migrations/`.
-
-So the P0 backup and Phase 0 of the architecture plan are the same piece of
-work. Capture once, use for both:
-
-1. Run the export.
-2. Diff `schema/public-schema.sql` against `Supabase/migrations/`.
-3. Commit the missing objects as migrations (`alerts`, `scanners`,
-   `raise_alert`, the nine RPCs, and the current `scan_proximity_code` — the
-   committed baseline is behind live).
-4. Delete the matching entries from `KNOWN_MISSING_FUNCTIONS` /
-   `KNOWN_MISSING_DEPENDENCIES` in `test/schema-drift.test.mjs`.
-5. Verify with `./Supabase/local/apply-migrations.sh` against a
-   `supabase start` stack.
-
-**`supabase db push` is unsafe against this project until step 3 is done.**
-`Supabase/README.md` records that the live history is missing entries for
-migrations that are nonetheless applied, and that repo filenames use different
-version numbers than live. A push would try to re-run migrations that already
-took effect. Apply files directly, then `supabase migration repair` once the
-history is reconciled.
-
----
-
-## 6. If you do go to option C
-
-Only after §4 is done and verified.
+The emergency target is:
 
 ```
-Supabase PostgreSQL
-      │  pg_dump (export-project.sh)
-      ▼
-Local PostgreSQL 17        ← restore + verify row counts
-      ▼
-Local Proximity API        ← the hard part; see LOCAL_DATABASE_ARCHITECTURE.md
-      ▼
-Existing frontend
+Current Supabase PostgreSQL
+        |
+        | backup / export
+        v
+Local PostgreSQL 17
+        |
+        +--> local application/API
+        |
+        +--> independent backup
 ```
 
-The restore itself is the easy half. The work is that the browser currently
-depends on Supabase for seven things, and only one of them is "a database":
+Then move toward:
 
-1. PostgREST over `supabase.from()`
-2. RPC over `supabase.rpc()`
-3. **RLS as the actual permission boundary**
-4. Auth and session management
-5. Realtime subscriptions
-6. Storage (scan sounds)
-7. Edge Functions (`upload-employee-photo`, `admin-users`)
+```
+Site PostgreSQL -> Sync API -> Central PostgreSQL
+```
 
-A database-only replacement does not work. Items 3 and 4 are the expensive
-ones: replacing RLS with an application-layer boundary is a genuine reduction
-in defence-in-depth, and auth has to be rebuilt rather than ported. Budget for
-those honestly rather than discovering them at cutover.
+## Priority order
 
-Order of operations, if forced:
+### P0 — protect data
 
-1. Restore to local PostgreSQL 17, verify against `row-counts.txt`
-2. Stand up the local API with the Scanner path only — it has the clearest
-   contract and already has the offline queue behind it
-3. Pilot one site in parallel with Supabase still live
-4. Cut over per-site, keeping Supabase as a read-only fallback until confident
-5. Keep the IndexedDB device queue throughout — it is the device-level
-   resilience layer, not a database replacement
+Before changing production:
 
-**Do not** attempt a big-bang cutover before 03 Nov. If the timeline gets
-tight, take option B and move the date.
+- Export the PostgreSQL database.
+- Export Supabase Storage objects.
+- Export Auth/user configuration and identify secrets/configuration that must be recreated.
+- Save the current Supabase project URL/ref.
+- Save the current migration files from GitHub.
+- Record enabled extensions, functions, triggers, publications, storage buckets and RLS policies.
+- Make at least one restore test against a local PostgreSQL 17 instance.
 
----
+**Do not assume the GitHub migration folder alone is a complete backup.** The repository documents known cases of live Supabase state being ahead of GitHub.
 
-## 7. Related
+### P0 — create a local PostgreSQL 17 environment
 
-- `LOCAL_DATABASE_ARCHITECTURE.md` — the target architecture and phasing
-- `Supabase/local/export-project.sh` — the §4 capture tool
-- `Supabase/local/apply-migrations.sh` — Phase 0 verification
-- `test/schema-drift.test.mjs` — enforces §5's reconciliation
-- `Supabase/README.md` — schema, RPC contracts, drift history
+Use PostgreSQL 17 locally.
+
+Do not change the schema to MySQL during the emergency migration.
+
+The immediate success condition is:
+
+> The local PostgreSQL database can answer the application's existing business queries and RPC-equivalent logic.
+
+### P1 — keep the current frontend alive
+
+Do not rewrite the frontend before the data is safe.
+
+First introduce a compatibility layer so existing models can transition from:
+
+```
+supabase.from()
+supabase.rpc()
+supabase.auth()
+supabase.storage()
+```
+
+to:
+
+```
+Local API
+```
+
+Migrate one capability at a time.
+
+### P1 — scanner continuity
+
+The scanner is the most important offline path.
+
+Keep:
+
+- IndexedDB lookup cache
+- offline scan queue
+- original scan timestamps
+- queued-scan replay
+- local photo/sound cache
+
+The scanner must be able to operate with no Internet.
+
+### P2 — local API
+
+Introduce a local API:
+
+```
+Browser -> Local API -> PostgreSQL
+```
+
+The browser must not receive PostgreSQL credentials.
+
+### P2 — synchronization
+
+Add:
+
+```
+sync_outbox
+sync_inbox / processed_changes
+site_id
+change_id
+version
+tombstones
+```
+
+Start with append-only `scan_events`.
+
+### P3 — remove remaining Supabase dependencies
+
+After local operation is proven:
+
+- Auth
+- Realtime
+- Storage
+- Edge Functions
+- PostgREST
+- Supabase client
+
+can be replaced or self-hosted.
+
+## What NOT to do before the deadline
+
+- Do not migrate PostgreSQL to MySQL.
+- Do not rewrite the entire frontend.
+- Do not put PostgreSQL credentials in browser JavaScript.
+- Do not create a separate unsynchronized database for every workstation.
+- Do not rely on browser IndexedDB as the only permanent database.
+- Do not implement multi-master conflict resolution as an afterthought.
+- Do not delete the Supabase project until a local restore has been verified.
+
+## Cutover strategy
+
+### Stage A — shadow local database
+
+Run local PostgreSQL while Supabase remains production.
+
+Copy production data periodically.
+
+### Stage B — local API in test mode
+
+Run the application against local PostgreSQL without changing the production system.
+
+Test:
+
+- login
+- employee CRUD
+- proximity cards
+- scanner
+- attendance
+- dashboard
+- alerts
+- audit
+- exports
+- settings
+- photo handling
+
+### Stage C — local production pilot
+
+Choose one site/device group.
+
+Operate locally for several days while keeping Supabase available as rollback/reference.
+
+### Stage D — synchronization
+
+Verify:
+
+- offline scan
+- reconnect
+- duplicate retry
+- two-site scan
+- deletion
+- employee edit
+- conflict detection
+- backup/restore
+
+### Stage E — production cutover
+
+Freeze writes briefly.
+
+Perform final data export.
+
+Restore/verify the final local database.
+
+Switch the application to the local API.
+
+Keep the original Supabase data untouched until the new system has passed the agreed retention period.
+
+## Rollback
+
+Rollback must be possible by changing the application endpoint back to the old service.
+
+Do not destroy the old Supabase environment immediately after cutover.
+
+## Final architecture
+
+```
+                  CENTRAL
+              PostgreSQL
+                   ^
+                   |
+                Sync API
+                   ^
+                   |
+        Internet / VPN when available
+                   |
+        +----------+----------+
+        |                     |
+     SITE A                 SITE B
+        |                     |
+   Local API             Local API
+        |                     |
+ PostgreSQL             PostgreSQL
+        ^                     ^
+        |                     |
+       LAN                   LAN
+        |                     |
+   Clients/scanners       Clients/scanners
+```
+
+This architecture makes Internet connectivity an **integration dependency**, not a **basic operational dependency**.
+
+## Definition of done
+
+- [ ] Full production database backup exists.
+- [ ] Storage objects are backed up.
+- [ ] Local PostgreSQL restore has been tested.
+- [ ] Local application works without Supabase.
+- [ ] Scanner works without Internet.
+- [ ] Multiple local clients share one site database.
+- [ ] Scan events synchronize without duplicates.
+- [ ] Deletions cannot resurrect.
+- [ ] Master-data conflicts are visible.
+- [ ] Local backups are automated.
+- [ ] Rollback has been tested.
+- [ ] Supabase can be retired without losing data.

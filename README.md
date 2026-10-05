@@ -607,7 +607,8 @@ file can drift from the live state between sessions.*
 **2026-10-05 (quota deadline) — Supabase exit runbook, and the reason it may not be needed**
 - The org went over its Free-plan egress quota (7.779 GB against 5 GB) and the
   grace period ends **03 Nov 2026**, after which requests return HTTP 402.
-  `docs/SUPABASE_EXIT_RUNBOOK.md` is the decision + contingency document.
+  `docs/SUPABASE_QUOTA_DECISION.md` is the decision brief (whether/when);
+  `docs/SUPABASE_EXIT_RUNBOOK.md` is the staged cutover runbook (how).
 - **Read the banner precisely.** It restricts *"if your organization remains
   over quota"*, and 402 means requests are refused — not that the project is
   deleted or paused (those are different mechanisms with different recovery
