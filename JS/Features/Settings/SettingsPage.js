@@ -558,7 +558,23 @@ function paintUsage() {
   // task with a documented fix, the second is an incident. A generic error
   // would send someone debugging a feature nobody has configured yet.
   let apiNote = '';
-  if (projectUsageError?.code === 'not_deployed') {
+  if (projectUsageError?.code === 'no_usage_endpoint') {
+    // Not a misconfiguration — the data may genuinely not be exposed by any
+    // API. Say so, show what was tried, and send the operator somewhere that
+    // does have the numbers rather than leaving a broken-looking panel.
+    const probes = Array.isArray(projectUsageError.probes) ? projectUsageError.probes : [];
+    apiNote = `<div class="empty-state" style="margin-top:10px;text-align:left;">
+      <strong>Egress, Cached Egress, Log Ingestion and Log Query aren't available from the API.</strong>
+      Supabase's published Management API has no usage or billing endpoint, so these four
+      may simply not be fetchable programmatically — this is not a misconfiguration on your side.
+      Read them from the
+      <a href="https://supabase.com/dashboard/project/_/settings/billing/usage" target="_blank" rel="noopener">dashboard Usage page</a>.
+      Database size below is unaffected.
+      ${probes.length ? `<div class="emp-meta mono" style="margin-top:8px;">Tried: ${
+        probes.map((p) => `${esc(String(p.path))} → ${esc(String(p.status))}`).join(' · ')
+      }</div>` : ''}
+    </div>`;
+  } else if (projectUsageError?.code === 'not_deployed') {
     apiNote = `<div class="empty-state" style="margin-top:10px;text-align:left;">
       <strong>The <span class="mono">project-usage</span> Edge Function isn't deployed yet.</strong>
       Egress, Cached Egress, Log Ingestion and Log Query come from it, and so do the
