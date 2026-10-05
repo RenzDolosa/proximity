@@ -604,6 +604,90 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-05 (quota deadline) — Supabase exit runbook, and the reason it may not be needed**
+- The org went over its Free-plan egress quota (7.779 GB against 5 GB) and the
+  grace period ends **03 Nov 2026**, after which requests return HTTP 402.
+  `docs/SUPABASE_QUOTA_DECISION.md` is the decision brief (whether/when);
+  `docs/SUPABASE_EXIT_RUNBOOK.md` is the staged cutover runbook (how).
+- **Read the banner precisely.** It restricts *"if your organization remains
+  over quota"*, and 402 means requests are refused — not that the project is
+  deleted or paused (those are different mechanisms with different recovery
+  paths). The risk being managed is "the app stops serving", not "the data is
+  gone", and the trigger is conditional: get back under 5 GB and it does not
+  fire.
+- **The likely resolution was already shipped and is probably inert.** The
+  egress migration from pass 3 (`20261005000000_…`, commit `5a1d49e`) targets
+  the dominant source — the per-kiosk whole-roster refresh (~3.7 GB/cycle per
+  kiosk) and the Dashboard's double roster download. Verified 2026-10-05: **no
+  workflow in `.github/workflows/` applies migrations** — `deploy-supabase.yml`
+  fires only on `Supabase/functions/**` and deploys only Edge Functions. Both
+  clients fall back to the old RPCs on `PGRST202`, which is exactly the state
+  an unapplied migration produces. So the fix is live in the browser and
+  absent from the database, and egress is still running at the old rate.
+  Applying that one file is the first thing to try.
+- Recommendation: apply the migration and re-measure with the Usage filter set
+  to **Proximity** rather than *All projects* (the 7.779 GB has never been
+  attributed to a single project); buy Pro (~$25/mo, 250 GB) as an immediate
+  safety net regardless, because it converts a hard deadline into no deadline.
+  Do **not** run an emergency platform migration to resolve a $25 bill — for an
+  access-control system, a rushed cutover means nobody badges in.
+- **P0 regardless of the option chosen:** `Supabase/local/export-project.sh`
+  takes a complete, read-only, restorable capture — schema (three forms), data,
+  `auth.users`, roles, extensions, every function definition, RLS policies,
+  triggers, live migration history, pg_cron jobs, realtime publication, storage
+  bucket config and object listing, and row counts for restore verification. It
+  writes a `MANIFEST.md` naming what it could not capture (storage object bytes,
+  Edge Function source, secrets, auth provider config) so a partial capture
+  can't be mistaken for a complete one.
+- **The backup doubles as the Phase 0 schema reconciliation.** Its
+  `inventory/public-functions.sql` contains every live function definition —
+  including the nine RPCs and the `alerts`/`scanners` tables that
+  `test/schema-drift.test.mjs` currently allowlists as missing. Capture once,
+  use for both; then delete the allowlist entries as each migration lands.
+
+**2026-10-05 (architecture) — local-database/sync proposal, and the blocker it uncovered**
+- On branch `architecture/local-database-sync`, not merged: new
+  `docs/LOCAL_DATABASE_ARCHITECTURE.md` proposing one local PostgreSQL per
+  **site** (not per device), a local API as the security boundary, a durable
+  transactional outbox, and idempotent append-only scan sync to a central
+  PostgreSQL. Keeps PostgreSQL — the app leans on RLS, `SECURITY DEFINER`
+  RPCs, triggers, `jsonb`, `pg_cron` and views, so an engine change would be a
+  backend rewrite bought for nothing. Nothing is implemented.
+- **The finding that reorders the plan: this repository cannot build its own
+  database.** Applying `Supabase/migrations/*.sql` in order to an empty
+  PostgreSQL *fails* — `20261002000000_scanner_silence_alerts.sql` calls
+  `public.raise_alert()` and reads `public.scanners` / `public.alerts`, and no
+  migration creates any of the three. Separately, nine RPCs the client calls
+  (`get_dashboard_stats`, `get_onsite_roster`, `get_alerts`,
+  `get_unread_alert_count`, `acknowledge_alert`, `acknowledge_all_alerts`,
+  `get_scanners`, `update_scanner`, `get_scanner_performance_stats`) have no
+  source in the repo at all, and the committed `scan_proximity_code()` is
+  behind live (it has no `scanners` upsert, which `Supabase/README.md`
+  documents as existing). Every phase of the local-database plan starts with
+  "stand up the schema from the repo", so this is Phase 0, ahead of any sync
+  work.
+- This is the predicted consequence of something `.github/AI_REVIEW.md`
+  already warned about: the AI review only sees a PR diff, so schema applied
+  straight to the project (via MCP) is structurally invisible to it.
+  `Supabase/README.md`'s change log records the same "backend shipped, no
+  migration file" pattern four separate times.
+- **Now enforced rather than just documented**: `test/schema-drift.test.mjs`
+  (5 cases) cross-checks every RPC called from `JS/` and every `public.<object>`
+  a migration references against what the migrations actually create. Current
+  drift is pinned in an explicit allowlist so `npm test` stays green while it's
+  paid down; new drift fails CI immediately, and reconciling an object forces
+  its allowlist entry to be deleted (a staleness check asserts that). Verified
+  by removing an entry and confirming the failure names the exact object.
+  Suite is now 48 passing.
+- `Supabase/local/apply-migrations.sh` applies the migrations in order against
+  a `supabase start` stack (or any `postgresql://` URL), stopping at the first
+  failure and naming the file. Phase 0 deliberately uses the Supabase CLI stack
+  rather than a bare `postgres:17` container: the schema depends on the
+  anon/authenticated/service_role roles, the `auth` schema behind `auth.uid()`,
+  `storage.*` for the scan-sounds bucket, and `pg_cron`/`pg_stat_statements`.
+  Validate the migrations first; replace the platform surface later, as its own
+  phase, so a migration bug can't be confused with a compatibility-shim bug.
+
 **2026-10-05 (pass 3) — the actual egress bill: two unconditional whole-dataset polls**
 - Passes 1 and 2 shrank what a *scan* costs. They explicitly left open what
   turned out to be the dominant cost, which is not per-scan at all: two
