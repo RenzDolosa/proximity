@@ -27,12 +27,17 @@ AS $function$
 DECLARE
   v_tables jsonb;
 BEGIN
-  -- Same gate as the other Settings panels. SECURITY DEFINER because
-  -- pg_total_relation_size and pg_database_size read catalog state that the
-  -- application roles are not otherwise granted; the check above is what
-  -- authorizes it, not the role's own privileges.
-  IF NOT public.can_view_settings() THEN
-    RAISE EXCEPTION 'not permitted to view settings';
+  -- Admin only, deliberately stricter than the can_view_settings() gate the
+  -- sibling Settings panels use. Its only caller is the Usage panel, which is
+  -- already admin-only, so a looser gate here would buy nothing and would let
+  -- a Viewer-with-Settings-access read table sizes and row counts by calling
+  -- the RPC directly. Least privilege, at zero cost.
+  --
+  -- SECURITY DEFINER because pg_database_size / pg_total_relation_size read
+  -- catalog state the application roles are not granted; this check is what
+  -- authorizes the call, not the caller's own privileges.
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'not permitted to view database usage';
   END IF;
 
   SELECT coalesce(jsonb_agg(t ORDER BY (t ->> 'total_bytes')::bigint DESC), '[]'::jsonb)

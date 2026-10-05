@@ -9,11 +9,27 @@ Those four are **platform billing metrics**. They are not in the database and
 no RPC can reach them — they exist only in Supabase's Management API at
 `api.supabase.com`, which authenticates with a Personal Access Token.
 
-That token is an **account-wide credential**: it can read and modify every
-project in every organization the issuing user belongs to, including deleting
-them. It cannot sit in client JavaScript behind an anon key. So the token lives
-here as an Edge Function secret, the browser calls this function, and the
+That token is a **server-side credential regardless of how narrowly it is
+scoped** — it authenticates to Supabase's control plane, not to this project's
+data API. It cannot sit in client JavaScript behind an anon key. So the token
+lives here as an Edge Function secret, the browser calls this function, and the
 browser never sees the token and never talks to `api.supabase.com`.
+
+**Scope it down when issuing it.** Supabase's token generator supports
+project-scoped tokens with per-category permissions (the legacy
+full-account token is a separate, explicitly-labelled option — do not use it
+here). Issue this one as:
+
+- **Scope:** Project → the organization → `proximity` only. Not Organization,
+  which spans every project in the org.
+- **Permissions:** read-only, and only the category covering project
+  usage/diagnostics. This function issues a single `GET` and never writes, so
+  no write permission is ever correct. Leave Database, Application services and
+  Infrastructure and delivery at None — it touches none of them.
+
+A token scoped that way, if leaked, exposes this project's usage figures and
+nothing else. That is a meaningfully different risk from the account-wide
+legacy token, and it is worth the extra minute at issue time.
 
 The fifth figure on the panel, **Database size**, deliberately does *not* come
 from here. `pg_database_size()` is readable from inside the database, so
@@ -23,26 +39,39 @@ unconfigured.
 
 ## Setup
 
-Two secrets, neither committed:
+**One secret**, not committed:
 
 | Secret | Value |
 |---|---|
-| `SUPABASE_MANAGEMENT_TOKEN` | Personal Access Token from [account/tokens](https://supabase.com/dashboard/account/tokens) |
-| `SUPABASE_PROJECT_REF` | this project's ref, e.g. `kjwttqmbcjvkivgmwuev` |
+| `MANAGEMENT_API_TOKEN` | Personal Access Token from [account/tokens](https://supabase.com/dashboard/account/tokens) |
 
 ```bash
-supabase secrets set SUPABASE_MANAGEMENT_TOKEN=sbp_xxx SUPABASE_PROJECT_REF=kjwttqmbcjvkivgmwuev
+supabase secrets set MANAGEMENT_API_TOKEN=sbp_xxx
 ```
+
+**Not** `SUPABASE_MANAGEMENT_TOKEN`: Supabase reserves the `SUPABASE_` prefix
+for the variables it injects itself and rejects user secrets that use it
+("Name must not start with the SUPABASE_ prefix").
+
+There is deliberately no project-ref secret. The ref is derived from the
+platform-injected `SUPABASE_URL` (`https://<ref>.supabase.co`). That is one
+less thing to set, and it cannot drift — a hand-typed ref that disagreed with
+the project the function actually runs in would report **someone else's usage
+with no visible error**. `MANAGEMENT_PROJECT_REF` overrides the derivation for
+the cases where the URL is not the ref (self-hosted, or a branch database whose
+usage should be attributed to the parent).
 
 `SUPABASE_URL` and `SUPABASE_ANON_KEY` are injected by the platform.
 
-Until both are set the function returns `503 { code: "not_configured" }`, and
+Until the token is set the function returns `503 { code: "not_configured" }`, and
 the panel says so explicitly rather than showing a generic error — a one-time
 setup task and an incident should not look alike.
 
-**Treat the token as a credential with blast radius well beyond this project.**
-Scope it to the smallest account that can read this project's usage, rotate it
-on staff change, and never put it anywhere a browser can reach.
+Rotate the token on staff change, and never put it anywhere a browser can
+reach. Mint it separately from the `SUPABASE_ACCESS_TOKEN` that
+`.github/workflows/deploy-supabase.yml` uses for Edge Function deploys — that
+one needs write access, this one does not, and separate tokens can be rotated
+independently.
 
 ## Contract
 

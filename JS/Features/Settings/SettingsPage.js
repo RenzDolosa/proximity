@@ -562,9 +562,9 @@ function paintUsage() {
     apiNote = `<div class="empty-state" style="margin-top:10px;text-align:left;">
       <strong>Egress, Cached Egress, Log Ingestion and Log Query aren't configured.</strong>
       These are platform billing metrics that exist only in Supabase's Management API,
-      behind a Personal Access Token — an account-wide credential that cannot live in the
-      browser. Set <span class="mono">SUPABASE_MANAGEMENT_TOKEN</span> and
-      <span class="mono">SUPABASE_PROJECT_REF</span> as Edge Function secrets to enable them.
+      behind a Personal Access Token — a control-plane credential that cannot live in the
+      browser. Set <span class="mono">MANAGEMENT_API_TOKEN</span> as an Edge Function
+      secret to enable them (issue it project-scoped and read-only).
       See <span class="mono">Supabase/functions/project-usage/README.md</span>.
       Database size below needs none of this and is live.
     </div>`;
@@ -572,7 +572,7 @@ function paintUsage() {
     apiNote = `<div class="empty-state" style="margin-top:10px;text-align:left;color:var(--bad)">
       <strong>Supabase rejected the management token.</strong> It has been revoked, has expired,
       or no longer has access to this project. Issue a new one and update the
-      <span class="mono">SUPABASE_MANAGEMENT_TOKEN</span> secret.
+      <span class="mono">MANAGEMENT_API_TOKEN</span> secret.
     </div>`;
   } else if (projectUsageError) {
     apiNote = `<div class="empty-state" style="margin-top:10px;">${esc(projectUsageError.message)}</div>`;
