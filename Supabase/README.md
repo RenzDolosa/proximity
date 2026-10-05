@@ -930,10 +930,13 @@ git commits here since nothing is deployed *from* this repo yet.*
   Egress, Cached Egress, Log Ingestion and Log Query are platform *billing*
   metrics with no database representation at all; they come from Supabase's
   Management API via the new `project-usage` Edge Function, which holds a
-  Personal Access Token as a secret. That token can read and delete every
-  project in the account, so it is categorically not something the browser can
-  hold — full contract, setup and threat note in
-  `Supabase/functions/project-usage/README.md`.
+  Personal Access Token as a secret. That token authenticates to the control
+  plane rather than the project data API, so it cannot sit behind an anon key
+  however narrowly it is scoped. Issue it **project-scoped to `proximity` and
+  read-only** — the function makes a single `GET` and never writes, so no write
+  permission is ever correct, and a token scoped that way exposes this
+  project's usage figures and nothing else if leaked. Full contract and setup
+  in `Supabase/functions/project-usage/README.md`.
 - Database size is also the only one that is a **level** rather than a flow:
   egress and log ingestion accumulate across a billing cycle and reset at the
   boundary, while database size is simply how big the database is now.
