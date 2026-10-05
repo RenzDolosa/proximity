@@ -96,6 +96,15 @@ if ($major -lt 17) {
 }
 Ok "client tools v$major"
 
+# Where the credential came from is reported on success and quoted back on an
+# auth failure. A stale $env:SUPABASE_DB_URL left in the window from an earlier
+# attempt silently wins over the prompt below, so "it rejected my new password"
+# can actually mean "it never saw your new password" — indistinguishable from a
+# genuinely wrong one unless the source is stated.
+$sourceOrigin = if ($PSBoundParameters.ContainsKey('SourceUrl')) { 'the -SourceUrl parameter' }
+                elseif ($SourceUrl)                              { '$env:SUPABASE_DB_URL (set earlier in this window)' }
+                else                                             { $null }
+
 # Interactive fallback. $env: variables are per-window, so the most common
 # failure here is setting one in one terminal and running the script in
 # another — prompting is strictly better than failing on that. -AsSecureString
@@ -112,6 +121,7 @@ if (-not $SourceUrl -and [Environment]::UserInteractive -and -not [Console]::IsI
                [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
     if ($plain) {
       $SourceUrl = "postgresql://postgres:$([uri]::EscapeDataString($plain))@db.$ref.supabase.co:5432/postgres"
+      $sourceOrigin = 'the interactive prompt'
       Ok 'connection string built from prompt (not stored, not echoed)'
     }
     Remove-Variable plain, sec -ErrorAction SilentlyContinue
@@ -127,7 +137,7 @@ if ($SourceUrl -match ':6543/') {
 if ($SourceUrl -match '://postgres:PASS@') {
   Die "The connection string still contains the literal placeholder 'PASS'. Substitute your real database password."
 }
-Ok 'source connection string looks well-formed'
+Ok "source connection string looks well-formed - from $sourceOrigin"
 
 # Local server reachable?
 $env:PGCLIENTENCODING = 'UTF8'
@@ -213,6 +223,14 @@ Supabase rejected the password.
 
        Resetting is safe for this project: Proximity connects with the anon
        key, so no part of the running application uses this credential.
+
+       The password just rejected came from $sourceOrigin.$(
+       if ($sourceOrigin -like '*env*') {
+"
+       That variable is STALE if you have reset the password since setting it -
+       it silently wins over the prompt. Clear it and re-run to be asked:
+           Remove-Item Env:SUPABASE_DB_URL"
+       })
 "@
   } elseif ("$dumpErr" -match 'Network is unreachable|could not connect|timeout|No route to host') {
 @"
