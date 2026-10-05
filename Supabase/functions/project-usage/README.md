@@ -1,7 +1,40 @@
 # `project-usage` Edge Function
 
-Backs **Settings → Usage**. Returns this project's billing-cycle usage for
-Egress, Cached Egress, Log Ingestion and Log Query.
+> ## ⚠️ This function does not currently work, and may never
+>
+> **Verified against the live project on 2026-10-05.** There is no usage or
+> billing endpoint in Supabase's Management API. Every candidate returned 404
+> while the token itself was proven good by a 200 on the same run:
+>
+> ```
+> /v1/projects/<ref>                        → 200   ← token valid, org resolved
+> /v1/organizations/<org>/usage             → 404
+> /v1/organizations/<org>/billing/usage     → 404
+> /v1/organizations/<org>/daily-stats       → 404
+> /v1/projects/<ref>/usage                  → 404
+> /v1/projects/<ref>/billing/usage          → 404
+> ```
+>
+> This matches the published OpenAPI spec (`https://api.supabase.com/api/v1-json`),
+> which contains no path mentioning usage, billing, quota, analytics or logs.
+> The dashboard's Usage page reads from something internal and unpublished.
+>
+> **The premise of this function was wrong.** It was written on the assumption
+> that those four metrics were available from the Management API; they are not.
+> Everything below describes what it *would* do if such an endpoint existed,
+> and the probe is retained so that a future Supabase release is detected
+> automatically rather than needing someone to remember to re-check.
+>
+> **Decide whether to keep it.** It currently costs a stored account
+> credential (which expires and must be rotated), an Edge Function deploy
+> dependency, and a secret — in exchange for nothing. Removing it leaves
+> Settings → Usage showing Database size and the per-table breakdown from
+> `get_database_usage()`, which needs none of that and works today. Read the
+> four billing figures from the dashboard, and attribute egress with the Logs
+> Explorer queries in `docs/SUPABASE_QUOTA_DECISION.md` §7.
+
+Backs **Settings → Usage**. Intended to return this project's billing-cycle
+usage for Egress, Cached Egress, Log Ingestion and Log Query.
 
 ## Why this is a function and not an RPC
 

@@ -930,7 +930,10 @@ git commits here since nothing is deployed *from* this repo yet.*
   Egress, Cached Egress, Log Ingestion and Log Query are platform *billing*
   metrics with no database representation at all; they come from Supabase's
   Management API via the new `project-usage` Edge Function, which holds a
-  Personal Access Token as a secret. That token authenticates to the control
+  Personal Access Token as a secret. **Verified 2026-10-05: no such endpoint
+  exists** — every usage candidate returns 404 while the token itself proves
+  good, matching the published OpenAPI spec, so this half of the panel cannot
+  work until Supabase publishes one. The token authenticates to the control
   plane rather than the project data API, so it cannot sit behind an anon key
   however narrowly it is scoped. Issue it **project-scoped to `proximity` and
   read-only** — the function makes a single `GET` and never writes, so no write

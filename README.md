@@ -604,6 +604,36 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-05 (correction) — Supabase has no usage/billing API; the Usage panel's billing half cannot work**
+- The `project-usage` Edge Function was written on the assumption that Egress,
+  Cached Egress, Log Ingestion and Log Query were available from Supabase's
+  Management API. **That assumption was wrong.** Verified against the live
+  project: the token is good (`/v1/projects/<ref>` → 200, organization
+  resolved) and every usage candidate returns 404 —
+  `/v1/organizations/<org>/usage`, `/billing/usage`, `/daily-stats`,
+  `/v1/projects/<ref>/usage`, `/billing/usage`. This matches the published
+  OpenAPI spec (`api.supabase.com/api/v1-json`), which contains no path
+  mentioning usage, billing, quota, analytics or logs. The dashboard reads
+  those figures from something internal and unpublished.
+- The function now probes that candidate set rather than assuming one path,
+  and returns the probe results to the client, so the Settings panel states
+  plainly that this is not a misconfiguration, lists exactly what was tried
+  and what each returned, and links to the dashboard Usage page. Shipping a
+  second guessed endpoint would have produced another 404 and another round
+  trip; probing settled it empirically in one deploy.
+- **The database half is unaffected and works.** `get_database_usage()` needs
+  no token and no external call, and already earned its place: it shows
+  `employees` at 12.5 MB — larger than 27,000 `scan_events` rows — which is
+  `photo_thumb_b64` carried on 729 rows.
+- **Open decision:** keeping the function costs a stored account credential
+  that expires and must be rotated, a deploy dependency and a secret, in
+  exchange for nothing until Supabase publishes such an endpoint. Removing it
+  leaves Database size plus the per-table breakdown, with the four billing
+  figures read from the dashboard and egress attributed via the Logs Explorer
+  queries in `docs/SUPABASE_QUOTA_DECISION.md` §7. The probe is retained for
+  now so a future Supabase release is detected automatically rather than
+  depending on someone remembering to re-check.
+
 **2026-10-05 (Settings) — Usage panel: the five metrics, plus avg/day and a cycle projection**
 - New **Settings → Usage** (admin only): Egress, Cached Egress, Log Ingestion,
   Log Query and Database size, each with **this cycle / avg per day / projected
