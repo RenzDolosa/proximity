@@ -27,6 +27,54 @@ for (const [name, val] of Object.entries({ ANTHROPIC_API_KEY, GITHUB_TOKEN, GITH
 
 const [OWNER, REPO] = GITHUB_REPOSITORY.split('/');
 
+// Posts a plain PR comment when the review could not RUN at all, as opposed to
+// running and finding problems. Deliberately defined up here, ahead of the
+// richer GitHub helpers further down, because the failure paths that need it
+// (no credits, API outage, rate limit, malformed response) all return before
+// those are reached.
+//
+// Why this matters: this job is designed to fail closed, so an infrastructure
+// failure and a critical finding both surface as the same red X on the PR.
+// Without a comment, the only way to tell "your code is dangerous" from
+// "nobody topped up the API account" is to open the Actions log — and the
+// natural reading of a red review check is the former. 16 consecutive runs
+// failed on an empty credit balance before anyone looked.
+//
+// Best-effort by design: if posting the comment also fails, the original
+// error still reaches the log and the exit code is unchanged. A broken
+// notifier must never mask the failure it was trying to describe.
+async function reportCannotRun(summary, detail) {
+  console.error(`${summary}\n${detail}`);
+  try {
+    await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/issues/${PR_NUMBER}/comments`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': `${REPO}-ai-review`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        body: [
+          '### ⚠️ AI Code Review could not run',
+          '',
+          `**${summary}**`,
+          '',
+          detail,
+          '',
+          '---',
+          '_This is a failure of the review tooling, **not a finding about this pull request**.',
+          'Nothing here has been reviewed — treat this check as "unknown", not as "rejected".',
+          'See `.github/AI_REVIEW.md` → Limitations._',
+        ].join('\n'),
+      }),
+    });
+  } catch (e) {
+    console.error('Additionally, failed to post the explanatory PR comment:', e?.message || e);
+  }
+}
+
 // Budgets — keep a single very large PR from either blowing the model's
 // context or the API bill. If truncation happens, that's disclosed in the
 // posted summary rather than silently reviewing a partial diff.
@@ -183,14 +231,38 @@ const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
 
 if (!anthropicRes.ok) {
   const body = await anthropicRes.text();
-  console.error(`Anthropic API error (${anthropicRes.status}): ${body}`);
+  // Name the two failures that are a human action rather than a retry, so the
+  // PR comment says what to do instead of just echoing a status code.
+  let hint = `The Anthropic API returned HTTP ${anthropicRes.status}. Full response:\n\n\`\`\`\n${body}\n\`\`\``;
+  if (/credit balance is too low/i.test(body)) {
+    hint = [
+      'The Anthropic API account behind the `ANTHROPIC_API_KEY` secret has **no credits**.',
+      '',
+      'Top it up at [console.anthropic.com](https://console.anthropic.com) → **Plans & Billing**.',
+      'API credits are billed separately from any Claude subscription — a Pro or Max plan does',
+      'not fund API usage, which is prepaid pay-as-you-go.',
+      '',
+      `Cost control: this job runs \`${AI_REVIEW_MODEL}\` and sends the full diff plus whole-file`,
+      'context. Setting `AI_REVIEW_MODEL: claude-sonnet-5` in `.github/workflows/ai-review.yml`',
+      'cuts the per-PR cost substantially — see `.github/AI_REVIEW.md` → Tuning.',
+    ].join('\n');
+  } else if (anthropicRes.status === 401) {
+    hint = 'The `ANTHROPIC_API_KEY` secret is missing, mistyped, or revoked. Reissue it at [console.anthropic.com](https://console.anthropic.com) and update the repository secret.';
+  } else if (anthropicRes.status === 429) {
+    hint = 'Rate limited by the Anthropic API. Re-running the job usually clears this; no change is needed to the pull request.';
+  }
+  await reportCannotRun(`Anthropic API error (HTTP ${anthropicRes.status})`, hint);
   process.exit(1);
 }
 
 const anthropicData = await anthropicRes.json();
 const toolUse = anthropicData.content?.find((b) => b.type === 'tool_use' && b.name === 'submit_code_review');
 if (!toolUse) {
-  console.error('Claude did not return a submit_code_review tool call. Raw response:', JSON.stringify(anthropicData));
+  await reportCannotRun(
+    'The model did not return a submit_code_review tool call',
+    'The API responded, but not in the forced-tool-call shape this script parses, so there are no findings to report either way. Re-running usually clears it; if it persists, the tool schema or the model name in `.github/workflows/ai-review.yml` is likely wrong.',
+  );
+  console.error('Raw response:', JSON.stringify(anthropicData));
   process.exit(1);
 }
 const review = toolUse.input;

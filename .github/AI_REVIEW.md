@@ -183,3 +183,44 @@ the integration suite above is still needed.
   your secrets against untrusted fork content.
 - **Comments accumulate.** Every push re-posts inline comments; earlier ones
   aren't resolved or de-duplicated.
+
+## Troubleshooting: the check is red on every PR
+
+A red **AI Code Review** means one of two very different things, and the PR
+surface shows them identically. Since 2026-10-05 the job posts a comment
+saying which, so check the PR before reading Actions logs.
+
+| Symptom | Meaning |
+|---|---|
+| A review comment with findings, at least one `critical` | The review ran. Fix the findings. |
+| A comment headed **"AI Code Review could not run"** | The tooling failed. **Nothing was reviewed.** Treat the check as *unknown*, not *rejected*. |
+
+### `Your credit balance is too low to access the Anthropic API`
+
+The Anthropic API account behind `ANTHROPIC_API_KEY` has no credits. Top up at
+[console.anthropic.com](https://console.anthropic.com) → **Plans & Billing**.
+
+**API credits are separate from a Claude subscription.** A Pro or Max plan does
+not fund API usage; the API is prepaid pay-as-you-go. This is the single most
+common cause of this job failing from a standing start, and it fails *every*
+run until credits exist — 16 consecutive runs failed this way before anyone
+looked at the log.
+
+### Keeping the cost down
+
+The job sends the full diff plus whole-file context for every changed file, on
+every push to every PR, at `AI_REVIEW_MODEL` (currently `claude-opus-5-5`).
+That is deliberate — review quality is the entire point — but it is also the
+most expensive configuration available.
+
+If cost is the binding constraint, set `AI_REVIEW_MODEL: claude-sonnet-5` in
+`.github/workflows/ai-review.yml`. The `concurrency` block already cancels
+superseded runs, so rapid pushes to one PR cost one review, not one per push.
+
+### Why it does not just pass when it cannot run
+
+Fail-closed is deliberate: a review that silently "passes" because the API was
+down is worse than one that visibly fails, because it looks like approval. If
+that blocks you in an emergency, a repo admin can merge past it — branch
+protection is configured with `enforce_admins` off (see this file's
+Limitations), which is exactly the escape hatch for this case.
