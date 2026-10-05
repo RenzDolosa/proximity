@@ -3,11 +3,25 @@ name: Deploy Edge Functions
 # Only fires on an actual merge to main, and only when Edge Function
 # source changed — the AI review pipeline has already gated everything
 # that got here.
+#
+# workflow_dispatch exists because the `paths:` filter creates a dead end that
+# is otherwise unescapable: if a run fails for a reason OUTSIDE the function
+# source (a missing secret, an under-scoped token, a bug in this workflow),
+# fixing it changes no file under Supabase/functions/**, so no new run is ever
+# triggered. Re-running the failed run does not help either — a re-run replays
+# the workflow file as it was at the original commit, so it cannot pick up a
+# fix to this file. Both of those happened during the 2026-10-05 rollout.
 on:
   push:
     branches: [main]
     paths:
       - 'Supabase/functions/**'
+  workflow_dispatch:
+    inputs:
+      function:
+        description: 'Slug to deploy, or "all" for every function with committed source'
+        required: false
+        default: 'all'
 
 jobs:
   # Free, fast, and catches real bugs (bad imports, type errors) before
@@ -51,15 +65,95 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Needed to diff the push range below. The default shallow clone
+          # (depth 1) has no parent commit to compare against, so every run
+          # would fall back to deploying everything — which is exactly the
+          # behaviour this is meant to replace.
+          fetch-depth: 0
 
       - name: Install Supabase CLI
         uses: supabase/setup-cli@v1
         with:
           version: latest
 
-      - name: Deploy changed functions
+      # Works out WHICH functions this run should touch, and writes the list to
+      # a file the deploy and smoke-test steps both read.
+      #
+      # Why this exists: the deploy step used to loop over every directory with
+      # an index.ts regardless of what changed, so a one-line edit to one
+      # function redeployed ALL of them — replacing live code that may have
+      # been updated by hand outside this repo (Supabase/README.md records that
+      # some functions were deployed that way). A deploy should only touch what
+      # the commit actually changed.
+      - name: Select functions to deploy
+        env:
+          # Interpolated through env, never directly into the script body:
+          # workflow_dispatch inputs are attacker-controllable on a public repo
+          # and `${{ }}` inside `run:` is textual substitution, i.e. shell
+          # injection. Reading "$INPUT_FUNCTION" is safe; pasting it is not.
+          INPUT_FUNCTION: ${{ inputs.function }}
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          set -e
+          LIST="$RUNNER_TEMP/slugs.txt"
+          : > "$LIST"
+
+          # Every function that actually has source here. The others are
+          # documentation-only stubs (see Supabase/README.md) and are deployed
+          # by hand, so they must never be passed to the CLI.
+          deployable() {
+            for dir in Supabase/functions/*/; do
+              [ -f "${dir}index.ts" ] && basename "$dir"
+            done
+          }
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ -n "$INPUT_FUNCTION" ] && [ "$INPUT_FUNCTION" != "all" ]; then
+              if [ ! -f "Supabase/functions/$INPUT_FUNCTION/index.ts" ]; then
+                echo "No committed source for function '$INPUT_FUNCTION'." >&2
+                exit 1
+              fi
+              echo "$INPUT_FUNCTION" >> "$LIST"
+            else
+              deployable >> "$LIST"
+            fi
+          elif [ -z "$BEFORE_SHA" ] \
+            || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ] \
+            || ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            # First push to the branch, a force-push that orphaned the old tip,
+            # or history the runner does not have. Deploying everything is the
+            # safe fallback: under-deploying would silently leave a function
+            # stale, which is harder to notice than an extra redeploy.
+            echo "No usable base commit ($BEFORE_SHA) — deploying all functions with committed source."
+            deployable >> "$LIST"
+          else
+            # Slug is the third path segment: Supabase/functions/<slug>/...
+            # A deleted directory can appear here, hence the index.ts guard.
+            git diff --name-only "$BEFORE_SHA" "$AFTER_SHA" -- 'Supabase/functions/**' \
+              | cut -d/ -f3 | sort -u \
+              | while read -r slug; do
+                  [ -n "$slug" ] || continue
+                  if [ -f "Supabase/functions/$slug/index.ts" ]; then
+                    echo "$slug"
+                  else
+                    echo "Skipping $slug — changed but has no committed index.ts." >&2
+                  fi
+                done >> "$LIST"
+          fi
+
+          if [ ! -s "$LIST" ]; then
+            echo "No functions to deploy."
+          else
+            echo "Will deploy:"; sed 's/^/  /' "$LIST"
+          fi
+
+      - name: Deploy selected functions
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -e
           # The Supabase CLI resolves a function's source from a LOWERCASE
@@ -76,40 +170,44 @@ jobs:
           # no-op on a case-insensitive filesystem, where `-e supabase`
           # already matches `Supabase`.
           [ -e supabase ] || ln -s Supabase supabase
-          # Only some function directories in this repo actually have
-          # source committed (Supabase/README.md explains why — the
-          # others are documentation-only stubs, deployed by hand so
-          # far). Skip anything without an index.ts rather than failing
-          # the whole job trying to deploy a folder that's just a README.
-          for dir in Supabase/functions/*/; do
-            slug="$(basename "$dir")"
-            if [ ! -f "${dir}index.ts" ]; then
-              echo "Skipping $slug — no index.ts in this repo (docs-only stub)."
-              continue
-            fi
+
+          LIST="$RUNNER_TEMP/slugs.txt"
+          if [ ! -s "$LIST" ]; then
+            echo "Nothing selected for deploy — see the previous step."
+            exit 0
+          fi
+          while read -r slug; do
+            [ -n "$slug" ] || continue
             echo "::group::deploy $slug"
             supabase functions deploy "$slug" \
-              --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}" \
+              --project-ref "$PROJECT_REF" \
               --no-verify-jwt=false
             echo "::endgroup::"
-          done
+          done < "$LIST"
 
       - name: Smoke test
+        env:
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -e
-          # Confirms each *deployed* function is actually reachable and
-          # returning a response post-deploy (a 401/CORS-preflight-style
-          # response is expected and fine here — this only proves the
-          # function didn't fail to boot, not that its full logic is
-          # correct).
-          for dir in Supabase/functions/*/; do
-            slug="$(basename "$dir")"
-            if [ ! -f "${dir}index.ts" ]; then continue; fi
-            url="https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co/functions/v1/${slug}"
+          # Confirms each function this run actually deployed is reachable and
+          # responding (a 401/CORS-preflight-style response is expected and
+          # fine here — this only proves the function didn't fail to boot, not
+          # that its full logic is correct). Scoped to the deployed list rather
+          # than every function, so a green smoke test means "what I just
+          # shipped is up", not "something is up somewhere".
+          LIST="$RUNNER_TEMP/slugs.txt"
+          if [ ! -s "$LIST" ]; then
+            echo "Nothing deployed — nothing to smoke test."
+            exit 0
+          fi
+          while read -r slug; do
+            [ -n "$slug" ] || continue
+            url="https://${PROJECT_REF}.supabase.co/functions/v1/${slug}"
             code="$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS "$url")"
             echo "$slug: OPTIONS -> $code"
             if [ "$code" -ge 500 ]; then
               echo "::error::$slug returned $code on a basic OPTIONS request post-deploy"
               exit 1
             fi
-          done
+          done < "$LIST"

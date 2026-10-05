@@ -57,6 +57,34 @@ honest substitute, not the real thing.
 - **Verify a deploy landed**: `Supabase:list_edge_functions` should show the
   version incremented and a fresh `updated_at`.
 
+## What a deploy actually touches
+
+Only the functions whose source changed in the push being deployed, worked out
+by diffing `github.event.before..github.sha` over `Supabase/functions/**`.
+
+This matters because the step used to loop over every directory with an
+`index.ts` regardless of what changed. A one-line edit to one function
+redeployed *all* of them — including `upload-employee-photo`, whose live copy
+may have been updated by hand outside this repo (`Supabase/README.md` records
+that some functions were deployed that way). A deploy would then silently
+revert work nobody asked it to touch.
+
+Fallbacks, deliberately biased toward over-deploying rather than under-:
+
+| Situation | Deploys |
+|---|---|
+| normal push | only functions changed in that push |
+| `workflow_dispatch` with a slug | just that one |
+| `workflow_dispatch` with `all` (default) | everything with committed source |
+| first push to a branch, force-push, or unavailable history | everything with committed source |
+
+Under-deploying leaves a function silently stale, which is far harder to notice
+than an unnecessary redeploy. The smoke test is scoped to the same list, so a
+green check means "what I just shipped is up", not "something is up somewhere".
+
+Functions without a committed `index.ts` are never deployed — they are
+documentation-only stubs maintained by hand.
+
 ## One-time setup
 
 ### 1. Secrets
@@ -71,14 +99,18 @@ access token by running `supabase login` or setting the SUPABASE_ACCESS_TOKEN
 environment variable."* — which reads like a CLI problem but is just an empty
 repo secret.
 
-**Set the secrets after a run already failed? Re-run it by hand.** This
-workflow only fires on a push to `main` that touches `Supabase/functions/**`,
-so adding the secrets afterwards does not retry anything — the function stays
-undeployed and the failure looks permanent. Go to **Actions → Deploy Edge
-Functions →** the failed run **→ Re-run failed jobs**. Secrets are read at run
-time, so the same commit succeeds on the retry. Merging an unrelated branch
-will *not* help: the `paths:` filter means a merge that changes no Edge
-Function source never triggers the workflow at all.
+**Set the secrets after a run already failed?** Use **Actions → Deploy Edge
+Functions → Run workflow** (the `workflow_dispatch` trigger), optionally naming
+a single function slug. That exists precisely for this: the `paths:` filter
+means a fix that changes no file under `Supabase/functions/**` never triggers
+a new run, so without it the failure is a dead end.
+
+**Re-running a failed run is not equivalent, and for some failures cannot
+work.** A re-run replays the workflow file *as it was at the original commit*.
+That is fine when only a secret was missing — secrets are read at run time —
+but useless when the fix is to this workflow itself, because the re-run still
+executes the broken version. Both cases came up during the 2026-10-05 rollout.
+When in doubt, dispatch rather than re-run.
 
 **Two different Supabase tokens now exist in this project. They are not
 interchangeable:**
