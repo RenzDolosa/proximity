@@ -91,6 +91,25 @@ interchangeable:**
 Issue them separately so they can be rotated independently, and give each only
 what it needs — the runtime one has no reason to be able to deploy anything.
 
+**Reusing one token for both does not work**, and the failure is specific:
+
+```
+unexpected list functions status 403:
+{"message":"Missing required permission(s): edge_functions_read",
+ "error":{"missing_permissions":["edge_functions_read"]}}
+```
+
+Supabase access tokens are scoped per project and per permission. The deploy
+token needs **Edge Functions read *and* write** on this project — `read`
+because the CLI lists existing functions before deploying, `write` to deploy.
+A token scoped only for reading project usage has neither.
+
+The useful property of these errors is that they name the exact permission in
+`missing_permissions`. If a deploy or a usage call fails with a 403, read that
+array and tick precisely those boxes rather than guessing at the matrix — the
+`project-usage` function passes the same list through to the Settings panel for
+the runtime token.
+
 Note the prefix asymmetry, which is a real trap: the `SUPABASE_` prefix is
 **fine for GitHub Actions secrets** but **rejected for Supabase Edge Function
 secrets**, where it is reserved for platform-injected variables. That is why
