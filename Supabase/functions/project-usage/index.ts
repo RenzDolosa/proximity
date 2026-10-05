@@ -26,11 +26,22 @@
 // is available from inside the database via get_database_usage(), so it costs
 // no token and no external call. See that migration.
 //
-// Required Edge Function secrets (set via `supabase secrets set` or the
-// Dashboard, NOT committed):
-//   SUPABASE_MANAGEMENT_TOKEN   Personal Access Token from
-//                               https://supabase.com/dashboard/account/tokens
-//   SUPABASE_PROJECT_REF        this project's ref (e.g. kjwttqmbcjvkivgmwuev)
+// Required Edge Function secret (set via `supabase secrets set` or the
+// Dashboard, NOT committed) — just ONE:
+//   MANAGEMENT_API_TOKEN   Personal Access Token from
+//                          https://supabase.com/dashboard/account/tokens
+//
+// NOT named SUPABASE_MANAGEMENT_TOKEN: Supabase reserves the `SUPABASE_`
+// prefix for the variables it injects itself and rejects user secrets using
+// it ("Name must not start with the SUPABASE_ prefix").
+//
+// The project ref is DERIVED from the platform-injected SUPABASE_URL
+// (https://<ref>.supabase.co) rather than stored as a second secret. One less
+// thing to set, and — more usefully — it cannot drift: a hand-typed ref that
+// disagrees with the project the function is actually running in would report
+// some other project's usage with no visible error. MANAGEMENT_PROJECT_REF
+// overrides it for the cases where the URL is not the ref (self-hosted, or a
+// branch database whose usage you want attributed to the parent).
 //
 // SUPABASE_URL and SUPABASE_ANON_KEY are injected by the platform.
 //
@@ -78,6 +89,25 @@ const cors = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+// Explicit override first, then derive from the injected SUPABASE_URL. See the
+// header for why deriving beats a second hand-typed secret.
+function projectRef(): string | null {
+  const explicit = Deno.env.get("MANAGEMENT_PROJECT_REF");
+  if (explicit) return explicit.trim();
+  const url = Deno.env.get("SUPABASE_URL");
+  if (!url) return null;
+  try {
+    const host = new URL(url).hostname;      // <ref>.supabase.co
+    const ref = host.split(".")[0];
+    // A local `supabase start` stack serves 127.0.0.1/localhost, which has no
+    // ref at all — return null so the caller reports "not configured" rather
+    // than querying the Management API for a project named "127".
+    return ref && !/^(localhost|\d+)$/.test(ref) ? ref : null;
+  } catch {
+    return null;
+  }
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -131,12 +161,13 @@ Deno.serve(async (req: Request) => {
     if (roleErr) return json({ error: roleErr.message }, 400);
     if (!allowed) return json({ error: "Only admins can view project usage." }, 403);
 
-    const token = Deno.env.get("SUPABASE_MANAGEMENT_TOKEN");
-    const ref = Deno.env.get("SUPABASE_PROJECT_REF");
+    const token = Deno.env.get("MANAGEMENT_API_TOKEN");
+    const ref = projectRef();
     if (!token || !ref) {
       return json({
-        error:
-          "Project usage isn't configured yet — SUPABASE_MANAGEMENT_TOKEN and SUPABASE_PROJECT_REF must be set as Edge Function secrets. See Supabase/functions/project-usage/README.md.",
+        error: !token
+          ? "Project usage isn't configured yet — set the MANAGEMENT_API_TOKEN Edge Function secret. See Supabase/functions/project-usage/README.md."
+          : "Could not determine the project ref from SUPABASE_URL. Set MANAGEMENT_PROJECT_REF explicitly.",
         code: "not_configured",
       }, 503);
     }

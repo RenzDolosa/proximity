@@ -39,20 +39,31 @@ unconfigured.
 
 ## Setup
 
-Two secrets, neither committed:
+**One secret**, not committed:
 
 | Secret | Value |
 |---|---|
-| `SUPABASE_MANAGEMENT_TOKEN` | Personal Access Token from [account/tokens](https://supabase.com/dashboard/account/tokens) |
-| `SUPABASE_PROJECT_REF` | this project's ref, e.g. `kjwttqmbcjvkivgmwuev` |
+| `MANAGEMENT_API_TOKEN` | Personal Access Token from [account/tokens](https://supabase.com/dashboard/account/tokens) |
 
 ```bash
-supabase secrets set SUPABASE_MANAGEMENT_TOKEN=sbp_xxx SUPABASE_PROJECT_REF=kjwttqmbcjvkivgmwuev
+supabase secrets set MANAGEMENT_API_TOKEN=sbp_xxx
 ```
+
+**Not** `SUPABASE_MANAGEMENT_TOKEN`: Supabase reserves the `SUPABASE_` prefix
+for the variables it injects itself and rejects user secrets that use it
+("Name must not start with the SUPABASE_ prefix").
+
+There is deliberately no project-ref secret. The ref is derived from the
+platform-injected `SUPABASE_URL` (`https://<ref>.supabase.co`). That is one
+less thing to set, and it cannot drift — a hand-typed ref that disagreed with
+the project the function actually runs in would report **someone else's usage
+with no visible error**. `MANAGEMENT_PROJECT_REF` overrides the derivation for
+the cases where the URL is not the ref (self-hosted, or a branch database whose
+usage should be attributed to the parent).
 
 `SUPABASE_URL` and `SUPABASE_ANON_KEY` are injected by the platform.
 
-Until both are set the function returns `503 { code: "not_configured" }`, and
+Until the token is set the function returns `503 { code: "not_configured" }`, and
 the panel says so explicitly rather than showing a generic error — a one-time
 setup task and an incident should not look alike.
 

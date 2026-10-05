@@ -949,7 +949,9 @@ git commits here since nothing is deployed *from* this repo yet.*
 - Edge Functions **do** auto-deploy from `main` (`deploy-supabase.yml`, on
   `Supabase/functions/**`), unlike migrations. So `project-usage` ships on
   merge, but it returns `503 not_configured` until
-  `SUPABASE_MANAGEMENT_TOKEN` and `SUPABASE_PROJECT_REF` are set as secrets,
+  `MANAGEMENT_API_TOKEN` is set as a secret (the `SUPABASE_` prefix is reserved
+  by the platform and rejected for user secrets; the project ref is derived
+  from the injected `SUPABASE_URL` rather than stored separately),
   and `get_database_usage()` must be applied manually first or the panel's
   database half errors.
 
