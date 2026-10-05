@@ -67,6 +67,13 @@ Until the token is set the function returns `503 { code: "not_configured" }`, an
 the panel says so explicitly rather than showing a generic error — a one-time
 setup task and an incident should not look alike.
 
+**Supabase access tokens expire**, and the expiry is chosen at issue time. When
+it lapses the panel starts reporting *"Supabase rejected the management
+token"* — accurate, but easy to misread as a bug months after you set it up.
+Note the expiry date somewhere you will see it, or pick a long one deliberately.
+`Last used` on the [tokens page](https://supabase.com/dashboard/account/tokens)
+is the quickest confirmation that the function has ever actually run.
+
 Rotate the token on staff change, and never put it anywhere a browser can
 reach. Mint it separately from the `SUPABASE_ACCESS_TOKEN` that
 `.github/workflows/deploy-supabase.yml` uses for Edge Function deploys — that
