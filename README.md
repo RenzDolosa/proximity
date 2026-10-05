@@ -604,6 +604,49 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-05 (architecture) — local-database/sync proposal, and the blocker it uncovered**
+- On branch `architecture/local-database-sync`, not merged: new
+  `docs/LOCAL_DATABASE_ARCHITECTURE.md` proposing one local PostgreSQL per
+  **site** (not per device), a local API as the security boundary, a durable
+  transactional outbox, and idempotent append-only scan sync to a central
+  PostgreSQL. Keeps PostgreSQL — the app leans on RLS, `SECURITY DEFINER`
+  RPCs, triggers, `jsonb`, `pg_cron` and views, so an engine change would be a
+  backend rewrite bought for nothing. Nothing is implemented.
+- **The finding that reorders the plan: this repository cannot build its own
+  database.** Applying `Supabase/migrations/*.sql` in order to an empty
+  PostgreSQL *fails* — `20261002000000_scanner_silence_alerts.sql` calls
+  `public.raise_alert()` and reads `public.scanners` / `public.alerts`, and no
+  migration creates any of the three. Separately, nine RPCs the client calls
+  (`get_dashboard_stats`, `get_onsite_roster`, `get_alerts`,
+  `get_unread_alert_count`, `acknowledge_alert`, `acknowledge_all_alerts`,
+  `get_scanners`, `update_scanner`, `get_scanner_performance_stats`) have no
+  source in the repo at all, and the committed `scan_proximity_code()` is
+  behind live (it has no `scanners` upsert, which `Supabase/README.md`
+  documents as existing). Every phase of the local-database plan starts with
+  "stand up the schema from the repo", so this is Phase 0, ahead of any sync
+  work.
+- This is the predicted consequence of something `.github/AI_REVIEW.md`
+  already warned about: the AI review only sees a PR diff, so schema applied
+  straight to the project (via MCP) is structurally invisible to it.
+  `Supabase/README.md`'s change log records the same "backend shipped, no
+  migration file" pattern four separate times.
+- **Now enforced rather than just documented**: `test/schema-drift.test.mjs`
+  (5 cases) cross-checks every RPC called from `JS/` and every `public.<object>`
+  a migration references against what the migrations actually create. Current
+  drift is pinned in an explicit allowlist so `npm test` stays green while it's
+  paid down; new drift fails CI immediately, and reconciling an object forces
+  its allowlist entry to be deleted (a staleness check asserts that). Verified
+  by removing an entry and confirming the failure names the exact object.
+  Suite is now 48 passing.
+- `Supabase/local/apply-migrations.sh` applies the migrations in order against
+  a `supabase start` stack (or any `postgresql://` URL), stopping at the first
+  failure and naming the file. Phase 0 deliberately uses the Supabase CLI stack
+  rather than a bare `postgres:17` container: the schema depends on the
+  anon/authenticated/service_role roles, the `auth` schema behind `auth.uid()`,
+  `storage.*` for the scan-sounds bucket, and `pg_cron`/`pg_stat_statements`.
+  Validate the migrations first; replace the platform surface later, as its own
+  phase, so a migration bug can't be confused with a compatibility-shim bug.
+
 **2026-10-05 (pass 3) — the actual egress bill: two unconditional whole-dataset polls**
 - Passes 1 and 2 shrank what a *scan* costs. They explicitly left open what
   turned out to be the dominant cost, which is not per-scan at all: two

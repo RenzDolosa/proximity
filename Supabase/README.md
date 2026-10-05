@@ -896,6 +896,44 @@ git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
 
+**2026-10-05 — Migration drift is now a failing-CI condition, not a paragraph**
+- Measured, not asserted: applying `Supabase/migrations/*.sql` in filename
+  order to an empty PostgreSQL **fails**.
+  `20261002000000_scanner_silence_alerts.sql` calls `public.raise_alert()` and
+  reads/writes `public.scanners` and `public.alerts`; no migration in this
+  directory creates any of the three. Nine client-called RPCs also have no
+  file here at all — `get_dashboard_stats`, `get_onsite_roster`, `get_alerts`,
+  `get_unread_alert_count`, `acknowledge_alert`, `acknowledge_all_alerts`,
+  `get_scanners`, `update_scanner`, `get_scanner_performance_stats` — which is
+  the same "backend shipped, UI followed later, migration never written"
+  pattern this change log already records for 2026-09-28 and 2026-10-02.
+- The committed `scan_proximity_code()` is also **behind live**, not merely
+  incomplete: this file documents that a `scanners` row is created by that
+  function's own upsert, and the baseline's copy contains no reference to
+  `scanners` anywhere.
+- `test/schema-drift.test.mjs` now cross-checks every `.rpc()` and `.from()`
+  in `JS/` and every `public.<object>` referenced by a migration against what
+  the migrations create. Today's gap is pinned in explicit allowlists
+  (`KNOWN_MISSING_FUNCTIONS`, `KNOWN_MISSING_DEPENDENCIES`) so the suite stays
+  green while it's paid down; **new** drift fails immediately. A staleness
+  assertion means reconciling an object forces its allowlist entry to be
+  deleted, so the list can't rot into noise.
+- Reconciliation order, when someone picks this up: `pg_get_functiondef` the
+  nine functions plus `raise_alert()`, `supabase db pull` the `alerts` and
+  `scanners` tables, re-capture `scan_proximity_code()`, then repair
+  `supabase_migrations.schema_migrations` (still carrying the version-number
+  mismatches described in the 2026-10-03 entries) before any automated
+  migration deploy. Verify each step with `Supabase/local/apply-migrations.sh`
+  against a `supabase start` stack, and delete the matching allowlist entry.
+- Context for why this is worth doing now rather than later:
+  `docs/LOCAL_DATABASE_ARCHITECTURE.md` (branch
+  `architecture/local-database-sync`) proposes per-site local PostgreSQL with
+  central sync. Every phase of it begins by building the schema from this
+  directory, so this is the gating work — ahead of any sync engine.
+- Still true and still unfixed by this: the RPC/RLS integration suite
+  `.github/AI_REVIEW.md` names as missing. RLS is the real permission
+  boundary and nothing currently exercises it against a real database.
+
 **2026-10-05 — Egress pass 3: the two unconditional whole-dataset polls**
 - Pass 2 closed with "remaining egress candidates, not changed:
   `get_scanner_offline_cache_compact()` is refreshed every 5 minutes per

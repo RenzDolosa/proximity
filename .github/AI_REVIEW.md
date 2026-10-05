@@ -145,11 +145,26 @@ protection. The initial suite protects the permission matrix plus offline
 classification and replay ordering. Database/RLS behavior needs a separate
 local-Supabase integration suite once migration history is reconciled.
 
+As of 2026-10-05 the unit suite also includes `test/schema-drift.test.mjs`,
+which partially covers the "only what's in the PR diff is reviewed" gap
+below: it fails CI when an RPC is called from `JS/` with no `CREATE FUNCTION`
+in `Supabase/migrations/`, or when a migration references a `public.<object>`
+no migration creates. That catches *new* drift mechanically — something a
+diff-scoped reviewer structurally cannot do. It does not catch a schema change
+applied live that nothing in the client calls, and it does not test behavior;
+the integration suite above is still needed.
+
 - **Only what's in the PR diff is reviewed.** The committed schema baseline
   is reviewable under `Supabase/migrations/`, but schema, RLS-policy and Edge
   Function changes applied directly to the Supabase project (for example via
   MCP) still bypass this pipeline. For anything touching auth/RLS, require a
   reviewed migration and a database integration test before deployment.
+  **This is not hypothetical.** Verified 2026-10-05: nine RPCs the client
+  calls have no source in this repo, and a committed migration depends on two
+  tables and a function no migration creates — so the migrations cannot build
+  a working database from empty. See `Supabase/README.md`'s change log and
+  `docs/LOCAL_DATABASE_ARCHITECTURE.md` §2. `test/schema-drift.test.mjs` now
+  pins that gap so it cannot widen.
 - **The PR is model input.** A diff or comment containing instructions aimed
   at the reviewer could try to talk it into approving. Findings are a strong
   signal, not a proof; the "sensitive-area" findings exist precisely so a
