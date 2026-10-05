@@ -71,6 +71,15 @@ access token by running `supabase login` or setting the SUPABASE_ACCESS_TOKEN
 environment variable."* — which reads like a CLI problem but is just an empty
 repo secret.
 
+**Set the secrets after a run already failed? Re-run it by hand.** This
+workflow only fires on a push to `main` that touches `Supabase/functions/**`,
+so adding the secrets afterwards does not retry anything — the function stays
+undeployed and the failure looks permanent. Go to **Actions → Deploy Edge
+Functions →** the failed run **→ Re-run failed jobs**. Secrets are read at run
+time, so the same commit succeeds on the retry. Merging an unrelated branch
+will *not* help: the `paths:` filter means a merge that changes no Edge
+Function source never triggers the workflow at all.
+
 **Two different Supabase tokens now exist in this project. They are not
 interchangeable:**
 
