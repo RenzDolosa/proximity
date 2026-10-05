@@ -59,9 +59,30 @@ function Die($msg)      { Write-Host "`nFAILED: $msg" -ForegroundColor Red; exit
 # ---------------------------------------------------------------- preflight --
 Step 1 'Preflight'
 
+# The Windows PostgreSQL installer does NOT add its bin directory to PATH, so
+# a perfectly good install still looks absent to Get-Command — which is the
+# first thing that actually happened here. Locate it ourselves and prepend for
+# the lifetime of this process only: no system or user PATH is modified, so
+# there is nothing to undo afterwards.
+if (-not (Get-Command pg_dump -ErrorAction SilentlyContinue)) {
+  $pgBin = @("$env:ProgramFiles\PostgreSQL", "${env:ProgramFiles(x86)}\PostgreSQL") |
+    Where-Object { Test-Path $_ } |
+    ForEach-Object { Get-ChildItem $_ -Directory -ErrorAction SilentlyContinue } |
+    Where-Object { ($_.Name -as [int]) -ne $null -and [int]$_.Name -ge 17 } |
+    Sort-Object { [int]$_.Name } -Descending |
+    ForEach-Object { Join-Path $_.FullName 'bin' } |
+    Where-Object { Test-Path (Join-Path $_ 'pg_dump.exe') } |
+    Select-Object -First 1
+
+  if ($pgBin) {
+    $env:Path = "$pgBin;$env:Path"
+    Ok "located PostgreSQL tools at $pgBin (PATH set for this run only)"
+  }
+}
+
 foreach ($t in 'pg_dump','pg_restore','psql','createdb') {
   if (-not (Get-Command $t -ErrorAction SilentlyContinue)) {
-    Die "$t not on PATH. Install PostgreSQL 17 and reopen PowerShell:`n       winget install -e --id PostgreSQL.PostgreSQL.17"
+    Die "$t not found.`n       If PostgreSQL 17 is not installed:  winget install -e --id PostgreSQL.PostgreSQL.17`n       If it IS installed, its bin directory is somewhere this script did not look -`n       add it to PATH for this session:  `$env:Path += ';C:\Program Files\PostgreSQL\17\bin'"
   }
 }
 
