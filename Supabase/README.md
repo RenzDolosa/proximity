@@ -175,7 +175,10 @@ an admin swaps it out.
   `tables[]` is the ten largest `public` relations by
   `pg_total_relation_size()`, each with `total_bytes`, `table_bytes`,
   `index_bytes` and `live_rows` (`reltuples`). `SECURITY DEFINER`, gated on
-  `can_view_settings()` — the catalog size functions are not granted to the
+  `is_admin()` — stricter than the `can_view_settings()` its sibling Settings
+  panels use, because its only caller is the admin-only Usage panel and a
+  looser gate would let a Viewer read table sizes and row counts directly. The
+  catalog size functions are not granted to the
   application roles, so that check is the authorization, not the role's own
   privileges. `PUBLIC` and `anon` revoked; `authenticated` and `service_role`
   granted. `database_limit_bytes` is the Free-plan 500 MB ceiling, held
