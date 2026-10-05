@@ -622,10 +622,13 @@ file can drift from the live state between sessions.*
   returns a per-table breakdown — "Database size: 50 MB" is not actionable,
   "scan_events is most of it" points straight at the archival panel below it.
   The other four are platform **billing** metrics that exist only in Supabase's
-  Management API, behind a Personal Access Token that can read and delete every
-  project in the account. That cannot live in a browser, so it is held as a
+  Management API, behind a Personal Access Token — a control-plane credential
+  that cannot live in a browser however narrowly it is scoped. It is held as a
   secret by the new `project-usage` Edge Function and the client never sees it
-  or talks to `api.supabase.com`.
+  or talks to `api.supabase.com`. Issue that token **project-scoped to
+  `proximity` and read-only**: the function makes a single `GET` and never
+  writes, so no write permission is ever correct. See
+  `Supabase/functions/project-usage/README.md`.
 - **The panel never polls.** On-demand only — page open, or the Refresh button.
   A usage monitor on a timer would spend the very egress and log-ingestion
   quota it exists to report on, which is the same class of bug the egress
