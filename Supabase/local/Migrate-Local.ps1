@@ -96,8 +96,40 @@ if ($major -lt 17) {
 }
 Ok "client tools v$major"
 
+# Where the credential came from is reported on success and quoted back on an
+# auth failure. A stale $env:SUPABASE_DB_URL left in the window from an earlier
+# attempt silently wins over the prompt below, so "it rejected my new password"
+# can actually mean "it never saw your new password" — indistinguishable from a
+# genuinely wrong one unless the source is stated.
+$sourceOrigin = if ($PSBoundParameters.ContainsKey('SourceUrl')) { 'the -SourceUrl parameter' }
+                elseif ($SourceUrl)                              { '$env:SUPABASE_DB_URL (set earlier in this window)' }
+                else                                             { $null }
+
+# Interactive fallback. $env: variables are per-window, so the most common
+# failure here is setting one in one terminal and running the script in
+# another — prompting is strictly better than failing on that. -AsSecureString
+# keeps the password off the screen and out of PowerShell history, and
+# EscapeDataString handles passwords containing @ : / # ? ,  which would
+# otherwise terminate the URI's userinfo early and surface as a baffling
+# "could not translate host name" instead of an auth error.
+if (-not $SourceUrl -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+  Warn 'No $env:SUPABASE_DB_URL in this window.'
+  $ref = Read-Host '    Supabase project ref (e.g. kjwttqmbcjvkivgmwuev), or blank to abort'
+  if ($ref) {
+    $sec = Read-Host "    Database password for $ref" -AsSecureString
+    $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+               [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+    if ($plain) {
+      $SourceUrl = "postgresql://postgres:$([uri]::EscapeDataString($plain))@db.$ref.supabase.co:5432/postgres"
+      $sourceOrigin = 'the interactive prompt'
+      Ok 'connection string built from prompt (not stored, not echoed)'
+    }
+    Remove-Variable plain, sec -ErrorAction SilentlyContinue
+  }
+}
+
 if (-not $SourceUrl) {
-  Die "No source connection string. Set `$env:SUPABASE_DB_URL or pass -SourceUrl.`n       Project Settings > Database > Connection string > URI (port 5432, not 6543)."
+  Die "No source connection string. Set `$env:SUPABASE_DB_URL in THIS window, or pass -SourceUrl.`n       Project Settings > Database > Connection string > URI (port 5432, not 6543)."
 }
 if ($SourceUrl -match ':6543/') {
   Die "That is the transaction pooler (port 6543). pg_dump needs the DIRECT connection on port 5432."
@@ -105,17 +137,54 @@ if ($SourceUrl -match ':6543/') {
 if ($SourceUrl -match '://postgres:PASS@') {
   Die "The connection string still contains the literal placeholder 'PASS'. Substitute your real database password."
 }
-Ok 'source connection string looks well-formed'
+Ok "source connection string looks well-formed - from $sourceOrigin"
 
 # Local server reachable?
 $env:PGCLIENTENCODING = 'UTF8'
-& psql -U $LocalUser -d postgres -c 'select 1' *> $null
-if ($LASTEXITCODE -ne 0) {
-  Die "cannot connect to the local PostgreSQL server as '$LocalUser'. Is the service running? (Get-Service postgresql*)`n       If it prompts for a password, set `$env:PGPASSWORD first."
+# Windows PowerShell 5.1 wraps a native executable's stderr in ErrorRecords
+# whenever a stream is redirected, and with $ErrorActionPreference = 'Stop'
+# that turns an ordinary psql exit-1 into a raw NativeCommandError that
+# terminates the script BEFORE the diagnostic below can run — so the operator
+# sees a stack trace instead of being told what to do. Relax the preference
+# around native calls and judge them solely by $LASTEXITCODE, which is the
+# only trustworthy signal for a native process anyway.
+#
+# Every psql / pg_dump / pg_restore / createdb call in this script also passes
+# -w (--no-password). Without it, libpq PROMPTS on the console for a missing
+# credential; under a redirected or non-interactive stdin that prompt is never
+# answered and the script hangs forever instead of failing with a usable
+# message. Observed, not theoretical — it hung exactly this way in testing.
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$probe = & psql -w -U $LocalUser -d postgres -c 'select 1' 2>&1
+$probeCode = $LASTEXITCODE
+$ErrorActionPreference = $prevEap
+
+if ($probeCode -ne 0) {
+  $hint = if ("$probe" -match 'no password supplied') {
+@"
+No local password is available. In THIS window:
+           `$env:PGPASSWORD = '<the local postgres superuser password>'
+       That is the LOCAL password, not the Supabase one.
+"@
+  } elseif ("$probe" -match 'password authentication failed') {
+@"
+The local 'postgres' password is wrong or not set. In THIS window:
+           `$env:PGPASSWORD = '<the superuser password you chose in the PostgreSQL installer>'
+       That is the LOCAL password, not the Supabase one. Supabase reads its own
+       from the connection string, so the two do not collide.
+"@
+  } elseif ("$probe" -match 'could not connect|refused|No such host') {
+@"
+The server is not reachable. Check the service:
+           Get-Service postgresql*
+"@
+  } else { "psql said: $probe" }
+  Die "cannot connect to the local PostgreSQL server as '$LocalUser'.`n       $hint"
 }
 Ok "local server reachable as '$LocalUser'"
 
-$exists = (& psql -U $LocalUser -d postgres -At -c "select 1 from pg_database where datname = '$TargetDb'")
+$exists = (& psql -w -U $LocalUser -d postgres -At -c "select 1 from pg_database where datname = '$TargetDb'")
 if ($exists -eq '1') {
   Die "database '$TargetDb' already exists. Drop it first, or pass -TargetDb with a different name.`n       Refusing to restore over an existing database - that would silently merge two datasets."
 }
@@ -131,20 +200,59 @@ $schemaFile = Join-Path $OutDir 'public-schema.sql'
 # Custom format = the restore artifact. Plain public schema alongside it,
 # because that is what Phase 0 diffs against Supabase/migrations/ to recover
 # the nine RPCs and the alerts/scanners tables that have no migration file.
-& pg_dump $SourceUrl --format=custom --no-owner `
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$dumpErr = & pg_dump -w $SourceUrl --format=custom --no-owner `
     --schema=public --schema=auth --schema=storage `
-    --file=$dumpFile
-if ($LASTEXITCODE -ne 0) { Die 'pg_dump failed - see the error above.' }
+    --file=$dumpFile 2>&1
+$dumpCode = $LASTEXITCODE
+$ErrorActionPreference = $prevEap
+
+if ($dumpCode -ne 0) {
+  $hint = if ("$dumpErr" -match 'password authentication failed') {
+@"
+Supabase rejected the password.
+
+       This is the project's DATABASE password - NOT your Supabase account
+       login, and NOT the anon / publishable API key the app authenticates
+       with. It is displayed once, at project creation, and cannot be read
+       back afterwards.
+
+       If you do not have it:
+         Dashboard > Project Settings > Database > Reset database password
+
+       Resetting is safe for this project: Proximity connects with the anon
+       key, so no part of the running application uses this credential.
+
+       The password just rejected came from $sourceOrigin.$(
+       if ($sourceOrigin -like '*env*') {
+"
+       That variable is STALE if you have reset the password since setting it -
+       it silently wins over the prompt. Clear it and re-run to be asked:
+           Remove-Item Env:SUPABASE_DB_URL"
+       })
+"@
+  } elseif ("$dumpErr" -match 'Network is unreachable|could not connect|timeout|No route to host') {
+@"
+DNS resolved but no session could be established. Supabase direct connections
+       are IPv6-only unless the IPv4 add-on is enabled, so a network without an
+       IPv6 route fails here. Use the Session pooler instead:
+         Dashboard > Connect > Session mode  (port 5432, user postgres.<ref>)
+       Transaction mode (6543) will NOT work - pg_dump needs a session.
+"@
+  } else { "pg_dump said:`n       $dumpErr" }
+  Die "pg_dump failed.`n       $hint"
+}
 Ok "archive: $dumpFile ($([math]::Round((Get-Item $dumpFile).Length/1MB,2)) MB)"
 
-& pg_dump $SourceUrl --schema-only --no-owner --no-privileges `
+& pg_dump -w $SourceUrl --schema-only --no-owner --no-privileges `
     --schema=public --file=$schemaFile
 if ($LASTEXITCODE -ne 0) { Warn 'plain schema dump failed; the custom archive above is still usable.' }
 else { Ok "plain schema: $schemaFile" }
 
 # Baseline to verify the restore against.
 $countsFile = Join-Path $OutDir 'row-counts-source.txt'
-& psql $SourceUrl -At -c @"
+& psql -w $SourceUrl -At -c @"
 select 'employees', count(*) from public.employees
 union all select 'proximity_cards', count(*) from public.proximity_cards
 union all select 'scan_events', count(*) from public.scan_events
@@ -157,13 +265,13 @@ if ($LASTEXITCODE -eq 0) { Ok "source row counts: $countsFile" } else { Warn 'co
 # ---------------------------------------------------------------- bootstrap --
 Step 3 "Create '$TargetDb' and the Supabase roles"
 
-& createdb -U $LocalUser $TargetDb
+& createdb -w -U $LocalUser $TargetDb
 if ($LASTEXITCODE -ne 0) { Die "createdb failed for '$TargetDb'" }
 Ok "created database '$TargetDb'"
 
 $rolesSql = Join-Path $scriptDir 'bootstrap-roles.sql'
 if (-not (Test-Path $rolesSql)) { Die "missing $rolesSql" }
-& psql -U $LocalUser -d $TargetDb -v ON_ERROR_STOP=1 -f $rolesSql
+& psql -w -U $LocalUser -d $TargetDb -v ON_ERROR_STOP=1 -f $rolesSql
 if ($LASTEXITCODE -ne 0) { Die 'bootstrap-roles.sql failed - see the error above.' }
 Ok 'roles, schemas and available extensions created'
 
@@ -176,11 +284,22 @@ Step 4 "Restore into '$TargetDb'"
 # throw away a restore that is otherwise complete. Everything is logged so a
 # real failure is still visible.
 $restoreLog = Join-Path $OutDir 'restore.log'
-& pg_restore --no-owner --dbname "postgresql://$LocalUser@localhost/$TargetDb" $dumpFile *>&1 |
+# Same PowerShell 5.1 stderr-wrapping trap as the preflight probe above: this
+# call redirects, and pg_restore is EXPECTED to write errors here (the missing
+# extensions), so without relaxing the preference the script would abort on a
+# restore that is actually fine.
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+& pg_restore -w --no-owner --dbname "postgresql://$LocalUser@localhost/$TargetDb" $dumpFile 2>&1 |
   Tee-Object -FilePath $restoreLog | Out-Null
+$ErrorActionPreference = $prevEap
 
 $errors = Select-String -Path $restoreLog -Pattern '^pg_restore: error' -ErrorAction SilentlyContinue
-$expected = 'pg_cron|pg_graphql|pgjwt|supabase_vault|must be owner|already exists'
+# 'schema "public" already exists' is unavoidable and harmless: pg_restore
+# replays CREATE SCHEMA public against a database that necessarily already has
+# one. Listed explicitly rather than relying on the generic 'already exists'
+# so the pattern stays readable about what it is forgiving and why.
+$expected = 'pg_cron|pg_graphql|pgjwt|supabase_vault|must be owner|schema "public" already exists|already exists'
 $unexpected = $errors | Where-Object { $_.Line -notmatch $expected }
 
 Ok "restore log: $restoreLog"
@@ -193,7 +312,7 @@ if ($unexpected) {
 # ------------------------------------------------------------------- verify --
 Step 5 'Verify'
 
-$targetCounts = & psql -U $LocalUser -d $TargetDb -At -c @"
+$targetCounts = & psql -w -U $LocalUser -d $TargetDb -At -c @"
 select 'employees', count(*) from public.employees
 union all select 'proximity_cards', count(*) from public.proximity_cards
 union all select 'scan_events', count(*) from public.scan_events

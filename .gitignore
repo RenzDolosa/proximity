@@ -9,3 +9,11 @@ htdocs.zip
 device-ping.php
 device-push.php
 device-push-debug.php
+
+# Database exports produced by Supabase/local/export-project.sh and
+# Migrate-Local.ps1. These contain the FULL production dataset — every
+# employee record, the complete scan history, and auth.users — so they must
+# never reach the repository. Keep them outside version control and treat the
+# directory as sensitive at rest.
+supabase-export-*/
+*.dump
