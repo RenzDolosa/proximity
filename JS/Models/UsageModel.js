@@ -21,7 +21,10 @@ async function readFunctionError(error) {
   try {
     if (error.context && typeof error.context.clone === 'function') {
       const body = await error.context.clone().json();
-      if (body?.error) return { message: body.error, code: body.code || null };
+      // `probes` rides along for the no_usage_endpoint case so the panel can
+      // show which paths were tried and what each answered, rather than an
+      // unfalsifiable "it didn't work".
+      if (body?.error) return { message: body.error, code: body.code || null, probes: body.probes || null };
     }
   } catch {
     // body wasn't JSON (or was already consumed) — fall through

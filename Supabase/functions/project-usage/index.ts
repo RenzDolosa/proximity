@@ -172,9 +172,77 @@ Deno.serve(async (req: Request) => {
       }, 503);
     }
 
-    const res = await fetch(`${MANAGEMENT_API}/v1/projects/${ref}/billing/usage`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-    });
+    // Usage/billing is NOT in Supabase's published Management API surface.
+    // Verified 2026-10-05 against https://api.supabase.com/api/v1-json: no
+    // path mentions usage, billing, quota, analytics or logs, and
+    // /v1/projects/{ref}/billing/usage — the first thing tried here —
+    // answered 404 against the live project.
+    //
+    // So rather than guess a second path and ship another 404, probe a small
+    // ordered set and report exactly what each one answered. One deploy then
+    // produces a definitive answer for THIS account instead of more
+    // speculation, and `probes` below is returned to the UI either way so the
+    // result is visible without reading function logs.
+    //
+    // Organization-scoped candidates come first on the reasoning that the
+    // dashboard presents usage at organization level ("Organization is on the
+    // Free Plan", an All-projects filter), so if an endpoint exists at all it
+    // is more likely to be org-scoped than project-scoped.
+    const probes: Array<{ path: string; status: number | string }> = [];
+
+    // The org id is needed for the org-scoped candidates. Failure here is not
+    // fatal — the project-scoped candidates still get tried.
+    let orgId: string | null = null;
+    try {
+      const projRes = await fetch(`${MANAGEMENT_API}/v1/projects/${ref}`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      });
+      probes.push({ path: `/v1/projects/${ref}`, status: projRes.status });
+      if (projRes.ok) {
+        const proj = await projRes.json();
+        orgId = proj?.organization_id ?? proj?.organization_slug ?? null;
+      }
+    } catch (e) {
+      probes.push({ path: `/v1/projects/${ref}`, status: String(e) });
+    }
+
+    const candidates = [
+      ...(orgId
+        ? [
+          `/v1/organizations/${orgId}/usage`,
+          `/v1/organizations/${orgId}/billing/usage`,
+          `/v1/organizations/${orgId}/daily-stats`,
+        ]
+        : []),
+      `/v1/projects/${ref}/usage`,
+      `/v1/projects/${ref}/billing/usage`,
+    ];
+
+    let res: Response | null = null;
+    for (const path of candidates) {
+      try {
+        const attempt = await fetch(`${MANAGEMENT_API}${path}`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        });
+        probes.push({ path, status: attempt.status });
+        // 401/403 is about the TOKEN, not the path — stop and report it,
+        // because trying further paths would just repeat the same rejection
+        // and bury the one message that tells the operator what to fix.
+        if (attempt.status === 401 || attempt.status === 403) { res = attempt; break; }
+        if (attempt.ok) { res = attempt; break; }
+      } catch (e) {
+        probes.push({ path, status: String(e) });
+      }
+    }
+
+    if (!res) {
+      return json({
+        error:
+          "No usage endpoint responded. Supabase's published Management API has no usage/billing path, so these four metrics may simply not be fetchable — read them from the dashboard's Usage page instead. Database size below is unaffected.",
+        code: "no_usage_endpoint",
+        probes,
+      }, 501);
+    }
 
     if (res.status === 401 || res.status === 403) {
       // A revoked, expired or under-scoped token is a human fix, not something
@@ -204,7 +272,7 @@ Deno.serve(async (req: Request) => {
       }, 503);
     }
     if (!res.ok) {
-      return json({ error: `Management API returned ${res.status}`, code: "management_api_error" }, 502);
+      return json({ error: `Management API returned ${res.status}`, code: "management_api_error", probes }, 502);
     }
 
     const payload = await res.json();
