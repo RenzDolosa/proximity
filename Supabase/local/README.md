@@ -58,3 +58,42 @@ bytes, Edge Function source, secrets, auth provider config). Read it.
 See `docs/SUPABASE_QUOTA_DECISION.md` for when and why to run this, and why its
 `inventory/public-functions.sql` output is also the raw material for closing
 the Phase 0 schema drift above.
+
+## Moving the database to a local PostgreSQL (Windows)
+
+`Migrate-Local.ps1` is the PowerShell end-to-end path: preflight, read-only
+export from Supabase, role bootstrap, restore, and a row-count verification
+that fails loudly rather than reporting a partial copy as a success.
+
+```powershell
+winget install -e --id PostgreSQL.PostgreSQL.17   # then reopen PowerShell
+$env:SUPABASE_DB_URL = 'postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres'
+.\Supabase\local\Migrate-Local.ps1
+```
+
+Setting `$env:SUPABASE_DB_URL` rather than passing `-SourceUrl` keeps the
+password out of PowerShell history. Stage 2 is read-only against Supabase —
+`pg_dump` issues no DDL or DML.
+
+### `bootstrap-roles.sql`
+
+Run automatically by stage 3, and usable on its own. A Supabase `pg_dump`
+carries GRANTs and RLS policies naming roles the dump itself cannot include —
+roles are cluster-level, so they fall outside a per-database dump. Restoring
+without them yields `role "anon" does not exist` and a database whose RLS is
+silently incomplete, which for an access-control system is the worst failure
+mode available: it restores "successfully" and enforces nothing.
+
+It also creates the extensions stock PostgreSQL 17 actually ships. It
+deliberately does **not** create `pg_cron`, `pg_graphql`, `pgjwt` or
+`supabase_vault` — those are packaged separately or Supabase-specific, and
+`pg_restore` logging errors for them is expected. Any *other* restore error is
+not; the script separates the two and surfaces the unexpected ones.
+
+### What this does and does not get you
+
+A database copy. **Not** a working local app. The browser still depends on
+Supabase for RLS as the permission boundary, Auth, Realtime, Storage and Edge
+Functions — see `docs/SUPABASE_EXIT_RUNBOOK.md` for the staged cutover and
+`docs/LOCAL_DATABASE_ARCHITECTURE.md` §2 for the schema gaps you will hit.
+`pg_cron` jobs (archival, scan-log trim, scanner silence) do not come across.
