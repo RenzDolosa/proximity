@@ -201,7 +201,149 @@ tight, take option B and move the date.
 
 ---
 
-## 7. Related
+## 7. Identifying what is actually consuming egress
+
+The usage page gives you a total. It never tells you *which endpoint* spent it,
+and every estimate in this document is inference from reading the client, not
+measurement. The logs are where it stops being inference.
+
+> ### Two things that will waste your time first
+>
+> **1. This is not the SQL Editor.** The logs are not in your Postgres
+> database. Running these there fails with
+> `ERROR: 42P01: relation "logs" does not exist`, which is Postgres correctly
+> reporting that no such table exists.
+>
+> | Page | Path | Queries |
+> |---|---|---|
+> | SQL Editor | `/project/<ref>/sql` | your Postgres database |
+> | **Logs Explorer** | `/project/<ref>/logs/explorer` | log analytics |
+>
+> **2. The log engine changed to ClickHouse** (announced in-product as "Logs
+> now run on a ClickHouse-backed engine"). Older material — including earlier
+> revisions of this document — used the previous BigQuery/Logflare schema:
+> a per-source `edge_logs` table queried with `cross join unnest(...)`. That
+> no longer exists and now fails with `Table "edge_logs" does not exist`.
+>
+> The current shape is **one `logs` table**, filtered by a `source` column,
+> with nested fields in a `log_attributes` map:
+>
+> | | Old (BigQuery) | Current (ClickHouse) |
+> |---|---|---|
+> | table | `edge_logs` | `logs` where `source = 'edge_logs'` |
+> | nesting | `cross join unnest(metadata)` | `log_attributes['request.path']` |
+> | casting | `cast(x as int64)` | `toInt64OrZero(x)` |
+>
+> The editor also offers **Rewrite with Assistant**, which converts a
+> BigQuery-era query for you. That is a legitimate shortcut, not a cop-out.
+
+### The quickest route of all
+
+The left sidebar has prebuilt **Collections** — `API Gateway`, `Postgres`,
+`PostgREST`, `Auth`, `Storage`, `Realtime`, `Edge Functions`, `Cron`. For "what
+is being requested", open **API Gateway** and set the time range (it defaults
+to *Last hour*; widen it). No SQL at all. Do this before writing queries.
+
+### Step 1 — confirm the sources available
+
+```sql
+select source, count() as rows
+from logs
+group by source
+order by rows desc
+```
+
+### Step 2 — discover the attribute keys
+
+The exact key names inside `log_attributes` are the part most likely to differ,
+so enumerate them rather than guessing:
+
+```sql
+select arrayJoin(mapKeys(log_attributes)) as attribute, count() as rows
+from logs
+where source = 'edge_logs'
+group by attribute
+order by rows desc
+limit 100
+```
+
+Look for the path key and a response-size key. Substitute the real names into
+the queries below if they differ from what is written here.
+
+### Step 3 — which endpoints spend the bytes
+
+```sql
+select
+  log_attributes['request.path'] as path,
+  count() as requests,
+  sum(toInt64OrZero(log_attributes['response.headers.content_length'])) as total_bytes
+from logs
+where source = 'edge_logs'
+group by path
+order by total_bytes desc
+limit 20
+```
+
+Order by `total_bytes`, not `requests` — they rank differently, and that gap is
+the whole finding. A handful of fat responses beats a flood of thin ones.
+
+### Step 4 — the decisive one
+
+Whether kiosks are still calling the pre-fix whole-roster endpoint:
+
+```sql
+select
+  log_attributes['request.path'] as path,
+  count() as calls,
+  sum(toInt64OrZero(log_attributes['response.headers.content_length'])) as total_bytes
+from logs
+where source = 'edge_logs'
+  and log_attributes['request.path'] like '%get_scanner_offline_cache%'
+group by path
+order by total_bytes desc
+```
+
+- **`..._compact` still arriving** ⇒ at least one kiosk runs pre-fix
+  JavaScript. A tab open since before the deploy keeps the old modules in
+  memory; applying the migration changed nothing for it.
+  **Hard-reload every kiosk (Ctrl+Shift+R).**
+- **`..._delta` only** ⇒ that kiosk is fixed, and if egress has not fallen the
+  analysis in §2 is wrong — which is worth knowing before spending more.
+- **Both** ⇒ some reloaded, some did not.
+
+### Step 5 — which client, and which hours
+
+```sql
+select
+  log_attributes['request.headers.user_agent'] as user_agent,
+  count() as requests,
+  sum(toInt64OrZero(log_attributes['response.headers.content_length'])) as total_bytes
+from logs
+where source = 'edge_logs'
+group by user_agent
+order by total_bytes desc
+limit 20
+```
+
+Steady traffic through the night is a machine on a timer — a kiosk, or a
+Dashboard left open — not people. That distinction decides whether the fix is
+"reload the tabs" or "change the code".
+
+### Caveats
+
+- **Free-plan retention is about one day.** Enough to establish a rate, not to
+  explain a whole cycle. Run these during a working day, and widen the time
+  selector from its *Last hour* default.
+- These queries have **not been run against this project** — the session that
+  wrote them had no access to it. Steps 1 and 2 exist precisely so you verify
+  the schema rather than trusting the rest verbatim.
+- `content_length` is absent on chunked or streamed responses, so sums are a
+  lower bound.
+- Realtime WebSocket traffic does not appear in `edge_logs` at all. Check
+  **Realtime Messages** on the usage page separately — at ~18k messages it was
+  never a credible contributor here.
+
+## 8. Related
 
 - `SUPABASE_EXIT_RUNBOOK.md` — staged cutover plan for option C
 - `LOCAL_DATABASE_ARCHITECTURE.md` — the target architecture and phasing

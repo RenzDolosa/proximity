@@ -26,7 +26,16 @@ async function readFunctionError(error) {
   } catch {
     // body wasn't JSON (or was already consumed) — fall through
   }
-  return { message: error.message || 'Request failed', code: null };
+  const message = error.message || 'Request failed';
+  // supabase-js reports a function that isn't deployed as a transport failure
+  // ("Failed to send a request to the Edge Function"), which reads like a
+  // network problem and sends people debugging connectivity. The far more
+  // likely cause is that the deploy never ran — this repo only deploys Edge
+  // Functions on a merge to main, behind a manual approval gate. Name that.
+  if (/failed to send a request|failed to fetch|networkerror/i.test(message)) {
+    return { message, code: 'not_deployed' };
+  }
+  return { message, code: null };
 }
 
 export const UsageModel = {
