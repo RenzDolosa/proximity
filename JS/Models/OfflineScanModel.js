@@ -141,8 +141,32 @@ let photoRefreshInFlight = null;
 let lastPhotoRefreshRequestAt = 0;
 const PHOTO_REFRESH_REQUEST_GAP_MS = 2 * 60 * 1000;
 
+// False once IndexedDB has refused to persist the photo cache. See the write
+// handling at the bottom of fetchAndStorePhotoUpdates() for why this exists.
+let photoCachePersistable = true;
+
 async function fetchAndStorePhotoUpdates() {
-  const current = await idbGetPhotoCache();
+  // An unreadable cache is recoverable: treat it as empty and carry on. It used
+  // to throw straight out of here, which the callers swallow with
+  // `.catch(() => {})`, so a transient IndexedDB error looked identical to
+  // success.
+  let current = await idbGetPhotoCache().catch(() => null);
+
+  // THE EGRESS LEAK THIS GUARDS AGAINST, because it is silent and unbounded:
+  // when the write below fails, nothing is persisted, so the next sync sends
+  // an empty known-ids map, so the server returns EVERY thumbnail again — all
+  // 729 of them, ~12 MB, employees being by far the largest table in this
+  // database — which again fails to store. That repeats on the 30-minute timer
+  // and on the per-scan trigger (throttled to one every 2 minutes), forever,
+  // with no error surfaced anywhere. A kiosk in private mode, under storage
+  // pressure, or configured to clear site data would quietly re-download the
+  // entire photo roster hundreds of times a day.
+  //
+  // Falling back to the in-memory copy caps that at ONE full download per page
+  // session: the memo supplies the known ids, so every later sync is a delta
+  // again even though nothing can be written to disk.
+  if (!current && photoMemo) current = photoMemo;
+
   const { data, error } = await supabase.rpc('get_scanner_offline_photo_updates', {
     p_known_photo_ids: current?.fileIdsByEmployeeId || {},
   });
@@ -162,9 +186,37 @@ async function fetchAndStorePhotoUpdates() {
     return { error: new Error('Invalid photo update data from get_scanner_offline_photo_updates') };
   }
   const next = mergePhotoUpdates(current, data);
-  await idbSetPhotoCache({ ...next, syncedAt: new Date().toISOString() });
+
+  // Memoise BEFORE attempting the write, and keep the merged value rather than
+  // invalidating to null. This is what makes the fallback above work: even if
+  // nothing can be persisted, the next sync still has a known-ids map to send,
+  // so it asks for a delta instead of the whole roster.
   photoGeneration += 1;
-  photoMemo = null;
+  photoMemo = next;
+
+  try {
+    await idbSetPhotoCache({ ...next, syncedAt: new Date().toISOString() });
+    if (!photoCachePersistable) {
+      photoCachePersistable = true;
+      console.info('Photo cache is writable again — thumbnails will survive a reload.');
+    }
+  } catch (err) {
+    // Deliberately not fatal: the thumbnails are in memory and the scanner
+    // renders correctly for the rest of this session. What is lost is
+    // persistence across a reload — and, without the memo fallback above, the
+    // bandwidth to rebuild it from scratch every couple of minutes. Warn once
+    // per transition so a kiosk that is quietly failing to cache is
+    // discoverable from the console instead of only from a billing page.
+    if (photoCachePersistable) {
+      photoCachePersistable = false;
+      console.warn(
+        'Could not persist the scanner photo cache to IndexedDB — thumbnails will be held in memory '
+        + 'for this session only and re-downloaded once after each reload. Common causes: private '
+        + 'browsing, a storage quota, or the browser clearing site data on exit.',
+        err,
+      );
+    }
+  }
   return { data: true };
 }
 
