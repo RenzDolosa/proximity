@@ -604,6 +604,55 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-05 (Settings) — Usage panel: the five metrics, plus avg/day and a cycle projection**
+- New **Settings → Usage** (admin only): Egress, Cached Egress, Log Ingestion,
+  Log Query and Database size, each with **this cycle / avg per day / projected
+  cycle total**, and a badge when the projection crosses 80% or 100% of a limit.
+- **Why avg/day and projection are the headline, not the totals.** Supabase's
+  own figures are cumulative for the billing cycle: they only ever rise and
+  reset at the boundary. After shipping an egress fix the total therefore
+  *cannot* fall — which is exactly the confusion that cost time earlier today.
+  The rate changes immediately, and the projection ("where this lands at the
+  cycle boundary if the current rate holds") is what predicts a breach while
+  there is still cycle left to act in. A metric at 40% of its limit on day 10
+  of 30 is in more trouble than one at 90% on day 29, and the panel says so.
+- **Only one of the five is reachable from the database.** `Database size`
+  comes from `pg_database_size()` via the new `get_database_usage()` RPC
+  (`Supabase/migrations/20261005120000_database_usage_rpc.sql`), which also
+  returns a per-table breakdown — "Database size: 50 MB" is not actionable,
+  "scan_events is most of it" points straight at the archival panel below it.
+  The other four are platform **billing** metrics that exist only in Supabase's
+  Management API, behind a Personal Access Token that can read and delete every
+  project in the account. That cannot live in a browser, so it is held as a
+  secret by the new `project-usage` Edge Function and the client never sees it
+  or talks to `api.supabase.com`.
+- **The panel never polls.** On-demand only — page open, or the Refresh button.
+  A usage monitor on a timer would spend the very egress and log-ingestion
+  quota it exists to report on, which is the same class of bug the egress
+  investigation found. The Edge Function's header says so explicitly so nobody
+  "improves" it later.
+- Degrades deliberately: the two halves load independently, so an unconfigured
+  or failing Management API still leaves Database size on screen. "Never set
+  up" (`not_configured`) and "token revoked" (`management_token_invalid`) are
+  reported as distinct, actionable states rather than one generic error — a
+  one-time setup task and an incident should not look alike. A metric missing
+  from the API response renders as "—", never 0, which would read as "no
+  egress" when it means "unknown".
+- `JS/Utils/usage.js` holds all the arithmetic (elapsed days, avg/day,
+  projection, state thresholds, decimal-unit formatting) with no DOM or
+  Supabase dependency; 11 cases in `test/usage.test.mjs` cover the divide-by-
+  near-zero guard at the start of a cycle, unknown windows yielding null rather
+  than a confident zero, projection-based rather than usage-based state, and
+  missing/limitless metrics. Suite is now 59 passing.
+- Bytes are formatted **decimally** (1000-based), unlike `Utils/format.js`'s
+  `fmtBytes`. Deliberate: these numbers are read side by side with Supabase's
+  billing page, which reports GB decimally, and showing 7.4 GiB next to their
+  7.98 GB would look like a bug in one of the two.
+- Deploy order: the migration must be applied by hand (nothing in CI applies
+  migrations) and the two Edge Function secrets must be set, or the panel shows
+  its "not configured" state. See
+  `Supabase/functions/project-usage/README.md`.
+
 **2026-10-05 (quota deadline) — Supabase exit runbook, and the reason it may not be needed**
 - The org went over its Free-plan egress quota (7.779 GB against 5 GB) and the
   grace period ends **03 Nov 2026**, after which requests return HTTP 402.
