@@ -138,14 +138,26 @@ $env:PGCLIENTENCODING = 'UTF8'
 # sees a stack trace instead of being told what to do. Relax the preference
 # around native calls and judge them solely by $LASTEXITCODE, which is the
 # only trustworthy signal for a native process anyway.
+#
+# Every psql / pg_dump / pg_restore / createdb call in this script also passes
+# -w (--no-password). Without it, libpq PROMPTS on the console for a missing
+# credential; under a redirected or non-interactive stdin that prompt is never
+# answered and the script hangs forever instead of failing with a usable
+# message. Observed, not theoretical — it hung exactly this way in testing.
 $prevEap = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
-$probe = & psql -U $LocalUser -d postgres -c 'select 1' 2>&1
+$probe = & psql -w -U $LocalUser -d postgres -c 'select 1' 2>&1
 $probeCode = $LASTEXITCODE
 $ErrorActionPreference = $prevEap
 
 if ($probeCode -ne 0) {
-  $hint = if ("$probe" -match 'password authentication failed') {
+  $hint = if ("$probe" -match 'no password supplied') {
+@"
+No local password is available. In THIS window:
+           `$env:PGPASSWORD = '<the local postgres superuser password>'
+       That is the LOCAL password, not the Supabase one.
+"@
+  } elseif ("$probe" -match 'password authentication failed') {
 @"
 The local 'postgres' password is wrong or not set. In THIS window:
            `$env:PGPASSWORD = '<the superuser password you chose in the PostgreSQL installer>'
@@ -162,7 +174,7 @@ The server is not reachable. Check the service:
 }
 Ok "local server reachable as '$LocalUser'"
 
-$exists = (& psql -U $LocalUser -d postgres -At -c "select 1 from pg_database where datname = '$TargetDb'")
+$exists = (& psql -w -U $LocalUser -d postgres -At -c "select 1 from pg_database where datname = '$TargetDb'")
 if ($exists -eq '1') {
   Die "database '$TargetDb' already exists. Drop it first, or pass -TargetDb with a different name.`n       Refusing to restore over an existing database - that would silently merge two datasets."
 }
@@ -178,20 +190,51 @@ $schemaFile = Join-Path $OutDir 'public-schema.sql'
 # Custom format = the restore artifact. Plain public schema alongside it,
 # because that is what Phase 0 diffs against Supabase/migrations/ to recover
 # the nine RPCs and the alerts/scanners tables that have no migration file.
-& pg_dump $SourceUrl --format=custom --no-owner `
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$dumpErr = & pg_dump -w $SourceUrl --format=custom --no-owner `
     --schema=public --schema=auth --schema=storage `
-    --file=$dumpFile
-if ($LASTEXITCODE -ne 0) { Die 'pg_dump failed - see the error above.' }
+    --file=$dumpFile 2>&1
+$dumpCode = $LASTEXITCODE
+$ErrorActionPreference = $prevEap
+
+if ($dumpCode -ne 0) {
+  $hint = if ("$dumpErr" -match 'password authentication failed') {
+@"
+Supabase rejected the password.
+
+       This is the project's DATABASE password - NOT your Supabase account
+       login, and NOT the anon / publishable API key the app authenticates
+       with. It is displayed once, at project creation, and cannot be read
+       back afterwards.
+
+       If you do not have it:
+         Dashboard > Project Settings > Database > Reset database password
+
+       Resetting is safe for this project: Proximity connects with the anon
+       key, so no part of the running application uses this credential.
+"@
+  } elseif ("$dumpErr" -match 'Network is unreachable|could not connect|timeout|No route to host') {
+@"
+DNS resolved but no session could be established. Supabase direct connections
+       are IPv6-only unless the IPv4 add-on is enabled, so a network without an
+       IPv6 route fails here. Use the Session pooler instead:
+         Dashboard > Connect > Session mode  (port 5432, user postgres.<ref>)
+       Transaction mode (6543) will NOT work - pg_dump needs a session.
+"@
+  } else { "pg_dump said:`n       $dumpErr" }
+  Die "pg_dump failed.`n       $hint"
+}
 Ok "archive: $dumpFile ($([math]::Round((Get-Item $dumpFile).Length/1MB,2)) MB)"
 
-& pg_dump $SourceUrl --schema-only --no-owner --no-privileges `
+& pg_dump -w $SourceUrl --schema-only --no-owner --no-privileges `
     --schema=public --file=$schemaFile
 if ($LASTEXITCODE -ne 0) { Warn 'plain schema dump failed; the custom archive above is still usable.' }
 else { Ok "plain schema: $schemaFile" }
 
 # Baseline to verify the restore against.
 $countsFile = Join-Path $OutDir 'row-counts-source.txt'
-& psql $SourceUrl -At -c @"
+& psql -w $SourceUrl -At -c @"
 select 'employees', count(*) from public.employees
 union all select 'proximity_cards', count(*) from public.proximity_cards
 union all select 'scan_events', count(*) from public.scan_events
@@ -204,13 +247,13 @@ if ($LASTEXITCODE -eq 0) { Ok "source row counts: $countsFile" } else { Warn 'co
 # ---------------------------------------------------------------- bootstrap --
 Step 3 "Create '$TargetDb' and the Supabase roles"
 
-& createdb -U $LocalUser $TargetDb
+& createdb -w -U $LocalUser $TargetDb
 if ($LASTEXITCODE -ne 0) { Die "createdb failed for '$TargetDb'" }
 Ok "created database '$TargetDb'"
 
 $rolesSql = Join-Path $scriptDir 'bootstrap-roles.sql'
 if (-not (Test-Path $rolesSql)) { Die "missing $rolesSql" }
-& psql -U $LocalUser -d $TargetDb -v ON_ERROR_STOP=1 -f $rolesSql
+& psql -w -U $LocalUser -d $TargetDb -v ON_ERROR_STOP=1 -f $rolesSql
 if ($LASTEXITCODE -ne 0) { Die 'bootstrap-roles.sql failed - see the error above.' }
 Ok 'roles, schemas and available extensions created'
 
@@ -229,7 +272,7 @@ $restoreLog = Join-Path $OutDir 'restore.log'
 # restore that is actually fine.
 $prevEap = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
-& pg_restore --no-owner --dbname "postgresql://$LocalUser@localhost/$TargetDb" $dumpFile 2>&1 |
+& pg_restore -w --no-owner --dbname "postgresql://$LocalUser@localhost/$TargetDb" $dumpFile 2>&1 |
   Tee-Object -FilePath $restoreLog | Out-Null
 $ErrorActionPreference = $prevEap
 
@@ -247,7 +290,7 @@ if ($unexpected) {
 # ------------------------------------------------------------------- verify --
 Step 5 'Verify'
 
-$targetCounts = & psql -U $LocalUser -d $TargetDb -At -c @"
+$targetCounts = & psql -w -U $LocalUser -d $TargetDb -At -c @"
 select 'employees', count(*) from public.employees
 union all select 'proximity_cards', count(*) from public.proximity_cards
 union all select 'scan_events', count(*) from public.scan_events
