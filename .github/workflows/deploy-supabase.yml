@@ -62,6 +62,20 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           set -e
+          # The Supabase CLI resolves a function's source from a LOWERCASE
+          # `supabase/functions/<slug>/index.ts`, and that location is not
+          # configurable — `functions deploy` takes a slug, not a path. This
+          # repo capitalises the directory (`Supabase/`) to match JS/, CSS/
+          # and Public/, which is invisible on the case-insensitive
+          # filesystems used for development and fatal on the case-sensitive
+          # Linux runner:
+          #   entrypoint path does not exist (.../supabase/functions/<slug>/index.ts)
+          # A symlink gives the CLI the spelling it insists on without
+          # renaming a directory that this repo's docs, scripts and workflows
+          # reference by name in dozens of places. The guard also makes this a
+          # no-op on a case-insensitive filesystem, where `-e supabase`
+          # already matches `Supabase`.
+          [ -e supabase ] || ln -s Supabase supabase
           # Only some function directories in this repo actually have
           # source committed (Supabase/README.md explains why — the
           # others are documentation-only stubs, deployed by hand so
