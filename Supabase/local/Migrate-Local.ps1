@@ -96,8 +96,30 @@ if ($major -lt 17) {
 }
 Ok "client tools v$major"
 
+# Interactive fallback. $env: variables are per-window, so the most common
+# failure here is setting one in one terminal and running the script in
+# another — prompting is strictly better than failing on that. -AsSecureString
+# keeps the password off the screen and out of PowerShell history, and
+# EscapeDataString handles passwords containing @ : / # ? ,  which would
+# otherwise terminate the URI's userinfo early and surface as a baffling
+# "could not translate host name" instead of an auth error.
+if (-not $SourceUrl -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+  Warn 'No $env:SUPABASE_DB_URL in this window.'
+  $ref = Read-Host '    Supabase project ref (e.g. kjwttqmbcjvkivgmwuev), or blank to abort'
+  if ($ref) {
+    $sec = Read-Host "    Database password for $ref" -AsSecureString
+    $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+               [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+    if ($plain) {
+      $SourceUrl = "postgresql://postgres:$([uri]::EscapeDataString($plain))@db.$ref.supabase.co:5432/postgres"
+      Ok 'connection string built from prompt (not stored, not echoed)'
+    }
+    Remove-Variable plain, sec -ErrorAction SilentlyContinue
+  }
+}
+
 if (-not $SourceUrl) {
-  Die "No source connection string. Set `$env:SUPABASE_DB_URL or pass -SourceUrl.`n       Project Settings > Database > Connection string > URI (port 5432, not 6543)."
+  Die "No source connection string. Set `$env:SUPABASE_DB_URL in THIS window, or pass -SourceUrl.`n       Project Settings > Database > Connection string > URI (port 5432, not 6543)."
 }
 if ($SourceUrl -match ':6543/') {
   Die "That is the transaction pooler (port 6543). pg_dump needs the DIRECT connection on port 5432."
