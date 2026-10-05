@@ -112,18 +112,23 @@ but useless when the fix is to this workflow itself, because the re-run still
 executes the broken version. Both cases came up during the 2026-10-05 rollout.
 When in doubt, dispatch rather than re-run.
 
-**Two different Supabase tokens now exist in this project. They are not
-interchangeable:**
+**One Supabase token is needed, in GitHub:**
 
 | Stored in | Name | Used by | Needs |
 |---|---|---|---|
 | **GitHub** Actions secrets | `SUPABASE_ACCESS_TOKEN` | this workflow, at deploy time | **write** — deploy Edge Functions |
-| **Supabase** Edge Function secrets | `MANAGEMENT_API_TOKEN` | `project-usage`, at run time | **read** — project usage only |
 
-Issue them separately so they can be rotated independently, and give each only
-what it needs — the runtime one has no reason to be able to deploy anything.
+There used to be a second, `MANAGEMENT_API_TOKEN`, held as a Supabase Edge
+Function secret for the `project-usage` function. Both were deleted on
+2026-10-05: Supabase publishes no usage or billing API, so that function could
+never work (see `README.md`'s change log for the probe output). If that secret
+or its access token still exist, remove them — a stored account credential that
+grants nothing you use is pure liability.
 
-**Reusing one token for both does not work**, and the failure is specific:
+Supabase access tokens are scoped per project and per permission. The deploy
+token needs **Edge Functions read *and* write** on this project — `read`
+because the CLI lists existing functions before deploying, `write` to deploy.
+A token scoped only for reading usage has neither, and fails specifically:
 
 ```
 unexpected list functions status 403:
@@ -131,16 +136,9 @@ unexpected list functions status 403:
  "error":{"missing_permissions":["edge_functions_read"]}}
 ```
 
-Supabase access tokens are scoped per project and per permission. The deploy
-token needs **Edge Functions read *and* write** on this project — `read`
-because the CLI lists existing functions before deploying, `write` to deploy.
-A token scoped only for reading project usage has neither.
-
 The useful property of these errors is that they name the exact permission in
-`missing_permissions`. If a deploy or a usage call fails with a 403, read that
-array and tick precisely those boxes rather than guessing at the matrix — the
-`project-usage` function passes the same list through to the Settings panel for
-the runtime token.
+`missing_permissions`. On a 403, read that array and tick precisely those
+boxes rather than guessing at the permission matrix.
 
 Note the prefix asymmetry, which is a real trap: the `SUPABASE_` prefix is
 **fine for GitHub Actions secrets** but **rejected for Supabase Edge Function
