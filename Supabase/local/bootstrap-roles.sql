@@ -61,6 +61,19 @@ create extension if not exists pgcrypto      with schema extensions;
 create extension if not exists "uuid-ossp"   with schema extensions;
 create extension if not exists pg_stat_statements;
 
+-- Required, and easy to miss because nothing fails until pg_restore reaches
+-- the indexes. The live schema has three trigram GIN indexes backing search —
+-- idx_employees_full_name_trgm, idx_employees_code_trgm and
+-- idx_proximity_code_trgm — all declared as
+-- `USING gin (col extensions.gin_trgm_ops)`. Without pg_trgm in the
+-- `extensions` schema specifically (the operator class is schema-qualified in
+-- the dump), pg_restore logs "operator class extensions.gin_trgm_ops does not
+-- exist" and SKIPS those three indexes. The restore still reports success and
+-- every row count still matches, so the only symptom is that employee and
+-- proximity-code search silently falls back to sequential scans — a local
+-- database that looks identical to production and performs differently.
+create extension if not exists pg_trgm       with schema extensions;
+
 -- DELIBERATELY NOT CREATED, because stock PostgreSQL does not have them:
 --
 --   pg_cron        -- the archival / scan-log-trim / scanner-silence jobs.

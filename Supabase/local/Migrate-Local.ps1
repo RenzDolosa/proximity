@@ -295,7 +295,11 @@ $ErrorActionPreference = 'Continue'
 $ErrorActionPreference = $prevEap
 
 $errors = Select-String -Path $restoreLog -Pattern '^pg_restore: error' -ErrorAction SilentlyContinue
-$expected = 'pg_cron|pg_graphql|pgjwt|supabase_vault|must be owner|already exists'
+# 'schema "public" already exists' is unavoidable and harmless: pg_restore
+# replays CREATE SCHEMA public against a database that necessarily already has
+# one. Listed explicitly rather than relying on the generic 'already exists'
+# so the pattern stays readable about what it is forgiving and why.
+$expected = 'pg_cron|pg_graphql|pgjwt|supabase_vault|must be owner|schema "public" already exists|already exists'
 $unexpected = $errors | Where-Object { $_.Line -notmatch $expected }
 
 Ok "restore log: $restoreLog"
