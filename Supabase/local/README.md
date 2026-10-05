@@ -36,3 +36,25 @@ the `anon`/`authenticated`/`service_role` roles, the `auth` schema behind
 `pg_cron`/`pg_stat_statements`. Writing a compatibility shim for all of that is
 real work, and doing it in the same phase as fixing the migrations means you
 can't tell which layer a failure came from. Validate the migrations first.
+
+## Also here: `export-project.sh`
+
+Captures a complete, restorable copy of the live Supabase project — schema,
+data, `auth.users`, roles, extensions, every function definition, RLS policies,
+triggers, live migration history, cron jobs, realtime publication, storage
+bucket config and object listings, plus row counts for restore verification.
+Read-only against the project.
+
+```bash
+./Supabase/local/export-project.sh "postgresql://postgres:PASS@db.<ref>.supabase.co:5432/postgres"
+```
+
+Direct connection (port 5432, **not** the 6543 pooler), and PostgreSQL client
+tools **17+** — an older `pg_dump` refuses to dump a 17 server.
+
+It writes a `MANIFEST.md` listing what it could *not* capture (storage object
+bytes, Edge Function source, secrets, auth provider config). Read it.
+
+See `docs/SUPABASE_EXIT_RUNBOOK.md` for when and why to run this, and why its
+`inventory/public-functions.sql` output is also the raw material for closing
+the Phase 0 schema drift above.

@@ -896,6 +896,42 @@ git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
 
+**2026-10-05 — The egress migration is not applied, and nothing in CI will apply it**
+- Verified: no workflow in `.github/workflows/` runs `supabase db push`,
+  `migration up`, or `apply_migration`. `deploy-supabase.yml` triggers only on
+  `Supabase/functions/**` and deploys Edge Functions only. **Every migration in
+  this directory has to be applied by hand**, which this file's change log has
+  said repeatedly and which is now load-bearing for a deadline.
+- Consequence: `20261005000000_incremental_scanner_cache_and_dashboard_pulse.sql`
+  is almost certainly not live. `get_scanner_offline_cache_delta()` and
+  `get_dashboard_pulse()` therefore do not exist on the project, both clients
+  take their `PGRST202` fallback to `get_scanner_offline_cache_compact()` and
+  the `get_dashboard_stats()` + `get_onsite_roster()` pair, and egress is still
+  being spent at the pre-fix rate — ~430 KB per kiosk per 5 minutes plus the
+  Dashboard's doubled roster. That matters now because the org's grace period
+  for exceeding the Free-plan egress quota ends 03 Nov 2026.
+  **Applying that one file is the highest-leverage action available.**
+- `Supabase/local/export-project.sh` added: a read-only, complete capture of the
+  live project (schema in three forms, data, `auth.users`, roles, extensions,
+  all function definitions, RLS policies, triggers, live migration history,
+  pg_cron jobs, realtime publication membership, storage bucket config and
+  object listing, row counts). Soft-fails per step and reports failures rather
+  than producing a silently partial archive. Requires the **direct** connection
+  string (5432, not the 6543 pooler) and client tools **17+**.
+- Its `inventory/public-functions.sql` is the fix for the drift recorded in the
+  entry below: it contains the live definitions of all nine missing RPCs,
+  `raise_alert()`, and the `alerts` / `scanners` tables, plus the current
+  `scan_proximity_code()` that the committed baseline is behind. Diff against
+  `Supabase/migrations/`, commit the gaps, then delete the matching entries from
+  `test/schema-drift.test.mjs`'s allowlists.
+- Reminder, unchanged and now more important: **`supabase db push` is unsafe
+  against this project** until that reconciliation is done — the live history is
+  missing entries for migrations that are nonetheless applied, and repo
+  filenames use different version numbers than live. Apply files directly, then
+  `supabase migration repair`.
+- Full decision framework (quota restriction vs. project loss, the three
+  options and their real costs) in `docs/SUPABASE_EXIT_RUNBOOK.md`.
+
 **2026-10-05 — Migration drift is now a failing-CI condition, not a paragraph**
 - Measured, not asserted: applying `Supabase/migrations/*.sql` in filename
   order to an empty PostgreSQL **fails**.

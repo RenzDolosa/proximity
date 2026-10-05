@@ -604,6 +604,46 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-05 (quota deadline) — Supabase exit runbook, and the reason it may not be needed**
+- The org went over its Free-plan egress quota (7.779 GB against 5 GB) and the
+  grace period ends **03 Nov 2026**, after which requests return HTTP 402.
+  `docs/SUPABASE_EXIT_RUNBOOK.md` is the decision + contingency document.
+- **Read the banner precisely.** It restricts *"if your organization remains
+  over quota"*, and 402 means requests are refused — not that the project is
+  deleted or paused (those are different mechanisms with different recovery
+  paths). The risk being managed is "the app stops serving", not "the data is
+  gone", and the trigger is conditional: get back under 5 GB and it does not
+  fire.
+- **The likely resolution was already shipped and is probably inert.** The
+  egress migration from pass 3 (`20261005000000_…`, commit `5a1d49e`) targets
+  the dominant source — the per-kiosk whole-roster refresh (~3.7 GB/cycle per
+  kiosk) and the Dashboard's double roster download. Verified 2026-10-05: **no
+  workflow in `.github/workflows/` applies migrations** — `deploy-supabase.yml`
+  fires only on `Supabase/functions/**` and deploys only Edge Functions. Both
+  clients fall back to the old RPCs on `PGRST202`, which is exactly the state
+  an unapplied migration produces. So the fix is live in the browser and
+  absent from the database, and egress is still running at the old rate.
+  Applying that one file is the first thing to try.
+- Recommendation: apply the migration and re-measure with the Usage filter set
+  to **Proximity** rather than *All projects* (the 7.779 GB has never been
+  attributed to a single project); buy Pro (~$25/mo, 250 GB) as an immediate
+  safety net regardless, because it converts a hard deadline into no deadline.
+  Do **not** run an emergency platform migration to resolve a $25 bill — for an
+  access-control system, a rushed cutover means nobody badges in.
+- **P0 regardless of the option chosen:** `Supabase/local/export-project.sh`
+  takes a complete, read-only, restorable capture — schema (three forms), data,
+  `auth.users`, roles, extensions, every function definition, RLS policies,
+  triggers, live migration history, pg_cron jobs, realtime publication, storage
+  bucket config and object listing, and row counts for restore verification. It
+  writes a `MANIFEST.md` naming what it could not capture (storage object bytes,
+  Edge Function source, secrets, auth provider config) so a partial capture
+  can't be mistaken for a complete one.
+- **The backup doubles as the Phase 0 schema reconciliation.** Its
+  `inventory/public-functions.sql` contains every live function definition —
+  including the nine RPCs and the `alerts`/`scanners` tables that
+  `test/schema-drift.test.mjs` currently allowlists as missing. Capture once,
+  use for both; then delete the allowlist entries as each migration lands.
+
 **2026-10-05 (architecture) — local-database/sync proposal, and the blocker it uncovered**
 - On branch `architecture/local-database-sync`, not merged: new
   `docs/LOCAL_DATABASE_ARCHITECTURE.md` proposing one local PostgreSQL per
