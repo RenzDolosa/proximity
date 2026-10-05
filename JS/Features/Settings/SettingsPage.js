@@ -24,6 +24,8 @@ import { QueryStatsModel } from '../../Models/QueryStatsModel.js';
 import { ScanArchiveModel } from '../../Models/ScanArchiveModel.js';
 import { ScanLogsTrimModel } from '../../Models/ScanLogsTrimModel.js';
 import { ScannerSilenceModel } from '../../Models/ScannerSilenceModel.js';
+import { UsageModel } from '../../Models/UsageModel.js';
+import { fmtUsageBytes, summarizeMetric } from '../../Utils/usage.js';
 import { openConfirmModal } from '../../Components/ConfirmModal.js';
 import { showModalError } from '../../Components/Modal.js';
 
@@ -58,6 +60,16 @@ let silenceStatus = null; // { silence_minutes, total_scanners, enabled_scanners
 let silenceStatusError = null;
 let silenceStatusLoaded = false;
 let silenceChecking = false;
+
+// Usage panel. Two independent sources, tracked separately on purpose: the
+// database half always works, the Management API half needs secrets that may
+// never have been set. One failing must not blank the other.
+let dbUsage = null;           // { database_bytes, database_limit_bytes, tables[], measured_at }
+let dbUsageError = null;
+let projectUsage = null;      // { period_start, period_end, metrics[], partial, notes[] }
+let projectUsageError = null; // { message, code }
+let usageLoaded = false;
+let usageRefreshing = false;
 
 export async function renderSettings() {
   const content = $('#content');
@@ -111,6 +123,28 @@ export async function renderSettings() {
     ${(!showSounds && !showPhotos) ? `
     <div class="empty-state" style="margin-top:16px;">You don't have access to any other Settings panels.</div>
     ` : `
+    ${!isAdmin() ? '' : `
+    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <h3 style="margin:0 0 4px;">Usage</h3>
+        <button type="button" class="ghost" id="us-refresh" ${usageRefreshing ? 'disabled' : ''}>${usageRefreshing ? 'Refreshing…' : 'Refresh'}</button>
+      </div>
+      <p class="sub" style="margin:0 0 10px;">
+        Billing-cycle usage for this project, read on demand — never on a
+        timer. A usage monitor that polled would spend the very egress and
+        log-ingestion quota it reports on.
+        <strong>Avg/day and Projected are the numbers that matter.</strong> The
+        figures Supabase shows are cumulative for the cycle: they only ever go
+        up and reset at the boundary, so after shipping a fix the total cannot
+        fall and tells you nothing. The rate can, and does, immediately.
+        Projected is where each metric lands at the cycle boundary if the
+        current rate holds — that is what predicts a breach while there is
+        still cycle left to act in.
+      </p>
+      <div id="us-body">${usageLoaded ? '' : 'Loading…'}</div>
+    </div>
+    `}
+
     ${!showSounds ? '' : `
     <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;">
@@ -266,6 +300,17 @@ export async function renderSettings() {
       toast('Query statistics reset');
       loadQueryStats();
     });
+    if (usageLoaded) paintUsage();
+    $('#us-refresh').addEventListener('click', async () => {
+      usageRefreshing = true;
+      const btn = $('#us-refresh');
+      btn.disabled = true;
+      btn.textContent = 'Refreshing…';
+      await loadUsage();
+      usageRefreshing = false;
+      const btnAfter = $('#us-refresh'); // re-query: the repaint inside loadUsage() may have replaced this node
+      if (btnAfter) { btnAfter.disabled = false; btnAfter.textContent = 'Refresh'; }
+    });
     if (archiveStatusLoaded) paintArchiveStatus();
     $('#sa-run').addEventListener('click', async () => {
       archiveRunning = true;
@@ -341,6 +386,7 @@ export async function renderSettings() {
       paintPhotoStorage();
     })());
   }
+  if (isAdmin()) tasks.push(loadUsage());
   if (isAdmin()) tasks.push(loadQueryStats());
   if (isAdmin()) tasks.push(loadArchiveStatus());
   if (isAdmin()) tasks.push(loadTrimStatus());
@@ -440,6 +486,124 @@ function paintQueryStats() {
       </tbody>
     </table>
     ${oldestSince ? `<div class="emp-meta" style="margin-top:8px;">Accumulated since ${esc(fmtTime(oldestSince))}${queryStats.length >= 50 ? ' — showing the top 50 by total time' : ''}</div>` : ''}
+  `;
+}
+
+// Both halves in parallel, each recorded independently — see the state
+// declarations above for why one failing must not blank the other.
+async function loadUsage() {
+  const [db, proj] = await Promise.all([
+    UsageModel.databaseUsage(),
+    UsageModel.projectUsage(),
+  ]);
+  dbUsageError = db.error ? db.error.message : null;
+  dbUsage = db.error ? null : db.data;
+  projectUsageError = proj.error || null;
+  projectUsage = proj.error ? null : proj.data;
+  usageLoaded = true;
+  paintUsage();
+}
+
+// Database size is a LEVEL, not a flow: it is how big the database is right
+// now, not something accumulated over the cycle and reset at the boundary.
+// Averaging it over elapsed days would be meaningless, so it gets its own row
+// shape with no Avg/day or Projected — a dash there is correct, not missing
+// data.
+function usageRowHTML(row, { rate = true } = {}) {
+  const tone = row.state === 'over' ? 'bad' : row.state === 'warn' ? 'warn' : '';
+  const pct = row.percent === null ? '' : ` <span class="emp-meta">(${row.percent}%)</span>`;
+  const projPct = row.projectedPercent === null ? '' : ` <span class="emp-meta">(${row.projectedPercent}%)</span>`;
+  return `
+    <tr>
+      <td>${esc(row.label)}</td>
+      <td class="mono">${esc(row.valueText)}${row.limitText ? ` <span class="emp-meta">/ ${esc(row.limitText)}</span>` : ''}${pct}</td>
+      <td class="mono">${rate ? esc(row.perDayText) : '—'}</td>
+      <td class="mono">${rate ? `${esc(row.projectedText)}${projPct}` : '—'}</td>
+      <td class="col-shrink">${rate && tone
+        ? `<span class="badge ${tone === 'bad' ? 'inactive_card' : 'unassigned_card'}">${tone === 'bad' ? 'over' : 'near'}</span>`
+        : ''}</td>
+    </tr>`;
+}
+
+function paintUsage() {
+  const body = $('#us-body');
+  if (!body) return; // panel not in the DOM (non-admin)
+  if (!usageLoaded) { body.innerHTML = 'Loading…'; return; }
+
+  const start = projectUsage?.period_start || null;
+  const end = projectUsage?.period_end || null;
+  const rows = [];
+
+  // Management API metrics first — these are the ones with quota pressure.
+  if (projectUsage?.metrics?.length) {
+    for (const m of projectUsage.metrics) rows.push(usageRowHTML(summarizeMetric(m, start, end)));
+  }
+
+  // Database size, from the RPC, always available.
+  if (dbUsage) {
+    rows.push(usageRowHTML(summarizeMetric({
+      key: 'db_size',
+      label: 'Database size',
+      value: Number(dbUsage.database_bytes),
+      limit: Number(dbUsage.database_limit_bytes) || null,
+      unit: 'bytes',
+    }, start, end), { rate: false }));
+  }
+
+  const cycleNote = start && end
+    ? `Billing cycle ${esc(fmtTime(start))} → ${esc(fmtTime(end))}.`
+    : 'Billing-cycle dates unavailable, so Avg/day and Projected cannot be calculated.';
+
+  // Distinguish "never set up" from "broken" — the first is a one-time admin
+  // task with a documented fix, the second is an incident. A generic error
+  // would send someone debugging a feature nobody has configured yet.
+  let apiNote = '';
+  if (projectUsageError?.code === 'not_configured') {
+    apiNote = `<div class="empty-state" style="margin-top:10px;text-align:left;">
+      <strong>Egress, Cached Egress, Log Ingestion and Log Query aren't configured.</strong>
+      These are platform billing metrics that exist only in Supabase's Management API,
+      behind a Personal Access Token — an account-wide credential that cannot live in the
+      browser. Set <span class="mono">SUPABASE_MANAGEMENT_TOKEN</span> and
+      <span class="mono">SUPABASE_PROJECT_REF</span> as Edge Function secrets to enable them.
+      See <span class="mono">Supabase/functions/project-usage/README.md</span>.
+      Database size below needs none of this and is live.
+    </div>`;
+  } else if (projectUsageError?.code === 'management_token_invalid') {
+    apiNote = `<div class="empty-state" style="margin-top:10px;text-align:left;color:var(--bad)">
+      <strong>Supabase rejected the management token.</strong> It has been revoked, has expired,
+      or no longer has access to this project. Issue a new one and update the
+      <span class="mono">SUPABASE_MANAGEMENT_TOKEN</span> secret.
+    </div>`;
+  } else if (projectUsageError) {
+    apiNote = `<div class="empty-state" style="margin-top:10px;">${esc(projectUsageError.message)}</div>`;
+  } else if (projectUsage?.partial) {
+    apiNote = `<div class="emp-meta" style="margin-top:8px;color:var(--warn)">
+      Some metrics weren't present in the Management API response and show as “—”.
+      ${esc((projectUsage.notes || []).join(' '))}
+    </div>`;
+  }
+
+  const tables = Array.isArray(dbUsage?.tables) ? dbUsage.tables.slice(0, 5) : [];
+
+  body.innerHTML = `
+    ${rows.length ? `
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th>Metric</th><th>This cycle</th><th>Avg/day</th><th>Projected</th><th class="col-shrink"></th>
+        </tr></thead>
+        <tbody>${rows.join('')}</tbody>
+      </table>
+    </div>` : '<div class="empty-state">No usage data available.</div>'}
+    <p class="emp-meta" style="margin-top:8px;">${cycleNote}</p>
+    ${apiNote}
+    ${dbUsageError ? `<div class="empty-state" style="margin-top:10px;">${esc(dbUsageError)}</div>` : ''}
+    ${tables.length ? `
+      <p class="emp-meta" style="margin-top:12px;">Largest tables — "Database size" on its own isn't actionable; this is:</p>
+      <div class="emp-meta mono" style="margin-top:4px;">
+        ${tables.map((t) => `${esc(t.name)} ${esc(fmtUsageBytes(Number(t.total_bytes)))}`).join(' · ')}
+      </div>
+    ` : ''}
   `;
 }
 

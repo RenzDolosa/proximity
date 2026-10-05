@@ -169,6 +169,21 @@ an admin swaps it out.
   Still live and still the fallback, but no longer what the kiosk calls on
   its 5-minute timer — see `get_scanner_offline_cache_delta()` directly
   below for why.
+- **`get_database_usage()`** — added 2026-10-05. Backs the database half of
+  Settings → Usage. Returns
+  `{ database_bytes, database_limit_bytes, tables[], measured_at }`;
+  `tables[]` is the ten largest `public` relations by
+  `pg_total_relation_size()`, each with `total_bytes`, `table_bytes`,
+  `index_bytes` and `live_rows` (`reltuples`). `SECURITY DEFINER`, gated on
+  `can_view_settings()` — the catalog size functions are not granted to the
+  application roles, so that check is the authorization, not the role's own
+  privileges. `PUBLIC` and `anon` revoked; `authenticated` and `service_role`
+  granted. `database_limit_bytes` is the Free-plan 500 MB ceiling, held
+  server-side so the constant is not duplicated client-side.
+  **The other four metrics on that panel (Egress, Cached Egress, Log
+  Ingestion, Log Query) have no database representation** — they are platform
+  billing figures from the Management API, fetched by the `project-usage`
+  Edge Function. Client: `Models/UsageModel.js`.
 - **`get_scanner_offline_cache_delta(p_since timestamptz, p_known_digest text)`**
   — added 2026-10-05. Returns
   `{ full, digest, cursor, rows }` with rows in exactly the shape
@@ -895,6 +910,42 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-10-05 — `get_database_usage()` RPC + `project-usage` Edge Function (Settings → Usage)**
+- New `get_database_usage()` (`20261005120000_database_usage_rpc.sql`, **not
+  applied by this session — apply by hand**): returns
+  `{ database_bytes, database_limit_bytes, tables[], measured_at }`, where
+  `tables[]` is the ten largest `public` relations by
+  `pg_total_relation_size()` with table/index split and `reltuples`.
+  `SECURITY DEFINER` gated on `can_view_settings()` — the catalog functions it
+  reads are not granted to the application roles, so the check is what
+  authorizes it, not the role's own privileges. `PUBLIC` and `anon` revoked.
+- `database_limit_bytes` is the Free-plan 500 MB ceiling, stated server-side so
+  the constant lives in one place rather than being duplicated in the client.
+  Update it on a plan change.
+- **Only this one of the panel's five metrics is knowable from the database.**
+  Egress, Cached Egress, Log Ingestion and Log Query are platform *billing*
+  metrics with no database representation at all; they come from Supabase's
+  Management API via the new `project-usage` Edge Function, which holds a
+  Personal Access Token as a secret. That token can read and delete every
+  project in the account, so it is categorically not something the browser can
+  hold — full contract, setup and threat note in
+  `Supabase/functions/project-usage/README.md`.
+- Database size is also the only one that is a **level** rather than a flow:
+  egress and log ingestion accumulate across a billing cycle and reset at the
+  boundary, while database size is simply how big the database is now.
+  Averaging a level over elapsed days would be meaningless, so the client shows
+  no per-day or projected figure for it.
+- The panel is **on demand only, never polled** — a usage monitor on a timer
+  would spend the egress and log-ingestion quota it reports on. Both the Edge
+  Function header and that README say so, so it does not get "improved" into a
+  polling loop later.
+- Edge Functions **do** auto-deploy from `main` (`deploy-supabase.yml`, on
+  `Supabase/functions/**`), unlike migrations. So `project-usage` ships on
+  merge, but it returns `503 not_configured` until
+  `SUPABASE_MANAGEMENT_TOKEN` and `SUPABASE_PROJECT_REF` are set as secrets,
+  and `get_database_usage()` must be applied manually first or the panel's
+  database half errors.
 
 **2026-10-05 — The egress migration is not applied, and nothing in CI will apply it**
 - Verified: no workflow in `.github/workflows/` runs `supabase db push`,
