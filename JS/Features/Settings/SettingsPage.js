@@ -25,7 +25,7 @@ import { ScanArchiveModel } from '../../Models/ScanArchiveModel.js';
 import { ScanLogsTrimModel } from '../../Models/ScanLogsTrimModel.js';
 import { ScannerSilenceModel } from '../../Models/ScannerSilenceModel.js';
 import { UsageModel } from '../../Models/UsageModel.js';
-import { fmtUsageBytes, summarizeMetric } from '../../Utils/usage.js';
+import { fmtUsageBytes, fmtPercent } from '../../Utils/usage.js';
 import { openConfirmModal } from '../../Components/ConfirmModal.js';
 import { showModalError } from '../../Components/Modal.js';
 
@@ -61,13 +61,13 @@ let silenceStatusError = null;
 let silenceStatusLoaded = false;
 let silenceChecking = false;
 
-// Usage panel. Two independent sources, tracked separately on purpose: the
-// database half always works, the Management API half needs secrets that may
-// never have been set. One failing must not blank the other.
+// Usage panel. Database size and its per-table breakdown only — Egress,
+// Cached Egress, Log Ingestion and Log Query were removed on 2026-10-05 along
+// with the `project-usage` Edge Function, once the live project proved
+// Supabase exposes no usage/billing API at all (every candidate path 404s
+// while the token verifiably works). See README.md's change log.
 let dbUsage = null;           // { database_bytes, database_limit_bytes, tables[], measured_at }
 let dbUsageError = null;
-let projectUsage = null;      // { period_start, period_end, metrics[], partial, notes[] }
-let projectUsageError = null; // { message, code }
 let usageLoaded = false;
 let usageRefreshing = false;
 
@@ -126,20 +126,18 @@ export async function renderSettings() {
     ${!isAdmin() ? '' : `
     <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
-        <h3 style="margin:0 0 4px;">Usage</h3>
+        <h3 style="margin:0 0 4px;">Database usage</h3>
         <button type="button" class="ghost" id="us-refresh" ${usageRefreshing ? 'disabled' : ''}>${usageRefreshing ? 'Refreshing…' : 'Refresh'}</button>
       </div>
       <p class="sub" style="margin:0 0 10px;">
-        Billing-cycle usage for this project, read on demand — never on a
-        timer. A usage monitor that polled would spend the very egress and
-        log-ingestion quota it reports on.
-        <strong>Avg/day and Projected are the numbers that matter.</strong> The
-        figures Supabase shows are cumulative for the cycle: they only ever go
-        up and reset at the boundary, so after shipping a fix the total cannot
-        fall and tells you nothing. The rate can, and does, immediately.
-        Projected is where each metric lands at the cycle boundary if the
-        current rate holds — that is what predicts a breach while there is
-        still cycle left to act in.
+        How much of the database's size ceiling is in use, and which tables
+        account for it. Read on demand, never on a timer.
+        <strong>Egress, Cached Egress, Log Ingestion and Log Query are not
+        here</strong> — Supabase publishes no API for them (verified against
+        this project: every candidate endpoint returns 404), so they can only
+        be read from the dashboard's Usage page. To find out <em>what</em> is
+        spending egress, which a billing total never tells you, use the Logs
+        Explorer queries in <span class="mono">docs/SUPABASE_QUOTA_DECISION.md</span>.
       </p>
       <div id="us-body">${usageLoaded ? '' : 'Loading…'}</div>
     </div>
@@ -489,150 +487,69 @@ function paintQueryStats() {
   `;
 }
 
-// Both halves in parallel, each recorded independently — see the state
-// declarations above for why one failing must not blank the other.
 async function loadUsage() {
-  const [db, proj] = await Promise.all([
-    UsageModel.databaseUsage(),
-    UsageModel.projectUsage(),
-  ]);
-  dbUsageError = db.error ? db.error.message : null;
-  dbUsage = db.error ? null : db.data;
-  projectUsageError = proj.error || null;
-  projectUsage = proj.error ? null : proj.data;
+  const { data, error } = await UsageModel.databaseUsage();
+  dbUsageError = error ? error.message : null;
+  dbUsage = error ? null : data;
   usageLoaded = true;
   paintUsage();
-}
-
-// Database size is a LEVEL, not a flow: it is how big the database is right
-// now, not something accumulated over the cycle and reset at the boundary.
-// Averaging it over elapsed days would be meaningless, so it gets its own row
-// shape with no Avg/day or Projected — a dash there is correct, not missing
-// data.
-function usageRowHTML(row, { rate = true } = {}) {
-  const tone = row.state === 'over' ? 'bad' : row.state === 'warn' ? 'warn' : '';
-  const pct = row.percent === null ? '' : ` <span class="emp-meta">(${row.percent}%)</span>`;
-  const projPct = row.projectedPercent === null ? '' : ` <span class="emp-meta">(${row.projectedPercent}%)</span>`;
-  return `
-    <tr>
-      <td>${esc(row.label)}</td>
-      <td class="mono">${esc(row.valueText)}${row.limitText ? ` <span class="emp-meta">/ ${esc(row.limitText)}</span>` : ''}${pct}</td>
-      <td class="mono">${rate ? esc(row.perDayText) : '—'}</td>
-      <td class="mono">${rate ? `${esc(row.projectedText)}${projPct}` : '—'}</td>
-      <td class="col-shrink">${rate && tone
-        ? `<span class="badge ${tone === 'bad' ? 'inactive_card' : 'unassigned_card'}">${tone === 'bad' ? 'over' : 'near'}</span>`
-        : ''}</td>
-    </tr>`;
 }
 
 function paintUsage() {
   const body = $('#us-body');
   if (!body) return; // panel not in the DOM (non-admin)
   if (!usageLoaded) { body.innerHTML = 'Loading…'; return; }
+  if (dbUsageError) { body.innerHTML = `<div class="empty-state">${esc(dbUsageError)}</div>`; return; }
+  if (!dbUsage) { body.innerHTML = '<div class="empty-state">No usage data available.</div>'; return; }
 
-  const start = projectUsage?.period_start || null;
-  const end = projectUsage?.period_end || null;
-  const rows = [];
+  const bytes = Number(dbUsage.database_bytes);
+  const limit = Number(dbUsage.database_limit_bytes) || null;
+  const pct = fmtPercent(bytes, limit);
+  // 80% of a 500 MB ceiling is the point at which someone should be looking at
+  // the archival and trim panels below rather than finding out at 100%.
+  const tone = pct === null ? '' : pct >= 90 ? 'bad' : pct >= 80 ? 'warn' : '';
 
-  // Management API metrics first — these are the ones with quota pressure.
-  if (projectUsage?.metrics?.length) {
-    for (const m of projectUsage.metrics) rows.push(usageRowHTML(summarizeMetric(m, start, end)));
-  }
-
-  // Database size, from the RPC, always available.
-  if (dbUsage) {
-    rows.push(usageRowHTML(summarizeMetric({
-      key: 'db_size',
-      label: 'Database size',
-      value: Number(dbUsage.database_bytes),
-      limit: Number(dbUsage.database_limit_bytes) || null,
-      unit: 'bytes',
-    }, start, end), { rate: false }));
-  }
-
-  const cycleNote = start && end
-    ? `Billing cycle ${esc(fmtTime(start))} → ${esc(fmtTime(end))}.`
-    : 'Billing-cycle dates unavailable, so Avg/day and Projected cannot be calculated.';
-
-  // Distinguish "never set up" from "broken" — the first is a one-time admin
-  // task with a documented fix, the second is an incident. A generic error
-  // would send someone debugging a feature nobody has configured yet.
-  let apiNote = '';
-  if (projectUsageError?.code === 'no_usage_endpoint') {
-    // Not a misconfiguration — the data may genuinely not be exposed by any
-    // API. Say so, show what was tried, and send the operator somewhere that
-    // does have the numbers rather than leaving a broken-looking panel.
-    const probes = Array.isArray(projectUsageError.probes) ? projectUsageError.probes : [];
-    apiNote = `<div class="empty-state" style="margin-top:10px;text-align:left;">
-      <strong>Egress, Cached Egress, Log Ingestion and Log Query aren't available from the API.</strong>
-      Supabase's published Management API has no usage or billing endpoint, so these four
-      may simply not be fetchable programmatically — this is not a misconfiguration on your side.
-      Read them from the
-      <a href="https://supabase.com/dashboard/project/_/settings/billing/usage" target="_blank" rel="noopener">dashboard Usage page</a>.
-      Database size below is unaffected.
-      ${probes.length ? `<div class="emp-meta mono" style="margin-top:8px;">Tried: ${
-        probes.map((p) => `${esc(String(p.path))} → ${esc(String(p.status))}`).join(' · ')
-      }</div>` : ''}
-    </div>`;
-  } else if (projectUsageError?.code === 'not_deployed') {
-    apiNote = `<div class="empty-state" style="margin-top:10px;text-align:left;">
-      <strong>The <span class="mono">project-usage</span> Edge Function isn't deployed yet.</strong>
-      Egress, Cached Egress, Log Ingestion and Log Query come from it, and so do the
-      billing-cycle dates that Avg/day and Projected are calculated against — which is why
-      those read “—” above. Edge Functions deploy on a merge to <span class="mono">main</span>
-      (<span class="mono">.github/workflows/deploy-supabase.yml</span>), behind a manual
-      approval gate. Database size below needs none of this and is live.
-    </div>`;
-  } else if (projectUsageError?.code === 'not_configured') {
-    apiNote = `<div class="empty-state" style="margin-top:10px;text-align:left;">
-      <strong>Egress, Cached Egress, Log Ingestion and Log Query aren't configured.</strong>
-      These are platform billing metrics that exist only in Supabase's Management API,
-      behind a Personal Access Token — a control-plane credential that cannot live in the
-      browser. Set <span class="mono">MANAGEMENT_API_TOKEN</span> as an Edge Function
-      secret to enable them (issue it project-scoped and read-only).
-      See <span class="mono">Supabase/functions/project-usage/README.md</span>.
-      Database size below needs none of this and is live.
-    </div>`;
-  } else if (projectUsageError?.code === 'management_token_invalid') {
-    // The message carries the Management API's own `missing_permissions` list
-    // when there is one, so show it verbatim rather than paraphrasing — it
-    // names the exact permission to tick.
-    apiNote = `<div class="empty-state" style="margin-top:10px;text-align:left;color:var(--bad)">
-      <strong>Supabase rejected the management token.</strong>
-      ${esc(projectUsageError.message)}
-    </div>`;
-  } else if (projectUsageError) {
-    apiNote = `<div class="empty-state" style="margin-top:10px;">${esc(projectUsageError.message)}</div>`;
-  } else if (projectUsage?.partial) {
-    apiNote = `<div class="emp-meta" style="margin-top:8px;color:var(--warn)">
-      Some metrics weren't present in the Management API response and show as “—”.
-      ${esc((projectUsage.notes || []).join(' '))}
-    </div>`;
-  }
-
-  const tables = Array.isArray(dbUsage?.tables) ? dbUsage.tables.slice(0, 5) : [];
+  const tables = Array.isArray(dbUsage.tables) ? dbUsage.tables : [];
+  const largest = tables.slice(0, 6);
+  // Share of the total, because "12.5 MB" means nothing without knowing the
+  // database is 35 MB — the ratio is what tells you where to look.
+  const shareOf = (n) => (bytes > 0 ? Math.round((Number(n) / bytes) * 100) : null);
 
   body.innerHTML = `
-    ${rows.length ? `
-    <div class="table-scroll">
-      <table>
-        <thead><tr>
-          <th>Metric</th><th>This cycle</th><th>Avg/day</th><th>Projected</th><th class="col-shrink"></th>
-        </tr></thead>
-        <tbody>${rows.join('')}</tbody>
-      </table>
-    </div>` : '<div class="empty-state">No usage data available.</div>'}
-    <p class="emp-meta" style="margin-top:8px;">${cycleNote}</p>
-    ${apiNote}
-    ${dbUsageError ? `<div class="empty-state" style="margin-top:10px;">${esc(dbUsageError)}</div>` : ''}
-    ${tables.length ? `
-      <p class="emp-meta" style="margin-top:12px;">Largest tables — "Database size" on its own isn't actionable; this is:</p>
-      <div class="emp-meta mono" style="margin-top:4px;">
-        ${tables.map((t) => `${esc(t.name)} ${esc(fmtUsageBytes(Number(t.total_bytes)))}`).join(' · ')}
+    <div class="stat-grid">
+      <div class="stat-card${tone ? ` ${tone}` : ' accent'}">
+        <div class="stat-value">${esc(fmtUsageBytes(bytes))}</div>
+        <div class="stat-label">Database size${limit ? ` of ${esc(fmtUsageBytes(limit))}${pct === null ? '' : ` (${pct}%)`}` : ''}</div>
+      </div>
+    </div>
+    ${largest.length ? `
+      <p class="emp-meta" style="margin-top:12px;">
+        Largest tables. The total on its own isn't actionable; this is — a table
+        dominating the database is where archival or trimming would actually pay off.
+      </p>
+      <div class="table-scroll" style="margin-top:6px;">
+        <table>
+          <thead><tr><th>Table</th><th>Total</th><th>Of which indexes</th><th class="col-shrink">Share</th></tr></thead>
+          <tbody>
+            ${largest.map((t) => {
+              const share = shareOf(t.total_bytes);
+              return `<tr>
+                <td class="mono">${esc(t.name)}</td>
+                <td class="mono">${esc(fmtUsageBytes(Number(t.total_bytes)))}</td>
+                <td class="mono">${esc(fmtUsageBytes(Number(t.index_bytes)))}</td>
+                <td class="mono col-shrink">${share === null ? '—' : `${share}%`}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
       </div>
     ` : ''}
+    <p class="emp-meta" style="margin-top:10px;">
+      ${dbUsage.measured_at ? `Measured ${esc(fmtTime(dbUsage.measured_at))}. ` : ''}Read on demand — never on a timer.
+    </p>
   `;
 }
+
 
 async function loadArchiveStatus() {
   const { data, error } = await ScanArchiveModel.status();

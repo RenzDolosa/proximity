@@ -604,6 +604,38 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-05 (removal) — `project-usage` Edge Function deleted; Usage panel is now Database usage**
+- Deleted `Supabase/functions/project-usage/` and the `MANAGEMENT_API_TOKEN`
+  secret it required. The function could never work: Supabase publishes no
+  usage or billing API, proven against the live project in the previous entry.
+  Keeping it cost a stored account credential that expires and needs rotating,
+  an Edge Function deploy dependency and a secret, in exchange for nothing.
+- **Settings → Usage is now Settings → Database usage** and shows what is
+  actually knowable: total size against the plan ceiling, and a per-table
+  breakdown with each table's size, index share, and **percentage of the
+  database**. The percentage is the addition that makes it useful —
+  "`employees` 12.5 MB" means little until you know the database is 35 MB and
+  that one table is a third of it. The card turns amber at 80% and red at 90%,
+  the point at which the archival and trim panels below it become the next
+  thing to look at rather than a surprise at 100%.
+- Avg/day and Projected are gone, not merely blank. They existed for metrics
+  that accumulate across a billing cycle; database size is a **level**, not a
+  flow — how big the database is right now, not something accrued since the
+  cycle boundary — so averaging or projecting it would have been meaningless
+  rather than simply unavailable. `JS/Utils/usage.js` is reduced to the two
+  formatters still in use and `test/usage.test.mjs` with it (suite 59 → 52);
+  dead code with passing tests is still dead code.
+- The four billing figures are read from the Supabase dashboard. For the
+  question that actually matters — *what* is spending egress, which a billing
+  total has never been able to answer — use the Logs Explorer queries in
+  `docs/SUPABASE_QUOTA_DECISION.md` §7.
+- **Clean up by hand**, since deleting the source does not touch the live
+  project: delete the `project-usage` function in the Supabase dashboard,
+  delete the `MANAGEMENT_API_TOKEN` Edge Function secret, and revoke the
+  `proximity-usage-panel` access token (it expires 12 Oct 2026 regardless).
+  `SUPABASE_ACCESS_TOKEN` in GitHub stays — that one deploys Edge Functions
+  and is still needed.
+
 **2026-10-05 (correction) — Supabase has no usage/billing API; the Usage panel's billing half cannot work**
 - The `project-usage` Edge Function was written on the assumption that Egress,
   Cached Egress, Log Ingestion and Log Query were available from Supabase's
