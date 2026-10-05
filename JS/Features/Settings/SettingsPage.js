@@ -558,7 +558,16 @@ function paintUsage() {
   // task with a documented fix, the second is an incident. A generic error
   // would send someone debugging a feature nobody has configured yet.
   let apiNote = '';
-  if (projectUsageError?.code === 'not_configured') {
+  if (projectUsageError?.code === 'not_deployed') {
+    apiNote = `<div class="empty-state" style="margin-top:10px;text-align:left;">
+      <strong>The <span class="mono">project-usage</span> Edge Function isn't deployed yet.</strong>
+      Egress, Cached Egress, Log Ingestion and Log Query come from it, and so do the
+      billing-cycle dates that Avg/day and Projected are calculated against — which is why
+      those read “—” above. Edge Functions deploy on a merge to <span class="mono">main</span>
+      (<span class="mono">.github/workflows/deploy-supabase.yml</span>), behind a manual
+      approval gate. Database size below needs none of this and is live.
+    </div>`;
+  } else if (projectUsageError?.code === 'not_configured') {
     apiNote = `<div class="empty-state" style="margin-top:10px;text-align:left;">
       <strong>Egress, Cached Egress, Log Ingestion and Log Query aren't configured.</strong>
       These are platform billing metrics that exist only in Supabase's Management API,

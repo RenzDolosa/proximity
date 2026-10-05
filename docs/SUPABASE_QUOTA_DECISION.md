@@ -201,7 +201,112 @@ tight, take option B and move the date.
 
 ---
 
-## 7. Related
+## 7. Identifying what is actually consuming egress
+
+The usage page gives you a total. It never tells you *which endpoint* spent it,
+and every estimate in this document is inference from reading the client, not
+measurement. The Logs Explorer is where it stops being inference.
+
+**Dashboard → Logs → Logs Explorer** (`/project/<ref>/logs/explorer`). It
+queries `edge_logs`, one row per API request, with the response size on it.
+
+> **Free-plan retention is ~1 day.** You can only see the last 24 hours, which
+> is enough to establish a *rate* but not to explain a whole cycle. Run these
+> during a normal working day, not at 2am.
+
+### Which endpoints are spending the bytes
+
+```sql
+select
+  r.path,
+  count(*) as requests,
+  sum(cast(rh.content_length as int64)) as total_bytes,
+  avg(cast(rh.content_length as int64)) as avg_bytes
+from edge_logs as t
+cross join unnest(t.metadata) as m
+cross join unnest(m.request) as r
+cross join unnest(m.response) as resp
+cross join unnest(resp.headers) as rh
+group by r.path
+order by total_bytes desc
+limit 20
+```
+
+`total_bytes` is the column that matters, and it is frequently *not* ordered
+the same as `requests` — a small number of fat responses beats a large number
+of thin ones. That gap is the whole finding.
+
+### Is the egress fix actually in effect? (the decisive one)
+
+The scanner RPC was the single largest suspected consumer. This says, in one
+query, whether kiosks are still calling the old whole-roster endpoint:
+
+```sql
+select
+  r.path,
+  count(*) as calls,
+  sum(cast(rh.content_length as int64)) as total_bytes
+from edge_logs as t
+cross join unnest(t.metadata) as m
+cross join unnest(m.request) as r
+cross join unnest(m.response) as resp
+cross join unnest(resp.headers) as rh
+where r.path like '%get_scanner_offline_cache%'
+   or r.path like '%get_dashboard%'
+group by r.path
+order by total_bytes desc
+```
+
+- Calls to **`get_scanner_offline_cache_compact`** still arriving ⇒ at least one
+  kiosk is running pre-fix JavaScript. A tab open since before the deploy keeps
+  the old modules in memory; applying the migration changes nothing for it.
+  **Hard-reload every kiosk (Ctrl+Shift+R).**
+- Calls to **`get_scanner_offline_cache_delta`** ⇒ that kiosk is fixed.
+- Both ⇒ some kiosks reloaded and some did not.
+
+### Which client, and which hours
+
+```sql
+select
+  h.user_agent,
+  h.x_client_info,
+  count(*) as requests,
+  sum(cast(rh.content_length as int64)) as total_bytes
+from edge_logs as t
+cross join unnest(t.metadata) as m
+cross join unnest(m.request) as r
+cross join unnest(r.headers) as h
+cross join unnest(m.response) as resp
+cross join unnest(resp.headers) as rh
+group by h.user_agent, h.x_client_info
+order by total_bytes desc
+limit 20
+```
+
+Steady traffic through the night is a machine on a timer — a kiosk or a
+left-open Dashboard — not people. That distinction decides whether the fix is
+"reload the tabs" or "change the code".
+
+### Quicker, less precise
+
+**Dashboard → Reports → API Gateway** gives request volume by route without
+writing SQL. Good for a first look; it reports requests, not bytes, so it will
+mislead you whenever a few large responses dominate — which is exactly the
+situation here.
+
+### Caveats
+
+- These queries are written against `edge_logs`' nested shape and have **not
+  been run against this project** (the session that wrote them had no access).
+  The Logs Explorer ships query templates; if the `unnest` nesting differs,
+  start from a template and keep the `sum(content_length)` aggregation.
+- `content_length` is absent on chunked/streamed responses, so sums are a
+  lower bound.
+- Realtime WebSocket traffic does not appear in `edge_logs` at all. Check
+  **Realtime Messages** on the usage page separately — though at ~18k messages
+  it was never a credible contributor here.
+
+## 8. Related
 
 - `SUPABASE_EXIT_RUNBOOK.md` — staged cutover plan for option C
 - `LOCAL_DATABASE_ARCHITECTURE.md` — the target architecture and phasing
