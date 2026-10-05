@@ -207,6 +207,24 @@ The usage page gives you a total. It never tells you *which endpoint* spent it,
 and every estimate in this document is inference from reading the client, not
 measurement. The Logs Explorer is where it stops being inference.
 
+> ### These do NOT run in the SQL Editor
+>
+> `edge_logs` is **not a Postgres table** and is not in your database. It lives
+> in Supabase's log-analytics backend, which is a different page with a
+> different query engine (BigQuery-flavoured SQL, hence the `cross join
+> unnest` shape — that syntax is itself the giveaway that this is not Postgres).
+>
+> Running these in the SQL Editor fails with
+> `ERROR: 42P01: relation "edge_logs" does not exist`. That is Postgres
+> correctly reporting that no such table exists, not a problem with the query.
+>
+> | Page | Path | Queries | Has |
+> |---|---|---|---|
+> | SQL Editor | `/project/<ref>/sql` | your Postgres database | `employees`, `scan_events`, … |
+> | **Logs Explorer** | `/project/<ref>/logs/explorer` | log analytics | `edge_logs`, `postgres_logs`, … |
+>
+> Use the second one.
+
 **Dashboard → Logs → Logs Explorer** (`/project/<ref>/logs/explorer`). It
 queries `edge_logs`, one row per API request, with the response size on it.
 
@@ -293,6 +311,25 @@ left-open Dashboard — not people. That distinction decides whether the fix is
 writing SQL. Good for a first look; it reports requests, not bytes, so it will
 mislead you whenever a few large responses dominate — which is exactly the
 situation here.
+
+### If the `unnest` shape is rejected
+
+Start smaller. This is the minimum that proves you are on the right page and
+that the nesting works, before adding aggregation:
+
+```sql
+select t.timestamp, r.method, r.path, resp.status_code
+from edge_logs as t
+cross join unnest(t.metadata) as m
+cross join unnest(m.request) as r
+cross join unnest(m.response) as resp
+order by t.timestamp desc
+limit 20
+```
+
+If that returns rows, build up from it. If it does not, open one of the Logs
+Explorer's built-in templates and adapt that instead — the nesting is the
+fragile part, the `sum(cast(content_length as int64))` aggregation is not.
 
 ### Caveats
 
