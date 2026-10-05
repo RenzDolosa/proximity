@@ -66,6 +66,28 @@ Repo → **Settings → Secrets and variables → Actions**:
 - `SUPABASE_PROJECT_REF` — your project ref (the subdomain in your
   project's API URL, `https://<this-part>.supabase.co`)
 
+Without them the deploy step fails with *"Access token not provided. Supply an
+access token by running `supabase login` or setting the SUPABASE_ACCESS_TOKEN
+environment variable."* — which reads like a CLI problem but is just an empty
+repo secret.
+
+**Two different Supabase tokens now exist in this project. They are not
+interchangeable:**
+
+| Stored in | Name | Used by | Needs |
+|---|---|---|---|
+| **GitHub** Actions secrets | `SUPABASE_ACCESS_TOKEN` | this workflow, at deploy time | **write** — deploy Edge Functions |
+| **Supabase** Edge Function secrets | `MANAGEMENT_API_TOKEN` | `project-usage`, at run time | **read** — project usage only |
+
+Issue them separately so they can be rotated independently, and give each only
+what it needs — the runtime one has no reason to be able to deploy anything.
+
+Note the prefix asymmetry, which is a real trap: the `SUPABASE_` prefix is
+**fine for GitHub Actions secrets** but **rejected for Supabase Edge Function
+secrets**, where it is reserved for platform-injected variables. That is why
+the names above look inconsistent; they are stored in two different systems
+with different rules.
+
 ### 2. The approval gate
 Repo → **Settings → Environments → New environment** → name it exactly
 `production` (matches `environment: production` in the workflow) →
