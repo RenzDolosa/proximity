@@ -578,10 +578,12 @@ function paintUsage() {
       Database size below needs none of this and is live.
     </div>`;
   } else if (projectUsageError?.code === 'management_token_invalid') {
+    // The message carries the Management API's own `missing_permissions` list
+    // when there is one, so show it verbatim rather than paraphrasing — it
+    // names the exact permission to tick.
     apiNote = `<div class="empty-state" style="margin-top:10px;text-align:left;color:var(--bad)">
-      <strong>Supabase rejected the management token.</strong> It has been revoked, has expired,
-      or no longer has access to this project. Issue a new one and update the
-      <span class="mono">MANAGEMENT_API_TOKEN</span> secret.
+      <strong>Supabase rejected the management token.</strong>
+      ${esc(projectUsageError.message)}
     </div>`;
   } else if (projectUsageError) {
     apiNote = `<div class="empty-state" style="margin-top:10px;">${esc(projectUsageError.message)}</div>`;

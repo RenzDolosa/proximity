@@ -177,10 +177,29 @@ Deno.serve(async (req: Request) => {
     });
 
     if (res.status === 401 || res.status === 403) {
-      // A revoked or mistyped token is a human fix, not something a retry
-      // helps with — flag it distinctly so the UI can say so.
+      // A revoked, expired or under-scoped token is a human fix, not something
+      // a retry helps with — flag it distinctly so the UI can say so.
+      //
+      // Scoped tokens report exactly which permission is absent, e.g.
+      //   {"message":"Missing required permission(s): edge_functions_read",
+      //    "error":{"missing_permissions":["edge_functions_read"]}}
+      // Passing that through turns "it says no" into "tick this box", which is
+      // the difference between a five-minute fix and an afternoon of guessing
+      // at a permission matrix. Observed from the CLI's own deploy failure.
+      let detail = "";
+      try {
+        const body = await res.json();
+        const missing = body?.error?.missing_permissions;
+        if (Array.isArray(missing) && missing.length) {
+          detail = ` Missing permission(s): ${missing.join(", ")}. Add them to this token's scope at https://supabase.com/dashboard/account/tokens (or issue a new token with them and update the MANAGEMENT_API_TOKEN secret).`;
+        } else if (typeof body?.message === "string") {
+          detail = ` ${body.message}`;
+        }
+      } catch {
+        // non-JSON body — the generic message below still applies
+      }
       return json({
-        error: "Supabase rejected the management token (revoked, expired, or lacking access to this project).",
+        error: `Supabase rejected the management token (HTTP ${res.status}): revoked, expired, or missing a permission.${detail}`,
         code: "management_token_invalid",
       }, 503);
     }
