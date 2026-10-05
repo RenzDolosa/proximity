@@ -73,6 +73,21 @@ an admin swaps it out.
   the last 10 minutes), `unread_alerts` (null unless admin/manager). Window is
   clamped to 1..72. Gate: `is_admin()` or `can_view_employee_manager()`.
   Client: `Models/DashboardModel.js`.
+- **`get_dashboard_pulse(p_window_hours default 16)`** — added 2026-10-05.
+  `{ stats, roster_version }`. `stats` is `get_dashboard_stats()` minus
+  `on_site` and `by_department`: the Dashboard reads neither (it derives both
+  from the roster via `Utils/dashboard.js`'s `summarizeRoster()`), and
+  `on_site[]` in particular is a second full copy of the roster the page was
+  already downloading separately. `roster_version` is
+  `md5(count(*) || max(updated_at))` over `employees` — sound as a change
+  signal for `get_onsite_roster()` because that function derives entirely
+  from `employees` (last `scan_logs` entry + status) and every path that can
+  change it either writes a row or changes the count. The one thing it cannot
+  observe is `is_stale` flipping with the passage of time, which is why
+  `DashboardPage.js` also force-refetches the roster every 5 minutes
+  regardless. `SECURITY INVOKER` — the wrapped function runs its own gate and
+  the version subquery reads `employees` under the caller's RLS. `PUBLIC` and
+  `anon` revoked.
 - **`get_onsite_roster(p_stale_hours default 16)`** — every employee whose
   *last* `scan_logs` entry is an `in` (any status), oldest IN first, with
   `seconds_on_site` and `is_stale` (IN older than the window). Capped at
@@ -151,6 +166,37 @@ an admin swaps it out.
   security-invoker wrapper around the live lookup RPC. It preserves that
   RPC's card/employee fields and access checks while returning only
   unresolved remarks; the offline classifier never displays resolved ones.
+  Still live and still the fallback, but no longer what the kiosk calls on
+  its 5-minute timer — see `get_scanner_offline_cache_delta()` directly
+  below for why.
+- **`get_scanner_offline_cache_delta(p_since timestamptz, p_known_digest text)`**
+  — added 2026-10-05. Returns
+  `{ full, digest, cursor, rows }` with rows in exactly the shape
+  `get_scanner_offline_cache_compact()` produces (same field names, same
+  `scan_count` source column, same unresolved-remarks-only filter), so
+  `JS/Core/offlineScanning.js` needed no changes to classification at all.
+  `full` is true on a first sync and whenever `p_known_digest` doesn't match
+  the server's current card-roster digest; otherwise `rows` contains only
+  employees with `updated_at > p_since`. The caller stores `cursor` and
+  `digest` and sends both back next time.
+  **Two change signals, deliberately**: `employees.updated_at` is maintained
+  by `trg_employees_updated_at` and bumped by every scan (via
+  `trg_append_scan_log`'s `scan_parity_count` update), so "who changed" is an
+  exact timestamp question; `proximity_cards` has **no** `updated_at`, and
+  its row set itself can change (issue, delete, revoke, reassign), so that
+  half is covered by an md5 over `(card id, proximity_code, is_active,
+  assigned employee id)` whose mismatch forces one full resync. A deletion or
+  rename therefore needs no `removed[]` list the way
+  `get_scanner_offline_photo_updates()` does — it can't arrive as a delta in
+  the first place.
+  The returned `cursor` is `now() - interval '1 minute'`, not `now()`: a row
+  written by a transaction still in flight when the response was built can
+  carry an `updated_at` just below a `now()` cursor and would then never be
+  picked up by any later delta. One minute of re-sent overlap is a few rows;
+  a missed row is a kiosk classifying against stale card/employee status.
+  `SECURITY DEFINER` with the same scanner gate as the RPC it replaces;
+  `PUBLIC` and `anon` revoked, `authenticated`/`service_role` granted.
+  Ships with `employees_updated_at_idx` for the incremental branch's filter.
 - **`get_scanner_offline_photos()`** — added 2026-09-19. Split out of
   `get_scanner_offline_cache()` above: returns a **sparse**
   `[{employee_id, photo_thumb_b64}]` array — only employees who actually
@@ -849,6 +895,63 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-10-05 — Egress pass 3: the two unconditional whole-dataset polls**
+- Pass 2 closed with "remaining egress candidates, not changed:
+  `get_scanner_offline_cache_compact()` is refreshed every 5 minutes per
+  kiosk and returns the whole card roster each time ... `get_dashboard_stats()`
+  / `get_onsite_roster()` polling". Those candidates are the bill. Using this
+  file's own recorded figures (729 employees, ~0.6 KB/employee without
+  photos, `get_onsite_roster(16)` = 272 rows):
+  - kiosk lookup cache: ~430 KB × 288 calls/day = **~125 MB/day per kiosk**,
+    ~3.7 GB per billing cycle per kiosk, essentially all of it unchanged rows;
+  - Dashboard: 2 RPCs × 2,880 polls/day per open tab, and
+    `get_dashboard_stats()`'s `on_site[]` means the roster came down roughly
+    twice per poll for a page that reads neither `on_site[]` nor
+    `by_department[]`.
+  Per-scan payloads, which passes 1 and 2 optimized hard (15,502 B → 487 B),
+  are not the problem — the timers are.
+- `20261005000000_incremental_scanner_cache_and_dashboard_pulse.sql` (**not
+  applied to the live project by this session — see below**) adds
+  `get_scanner_offline_cache_delta(p_since, p_known_digest)` and
+  `get_dashboard_pulse(p_window_hours)`, plus `employees_updated_at_idx`.
+  Full contracts in the RPC section above, including why the scanner needs a
+  timestamp cursor *and* a digest (`proximity_cards` has no `updated_at`) and
+  why the returned cursor lags `now()` by a minute.
+- Purely additive: no existing function is dropped or redefined, so an
+  already-deployed client is unaffected. Both new callers detect `PGRST202`
+  ("could not find the function") once and fall back to the previous RPCs for
+  the rest of the page session, so a **client deploy landing before this
+  migration degrades to today's behaviour rather than breaking** — important
+  for the kiosk, where a lookup cache that silently stopped refreshing would
+  undermine the exact thing offline scanning exists to guarantee.
+- Client: `OfflineScanModel.refreshCache()` stores `{rows, syncedAt, cursor,
+  digest}` and merges through the new pure `mergeLookupDelta()`
+  (`JS/Core/offlineScanning.js`, 6 new cases in
+  `test/offline-scanning.test.mjs`; 43 tests passing).
+  `DashboardPage.js` polls the pulse and skips `get_onsite_roster()` while
+  `roster_version` is unchanged, with a 5-minute forced refetch for `is_stale`
+  and an always-forced one behind the Refresh button.
+  `JS/Core/alertsBadge.js` stops polling while the tab is hidden.
+  `EmployeesModel.listDirectory()` replaces `select('*')` with an explicit
+  column list, dropping `last_scan` (a jsonb scan-log entry per employee),
+  `total_remarks`, `created_at` and `updated_at`.
+- **Verification status — read before trusting the numbers above.** The
+  Supabase credentials in this session cover a different organization
+  (`Pakyawan`, `PSP`); project `kjwttqmbcjvkivgmwuev` was not reachable, so
+  **nothing here was executed, EXPLAINed, or measured against the live
+  database**, and no API-log attribution was done. The estimates come from
+  this file's previously recorded row counts and payload sizes. Before
+  relying on this: apply the migration, confirm `get_dashboard_stats()`
+  really does return `on_site`/`by_department` keys (the `-` operator is a
+  no-op if not, so this is safe either way), confirm `get_onsite_roster()`
+  still answers under the new client, and compare **project-filtered**
+  uncached egress — the billing screenshot is still filtered to *All
+  projects*, which is organization-wide and not attributable to Proximity.
+- Migration-history drift called out in the 2026-10-03 entries is unchanged
+  and still blocks `supabase db push` against this project; apply this file
+  the same way the previous two were (directly, then
+  `supabase migration repair` when the history is reconciled).
 
 **2026-10-03 (pass 2) — remove thumbnails and unused PII from live scan/feed responses; close an `anon` grant**
 - Pass 1 (below) removed `scan_logs` from scan responses, but measuring live

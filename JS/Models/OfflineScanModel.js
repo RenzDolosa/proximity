@@ -1,8 +1,15 @@
 // What keeps the standalone Scanner working through a real network
 // outage:
 // - a local IndexedDB copy of the card->employee lookup
-//   (get_scanner_offline_cache()), refreshed opportunistically while
-//   online, so a scan can still be classified with the network down
+//   (get_scanner_offline_cache_delta()), refreshed opportunistically while
+//   online, so a scan can still be classified with the network down.
+//   UPDATED 2026-10-05: that refresh is incremental. It used to re-download
+//   the entire card roster every 5 minutes per kiosk (~430 KB a call, ~3.7 GB
+//   a billing cycle per kiosk) regardless of whether anything had changed;
+//   it now sends back the previous response's cursor + roster digest and
+//   receives only the employees updated since. See the migration
+//   20261005000000_incremental_scanner_cache_and_dashboard_pulse.sql for
+//   why card-roster changes need a digest rather than a timestamp cursor.
 // - a queue of raw scan attempts made while offline, replayed strictly in
 //   order (one at a time, never in parallel) once back online, through
 //   the compact wrapper over the real scan_proximity_code() RPC
@@ -43,7 +50,7 @@
 // change log entry for the full story.
 import { supabase } from '../Core/supabaseClient.js';
 import { idbGetCache, idbSetCache, idbEnqueue, idbGetQueue, idbRemoveFromQueue, idbCountQueue, idbGetPhotoCache, idbSetPhotoCache } from '../Utils/idb.js';
-import { attachCachedPhoto, classifyCachedScan, flushQueuedScans, mergePhotoUpdates, photoNeedsRefresh } from '../Core/offlineScanning.js';
+import { attachCachedPhoto, classifyCachedScan, flushQueuedScans, mergeLookupDelta, mergePhotoUpdates, photoNeedsRefresh } from '../Core/offlineScanning.js';
 
 // Past this age, the cached lookup is old enough that a card revoked (or
 // an employee deactivated/reactivated) since the last refresh could still
@@ -54,6 +61,21 @@ import { attachCachedPhoto, classifyCachedScan, flushQueuedScans, mergePhotoUpda
 // instead if this scanner is ever the *sole* access control for
 // something higher-stakes than an attendance/activity log.
 export const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+
+// Set once if get_scanner_offline_cache_delta() isn't on the project yet, so
+// a kiosk running a client that's ahead of the database doesn't pay a failed
+// round trip before every fallback refresh. See refreshCache() below.
+let lookupDeltaUnavailable = false;
+
+// PostgREST answers an unknown RPC with PGRST202 ("Could not find the
+// function ... in the schema cache"), which is specifically a
+// not-deployed-yet signal rather than a failure worth retrying. The message
+// check is a fallback for older gateway versions that didn't set the code.
+function isMissingFunctionError(error) {
+  if (!error) return false;
+  if (error.code === 'PGRST202' || error.code === '42883') return true;
+  return /could not find the function/i.test(error.message || '');
+}
 
 function isNetworkError(error) {
   if (!error) return false;
@@ -149,7 +171,42 @@ async function fetchAndStorePhotoUpdates() {
 export const OfflineScanModel = {
   isNetworkError,
 
+  // Incremental by default (get_scanner_offline_cache_delta): sends back the
+  // cursor and roster digest from the previous refresh and gets only the
+  // employees who changed since. The whole roster still comes down on the
+  // first refresh of a kiosk, and whenever the card roster itself changed
+  // (digest mismatch) — see the migration's header comment for why those are
+  // two separate signals.
+  //
+  // Falls back, once per page session, to the previous whole-roster RPC if
+  // the delta function isn't on the project yet. This repo does not
+  // auto-deploy migrations, so a client deploy can legitimately land first;
+  // without the fallback that window is a kiosk whose lookup cache silently
+  // stops refreshing, which is exactly the failure offline scanning exists
+  // to prevent.
   async refreshCache() {
+    if (!lookupDeltaUnavailable) {
+      const cached = await idbGetCache().catch(() => null);
+      const { data, error } = await supabase.rpc('get_scanner_offline_cache_delta', {
+        p_since: cached?.cursor || null,
+        p_known_digest: cached?.digest || null,
+      });
+      if (!error && data && Array.isArray(data.rows)) {
+        await idbSetCache({
+          rows: mergeLookupDelta(cached?.rows, data),
+          syncedAt: new Date().toISOString(),
+          cursor: data.cursor || null,
+          digest: data.digest || null,
+        });
+        return { data: true };
+      }
+      // A missing function is a deploy-ordering problem, not a transient
+      // one, so stop retrying it for the rest of this session. Anything else
+      // (offline, permission, a genuine server error) is reported as-is so
+      // the caller's normal error handling still sees it.
+      if (!isMissingFunctionError(error)) return { error: error || new Error('Unexpected response from get_scanner_offline_cache_delta') };
+      lookupDeltaUnavailable = true;
+    }
     const { data, error } = await supabase.rpc('get_scanner_offline_cache_compact');
     if (error) return { error };
     await idbSetCache({ rows: data, syncedAt: new Date().toISOString() });

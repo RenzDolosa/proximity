@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { attachCachedPhoto, classifyCachedScan, flushQueuedScans, groupQueuedScans, mergePhotoUpdates, photoNeedsRefresh } from '../JS/Core/offlineScanning.js';
+import { attachCachedPhoto, classifyCachedScan, flushQueuedScans, groupQueuedScans, mergeLookupDelta, mergePhotoUpdates, photoNeedsRefresh } from '../JS/Core/offlineScanning.js';
 
 const matchedRow = {
   proximity_code: 'CARD-1', card_active: true, employee_id: 'employee-1',
@@ -137,4 +137,62 @@ test('photoNeedsRefresh flags new, replaced and legacy-cache photos but not phot
   assert.equal(photoNeedsRefresh(scan({ id: 'e1', photo_file_id: 'f1' }), { byEmployeeId: { e1: 't1' } }), true); // legacy cache without file ids
   assert.equal(photoNeedsRefresh({ result: 'unmatched', employee: null }, cache), false);
   assert.equal(photoNeedsRefresh(scan({ id: 'e1', photo_file_id: 'f1' }), null), true);
+});
+
+// get_scanner_offline_cache_delta() (Supabase/migrations/
+// 20261005000000_incremental_scanner_cache_and_dashboard_pulse.sql) answers
+// with either a full roster or only the employees updated since the cursor
+// the kiosk sent back. These pin the merge rules the kiosk applies to that
+// response — in particular that a `full` response REPLACES rather than
+// overlays, which is what makes deletions work without a separate removed[]
+// list the way the photo cache needs.
+const lookupRow = (code, over = {}) => ({
+  proximity_code: code, card_active: true, employee_id: `emp-${code}`,
+  employee_status: 'active', scan_count: 2, full_name: `Name ${code}`,
+  employee_code: `E-${code}`, department: 'Ops', remarks_log: [], ...over,
+});
+
+test('a full delta response replaces the cached roster outright', () => {
+  const cached = [lookupRow('A'), lookupRow('B')];
+  const merged = mergeLookupDelta(cached, { full: true, rows: [lookupRow('A')] });
+  assert.deepEqual(merged.map((r) => r.proximity_code), ['A']); // B was deleted server-side — a full response is the only signal for that
+});
+
+test('an incremental response overlays only the rows it carries, in place', () => {
+  const cached = [lookupRow('A'), lookupRow('B'), lookupRow('C')];
+  const merged = mergeLookupDelta(cached, {
+    full: false,
+    rows: [lookupRow('B', { scan_count: 7, employee_status: 'inactive' })],
+  });
+  assert.equal(merged.length, 3);
+  assert.deepEqual(merged.map((r) => r.proximity_code), ['A', 'B', 'C']); // order preserved
+  assert.equal(merged[1].scan_count, 7);
+  assert.equal(merged[1].employee_status, 'inactive');
+  assert.equal(merged[0].scan_count, 2); // untouched rows are the same objects' values, not re-fetched
+});
+
+test('an empty incremental response leaves the cache exactly as it was', () => {
+  const cached = [lookupRow('A'), lookupRow('B')];
+  assert.equal(mergeLookupDelta(cached, { full: false, rows: [] }), cached);
+});
+
+test('a delta row for a code the cache has never seen is appended, not dropped', () => {
+  const merged = mergeLookupDelta([lookupRow('A')], { full: false, rows: [lookupRow('Z')] });
+  assert.deepEqual(merged.map((r) => r.proximity_code), ['A', 'Z']);
+});
+
+test('merging into a missing or malformed cache degrades to whatever the server sent', () => {
+  assert.deepEqual(mergeLookupDelta(undefined, { full: true, rows: [lookupRow('A')] }).length, 1);
+  assert.deepEqual(mergeLookupDelta(undefined, { full: false, rows: [lookupRow('A')] }).length, 1);
+  assert.deepEqual(mergeLookupDelta([lookupRow('A')], { full: true }), []);
+});
+
+// The merged rows still have to be exactly what classifyCachedScan() expects
+// — the delta path is only a transport change, not a shape change.
+test('rows that arrived through a delta still classify identically', () => {
+  const merged = mergeLookupDelta(
+    [lookupRow('CARD-9', { scan_count: 2 })],
+    { full: false, rows: [lookupRow('CARD-9', { scan_count: 3 })] },
+  );
+  assert.equal(classifyCachedScan('CARD-9', merged).direction, 'out'); // 3 is odd
 });

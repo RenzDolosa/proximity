@@ -25,6 +25,32 @@ export function classifyCachedScan(proximityCode, rows, pendingBumps = new Map()
   };
 }
 
+// Applies one get_scanner_offline_cache_delta() response to the locally
+// cached lookup rows. `full` responses replace the cache outright; an
+// incremental one overlays only the rows the server says changed, keyed by
+// proximity_code (the same key classifyCachedScan() looks rows up by).
+//
+// Keying on proximity_code is safe precisely because the server's digest
+// covers card id, code, is_active and assignment: anything that could add,
+// remove or rename a key forces `full: true` instead of arriving as a delta,
+// so the incremental branch only ever has to replace rows that already
+// exist. A delta row for an unknown code would still be appended rather than
+// dropped — belt and braces, since silently discarding one would mean the
+// kiosk classifying that card against nothing at all.
+export function mergeLookupDelta(currentRows, delta) {
+  if (delta?.full) return Array.isArray(delta.rows) ? delta.rows : [];
+  const rows = Array.isArray(currentRows) ? currentRows : [];
+  const changed = Array.isArray(delta?.rows) ? delta.rows : [];
+  if (!changed.length) return rows;
+  const byCode = new Map(changed.map((r) => [r.proximity_code, r]));
+  const merged = rows.map((r) => byCode.get(r.proximity_code) ?? r);
+  const known = new Set(rows.map((r) => r.proximity_code));
+  for (const r of changed) {
+    if (!known.has(r.proximity_code)) merged.push(r);
+  }
+  return merged;
+}
+
 export function mergePhotoUpdates(current, updates) {
   const hasSnapshot = Boolean(current?.fileIdsByEmployeeId);
   const byEmployeeId = hasSnapshot ? { ...current.byEmployeeId } : {};

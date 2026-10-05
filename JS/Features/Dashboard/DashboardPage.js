@@ -17,10 +17,33 @@ import { DashboardModel } from '../../Models/DashboardModel.js';
 import { openDepartmentRosterModal } from '../../Components/DepartmentRosterModal.js';
 
 const REFRESH_MS = 30000;
+// Upper bound on how long a skipped roster fetch can keep showing a row
+// whose `is_stale` flag should by now have flipped. That flag is the only
+// part of the roster that changes with nothing but the passage of time, so
+// it's the only reason to refetch an otherwise-unchanged roster — see
+// load()'s rosterIsStale. 5 minutes against a 16-hour stale window is
+// immaterial to what the page claims, and keeps the refetch rate at 1-in-10
+// polls rather than 10-in-10.
+const ROSTER_MAX_AGE_MS = 5 * 60 * 1000;
 
 let stats = null;
 let roster = [];
+let rosterVersion = null;
+let rosterFetchedAt = 0;
 let loaded = false;
+// Set once if get_dashboard_pulse() isn't on the project yet (client
+// deployed ahead of the migration), so every later refresh goes straight to
+// the legacy pair instead of paying a failed round trip first.
+let pulseUnavailable = false;
+const MISSING_PULSE = { code: 'PGRST202', message: 'Could not find the function public.get_dashboard_pulse' };
+
+// Same signal OfflineScanModel.js checks for: PostgREST answers an unknown
+// RPC with PGRST202, which means "not deployed yet", not "retry me".
+function isMissingFunctionError(error) {
+  if (!error) return false;
+  if (error.code === 'PGRST202' || error.code === '42883') return true;
+  return /could not find the function/i.test(error.message || '');
+}
 let filters = { query: '', department: '', view: 'live' };
 let page = 1;
 let pageSize = 50;
@@ -66,7 +89,11 @@ export async function renderDashboard() {
   $('#dash-q').addEventListener('input', (e) => { filters.query = e.target.value; page = 1; paintTable(); });
   $('#dash-dept').addEventListener('change', (e) => { filters.department = e.target.value; page = 1; paintTable(); });
   $('#dash-view').addEventListener('change', (e) => { filters.view = e.target.value; page = 1; paintTable(); });
-  $('#dash-refresh').addEventListener('click', load);
+  // force: an explicit Refresh click should re-read the roster even when the
+  // pulse says nothing changed — "I pressed refresh and it did nothing" is
+  // not a trade worth making for a few KB. (Also: a bare `load` here would
+  // receive the click Event as its options argument.)
+  $('#dash-refresh').addEventListener('click', () => load({ force: true }));
   $('#dash-export').addEventListener('click', exportRows);
 
   if (loaded) { paintStats(); paintTable(); }
@@ -91,19 +118,63 @@ function showError(message) {
   el.classList.toggle('hidden', !message);
 }
 
-async function load() {
+async function load({ force = false } = {}) {
   const seq = ++requestSeq;
   const btn = $('#dash-refresh');
   if (btn) { btn.disabled = true; btn.textContent = 'Refreshing…'; }
-  const [s, r] = await Promise.all([DashboardModel.stats(), DashboardModel.onSiteRoster()]);
+  const p = pulseUnavailable ? { error: MISSING_PULSE } : await DashboardModel.pulse();
+  // A client deployed ahead of the migration keeps the old behaviour rather
+  // than showing an empty dashboard — see DashboardModel.js.
+  if (p.error && isMissingFunctionError(p.error)) {
+    pulseUnavailable = true;
+    const [s, r] = await Promise.all([DashboardModel.stats(), DashboardModel.onSiteRoster()]);
+    if (seq !== requestSeq) return;
+    finish(seq, s.error || r.error, s.data, r.data);
+    return;
+  }
   if (seq !== requestSeq) return; // superseded by a newer load
+  if (p.error) { finish(seq, p.error); return; }
+
+  // The roster is the expensive half of this refresh (hundreds of rows,
+  // every 30 seconds, for as long as someone leaves this tab open). Skip it
+  // entirely when the pulse says nothing in `employees` has changed since the
+  // last one — which is every poll of a quiet night or weekend. The periodic
+  // force below exists because `is_stale` flips purely with the passage of
+  // time, which no data version can observe; the manual Refresh button and
+  // the first load of the page also force it.
+  const version = p.data?.roster_version ?? null;
+  const rosterIsStale = force
+    || !loaded
+    || version === null
+    || version !== rosterVersion
+    || Date.now() - rosterFetchedAt > ROSTER_MAX_AGE_MS;
+  if (!rosterIsStale) { finish(seq, null, p.data?.stats, roster, version, false); return; }
+
+  const r = await DashboardModel.onSiteRoster();
+  if (seq !== requestSeq) return;
+  finish(seq, r.error, p.data?.stats, r.data, version, true);
+}
+
+// Shared tail of every path through load() above: re-enable the button, show
+// or clear the error, and repaint. `nextRoster` is the existing roster when
+// the fetch was skipped, so a skipped refresh is indistinguishable on screen
+// from one that came back identical.
+//
+// `fetchedRoster` has to be passed separately rather than inferred: the age
+// clock behind ROSTER_MAX_AGE_MS must only advance when the roster was really
+// re-read. Stamping it on every call — including the skipped ones — would
+// mean the 5-minute force could never fire at all, because each skipped poll
+// 30 seconds earlier would have reset it.
+function finish(seq, err, nextStats, nextRoster, version, fetchedRoster = false) {
+  if (seq !== requestSeq) return;
   const b = $('#dash-refresh');
   if (b) { b.disabled = false; b.textContent = 'Refresh'; }
-  const err = s.error || r.error;
   if (err) { showError(err.message); return; }
   showError('');
-  stats = s.data;
-  roster = r.data || [];
+  stats = nextStats;
+  roster = nextRoster || [];
+  if (version !== undefined) rosterVersion = version;
+  if (fetchedRoster) rosterFetchedAt = Date.now();
   loaded = true;
   if (filters.department && !roster.some((x) => (x.department || '') === filters.department)) filters.department = '';
   paintStats();

@@ -7,6 +7,17 @@ import { fetchAllRows } from '../Utils/fetchAllRows.js';
 
 const base = createModel('employees');
 
+// Every employee_directory column the client actually reads: the grid
+// (DirectoryPage.js), the edit modal (EmployeeModal.js), and the XLSX export.
+// Deliberately omits `last_scan` (a full jsonb scan-log entry per row),
+// `total_remarks`, `created_at` and `updated_at` — nothing renders them, and
+// this view is refetched in full on every visit to Employee Manager.
+const DIRECTORY_COLUMNS = [
+  'id', 'employee_code', 'full_name', 'department', 'position', 'email', 'phone',
+  'photo_url', 'photo_file_id', 'status', 'active_proximity_code',
+  'proximity_card_active', 'proximity_card_id', 'total_scans', 'open_remarks',
+].join(',');
+
 // supabase-js's functions.invoke() only gives a generic "Edge Function
 // returned a non-2xx status code" message for FunctionsHttpError — the
 // actual { error: "..." } JSON body the function sent back is on
@@ -34,9 +45,21 @@ export const EmployeesModel = {
   // Pages through past Supabase's default 1000-row-per-request cap so the
   // grid always reflects the true full roster, however large it grows —
   // see Utils/fetchAllRows.js for why a plain .limit() can't do this.
+  //
+  // Explicit column list rather than '*': the view also exposes `last_scan`
+  // (a whole jsonb scan-log entry per employee — by far the heaviest column
+  // in it), `total_remarks`, `created_at` and `updated_at`, none of which the
+  // grid, the edit modal, or the XLSX export read. This payload is fetched in
+  // full on every visit to the page, so columns nobody renders are pure
+  // egress. Keep this list in sync with what DirectoryPage.js and
+  // EmployeeModal.js actually consume — adding a column to the view no longer
+  // silently adds it to this request.
   async listDirectory() {
     return fetchAllRows((from, to) =>
-      supabase.from('employee_directory').select('*').order('full_name').range(from, to)
+      supabase.from('employee_directory')
+        .select(DIRECTORY_COLUMNS)
+        .order('full_name')
+        .range(from, to)
     );
   },
 

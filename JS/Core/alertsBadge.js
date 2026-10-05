@@ -9,6 +9,7 @@ import { isAdminOrManager } from './state.js';
 
 const POLL_MS = 60000;
 let timer = null;
+let visibilityHandler = null;
 
 export async function refreshAlertsBadge() {
   const el = $('#alerts-badge');
@@ -21,13 +22,25 @@ export async function refreshAlertsBadge() {
 }
 
 export function startAlertsBadge() {
-  clearInterval(timer);
+  stopAlertsBadge();
   if (!isAdminOrManager()) return;
   refreshAlertsBadge();
-  timer = setInterval(refreshAlertsBadge, POLL_MS);
+  // Skipped while the tab is hidden, same reasoning as DashboardPage's
+  // refresh: a badge nobody can see is worth no round trips at all, and a
+  // backgrounded admin tab left open overnight was otherwise polling this
+  // every minute until the browser was closed. The visibility handler catches
+  // up the moment the tab is looked at again, so it's never stale on screen.
+  timer = setInterval(() => {
+    if (document.hidden) return;
+    refreshAlertsBadge();
+  }, POLL_MS);
+  visibilityHandler = () => { if (!document.hidden) refreshAlertsBadge(); };
+  document.addEventListener('visibilitychange', visibilityHandler);
 }
 
 export function stopAlertsBadge() {
   clearInterval(timer);
   timer = null;
+  if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
+  visibilityHandler = null;
 }

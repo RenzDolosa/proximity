@@ -604,6 +604,64 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-05 (pass 3) — the actual egress bill: two unconditional whole-dataset polls**
+- Passes 1 and 2 shrank what a *scan* costs. They explicitly left open what
+  turned out to be the dominant cost, which is not per-scan at all: two
+  timers that re-download an entire dataset on a fixed interval whether or
+  not anything changed.
+  - **Scanner lookup cache** — `get_scanner_offline_cache_compact()` every
+    5 minutes per kiosk, returning the whole card roster each time. At the
+    729 employees and ~0.6 KB/employee this file already recorded, that is
+    ~430 KB × 288 calls = **~125 MB/day per kiosk, ~3.7 GB per billing
+    cycle per kiosk** — nearly all of it bytes the kiosk already had.
+  - **Dashboard** — `get_dashboard_stats()` *and* `get_onsite_roster()`
+    every 30 s per open tab. `get_onsite_roster(16)` was measured at 272
+    rows, and the stats object additionally carries an `on_site[]` array
+    that is a second copy of that same roster which `DashboardPage.js` has
+    never read (it derives every on-site number from the roster itself via
+    `summarizeRoster()`), plus a `by_department[]` it recomputes locally.
+    So the page downloaded the roster roughly twice, 2,880 times a day, per
+    open tab.
+- **Fix: make both conditional.** New migration
+  `Supabase/migrations/20261005000000_incremental_scanner_cache_and_dashboard_pulse.sql`
+  adds `get_scanner_offline_cache_delta(p_since, p_known_digest)` and
+  `get_dashboard_pulse(p_window_hours)`. Nothing existing is dropped or
+  altered, and both clients fall back to the previous RPCs on `PGRST202`, so
+  a client deploy landing before the migration degrades to today's behaviour
+  instead of breaking.
+  - The scanner now sends back the previous response's cursor + roster
+    digest and receives only the employees updated since (in a 5-minute
+    window: the handful of people who actually scanned). Two change signals
+    rather than one, because `employees` has an `updated_at` that every scan
+    bumps, while `proximity_cards` has no timestamp at all — card
+    issue/delete/revoke/reassign is covered by a digest whose mismatch forces
+    one full resync. Deletions therefore need no `removed[]` list.
+  - The dashboard polls `get_dashboard_pulse()` (stats minus the two array
+    fields nothing reads, plus a cheap roster version) and only refetches
+    the roster when that version changed — plus a forced refetch every 5
+    minutes, because `is_stale` flips with nothing but the passage of time
+    and no data version can observe that. Clicking **Refresh** always forces.
+- Two smaller cuts in the same pass: the alerts badge no longer polls while
+  the tab is hidden (it caught up on `visibilitychange` already being the
+  pattern used by the Dashboard), and `employee_directory` is now fetched
+  with an explicit column list instead of `select('*')` — dropping
+  `last_scan` (a whole jsonb scan-log entry per employee, the heaviest
+  column in the view), `total_remarks`, `created_at` and `updated_at`, none
+  of which the grid, the edit modal or the XLSX export read.
+- New pure helper `mergeLookupDelta()` in `JS/Core/offlineScanning.js`,
+  covered by six cases in `test/offline-scanning.test.mjs` (full replaces,
+  incremental overlays in place, empty is a no-op, an unknown code is
+  appended rather than dropped, a missing cache degrades safely, and merged
+  rows still classify identically). Full suite: 43 passing.
+- **Not measured against the live project.** The Supabase credentials
+  available in this session do not include the Proximity project
+  (`kjwttqmbcjvkivgmwuev`), so these numbers come from the repository plus
+  the row counts and payload sizes earlier sessions recorded in
+  `Supabase/README.md`, not from a fresh query or the API logs. Apply the
+  migration first, then compare **project-filtered** (not "All projects")
+  uncached egress after the next usage refresh before attributing what
+  remains.
+
 **2026-10-03 (pass 2) — scanner no longer downloads thumbnails per scan or per feed refresh**
 - After the first egress pass, live measurements showed thumbnails were still
   ~92% of every scan response (~9.3 KB) and every Recent Activity load
