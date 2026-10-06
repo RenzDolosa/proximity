@@ -196,3 +196,45 @@ test('rows that arrived through a delta still classify identically', () => {
   );
   assert.equal(classifyCachedScan('CARD-9', merged).direction, 'out'); // 3 is odd
 });
+
+// The property the in-memory fallback depends on (see
+// OfflineScanModel.fetchAndStorePhotoUpdates): when IndexedDB refuses the
+// write, the merged value held in memory must still be usable as the NEXT
+// sync's known-ids map. If it were not, every sync would send an empty map and
+// the server would return all 729 thumbnails (~12 MB) every time — silently,
+// every couple of minutes, forever.
+test('a merged photo cache can serve as the next request’s known-ids map', () => {
+  const merged = mergePhotoUpdates(null, {
+    full: true,
+    photos: [
+      { employee_id: 'e1', photo_file_id: 'f1', photo_thumb_b64: 'AAAA' },
+      { employee_id: 'e2', photo_file_id: 'f2', photo_thumb_b64: 'BBBB' },
+      // An employee whose thumbnail exists but has no file id — the server
+      // compares `known->>id IS DISTINCT FROM photo_file_id`, and null vs null
+      // is NOT distinct, so this must not be re-sent either.
+      { employee_id: 'e3', photo_file_id: null, photo_thumb_b64: 'CCCC' },
+    ],
+    removed: [],
+  });
+
+  // Every employee that has a thumbnail is represented in the id map, which is
+  // the whole payload of the next request.
+  assert.deepEqual(Object.keys(merged.fileIdsByEmployeeId).sort(), ['e1', 'e2', 'e3']);
+  assert.equal(merged.fileIdsByEmployeeId.e3, null);
+
+  // Feeding it back with nothing changed is a no-op, not a reset.
+  const unchanged = mergePhotoUpdates(merged, { full: false, photos: [], removed: [] });
+  assert.deepEqual(unchanged.byEmployeeId, merged.byEmployeeId);
+  assert.deepEqual(unchanged.fileIdsByEmployeeId, merged.fileIdsByEmployeeId);
+
+  // And a real change still applies on top of it.
+  const replaced = mergePhotoUpdates(merged, {
+    full: false,
+    photos: [{ employee_id: 'e2', photo_file_id: 'f2-new', photo_thumb_b64: 'ZZZZ' }],
+    removed: ['e1'],
+  });
+  assert.equal(replaced.byEmployeeId.e2, 'ZZZZ');
+  assert.equal(replaced.fileIdsByEmployeeId.e2, 'f2-new');
+  assert.equal('e1' in replaced.byEmployeeId, false);
+  assert.equal('e1' in replaced.fileIdsByEmployeeId, false);
+});
