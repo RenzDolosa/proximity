@@ -604,6 +604,65 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-06 — offline scanner thumbnails roughly halved, with a re-runnable recompressor for existing rows**
+
+`employees.photo_thumb_b64` was the largest thing in the database — 12.5 MB
+across 729 rows, ~17 KB each, a third of a 35 MB database on a 500 MB ceiling
+— and simultaneously the heaviest payload the kiosk offline cache downloads
+(`get_scanner_offline_photo_updates`). That size is therefore paid for twice:
+once as stored bytes, and again as egress on every fresh cache build.
+
+- **Encoder target cut: 480px/q0.80 → 400px/q0.62** (`OFFLINE_THUMB_MAX_DIMENSION`
+  / `OFFLINE_THUMB_QUALITY` in `JS/Utils/image.js`), and the Edge Function's
+  server-side Drive fallback moved from `sz=w480` to `sz=w400` to match.
+  **Quality was the wasteful axis, not dimension.** This image is not an
+  avatar: `.ss-photo-stage img` renders it at `min(82dvh, 82dvw)` — the
+  Scanner's full-screen match photo, the most prominent image in the app — so
+  480px was already being *upscaled* (~630 CSS px on a 1366×768 tablet, ~885
+  on a 1080p display). Upscaling destroys precisely the high-frequency detail
+  the extra quality bits encode, so q0.8 was paying for information the screen
+  throws away. Dimension came down only slightly; quality came down sharply.
+- **A constant change alone shrinks nothing**, which is the part that matters:
+  it only affects future uploads, leaving all 729 existing rows at their
+  original size. So **Settings → Offline scanner thumbnails** (admin-only) now
+  re-encodes the stored bytes in place — decoding each row's own base64 through
+  `<canvas>` rather than re-fetching from Drive, which a cross-origin canvas
+  cannot read (the same no-cors wall that sank an earlier bulk prefetch, see
+  the 2026-09-18 entry) and which would also fail for rows whose Drive file is
+  gone.
+- **Safe to re-run, by construction.** `pickSmallerThumb()` keeps the ORIGINAL
+  unless re-encoding saves at least 10%, so a second pass finds nothing to gain
+  and writes nothing. This is not a nicety: re-encoding is not monotonically
+  shrinking — a row already under the target gets scaled back *up* to it and
+  can come back larger — and every pass costs a generation of lossy quality.
+  An empty or failed encode can likewise never blank a real photo.
+- **Measured before anything is downloaded.** `get_offline_thumb_stats()`
+  reports the column's size distribution and how many rows exceed the target in
+  a few hundred bytes; `get_thumbs_to_recompress()` then returns only the
+  over-target rows, keyset-paged on `id`. Measuring by fetching the column
+  would have spent the exact resource the panel exists to conserve, and
+  downloading already-small rows just to decline to change them would be pure
+  egress. The stats RPC is `SECURITY DEFINER` (catalog-free, admin-gated); the
+  row-returning one is deliberately `SECURITY INVOKER` so employee photos stay
+  subject to the caller's own RLS.
+- Per-row failures are non-fatal and counted: an undecodable row or an
+  RLS-rejected write must not strand the other 700. Only a failure to read a
+  *page* ends the run.
+- Recompressing bumps `updated_at` on each rewritten row, so a full pass costs
+  one small scanner lookup-cache resync (no photos in that delta). Kiosks keep
+  the thumbnails they already hold — the photo cache is keyed on
+  `photo_file_id`, which this does not touch — so this deliberately does *not*
+  push megabytes at every kiosk for a photo they can already display; they
+  adopt the smaller ones on their next full rebuild.
+- `test/image.test.mjs` (new) pins the byte arithmetic and every
+  keep-the-original rule. The encoders themselves need `<canvas>`, which Node
+  has none of; the decisions *around* the encoder were factored out precisely
+  so they could be tested rather than only ever checked by hand in a browser.
+
+Projected recovery is roughly half of the over-target bytes, but that is a
+projection from the target, not a measurement — the actual saving depends on
+each photo's own content, and the panel reports what the run really achieved.
+
 **2026-10-05 (removal) — `project-usage` Edge Function deleted; Usage panel is now Database usage**
 - Deleted `Supabase/functions/project-usage/` and the `MANAGEMENT_API_TOKEN`
   secret it required. The function could never work: Supabase publishes no
