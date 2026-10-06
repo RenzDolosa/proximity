@@ -573,6 +573,43 @@ branch protection before relying on them as merge gates.
   silently flip IN/OUT direction; see Supabase/README.md's change log for
   both). `employees.remarks_log` is still open — 40 entries total across
   723 employees as of 2026-10-01, not yet a real growth problem.
+- **Reusing an `employee_code` after someone resigns** — raised 2026-10-06, not
+  implemented. The business practice is to recycle codes when staff leave, but
+  `employees_employee_code_key UNIQUE (employee_code)` makes that impossible
+  today. **Do not simply drop the constraint.** Three things break:
+  - **The XLSX import silently skips the new hire.** `DirectoryPage.js:358`
+    treats an already-present `employee_code` as "already an employee on file"
+    and increments `skippedCount` — deliberately *not* an error, since in every
+    other case it means a harmless re-import. Re-hire into a recycled code,
+    import the roster, and the new person is simply never created, with no
+    message. This has to become status-aware or it swallows re-hires.
+  - **Every human-facing export becomes ambiguous.** The database itself stays
+    correct — `scan_events.employee_id` and `scan_logs` are keyed by UUID and
+    `proximity_code`, never by `employee_code` — but Attendance, On-site,
+    Proximity, Directory and the Audit log all *display* `employee_code` as the
+    identity. A report spanning the handover shows the same code twice under two
+    names, or attributes the predecessor's history to the successor.
+  - **Typo protection is lost permanently.** A constraint cannot distinguish
+    intentional reuse from a mistyped code, and in an access-control system a
+    duplicate silently merges two people's scans. Dropping a UNIQUE is also a
+    one-way door: once duplicates exist it cannot be re-added without resolving
+    them.
+
+  The structurally correct fix is to narrow the constraint rather than remove
+  it, which the schema already supports since `resigned` is a valid
+  `employees.status` (added 2026-10-03):
+
+  ```sql
+  ALTER TABLE public.employees DROP CONSTRAINT employees_employee_code_key;
+  CREATE UNIQUE INDEX employees_employee_code_current_key
+    ON public.employees (employee_code) WHERE status <> 'resigned';
+  ```
+
+  A partial unique index permits reuse **only** once the previous holder is
+  marked `resigned`, while still making accidental duplicates among current
+  staff impossible. It encodes the actual rule — *a code identifies one current
+  employee* — instead of either extreme. Ship it together with the two client
+  changes above, not on its own.
 - Replace the placeholder SVGs in `Public/Assets/Favicon` and
   `Public/Assets/Icon` with real brand assets.
 - The kiosk's Supabase session token still needs network to silently

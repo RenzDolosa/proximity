@@ -125,6 +125,59 @@ These are projections. §5 is how to confirm them.
 
 ## 4. Considered and rejected
 
+### Moving `scan_events` / `scan_logs` into Google Drive as JSON files
+
+Asked 2026-10-06: store scan history in Drive as `<name>.jsonb`, mirroring the
+employee-photo filename convention, to cut egress and Log Ingestion.
+
+**Rejected.** The instinct — get the big append-only dataset out of the metered
+place — is sound, but it is aimed at the wrong resource, and the move would make
+three things worse.
+
+- **Log Ingestion is unrelated to application tables.** It measures platform
+  observability volume: Postgres log lines, API/edge logs, auth logs. Writing a
+  `scan_events` row generates no log ingestion beyond the one request line for
+  the call that wrote it. The driver actually under this app's control is
+  **`log_min_duration_statement = 200`** on `anon`/`authenticated`/`service_role`
+  (see Supabase/README.md → Query performance): every statement at or over 200 ms
+  is written to the Postgres log *with its full statement text*. Raising that
+  threshold, or resetting it once a performance investigation is finished, is the
+  direct lever. Moving table data to Drive does not touch it.
+- **`scan_logs` already costs almost no egress.** It is deliberately never sent
+  to the client in bulk: excluded from `DIRECTORY_COLUMNS`, excluded from the
+  scanner offline cache, and `get_onsite_roster_delta()` returns only the
+  `last_in_at` / `last_scanner_id` it extracts server-side from `scan_logs -> -1`.
+  `ScanLogModal` fetches one employee's log on demand. So this is a **database
+  size** lever, not an egress one — and size relief already exists
+  (`archive_old_scan_events()`, `trim_employee_scan_logs()`).
+- **A file cannot be queried, and that is fatal.** The on-site roster, attendance
+  report, IN/OUT direction and Dashboard all filter and aggregate scan history
+  *server-side*. A per-employee JSON blob in Drive can only be fetched whole, so
+  building the roster would mean ~729 Drive fetches instead of one SQL query. And
+  egress would **rise**: a browser cannot read Drive cross-origin (the same
+  opaque-response wall that sank the bulk photo prefetch, README 2026-09-18), so
+  the bytes must route through an Edge Function — and the function→client leg is
+  billed Supabase egress regardless of where the data came from.
+- **It breaks the transaction that keeps IN/OUT correct.** A scan today is one
+  transaction: insert `scan_events` → `trg_scan_events_append_log` appends to
+  `scan_logs` → increments `scan_parity_count`. Split across Postgres and Drive, a
+  partial failure leaves counter and log disagreeing, which **flips IN/OUT
+  direction** for that employee — precisely the failure the 2026-10-01
+  `scan_parity_count` work exists to prevent. Drive offers no transaction to
+  enlist in.
+- **It is an access-control audit trail.** Drive gives no RLS, no referential
+  integrity, a single OAuth refresh token as the entire access boundary, and
+  link-sharing exposure if one setting slips. `scan_events` has
+  `scan_events_select_scope`. Downgrading the record of who entered which door
+  and when is the wrong place to economise.
+
+**Instead:** for size, the archival and trim jobs already running. For egress,
+§3. For structural relief, `LOCAL_DATABASE_ARCHITECTURE.md` — keeping Postgres as
+Postgres on a LAN removes the traffic by moving the *queries*, not by moving the
+data somewhere that cannot answer them.
+
+
+
 - **Lengthen the Dashboard poll (30 s → 60 s).** Halves the symptom, keeps the
   defect, and makes a live operations screen less live. A 13× cut that *improves*
   the page beats a 2× cut that degrades it.
