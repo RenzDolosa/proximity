@@ -20,7 +20,7 @@ supabase functions download upload-employee-photo --project-ref kjwttqmbcjvkivgm
 | Table                       | Purpose                                                                                                                                                                                                    |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `profiles`                   | One row per login account (`auth.users` 1:1). `role` = `admin` / `manager` / `viewer`. `access_scope` = `all` / `employee_manager` / `scanner` — which sections the account can open at all. `is_active` — soft-disable; checked at boot, force signs out if false or missing. |
-| `employees`                  | Master employee record. Requires `employee_code` **and** `proximity_card_id` (NOT NULL + unique — every employee has exactly one card). `status` = `active`/`inactive`/`suspended`/`resigned`. Revoking an assigned proximity card updates this status and appends it, plus any additional remarks, to `remarks_log` in the same database transaction. `scan_logs` jsonb — append-only, written by `trg_append_scan_log` on every matched scan, and trimmed of entries older than 180 days by `trim_employee_scan_logs()` on a daily schedule (added 2026-10-01; see that function's entry and the change log). `scan_parity_count` integer (added 2026-10-01) — a durable, only-ever-incrementing counter that `trg_append_scan_log()` now reads for IN/OUT parity instead of `jsonb_array_length(scan_logs)`, so trimming `scan_logs` can never shift any future scan's direction; backfilled at migration time from each employee's count then, and never decreased afterward, including by the trim job. `remarks_log` jsonb — append-only notes, written via `add_employee_remark()` and the card-revocation RPC. `photo_url` / `photo_file_id` — Drive-hosted photo; `photo_file_id` changes to a fresh UUID on every replace (see Edge Functions below). `photo_thumb_b64` — small base64 thumbnail (added 2026-09-18), fetched server-side by `upload-employee-photo` at upload time; format is whatever Drive's `/thumbnail` endpoint returns (PNG or JPEG, not always JPEG despite this column's original 2026-09-18 write-up assuming so — client-side callers now sniff the real format rather than trusting a hardcoded label, see root `README.md`'s 2026-09-19 change log entry); feeds the offline Scanner's `offlineAvatarHTML()` with zero network requests — see "Offline scanning" below. |
+| `employees`                  | Master employee record. Requires `employee_code` **and** `proximity_card_id` (both NOT NULL; `proximity_card_id` unique — every employee has exactly one card). `employee_code` is unique only among **non-resigned** employees, via the partial index `employees_employee_code_current_key` (2026-10-06), so a code can be recycled once its holder is marked `resigned`. `status` = `active`/`inactive`/`suspended`/`resigned`. Revoking an assigned proximity card updates this status and appends it, plus any additional remarks, to `remarks_log` in the same database transaction. `scan_logs` jsonb — append-only, written by `trg_append_scan_log` on every matched scan, and trimmed of entries older than 180 days by `trim_employee_scan_logs()` on a daily schedule (added 2026-10-01; see that function's entry and the change log). `scan_parity_count` integer (added 2026-10-01) — a durable, only-ever-incrementing counter that `trg_append_scan_log()` now reads for IN/OUT parity instead of `jsonb_array_length(scan_logs)`, so trimming `scan_logs` can never shift any future scan's direction; backfilled at migration time from each employee's count then, and never decreased afterward, including by the trim job. `remarks_log` jsonb — append-only notes, written via `add_employee_remark()` and the card-revocation RPC. `photo_url` / `photo_file_id` — Drive-hosted photo; `photo_file_id` changes to a fresh UUID on every replace (see Edge Functions below). `photo_thumb_b64` — small base64 thumbnail (added 2026-09-18), fetched server-side by `upload-employee-photo` at upload time; format is whatever Drive's `/thumbnail` endpoint returns (PNG or JPEG, not always JPEG despite this column's original 2026-09-18 write-up assuming so — client-side callers now sniff the real format rather than trusting a hardcoded label, see root `README.md`'s 2026-09-19 change log entry); feeds the offline Scanner's `offlineAvatarHTML()` with zero network requests — see "Offline scanning" below. |
 | `proximity_cards`             | Standalone card inventory. Does **not** require an employee — a card can be issued and sit unassigned until linked from Employee Manager. `is_active` tracks whether the card is usable; optional `revoke_reason` stores additional remarks, while an assigned employee's selected status is recorded on the employee and in `remarks_log`. |
 | `scan_events`                 | FK to `employees` and `proximity_cards`. One row per scan of a **recognised** card: `matched`, `inactive_card`, `inactive_employee`, or `unassigned_card`. Scans of a code that matches no card (`unmatched`) are **not stored** — `scan_proximity_code()` skips the insert (`if v_result <> 'unmatched'`), so `unmatched` rows never exist today even though the column's vocabulary allows it. (This file previously said every attempt was logged; corrected 2026-09-28 against the live function body. Whether to start storing them is a product decision — it means unbounded inserts from junk scans — not something a docs fix should decide.) Direction (IN/OUT) is **not a column here**: `trg_append_scan_log()` derives it from the parity of the employee's `scan_logs` length at insert time and stores it only in `employees.scan_logs`. |
 | `scan_events_archive`        | Added 2026-09-30. Same shape as `scan_events`, minus foreign keys (deliberately — see below) plus `archived_at`. Rows older than 180 days are moved here by `archive_old_scan_events()` on a daily `pg_cron` schedule, so `scan_events` itself stays small as it accumulates (10,368 rows after 3 days live — see root `README.md`'s change log). Not a soft-delete: nothing is lost, `get_all_scan_events()` reads both tables so an admin's date-range export still reaches old rows. No FK to `employees`/`proximity_cards` (unlike `scan_events`, which cascades on delete) — an audit trail that disappeared when its parent row did would defeat the point of archiving it. Same read policy as `scan_events` (`is_admin() OR can_view_scanner()`); no write policy at all, since only `archive_old_scan_events()` (`SECURITY DEFINER`) ever writes here. |
@@ -93,6 +93,39 @@ an admin swaps it out.
   `seconds_on_site` and `is_stale` (IN older than the window). Capped at
   10,000 rows. Gate: `is_admin_or_manager()`. The client counts only
   `status = 'active'` rows as on site, matching `get_dashboard_stats()`.
+  **No longer what the Dashboard's 30-second poll calls** — see
+  `get_onsite_roster_delta()` directly below. Still live, still the fallback, and
+  still what the periodic full resync would use if the delta were unavailable.
+- **`get_onsite_roster_delta(p_since timestamptz, p_stale_hours default 16)`** —
+  added 2026-10-06. Returns `{ full, cursor, stale_hours, rows }`.
+  `p_since` NULL ⇒ `full` true and `rows` is the complete current roster (client
+  replaces outright). Otherwise `rows` is every employee whose `updated_at` is
+  past `p_since` — **including ones who have left the roster** — each carrying
+  `on_roster`; the client upserts where true and drops where false. That flag is
+  the only way a delta can express a removal: someone who scans OUT does not
+  appear as a deleted row, they simply stop satisfying the roster predicate,
+  which a timestamp cursor can never observe.
+  Row shape is `{ id, full_name, employee_code, department, status, last_in_at,
+  last_scanner_id, on_roster }`. **`seconds_on_site` and `is_stale` are
+  deliberately absent** — both are pure functions of `last_in_at`, and `is_stale`
+  flipping with the clock was the entire reason the client used to refetch the
+  whole roster every 5 minutes. `stale_hours` is returned instead, once, so the
+  client's rule and the server's are the same rule
+  (`Utils/dashboard.js`'s `deriveRosterRow`).
+  `cursor` is lagged one minute behind `now()`, same guard as
+  `get_scanner_offline_cache_delta()`: a transaction committing after `now()` is
+  read but before the client stores the cursor would otherwise be skipped
+  forever. The overlap re-sends a few rows, and the client's merge is idempotent.
+  A full sync filters to on-roster rows only; an incremental one does not — for a
+  first sync the ~500 off-roster employees would be pure waste, for an
+  incremental one they are the point. Capped at 10,000 rows like its predecessor.
+  `SECURITY INVOKER` (so `employees` is read under the caller's RLS) with an
+  `is_admin_or_manager()` check on top. `PUBLIC`/`anon` revoked.
+  **Why it exists:** `roster_version` in `get_dashboard_pulse()` could never skip
+  the roster during working hours, because every scan bumps
+  `employees.updated_at`. This was ~90% of a 13.95 GB/month egress bill against a
+  5 GB quota — see `docs/EGRESS_BUDGET.md`. Client:
+  `Models/DashboardModel.js`'s `rosterDelta()`.
 - **`get_alerts(p_limit default 100, p_include_acknowledged default false)`**
   → jsonb array (newest first, each row plus `acknowledged_by_name`; limit
   clamped 1..500), **`get_unread_alert_count()`** (returns 0 for
@@ -945,6 +978,70 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-10-06 — `employee_code` reusable after a resignation (`20261006140000_employee_code_reuse_after_resign.sql`, NOT applied — apply by hand)**
+
+Codes are recycled when staff leave, which `employees_employee_code_key UNIQUE`
+forbade. Dropping that constraint would also discard protection against a
+mistyped code — which silently merges two people's scans in an access-control
+system — and a UNIQUE cannot be re-added once duplicates exist. So it is
+**narrowed, not removed**:
+
+```sql
+ALTER TABLE public.employees DROP CONSTRAINT employees_employee_code_key;
+CREATE UNIQUE INDEX employees_employee_code_current_key
+  ON public.employees (employee_code) WHERE status <> 'resigned';
+```
+
+A partial unique index states the real rule — *a code identifies one current
+employee* — and needed no new status, since `resigned` has been valid since
+20261003060125.
+
+**No companion lookup RPC, deliberately.** Both callers that need to know whether
+a code is free (the XLSX import and the employee modal) run on Employee Manager,
+which already holds the whole directory including `status`, so they decide locally
+via `JS/Utils/employeeCode.js`. A per-row RPC would have added a round trip per
+import line for data already in memory. The index is the enforcement; the client
+check only buys a better error message.
+
+**Nothing in the schema keys on `employee_code`** — `scan_events` uses
+`employee_id`, `scan_logs` uses `proximity_code` — so history stays attributed
+correctly across a handover. The exposure is entirely in human-facing exports,
+which display the code as the identity; the Attendance export now carries
+`employee_id` alongside it.
+
+**2026-10-06 — `get_onsite_roster_delta()` (`20261006120000_onsite_roster_delta.sql`, NOT applied — apply by hand)**
+
+`roster_version`, added below on 2026-10-05, could never skip the roster during
+working hours. It is `md5(count(*) || max(updated_at))`, and every matched scan
+runs `UPDATE public.employees SET scan_logs = ..., scan_parity_count = ...` via
+`trg_scan_events_append_log`, which trips `trg_employees_updated_at` and moves
+`max(updated_at)`. So the version is in practice *"has anyone scanned in the last
+30 seconds?"* — always yes during a shift. The full roster went out every 30
+seconds per open tab: ~8.4 MB/hour each, roughly 90% of a 13.95 GB/month bill
+against a 5 GB quota. See `docs/EGRESS_BUDGET.md`.
+
+The new function returns only employees whose `updated_at` is past `p_since`,
+each with an **`on_roster`** flag. Full contract in the RPC section above. Three
+points worth repeating here:
+
+- **`on_roster` is what makes removals expressible.** An employee who scans OUT
+  does not appear as a deleted row — they stop satisfying the roster predicate,
+  which a timestamp cursor cannot observe. Without the flag the Dashboard would
+  show people as on site until the next full resync.
+- **A full sync filters to on-roster rows; an incremental one does not.** For a
+  first sync the ~500 employees who are not on site would be pure waste, worse
+  than the function this replaces. For an incremental sync they are the entire
+  point.
+- **`seconds_on_site` and `is_stale` are gone on purpose.** Clock-derived, so the
+  client computes them; `stale_hours` is returned once so both halves share one
+  rule. That is what let the client's unconditional 5-minute refetch go away.
+
+`get_onsite_roster()` stays live and unchanged as the fallback for a client
+deployed ahead of this migration. Because `DashboardPage.js` latches that
+fallback on `PGRST202`, **an unapplied migration is indistinguishable from no
+improvement** — check `list_migrations` before concluding the change did not
+work.
 
 **2026-10-06 — thumbnail recompression RPCs (`20261006000000_offline_thumb_recompression.sql`, NOT applied — apply by hand)**
 

@@ -235,6 +235,11 @@ function exportRows() {
       sheetName: 'Attendance',
       columns: [
         { key: 'work_date', label: 'Date' },
+        // employee_code is recycled when staff resign
+        // (employees_employee_code_current_key), so across a handover the same
+        // code can appear under two names in one report. employee_id is the
+        // only key that stays unambiguous — group or pivot on it, not the code.
+        { key: 'employee_id', label: 'Employee ID', text: true },
         { key: 'employee_code', label: 'Employee code', text: true },
         { key: 'full_name', label: 'Employee' },
         { key: 'department', label: 'Department' },
@@ -247,6 +252,7 @@ function exportRows() {
       ],
       rows: rows.map((r) => ({
         work_date: r.work_date,
+        employee_id: r.employee_id || '',
         employee_code: r.employee_code,
         full_name: r.full_name,
         department: r.department || '',

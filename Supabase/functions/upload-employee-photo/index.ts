@@ -1,74 +1,40 @@
 // upload-employee-photo Edge Function
 //
-// POST { action: "upload", image_base64: string, filename: string, mime_type?: string, old_file_id?: string|null, thumb_base64?: string|null, thumb_mime_type?: string|null }
-//   -> { url: string, file_id: string, thumb_b64: string|null }
-//   thumb_b64: normally an echo of the caller's thumb_base64 — a small
-//   (~400px) .webp thumbnail the client already generated client-side via
-//   Utils/image.js's fileToOfflineThumbWebp() — for the client to store
-//   as employees.photo_thumb_b64. If thumb_base64 is omitted (an older
-//   client) or looks malformed, falls back to a server-side Drive
-//   thumbnail fetch instead — see README.md's 2026-09-18/09-19 change log
-//   entries for why that used to be the only mechanism, and isn't
-//   guaranteed .webp the way the client-side path is. null if neither
-//   produced anything usable (logged, never fails the upload itself —
-//   url/file_id are unaffected either way).
-// POST { action: "delete", old_file_id: string }
-//   -> { ok: true }
-// POST { action: "quota" }
-//   -> { usage: number, limit: number|null, usageInDrive: number }
-//   Bytes used / total on the connected Google account, straight from
-//   Drive's own `about.get`. `limit` is null for accounts with no storage
-//   cap (some Google Workspace plans) rather than a number that would
-//   misread as "0 bytes available". Read by Settings' "Employee photos"
-//   capacity panel (JS/Features/Settings/SettingsPage.js).
+// POST { action: "upload", image_base64, filename, mime_type?, old_file_id?,
+//        thumb_base64?, thumb_mime_type? }
+//   -> { url, file_id, thumb_b64 }
+//   thumb_b64 is normally an echo of the caller's ~400px .webp thumbnail
+//   (Utils/image.js's fileToOfflineThumbWebp) for storing as
+//   employees.photo_thumb_b64. Falls back to a server-side Drive thumbnail fetch
+//   when the client sends none, which is NOT guaranteed .webp. null if neither
+//   worked — logged, but never fails the upload.
+// POST { action: "delete", old_file_id } -> { ok: true }
+// POST { action: "quota" } -> { usage, limit, usageInDrive }
+//   Drive's own about.get. `limit` is null for uncapped Workspace accounts, so
+//   the client can tell "unlimited" from "full". Read by Settings.
 //
-// Errors: { error: string, code?: string }. `code` is only set for failures the
-// caller can't fix by retrying:
-//   503 google_reauth_required — Google rejected the stored refresh token
-//        (invalid_grant: revoked, expired, or the consent screen is in
-//        "Testing"). Access tokens renew silently on every call; a dead
-//        REFRESH token can only be replaced by a human re-consenting once —
-//        see README.md → "Refresh token stops working?".
-//   503 google_client_invalid — Google rejected the OAuth client itself
-//        (invalid_client / unauthorized_client: client deleted, secret rotated
-//        or mistyped). Needs the same admin fix path as above.
-//   Everything else stays a plain 4xx/500 with just `error`.
+// Errors: { error, code? }. `code` marks failures no retry can fix:
+//   503 google_reauth_required — invalid_grant: the refresh token is revoked or
+//        expired (a consent screen left in "Testing" caps them at 7 days). Only
+//        a human re-consenting can replace it; see README.
+//   503 google_client_invalid — invalid_client/unauthorized_client: the OAuth
+//        client itself was deleted or its secret rotated.
 //
-// Auth is per-action, not a single blanket check: "quota" is read-only
-// (just tells the caller how much room is left) so it's allowed for
-// anyone with Settings access at all — including Viewers — via
-// can_view_settings(); "upload"/"delete" actually write to Drive, so they
-// keep the stricter is_admin_or_manager() check this function always had.
-// Both are re-checked server-side against the caller's own JWT (never a
-// service role), same pattern as proximity-scan.
+// Auth is per-action, both re-checked against the caller's own JWT, never a
+// service role: "quota" is read-only so can_view_settings() suffices (Viewers
+// included), while "upload"/"delete" write to Drive and need
+// is_admin_or_manager().
 //
-// mime_type should be the ACTUAL type of the bytes in image_base64 (e.g.
-// what Blob.type reported after client-side conversion) — canvas.toBlob()
-// can silently fall back to a different format than requested, so the
-// client can't assume it always produced .webp, and neither can this
-// function. Falls back to image/webp only if the caller omits mime_type.
+// mime_type must be the ACTUAL type of image_base64 — canvas.toBlob() can
+// silently produce a different format than requested, so neither side may assume
+// .webp.
 //
-// Storage: Google Drive, authenticated as a real Google account via OAuth
-// (NOT a service account). Google service accounts have zero storage quota
-// of their own — they can only write into Shared Drives or act via
-// domain-wide delegation, both of which require a paid Google Workspace
-// account. For a personal Gmail account, the only way for server-side code
-// to write into "My Drive" is to act as that real account, so this function
-// holds a long-lived OAuth refresh token for that account and exchanges it
-// for a short-lived access token on each call.
-//
-// Required Edge Function secrets (set via `supabase secrets set` or the
-// Dashboard, NOT committed to the repo):
-//   GOOGLE_OAUTH_CLIENT_ID       OAuth 2.0 Client ID (Web application type)
-//   GOOGLE_OAUTH_CLIENT_SECRET   its client secret
-//   GOOGLE_OAUTH_REFRESH_TOKEN   a refresh token obtained once for the
-//                                Google account that owns the target folder
-//   GOOGLE_DRIVE_FOLDER_ID       the Drive folder to upload into (must be
-//                                owned by, or shared as Editor with, that
-//                                same account)
-//
-// See Supabase/functions/upload-employee-photo/README.md for the full
-// one-time Google Cloud + OAuth Playground setup to get the refresh token.
+// Storage is Google Drive via a real account's OAuth refresh token, NOT a service
+// account: service accounts have no storage quota of their own and can only write
+// to Shared Drives or use domain-wide delegation, both of which need paid
+// Workspace. Required secrets (set in the Dashboard, never committed):
+// GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_OAUTH_REFRESH_TOKEN,
+// GOOGLE_DRIVE_FOLDER_ID. See this folder's README for the one-time setup.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -158,23 +124,17 @@ Deno.serve(async (req: Request) => {
         return json({ error: "Photo is too large (max 8MB)." }, 400, cors);
       }
 
-      // Trust whatever mime type the client actually produced (canvas.toBlob
-      // can silently fall back to a different format than requested — see
-      // Utils/image.js) rather than assuming .webp. Falls back to webp only
-      // if an older client doesn't send mime_type at all.
+      // Trust the mime type the client actually produced, not .webp — see the
+      // header. Defaults to webp only when an older client omits it.
       const contentType = typeof mime_type === "string" && EXTENSION_BY_MIME[mime_type] ? mime_type : "image/webp";
       const ext = EXTENSION_BY_MIME[contentType];
 
       const safeName = (filename || "employee-photo").replace(/[^a-zA-Z0-9._-]/g, "_");
 
-      // Deleting the OLD photo (when replacing one) doesn't depend on the
-      // NEW upload finishing — both only need accessToken. Running it
-      // concurrently instead of after the upload+make-public sequence saves
-      // a full Google API round trip off the critical path. It's already
-      // best-effort (errors swallowed), so it doesn't need to block the
-      // response at all: kick it off, let it finish in the background via
-      // EdgeRuntime.waitUntil (falls back to a bounded await if that global
-      // isn't available in this runtime).
+      // Deleting the old photo needs nothing from the new upload, so it runs
+      // concurrently — and since it is already best-effort, hand it to
+      // EdgeRuntime.waitUntil so it leaves the response path entirely. Falls back
+      // to a bounded await where that global is unavailable.
       let deleteOldPromise: Promise<void> = Promise.resolve();
       if (old_file_id) {
         deleteOldPromise = deleteDriveFile(old_file_id, accessToken);
@@ -185,23 +145,15 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // A random suffix keeps every upload's Drive filename unique even
-      // when the caller reuses the same base name (e.g. an employee_code)
-      // across repeated uploads/replacements — avoids any ambiguity in
-      // Drive when browsing the folder directly.
+      // A random suffix keeps Drive filenames unique even when the caller reuses
+      // a base name (employee_code is recycled after a resignation).
       const fileId = await uploadToDrive(bytes, `${safeName}-${crypto.randomUUID().slice(0, 8)}.${ext}`, contentType, folderId, accessToken);
       await makeFilePublic(fileId, accessToken); // "anyone with the link can view"
       await deleteOldPromise; // no-op if EdgeRuntime.waitUntil already took it, otherwise waits for the best-effort delete
 
-      // Offline-Scanner thumbnail: PREFER whatever the client already sent
-      // (Utils/image.js's fileToOfflineThumbWebp(), a guaranteed-.webp
-      // client-side canvas resize — see EmployeeModal.js) over fetching
-      // one ourselves. Sanity-checked, not just trusted blindly: capped at
-      // 1MB (a 400px webp thumbnail has no legitimate reason to be
-      // anywhere near that; a bloated value here would otherwise ride
-      // along in get_scanner_offline_photos() for every kiosk sync) and
-      // ignored (falls through to the server-side fetch below) if it's
-      // clearly not real image bytes.
+      // Prefer the client's own .webp thumbnail over fetching one. Sanity-checked
+      // rather than trusted: a bloated value here would ride along in every
+      // kiosk's photo sync forever.
       const MAX_CLIENT_THUMB_BYTES = 1 * 1024 * 1024;
       let thumbB64: string | null = null;
       if (typeof thumb_base64 === "string" && thumb_base64.length > 0) {
@@ -217,31 +169,13 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // Fallback only: an older client that hasn't picked up
-      // fileToOfflineThumbWebp() yet, or one where that client-side
-      // conversion itself failed (see EmployeeModal.js's try/catch around
-      // it). This is the ORIGINAL mechanism this feature shipped with —
-      // see README.md's 2026-09-18 change log entry for the full
-      // reasoning on why it's a server-side fetch (avoiding the same
-      // opaque-response no-cors problem a bulk client-side prefetch had).
-      // w400 (bumped up from the original w96 — see the same change log's
-      // 2026-09-19 follow-up entry — then trimmed from w480 on 2026-10-06
-      // when the client-side target was cut to halve these bytes) roughly
-      // matches fileToOfflineThumbWebp()'s own
-      // OFFLINE_THUMB_MAX_DIMENSION, so a
-      // fallback-sourced thumbnail doesn't look visibly blurrier than a
-      // client-sourced one once StandaloneScanner.js blows it up to fill
-      // .ss-photo-stage. Bounded to THUMB_FETCH_TIMEOUT_MS: a file Drive
-      // JUST finished receiving doesn't always have a thumbnail ready to
-      // serve instantly — its thumbnail generation can lag the upload by
-      // a second or more. Without a timeout, that lag sat directly in the
-      // upload's own response time, making every single upload feel slow
-      // regardless of roster size (reported directly as "upload speed
-      // slow" — this wasn't about how many employees have photos, it was
-      // this one synchronous fetch on the critical path of every upload).
-      // A bounded wait keeps the worst case predictable; a timeout just
-      // means thumb_b64 comes back null this time, same as any other
-      // best-effort failure — nothing else about the upload is affected.
+      // Fallback for a client that sent no thumbnail, or whose conversion failed.
+      // w400 matches OFFLINE_THUMB_MAX_DIMENSION so a fallback thumbnail is no
+      // blurrier than a client one on the kiosk's full-screen photo stage.
+      //
+      // Timed out because Drive's thumbnail generation can lag an upload it just
+      // received by a second or more, and that lag sat directly in every upload's
+      // response time. A timeout just yields null, like any best-effort failure.
       if (thumbB64 === null) {
         const THUMB_FETCH_TIMEOUT_MS = 2500;
         try {
@@ -254,26 +188,17 @@ Deno.serve(async (req: Request) => {
             console.warn(`Offline-thumbnail fetch for Drive file ${fileId} returned HTTP ${thumbRes.status} — photo_thumb_b64 will be null for this employee.`);
           }
         } catch (thumbErr) {
-          // Best-effort, deliberately: the employee's photo is already fully
-          // uploaded and public at this point. Missing an offline thumbnail
-          // means that one employee falls back to the default avatar during
-          // an offline scan (same as before this feature existed) — it must
-          // never fail the whole upload. Covers both a timeout (AbortError,
-          // from THUMB_FETCH_TIMEOUT_MS above) and any other network error.
+          // The photo is already uploaded and public by now; a missing thumbnail
+          // only costs this one employee their offline photo, so it must never
+          // fail the upload. Covers both the timeout and any network error.
           console.warn(`Offline-thumbnail fetch for Drive file ${fileId} threw (or timed out after ${THUMB_FETCH_TIMEOUT_MS}ms) — photo_thumb_b64 will be null for this employee.`, thumbErr);
         }
       }
 
-      // drive.google.com/uc?export=view is deprecated for hot-linking and
-      // does not reliably serve an inline image response for every content
-      // type (webp in particular tends to come back as a download/HTML
-      // interstitial instead of the raw bytes an <img> tag needs) — that's
-      // why photos stopped rendering in the employee avatar right after the
-      // Content-Type fix started sending real webp instead of a mislabeled
-      // fallback. /thumbnail is the format Drive's own UI uses for inline
-      // previews and reliably works for any image type it can generate a
-      // preview for, including webp; sz=w512 is plenty for an avatar shown
-      // at 44-64px even on a retina display.
+      // /thumbnail, NOT uc?export=view: the latter is deprecated for hot-linking
+      // and returns a download interstitial rather than raw bytes for webp, which
+      // is why avatars broke once uploads started sending real webp. w512 is
+      // plenty for a 44-64px avatar on a retina display.
       const url = `https://drive.google.com/thumbnail?id=${fileId}&sz=w512`;
       return json({ url, file_id: fileId, thumb_b64: thumbB64 }, 200, cors);
     }
@@ -306,21 +231,12 @@ class GoogleAuthError extends Error {
 }
 
 // ---- Google OAuth (refresh token -> short-lived access token) ----
-// Much simpler than the service-account JWT-signing flow it replaces: no
-// RS256/Web Crypto involved, just a single token-refresh POST.
 
-// Module-scope, not per-request: a Supabase Edge Function instance stays
-// "warm" and reuses the same JS runtime (and therefore the same
-// module-level state) across multiple invocations that arrive close
-// together — a burst of uploads, or Settings' quota panel polling. Google
-// access tokens are normally valid for an hour; refetching one on EVERY
-// single call, every time, was one more full network round trip sitting
-// in the critical path of every upload (reported as "upload slow" even
-// after the thumbnail-fetch timeout fix below addressed the other half
-// of that). Cached here with a safety margin before the real expiry, and
-// scoped to the specific refresh token it was issued for — if that env
-// var is ever rotated, the cache correctly misses and re-fetches rather
-// than serving a token for the wrong account.
+// Module-scope, not per-request: a warm function instance reuses this across
+// invocations arriving close together, so a burst of uploads does not each pay a
+// full token round trip on the critical path. Access tokens last an hour. Keyed
+// by the refresh token it was issued for, so rotating that env var misses the
+// cache instead of serving a token for the wrong account.
 let cachedToken: { accessToken: string; expiresAt: number; forRefreshToken: string } | null = null;
 const TOKEN_EXPIRY_SAFETY_MARGIN_MS = 60_000; // refresh a minute early rather than risk a request landing right at expiry
 
@@ -348,19 +264,15 @@ async function getGoogleAccessToken(clientId: string, clientSecret: string, refr
       grant_type: "refresh_token",
     }),
   });
-  // .catch: a non-JSON body (proxy/HTML error page) must not mask the real
-  // HTTP status behind a JSON parse exception.
+  // .catch so a non-JSON body (proxy/HTML error page) cannot mask the real status.
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const googleError = String(data.error || "");
-    // Logged with Google's own wording: the response to the browser is
-    // deliberately friendlier, and function logs are where an admin looks
-    // to confirm which failure this really was. Contains no secrets.
+    // Google's own wording goes to the logs (no secrets in it); the browser gets
+    // the friendlier message below.
     console.error(`Google token refresh failed (HTTP ${res.status}): ${googleError || "no error code"} — ${data.error_description || "no description"}`);
-    // A revoked/expired refresh token (e.g. the OAuth consent screen was
-    // left in "Testing" mode, which caps tokens at 7 days — see README)
-    // shows up here as invalid_grant. There is no server-side way to mint a
-    // replacement: Google requires an interactive consent for that.
+    // invalid_grant means the refresh token is dead and no server-side call can
+    // mint a replacement — Google requires interactive consent.
     if (googleError === "invalid_grant") {
       throw new GoogleAuthError(
         "google_reauth_required",
@@ -375,11 +287,8 @@ async function getGoogleAccessToken(clientId: string, clientSecret: string, refr
     }
     throw new Error(data.error_description || googleError || `Google authentication failed (HTTP ${res.status}).`);
   }
-  // expires_in is Google's own stated lifetime in seconds (normally 3600).
-  // Falling back to a conservative 1800s if it's ever absent from the
-  // response keeps the cache from assuming an indefinitely-valid token —
-  // worst case with the fallback is refreshing twice as often as
-  // strictly needed, never serving a token past its real expiry.
+  // The conservative 1800s fallback means a missing expires_in costs an extra
+  // refresh, never a token served past its real expiry.
   return { accessToken: data.access_token, expiresInSeconds: Number(data.expires_in) || 1800 };
 }
 
@@ -422,10 +331,8 @@ async function makeFilePublic(fileId: string, accessToken: string) {
   }
 }
 
-// storageQuota's `limit` is omitted entirely by Drive for accounts with no
-// storage cap (some Google Workspace plans) rather than sent as 0 — kept
-// as `null` here for the same reason, so the client can tell "unlimited"
-// apart from "full" instead of misreading a missing field as zero bytes.
+// Drive omits `limit` entirely for uncapped accounts rather than sending 0, so
+// it stays null here — the client must be able to tell "unlimited" from "full".
 async function getDriveStorageQuota(accessToken: string): Promise<{ usage: number; limit: number | null; usageInDrive: number }> {
   const res = await fetch(`${DRIVE_ABOUT_URL}?fields=storageQuota`, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -447,8 +354,8 @@ async function deleteDriveFile(fileId: string, accessToken: string) {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
   } catch {
-    // best-effort — an orphaned Drive file is a non-issue, never fail the
-    // caller's request over cleanup of the OLD photo.
+    // Best-effort: an orphaned Drive file is a non-issue, and cleanup of the OLD
+    // photo must never fail the caller's request.
   }
 }
 
@@ -461,10 +368,8 @@ function base64ToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
-// Reverse of base64ToBytes, for encoding the server-side thumbnail fetch's
-// response back to base64 for the JSON reply. Chunked to avoid blowing the
-// call stack on String.fromCharCode(...bytes) for a large array — not a
-// real concern at thumbnail size (a few KB), but cheap insurance.
+// Chunked so String.fromCharCode(...bytes) cannot blow the call stack. Not a
+// real risk at thumbnail size, but cheap insurance.
 function bytesToBase64(bytes: Uint8Array): string {
   const CHUNK = 8192;
   let binary = "";
@@ -474,13 +379,9 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-// Return type deliberately inferred, not annotated as `Uint8Array`: on
-// Deno/TypeScript 5.7+ a bare `Uint8Array` means Uint8Array<ArrayBufferLike>,
-// which fetch()'s BodyInit no longer accepts (it wants an ArrayBuffer-backed
-// one) — the inferred Uint8Array<ArrayBuffer> from `new Uint8Array(total)`
-// below is accepted, and on older toolchains still just infers plain
-// Uint8Array. This exact annotation made `deno check` fail in CI
-// (.github/workflows/deploy-supabase.yml), which skips the deploy job.
+// Return type deliberately NOT annotated as `Uint8Array`: on Deno/TS 5.7+ that
+// means Uint8Array<ArrayBufferLike>, which fetch()'s BodyInit rejects. Annotating
+// it made `deno check` fail in CI and skip the deploy job.
 function concatBytes(parts: Uint8Array[]) {
   const total = parts.reduce((n, p) => n + p.length, 0);
   const out = new Uint8Array(total);

@@ -573,6 +573,14 @@ branch protection before relying on them as merge gates.
   silently flip IN/OUT direction; see Supabase/README.md's change log for
   both). `employees.remarks_log` is still open — 40 entries total across
   723 employees as of 2026-10-01, not yet a real growth problem.
+- ~~Reusing an `employee_code` after someone resigns~~ - **done 2026-10-06**
+  (`employees_employee_code_current_key`, a partial unique index excluding
+  `resigned`, plus the status-aware XLSX import and the `employee_id` column on
+  the Attendance export - see this section's change log entry). Still open
+  alongside it: the **Audit log** and the **Proximity Cards** export show
+  `employee_code` with no `employee_id` beside it, so a report spanning a
+  handover stays readable but is not machine-unambiguous the way Attendance now
+  is. Worth closing if either export starts being pivoted on.
 - Replace the placeholder SVGs in `Public/Assets/Favicon` and
   `Public/Assets/Icon` with real brand assets.
 - The kiosk's Supabase session token still needs network to silently
@@ -603,6 +611,134 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-10-06 — `employee_code` is reusable after a resignation; kiosk focus survives Chrome Remote Desktop; comments compressed**
+
+Three unrelated pieces of work.
+
+**1. Recycling `employee_code`.** The business practice is to reuse a code when
+staff leave, which `employees_employee_code_key UNIQUE` made impossible.
+Dropping the constraint would also discard protection against a mistyped code —
+which in an access-control system silently merges two people's scans — and a
+UNIQUE cannot be re-added once duplicates exist. So the constraint was
+**narrowed, not removed** (`20261006140000_employee_code_reuse_after_resign.sql`):
+
+```sql
+CREATE UNIQUE INDEX employees_employee_code_current_key
+  ON public.employees (employee_code) WHERE status <> 'resigned';
+```
+
+A partial unique index states the real rule — *a code identifies one current
+employee* — and needs no schema change beyond itself, since `resigned` has been a
+valid status since 2026-10-03. Two client changes ship with it, because the index
+alone would have left both defects in place:
+
+- **The XLSX import was silently dropping re-hires.** It treated any existing
+  code as "already an employee on file" and incremented `skippedCount` — not an
+  error, a *silent skip*, which is correct for an ordinary re-import. Re-hire into
+  a recycled code and the new person was simply never created, with no message.
+  Now status-aware via `JS/Utils/employeeCode.js`, and reuse is reported
+  explicitly ("Reused N codes from resigned employees") rather than passed through
+  quietly, so a typo matching a former employee's code is still visible.
+- **Name collisions had the same bug.** A resigned person's name blocked their own
+  re-hire, which is the common case now that codes are recycled. Same rule,
+  applied once: "already exists" means *currently* exists.
+- The employee modal now pre-checks the code and explains the rule, instead of
+  surfacing a raw constraint violation.
+- **Attendance exports gained an `employee_id` column.** The database stays
+  correct across a handover (`scan_events` keys on `employee_id`, `scan_logs` on
+  `proximity_code` — never on `employee_code`), but every human-facing export
+  *displays* the code as the identity, so a report spanning a handover shows one
+  code under two names. `employee_id` is the only key that stays unambiguous:
+  group and pivot on it.
+- `test/employee-code.test.mjs` (new, 10 tests) pins that inactive and suspended
+  still hold their code while only `resigned` releases it, both lookup directions,
+  the edit-self case, and a code held by a current *and* a resigned employee.
+
+**2. Kiosk input losing focus over Chrome Remote Desktop.** The badge reader is a
+keyboard, so an unfocused `#ss-code` means a scan types into nothing and is
+silently lost. The old guard listened for `blur` and refocused only if
+`document.activeElement === document.body` — which never fired here: CRD takes OS
+focus, resizes the remote display, and can route through a lock/unlock, and
+losing *window* focus does not change `activeElement` at all. Replaced with a
+1-second watchdog plus `focus`/`resize`/`pageshow`/`visibilitychange` handlers,
+since the ways a kiosk loses focus cannot be enumerated. It still never steals
+focus from a control the operator is using or from an open dialog.
+
+**3. Comment volume.** 2,575 → 1,892 comment lines across the codebase (29% →
+23%), with the worst files cut by more than half: `StandaloneScanner.js` 221→117,
+`OfflineScanModel.js` 213→102, `upload-employee-photo/index.ts` 201→102,
+`image.js` 167→38, `format.js` 91→38. Whole blocks described *deleted* code or
+restated a change-log entry already in these `.md` files. The *why* notes stay;
+the narratives are gone.
+
+**2026-10-06 — the Dashboard on-site roster is incremental; `roster_version` never worked during working hours**
+
+Measured load: **~0.025 GB/hour over an 18-hour day ≈ 13.95 GB/month against a
+5 GB Free-plan quota** — a 2.8× overshoot, with 10 users of whom 3 are active
+kiosks. Full per-source budget in `docs/EGRESS_BUDGET.md`.
+
+**The defect.** The 2026-10-05 entry below added `roster_version` to
+`get_dashboard_pulse()` so the Dashboard's 30-second refresh could skip
+re-downloading the roster when nothing had changed. That version is
+`md5(count(*) || max(updated_at))`.
+
+Every matched scan runs `UPDATE public.employees SET scan_logs = ...,
+scan_parity_count = ...` (`trg_scan_events_append_log`), and
+`trg_employees_updated_at` fires `BEFORE UPDATE` setting `updated_at = now()`.
+So `max(updated_at)` moves on **every scan** — making `roster_version` in
+practice a *"has anyone scanned in the last 30 seconds?"* flag. With three active
+kiosks the answer is always yes during a shift, the skip never fires, and all
+~500 roster rows (~70 KB) are downloaded every 30 seconds per open tab.
+**The optimization worked only on a quiet night, which is exactly when egress
+does not matter.** Two open Dashboard tabs were ~17 MB/hour by themselves —
+roughly 90% of the bill.
+
+No version string could fix this, because the data genuinely *had* changed. One
+row of it. So send one row.
+
+- **`get_onsite_roster_delta(p_since, p_stale_hours)`** returns only employees
+  whose `updated_at` is past a cursor, each carrying **`on_roster`** so the
+  client upserts or drops. That flag is the whole mechanism for removals: someone
+  who scans OUT does not arrive as a deleted row, they simply stop satisfying the
+  roster predicate, which a timestamp cursor can never observe on its own.
+- **`seconds_on_site` and `is_stale` are no longer sent.** Both are pure
+  functions of `last_in_at`, and `is_stale` flipping with the clock was the
+  *entire* reason for the old unconditional 5-minute refetch — no data version
+  can observe a clock. The client derives them (`Utils/dashboard.js`'s
+  `deriveRosterRow`) and the server returns `stale_hours` once so both halves
+  share one rule. Side benefit: **"Time on site" now ticks between polls**
+  instead of sitting frozen at whatever the last response said.
+- **A full resync every 10 minutes is the self-heal**, replacing that 5-minute
+  refetch. A cursor cannot see a hard-`DELETE`d employee and cannot recover alone
+  from a laptop that slept through a stretch of changes; rather than reason about
+  each case, pay one full roster every 10 minutes.
+- **Roster bytes per open tab: ~8.4 MB/hour → ~0.65 MB/hour (~13×).** Projected
+  total ~25 MB/hour → **~1.8 MB/hour, about 1 GB/month** — 5× headroom under the
+  quota. Projections, not measurements; `docs/EGRESS_BUDGET.md` §5 is how to
+  confirm them, including the Logs Explorer query that distinguishes "working" from
+  "the migration was never applied".
+- `test/roster-delta.test.mjs` (new, 17 tests) covers upsert, removal via
+  `on_roster`, idempotence under the one-minute cursor overlap, sort order
+  matching a full sync, malformed deltas, and every clock-derived case.
+- `DashboardPage.js` latches a `PGRST202` from the new RPC and falls back
+  permanently to `get_onsite_roster()`, same forward-compatibility shape as the
+  pulse — so a client deployed ahead of the migration keeps working. **Note the
+  consequence:** an unapplied migration looks identical to no improvement at all.
+
+**Rejected:** lengthening the poll to 60 s (halves the symptom, keeps the defect,
+makes a live operations screen less live); dropping the Employee Manager Realtime
+subscription (real, but under 1 MB/day); folding the alerts-badge poll into the
+pulse (~0.2 GB/month — worth doing, but fixing the 8.4 MB/h first is 350× the
+return). Reasoning in `docs/EGRESS_BUDGET.md` §4.
+
+**Also fixed:** `.github/workflows/ai-review.yml` set `AI_REVIEW_MODEL` to
+`claude-opus-5-5`, which is not a real model ID — a 2026-10-01 edit changed it
+*away* from the correct `claude-opus-5` on the stated grounds that that one "was
+never valid", which is backwards. An unknown model is a 404 `not_found_error`, so
+every PR failed with no review posted. Corrected, and `ai-review.mjs` now names
+the bad model string in its PR comment instead of reporting a generic API error
+that sends you looking at credentials.
 
 **2026-10-06 — offline scanner thumbnails roughly halved, with a re-runnable recompressor for existing rows**
 

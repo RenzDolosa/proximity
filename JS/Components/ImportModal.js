@@ -106,7 +106,7 @@ export function openImportModal({ title, description, columns, sampleRow, onImpo
       if (labelEl) labelEl.textContent = total ? `Imported ${done} of ${total} row${total === 1 ? '' : 's'}…` : 'Working…';
     };
 
-    const { successCount, skippedCount = 0, errors } = await onImport(parsedRecords, onProgress);
+    const { successCount, skippedCount = 0, reusedCount = 0, errors } = await onImport(parsedRecords, onProgress);
     setModalLocked(overlay, false);
     parsedRecords = null;
 
@@ -117,6 +117,7 @@ export function openImportModal({ title, description, columns, sampleRow, onImpo
       <div class="emp-meta">
         Imported <strong style="color:var(--good)">${successCount}</strong> of ${rowCount} row${rowCount === 1 ? '' : 's'}.
         ${skippedCount ? ` Skipped <strong>${skippedCount}</strong> duplicate${skippedCount === 1 ? '' : 's'}.` : ''}
+        ${reusedCount ? ` Reused <strong>${reusedCount}</strong> code${reusedCount === 1 ? '' : 's'} from resigned employees.` : ''}
       </div>
       ${errors.length ? `
         <div class="search-results" style="max-height:180px;margin-top:8px;">

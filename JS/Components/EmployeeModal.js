@@ -7,6 +7,7 @@ import { EmployeesModel } from '../Models/EmployeesModel.js';
 import { ProximityCardsModel } from '../Models/ProximityCardsModel.js';
 import { fileToWebp, fileToOfflineThumbWebp, blobToBase64 } from '../Utils/image.js';
 import { EMPLOYEE_STATUSES } from '../Utils/employeeStatus.js';
+import { currentCodeHolder, currentNameHolder } from '../Utils/employeeCode.js';
 
 // Opens instantly — the two network calls this needs (unassigned cards +
 // who's linked to what) load in the background *after* the modal is
@@ -210,17 +211,18 @@ export async function openEmployeeModal(emp, onSaved) {
       showModalError(overlay, errSel, 'Full name and employee code are required.');
       return;
     }
-    // Guard against accidentally adding the same person twice (or renaming
-    // someone into a collision with someone else) — full_name isn't a
-    // unique DB column, so nothing else stops this. Excludes the record
-    // being edited itself, so saving an employee without changing their
-    // name doesn't trip over their own existing row.
-    const nameKey = payload.full_name.toLowerCase();
-    const nameCollision = (appState.employeesCache || []).find(
-      (e) => e.id !== emp?.id && (e.full_name || '').trim().toLowerCase() === nameKey
-    );
+    // Both checks ignore resigned employees and the record being edited — see
+    // Utils/employeeCode.js. The code check mirrors
+    // employees_employee_code_current_key so a collision reads as an
+    // explanation rather than a raw constraint-violation message.
+    const nameCollision = currentNameHolder(appState.employeesCache, payload.full_name, emp?.id);
     if (nameCollision) {
       showModalError(overlay, errSel, `An employee named "${payload.full_name}" already exists (code ${nameCollision.employee_code}). If this is a different person, adjust the name slightly to tell them apart.`);
+      return;
+    }
+    const codeCollision = currentCodeHolder(appState.employeesCache, payload.employee_code, emp?.id);
+    if (codeCollision) {
+      showModalError(overlay, errSel, `Employee code "${payload.employee_code}" is already used by ${codeCollision.full_name}. Codes can only be reused once the previous holder's status is set to Resigned.`);
       return;
     }
 

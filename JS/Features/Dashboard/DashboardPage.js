@@ -12,30 +12,33 @@ import { appState, isAdminOrManager } from '../../Core/state.js';
 import { renderPagination } from '../../Components/Pagination.js';
 import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
 import { fmtDuration } from '../../Utils/attendance.js';
-import { summarizeRoster, filterRoster } from '../../Utils/dashboard.js';
+import { summarizeRoster, filterRoster, mergeRosterDelta, deriveRoster } from '../../Utils/dashboard.js';
 import { DashboardModel } from '../../Models/DashboardModel.js';
 import { openDepartmentRosterModal } from '../../Components/DepartmentRosterModal.js';
 
 const REFRESH_MS = 30000;
-// Upper bound on how long a skipped roster fetch can keep showing a row
-// whose `is_stale` flag should by now have flipped. That flag is the only
-// part of the roster that changes with nothing but the passage of time, so
-// it's the only reason to refetch an otherwise-unchanged roster — see
-// load()'s rosterIsStale. 5 minutes against a 16-hour stale window is
-// immaterial to what the page claims, and keeps the refetch rate at 1-in-10
-// polls rather than 10-in-10.
-const ROSTER_MAX_AGE_MS = 5 * 60 * 1000;
+// The delta's self-heal, not a correctness requirement: a cursor only sees rows
+// whose updated_at moved, so it cannot observe a hard-DELETEd employee or recover
+// from a laptop that slept through a stretch of changes. One full roster every
+// 10 minutes fixes every such case without reasoning about them individually.
+const ROSTER_FULL_RESYNC_MS = 10 * 60 * 1000;
 
 let stats = null;
-let roster = [];
-let rosterVersion = null;
-let rosterFetchedAt = 0;
+let roster = [];          // raw rows as the server sent them — NO derived fields
+let rosterCursor = null;  // `cursor` from the last delta; null forces a full sync
+let rosterStaleHours = 16;
+let rosterSyncedAt = 0;
 let loaded = false;
-// Set once if get_dashboard_pulse() isn't on the project yet (client
-// deployed ahead of the migration), so every later refresh goes straight to
-// the legacy pair instead of paying a failed round trip first.
+// One-shot latches for a client deployed ahead of its migrations, so later
+// refreshes go straight to the legacy RPC instead of paying a failed round trip.
+//
+// Note what latching the roster one costs: a full roster on every poll, i.e.
+// exactly the behaviour the delta exists to remove. If the Dashboard feels
+// expensive again, check that 20261006120000_onsite_roster_delta.sql was applied.
 let pulseUnavailable = false;
 const MISSING_PULSE = { code: 'PGRST202', message: 'Could not find the function public.get_dashboard_pulse' };
+let rosterDeltaUnavailable = false;
+const MISSING_ROSTER_DELTA = { code: 'PGRST202', message: 'Could not find the function public.get_onsite_roster_delta' };
 
 // Same signal OfflineScanModel.js checks for: PostgREST answers an unknown
 // RPC with PGRST202, which means "not deployed yet", not "retry me".
@@ -135,46 +138,50 @@ async function load({ force = false } = {}) {
   if (seq !== requestSeq) return; // superseded by a newer load
   if (p.error) { finish(seq, p.error); return; }
 
-  // The roster is the expensive half of this refresh (hundreds of rows,
-  // every 30 seconds, for as long as someone leaves this tab open). Skip it
-  // entirely when the pulse says nothing in `employees` has changed since the
-  // last one — which is every poll of a quiet night or weekend. The periodic
-  // force below exists because `is_stale` flips purely with the passage of
-  // time, which no data version can observe; the manual Refresh button and
-  // the first load of the page also force it.
-  const version = p.data?.roster_version ?? null;
-  const rosterIsStale = force
-    || !loaded
-    || version === null
-    || version !== rosterVersion
-    || Date.now() - rosterFetchedAt > ROSTER_MAX_AGE_MS;
-  if (!rosterIsStale) { finish(seq, null, p.data?.stats, roster, version, false); return; }
+  // `roster_version` from the pulse is deliberately NOT consulted: every matched
+  // scan bumps employees.updated_at, so during a shift it changes on essentially
+  // every poll and the old code re-downloaded all ~500 rows every 30 seconds per
+  // tab — most of this project's egress bill (docs/EGRESS_BUDGET.md). A delta asks
+  // only for what moved. Refresh and the periodic self-heal drop the cursor, which
+  // is what asks for the whole roster.
+  const wantsFull = force || !loaded || !rosterCursor
+    || Date.now() - rosterSyncedAt > ROSTER_FULL_RESYNC_MS;
+  const d = rosterDeltaUnavailable
+    ? { error: MISSING_ROSTER_DELTA }
+    : await DashboardModel.rosterDelta(wantsFull ? null : rosterCursor);
 
-  const r = await DashboardModel.onSiteRoster();
+  if (d.error && isMissingFunctionError(d.error)) {
+    rosterDeltaUnavailable = true;
+    const r = await DashboardModel.onSiteRoster();
+    if (seq !== requestSeq) return;
+    finish(seq, r.error, p.data?.stats, r.data);
+    return;
+  }
   if (seq !== requestSeq) return;
-  finish(seq, r.error, p.data?.stats, r.data, version, true);
+  if (d.error) { finish(seq, d.error, p.data?.stats); return; }
+
+  finish(seq, null, p.data?.stats, mergeRosterDelta(roster, d.data), d.data);
 }
 
-// Shared tail of every path through load() above: re-enable the button, show
-// or clear the error, and repaint. `nextRoster` is the existing roster when
-// the fetch was skipped, so a skipped refresh is indistinguishable on screen
-// from one that came back identical.
-//
-// `fetchedRoster` has to be passed separately rather than inferred: the age
-// clock behind ROSTER_MAX_AGE_MS must only advance when the roster was really
-// re-read. Stamping it on every call — including the skipped ones — would
-// mean the 5-minute force could never fire at all, because each skipped poll
-// 30 seconds earlier would have reset it.
-function finish(seq, err, nextStats, nextRoster, version, fetchedRoster = false) {
+// Shared tail of every path through load(). `delta` is present only on the
+// incremental path; its cursor is committed HERE, not at the call site, because a
+// superseded response must change no state at all — advancing the cursor for rows
+// that were discarded would mean never requesting them again. The legacy
+// fallbacks pass no delta, leaving the cursor null so they keep asking for full
+// rosters, which is all those RPCs can give.
+function finish(seq, err, nextStats, nextRoster, delta = null) {
   if (seq !== requestSeq) return;
   const b = $('#dash-refresh');
   if (b) { b.disabled = false; b.textContent = 'Refresh'; }
   if (err) { showError(err.message); return; }
   showError('');
-  stats = nextStats;
+  if (nextStats !== undefined) stats = nextStats;
   roster = nextRoster || [];
-  if (version !== undefined) rosterVersion = version;
-  if (fetchedRoster) rosterFetchedAt = Date.now();
+  if (delta) {
+    rosterCursor = delta.cursor ?? null;
+    rosterSyncedAt = Date.now();
+    if (Number.isFinite(delta.stale_hours)) rosterStaleHours = delta.stale_hours;
+  }
   loaded = true;
   if (filters.department && !roster.some((x) => (x.department || '') === filters.department)) filters.department = '';
   paintStats();
@@ -192,7 +199,10 @@ function paintStats() {
   if (!el || !stats) return;
   const rate = stats.scans_24h ? `${Math.round((stats.matched_24h / stats.scans_24h) * 100)}%` : '—';
   const alerts = stats.unread_alerts;
-  const sum = summarizeRoster(roster);
+  // Derived, not raw: `is_stale` is what splits "On site" from "Possibly left",
+  // and it is computed client-side now (see derivedRoster()).
+  const derived = derivedRoster();
+  const sum = summarizeRoster(derived);
   el.innerHTML = `
     <div class="stat-grid">
       ${statCard('On site', sum.live, { tone: 'accent' })}
@@ -217,12 +227,18 @@ function paintStats() {
   el.querySelectorAll('[data-dept]').forEach((chip) => {
     chip.addEventListener('click', () => {
       const department = chip.dataset.dept;
-      openDepartmentRosterModal(department, filterRoster(roster, { department, view: 'live' }));
+      openDepartmentRosterModal(department, filterRoster(derived, { department, view: 'live' }));
     });
   });
 }
 
-function currentRows() { return filterRoster(roster, filters); }
+// seconds_on_site and is_stale are attached at PAINT time, not on arrival: both
+// change with nothing but the clock, so deriving them once would freeze "Time on
+// site" and never flip is_stale. It is also what removed the old 5-minute
+// unconditional refetch — time passing is no longer a reason to call the server.
+function derivedRoster() { return deriveRoster(roster, Date.now(), rosterStaleHours); }
+
+function currentRows() { return filterRoster(derivedRoster(), filters); }
 
 function paintTable() {
   const wrap = $('#dash-table');
