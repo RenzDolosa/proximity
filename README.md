@@ -612,6 +612,41 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-06 — nav clicks and Alt-Tab stop refetching (Dashboard, Attendance, Employee Manager)**
+
+The router calls a page's render function on every sidebar click, and each one
+refetched unconditionally — so flicking between items re-downloaded the same
+rows. ~220 KB per Employee Manager visit, a whole report per Attendance visit.
+
+`JS/Utils/freshness.js` (new) is a timestamp per data set, not a cache: it stores
+no rows, only when a key was last fetched, so the pages keep whatever shape they
+already had. Inside a 60-second window the page paints from what it already has
+in memory and makes no request.
+
+- **Writes invalidate explicitly**, because a timestamp cannot observe a
+  mutation. Every Employee Manager write path now goes through
+  `reloadDirectory()`, which invalidates before rendering — an edit can never be
+  hidden by the window.
+- **Attendance keys on its range**, so changing the dates misses naturally. It
+  also checks `loadedRange`, which matters: `rowsCache` holds exactly one report,
+  so A → B → A inside the window would otherwise find key A fresh while the cache
+  still held B, and **paint B's rows under A's label**. The Run button always
+  forces a refetch.
+- **The Dashboard's Alt-Tab handler** respects `REFRESH_MS` instead of firing on
+  every flick away and back, so returning lands on the cadence the page would
+  have had if it had never been hidden.
+- `test/freshness.test.mjs` (new, 7 tests) covers the window boundary,
+  invalidation, key independence, a non-positive window meaning *always refetch*
+  rather than *fresh forever*, and a clock that moved backwards reading as stale.
+
+**On Employee Manager's photos specifically:** those are Google Drive requests,
+**not Supabase egress** — they cost page speed and the kiosk's connection, never
+the 5 GB quota. The Service Worker photo cache was deleted on 2026-09-18, so they
+rely on the browser's HTTP cache alone, and a full repaint recreates every
+`<img>`. Added `loading="lazy"` so a repaint only re-requests the rows actually on
+screen. Reinstating a photo cache is the real fix if the flashing is still
+annoying; say so and it's a small piece of work.
+
 **2026-10-06 — `employee_code` is reusable after a resignation; kiosk focus survives Chrome Remote Desktop; comments compressed**
 
 Three unrelated pieces of work.

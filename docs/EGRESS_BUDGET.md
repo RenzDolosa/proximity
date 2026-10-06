@@ -46,6 +46,7 @@ including a 36-char UUID and an ISO timestamp).
 | Scan RPC | scan | — | ~1 KB | with volume |
 | Realtime `scan_events` | subscriber | — | ~0.5 KB/event | with volume |
 | Employee Manager roster | page visit | — | ~220 KB | with use |
+| Attendance report | page visit | — | varies with range | with use |
 
 **Two open Dashboard tabs ≈ 17 MB/hour on their own.** Add three kiosks, badge
 polls, scans and occasional Employee Manager visits and ~25 MB/hour is fully
@@ -113,6 +114,32 @@ Against a 5 GB quota that is **5× headroom** — enough to absorb more kiosks,
 more users, or a heavier month without revisiting this.
 
 These are projections. §5 is how to confirm them.
+
+### Nav clicks and Alt-Tab no longer refetch (2026-10-06)
+
+The router calls a page's render function on every sidebar click, and each one
+refetched unconditionally. Flicking between items re-downloaded the same rows —
+~220 KB per Employee Manager visit, a whole attendance report per Attendance
+visit. `JS/Utils/freshness.js` gates those on a 60-second window: the page paints
+from the rows already in memory and only goes to the network once they are
+actually old.
+
+- **Mutations invalidate explicitly**, since a timestamp cannot observe a write.
+  Every Employee Manager write path goes through `reloadDirectory()`, which
+  invalidates before rendering, so an edit is never hidden by the window.
+- **Attendance keys on its range** (`attendance:<from>..<to>`), so changing the
+  dates misses naturally — *and* checks `loadedRange`, because `rowsCache` holds
+  only one report: A → B → A inside the window would otherwise find key A fresh
+  while the cache still held B. The Run button always forces.
+- **Dashboard's Alt-Tab handler** now respects `REFRESH_MS` instead of firing on
+  every flick away and back, so returning lands on the cadence the page would
+  have had if it had stayed visible.
+
+**Employee Manager's photos are Google Drive, not Supabase.** They cost page
+speed and the kiosk's connection, never the 5 GB quota — and the Service Worker
+photo cache was removed on 2026-09-18, so they rely on the browser's HTTP cache
+alone. `loading="lazy"` on those `<img>`s means a repaint only re-requests rows
+actually on screen.
 
 ### Also landed, smaller
 

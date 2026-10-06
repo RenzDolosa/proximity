@@ -28,6 +28,7 @@ let roster = [];          // raw rows as the server sent them — NO derived fie
 let rosterCursor = null;  // `cursor` from the last delta; null forces a full sync
 let rosterStaleHours = 16;
 let rosterSyncedAt = 0;
+let lastLoadAt = 0;
 let loaded = false;
 // One-shot latches for a client deployed ahead of its migrations, so later
 // refreshes go straight to the legacy RPC instead of paying a failed round trip.
@@ -108,8 +109,14 @@ export async function renderDashboard() {
     if (document.hidden) return;
     load();
   }, REFRESH_MS);
+  // Alt-Tab back in. The 30-second timer is suppressed while hidden, so this
+  // catches up after a real absence — but it used to fire on every flick away
+  // and back, however brief. Reusing REFRESH_MS as the floor means returning
+  // lands on the same cadence the page would have had if it had stayed visible.
   visibilityHandler = () => {
-    if (!document.hidden && appState.route === 'dashboard' && $('#dash-table')) load();
+    if (document.hidden || appState.route !== 'dashboard' || !$('#dash-table')) return;
+    if (Date.now() - lastLoadAt < REFRESH_MS) return;
+    load();
   };
   document.addEventListener('visibilitychange', visibilityHandler);
 }
@@ -123,6 +130,7 @@ function showError(message) {
 
 async function load({ force = false } = {}) {
   const seq = ++requestSeq;
+  lastLoadAt = Date.now();
   const btn = $('#dash-refresh');
   if (btn) { btn.disabled = true; btn.textContent = 'Refreshing…'; }
   const p = pulseUnavailable ? { error: MISSING_PULSE } : await DashboardModel.pulse();
