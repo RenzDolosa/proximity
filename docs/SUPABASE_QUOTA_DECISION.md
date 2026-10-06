@@ -311,6 +311,45 @@ order by total_bytes desc
   analysis in §2 is wrong — which is worth knowing before spending more.
 - **Both** ⇒ some reloaded, some did not.
 
+### Step 4b — the photo path
+
+The other candidate, and the one that is large by construction rather than by
+accident:
+
+```sql
+select
+  log_attributes['request.path'] as path,
+  count() as requests,
+  sum(toInt64OrZero(log_attributes['response.headers.content_length'])) as total_bytes
+from logs
+where source = 'edge_logs'
+  and log_attributes['request.path'] like '%offline_photo%'
+group by path
+order by total_bytes desc
+```
+
+A full `get_scanner_offline_photo_updates` response is the whole thumbnail
+column. At 2026-10-05 that was **12.5 MB across 729 rows**, so a handful of
+unnecessary full syncs per day is gigabytes on its own — easily the largest
+single thing this project can spend egress on.
+
+Two separate fixes landed for it, and they address different failures:
+
+- **2026-10-05** — a cache-persistence bug meant a kiosk whose IndexedDB write
+  failed sent an *empty* known-ids map on every subsequent sync and got all 729
+  thumbnails back, every 30 minutes on the timer and as often as every 2 minutes
+  while scanning. Silently, with no error surfaced anywhere. Now capped at one
+  full download per page session, and a failed write warns once naming the
+  likely causes.
+- **2026-10-06** — the thumbnails themselves were roughly halved (480px/q0.80 →
+  400px/q0.62), with **Settings → Offline scanner thumbnails** to re-encode the
+  existing rows in place. This shrinks every future full sync *and* the database,
+  independent of how often a full sync happens.
+
+If this query shows high `requests` against `%offline_photo%`, the first fix is
+the relevant one and kiosks need a hard reload to pick it up. If `requests` is
+low but `total_bytes` is still large, the second is — run the recompressor.
+
 ### Step 5 — which client, and which hours
 
 ```sql

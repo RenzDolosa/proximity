@@ -3,7 +3,7 @@
 // POST { action: "upload", image_base64: string, filename: string, mime_type?: string, old_file_id?: string|null, thumb_base64?: string|null, thumb_mime_type?: string|null }
 //   -> { url: string, file_id: string, thumb_b64: string|null }
 //   thumb_b64: normally an echo of the caller's thumb_base64 — a small
-//   (~480px) .webp thumbnail the client already generated client-side via
+//   (~400px) .webp thumbnail the client already generated client-side via
 //   Utils/image.js's fileToOfflineThumbWebp() — for the client to store
 //   as employees.photo_thumb_b64. If thumb_base64 is omitted (an older
 //   client) or looks malformed, falls back to a server-side Drive
@@ -197,7 +197,7 @@ Deno.serve(async (req: Request) => {
       // (Utils/image.js's fileToOfflineThumbWebp(), a guaranteed-.webp
       // client-side canvas resize — see EmployeeModal.js) over fetching
       // one ourselves. Sanity-checked, not just trusted blindly: capped at
-      // 1MB (a 480px webp thumbnail has no legitimate reason to be
+      // 1MB (a 400px webp thumbnail has no legitimate reason to be
       // anywhere near that; a bloated value here would otherwise ride
       // along in get_scanner_offline_photos() for every kiosk sync) and
       // ignored (falls through to the server-side fetch below) if it's
@@ -224,9 +224,11 @@ Deno.serve(async (req: Request) => {
       // see README.md's 2026-09-18 change log entry for the full
       // reasoning on why it's a server-side fetch (avoiding the same
       // opaque-response no-cors problem a bulk client-side prefetch had).
-      // w480 (bumped up from the original w96 — see the same change log's
-      // 2026-09-19 follow-up entry) roughly matches
-      // fileToOfflineThumbWebp()'s own OFFLINE_THUMB_MAX_DIMENSION, so a
+      // w400 (bumped up from the original w96 — see the same change log's
+      // 2026-09-19 follow-up entry — then trimmed from w480 on 2026-10-06
+      // when the client-side target was cut to halve these bytes) roughly
+      // matches fileToOfflineThumbWebp()'s own
+      // OFFLINE_THUMB_MAX_DIMENSION, so a
       // fallback-sourced thumbnail doesn't look visibly blurrier than a
       // client-sourced one once StandaloneScanner.js blows it up to fill
       // .ss-photo-stage. Bounded to THUMB_FETCH_TIMEOUT_MS: a file Drive
@@ -243,7 +245,7 @@ Deno.serve(async (req: Request) => {
       if (thumbB64 === null) {
         const THUMB_FETCH_TIMEOUT_MS = 2500;
         try {
-          const thumbRes = await fetch(`https://drive.google.com/thumbnail?id=${fileId}&sz=w480`, {
+          const thumbRes = await fetch(`https://drive.google.com/thumbnail?id=${fileId}&sz=w400`, {
             signal: AbortSignal.timeout(THUMB_FETCH_TIMEOUT_MS),
           });
           if (thumbRes.ok) {

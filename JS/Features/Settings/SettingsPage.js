@@ -26,6 +26,7 @@ import { ScanLogsTrimModel } from '../../Models/ScanLogsTrimModel.js';
 import { ScannerSilenceModel } from '../../Models/ScannerSilenceModel.js';
 import { UsageModel } from '../../Models/UsageModel.js';
 import { fmtUsageBytes, fmtPercent } from '../../Utils/usage.js';
+import { OFFLINE_THUMB_TARGET, recompressThumbBase64 } from '../../Utils/image.js';
 import { openConfirmModal } from '../../Components/ConfirmModal.js';
 import { showModalError } from '../../Components/Modal.js';
 
@@ -70,6 +71,16 @@ let dbUsage = null;           // { database_bytes, database_limit_bytes, tables[
 let dbUsageError = null;
 let usageLoaded = false;
 let usageRefreshing = false;
+
+// Offline-thumbnail recompression. `thumbStats` is the cheap server-side
+// measurement (get_offline_thumb_stats — a few hundred bytes); `thumbRun`
+// only exists while a pass is in flight or has just finished, and holds the
+// running before/after tally so the panel can show what was actually saved
+// rather than only what was projected.
+let thumbStats = null;        // { with_thumb, total_bytes, avg_bytes, max_bytes, over_target_rows, over_target_total_bytes, ... }
+let thumbStatsError = null;
+let thumbStatsLoaded = false;
+let thumbRun = null;          // { done, changed, skipped, failed, before, after, finished } | null
 
 export async function renderSettings() {
   const content = $('#content');
@@ -171,6 +182,36 @@ export async function renderSettings() {
       </p>
       <div id="photo-storage-body">${photoLoaded ? '' : 'Loading…'}</div>
     </div>
+
+    ${!isAdmin() ? '' : `
+    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <h3 style="margin:0 0 4px;">Offline scanner thumbnails</h3>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="ghost" id="th-refresh" ${thumbRun && !thumbRun.finished ? 'disabled' : ''}>Refresh</button>
+          <button type="button" class="ghost" id="th-run" ${thumbRun && !thumbRun.finished ? 'disabled' : ''}>${thumbRun && !thumbRun.finished ? 'Recompressing…' : 'Recompress now'}</button>
+        </div>
+      </div>
+      <p class="sub" style="margin:0 0 10px;">
+        Every employee photo is also stored as a small image inside the
+        database (<span class="mono">employees.photo_thumb_b64</span>) so the
+        Scanner can show a face while offline. That column is the largest
+        thing in this database and the heaviest part of every kiosk's cache
+        sync, so its size is paid for twice — once in Database size above,
+        and again in egress on every fresh sync.
+        <strong>Recompress now</strong> re-encodes the oversized ones to the
+        current target (${OFFLINE_THUMB_TARGET.maxDimension}px,
+        quality ${OFFLINE_THUMB_TARGET.quality}) in this browser and writes
+        them back. It is safe to re-run: a row is only replaced when
+        re-encoding actually saves at least 10%, so rows that are already
+        small are left exactly as they are rather than losing another
+        generation of quality. Kiosks keep the thumbnails they already hold
+        — they adopt the smaller ones on their next full cache rebuild — so
+        this costs no extra kiosk egress today.
+      </p>
+      <div id="th-body">${thumbStatsLoaded ? '' : 'Loading…'}</div>
+    </div>
+    `}
     `}
     `}
 
@@ -298,6 +339,17 @@ export async function renderSettings() {
       toast('Query statistics reset');
       loadQueryStats();
     });
+    if (thumbStatsLoaded) paintThumbStats();
+    $('#th-refresh')?.addEventListener('click', () => loadThumbStats());
+    $('#th-run')?.addEventListener('click', async () => {
+      const ok = await openConfirmModal({
+        title: 'Recompress offline thumbnails?',
+        message: `Re-encodes ${thumbStats?.over_target_rows ?? 'the oversized'} stored thumbnail${thumbStats?.over_target_rows === 1 ? '' : 's'} at ${OFFLINE_THUMB_TARGET.maxDimension}px / quality ${OFFLINE_THUMB_TARGET.quality} and writes them back. Re-encoding is lossy, so this is not reversible without re-uploading the original photos — those stay untouched in Google Drive. Rows that would not get at least 10% smaller are left alone.`,
+        confirmLabel: 'Recompress',
+      });
+      if (!ok) return;
+      await runThumbRecompress();
+    });
     if (usageLoaded) paintUsage();
     $('#us-refresh').addEventListener('click', async () => {
       usageRefreshing = true;
@@ -384,6 +436,7 @@ export async function renderSettings() {
       paintPhotoStorage();
     })());
   }
+  if (isAdmin()) tasks.push(loadThumbStats());
   if (isAdmin()) tasks.push(loadUsage());
   if (isAdmin()) tasks.push(loadQueryStats());
   if (isAdmin()) tasks.push(loadArchiveStatus());
@@ -438,6 +491,181 @@ function paintPhotoStorage() {
       <div class="progress-track"><div class="progress-fill${pct >= 80 ? ' warn' : ''}" style="width:${pct}%;"></div></div>
     </div>
   `;
+}
+
+// ---- offline-thumbnail recompression ----
+
+async function loadThumbStats() {
+  const { data, error } = await EmployeesModel.offlineThumbStats(OFFLINE_THUMB_TARGET.overTargetStoredBytes);
+  thumbStatsError = error ? error.message : null;
+  thumbStats = error ? null : data;
+  thumbStatsLoaded = true;
+  paintThumbStats();
+}
+
+function paintThumbStats() {
+  const body = $('#th-body');
+  if (!body) return; // panel not in the DOM (non-admin)
+  if (thumbStatsError) {
+    body.innerHTML = `<div class="empty-state">${esc(thumbStatsError)}</div>`;
+    return;
+  }
+  if (!thumbStats) { body.innerHTML = 'Loading…'; return; }
+
+  const { with_thumb: withThumb, total_bytes: total, avg_bytes: avg, max_bytes: max,
+          over_target_rows: overRows, over_target_total_bytes: overBytes } = thumbStats;
+
+  if (!withThumb) {
+    body.innerHTML = '<div class="empty-state">No employee has a stored offline thumbnail yet.</div>';
+    return;
+  }
+
+  // Projected, not promised: the real saving depends on each photo's own
+  // content, which only the encoder knows. Stated as "about half" rather
+  // than a precise figure for exactly that reason — the run reports what it
+  // actually achieved below, and that number is the one to trust.
+  const projected = Math.round(overBytes * 0.5);
+
+  body.innerHTML = `
+    <div class="emp-meta mono" style="margin-bottom:8px;">
+      ${withThumb} thumbnail${withThumb === 1 ? '' : 's'} · ${fmtUsageBytes(total)} stored
+      · ${fmtUsageBytes(avg)} average · ${fmtUsageBytes(max)} largest
+    </div>
+    ${overRows === 0 ? `
+      <div class="emp-meta">Every thumbnail is already at or under
+      ${fmtUsageBytes(thumbStats.over_target_bytes)} — nothing to recompress.</div>
+    ` : `
+      <div class="emp-meta" style="margin-bottom:8px;">
+        <strong>${overRows}</strong> ${overRows === 1 ? 'is' : 'are'} over
+        ${fmtUsageBytes(thumbStats.over_target_bytes)}, accounting for
+        ${fmtUsageBytes(overBytes)}. Recompressing those should recover
+        roughly ${fmtUsageBytes(projected)} — a projection from the target,
+        not a measurement; the run reports what it actually saved.
+      </div>
+    `}
+    ${!thumbRun ? '' : `
+      <div class="progress" style="margin:0 0 8px;">
+        <div class="progress-track">
+          <div class="progress-fill" style="width:${thumbRunPercent(overRows)}%;"></div>
+        </div>
+      </div>
+      <div class="emp-meta mono">
+        ${thumbRun.finished ? 'Done' : 'Working'} — ${thumbRun.done} examined,
+        ${thumbRun.changed} rewritten, ${thumbRun.skipped} left alone${thumbRun.failed ? `, ${thumbRun.failed} failed` : ''}
+        ${thumbRun.changed ? ` · ${fmtUsageBytes(thumbRun.before)} → ${fmtUsageBytes(thumbRun.after)} (saved ${fmtUsageBytes(thumbRun.before - thumbRun.after)})` : ''}
+      </div>
+      ${!thumbRun.finished ? '' : '<div class="emp-meta">Refresh above to re-measure the column.</div>'}
+    `}
+  `;
+}
+
+// How far through the pass we are. A determinate bar, not the shimmering
+// `.indeterminate` one upload progress uses: the row count is known up
+// front, so there is real progress to show.
+//
+// `expected` is the over-target count from the LAST measurement, which the
+// run is actively invalidating as it rewrites rows — and after the run
+// finishes, loadThumbStats() re-measures it to near zero. Taking the max of
+// the two keeps the bar monotonic and pinned at 100% when done, instead of
+// dividing by a number that shrank out from under it.
+function thumbRunPercent(expected) {
+  if (!thumbRun) return 0;
+  if (thumbRun.finished) return 100;
+  const denominator = Math.max(expected || 0, thumbRun.done, 1);
+  return Math.min(100, Math.round((thumbRun.done / denominator) * 100));
+}
+
+// Walks the over-target rows a page at a time, re-encoding each in this
+// browser and writing it back. Deliberately sequential rather than
+// parallel: canvas decode + WebP encode is synchronous main-thread work, so
+// firing them concurrently would not finish sooner and would just make the
+// page unresponsive for longer at a stretch.
+//
+// Every failure mode is per-row and non-fatal. A photo this browser can't
+// decode (a corrupt row, or a format its canvas doesn't support) or a write
+// that RLS rejects increments `failed` and the walk continues — one bad row
+// must not strand the other 700. Only a failure to read a PAGE stops the
+// run, since without the page there is nothing to continue from.
+async function runThumbRecompress() {
+  const PAGE = 20;
+  thumbRun = { done: 0, changed: 0, skipped: 0, failed: 0, before: 0, after: 0, finished: false };
+  // Toggle just this panel's own buttons rather than calling
+  // renderSettings(), which would re-run every other panel's loader for a
+  // state change confined to this one.
+  setThumbButtons(true);
+  paintThumbStats();
+
+  let afterId = null;
+  try {
+    for (;;) {
+      const { data: page, error } = await EmployeesModel.thumbsToRecompress({
+        afterId,
+        limit: PAGE,
+        overTargetBytes: OFFLINE_THUMB_TARGET.overTargetStoredBytes,
+      });
+      if (error) { toast(error.message, 'error'); break; }
+      const rows = Array.isArray(page) ? page : [];
+      if (!rows.length) break;
+
+      for (const row of rows) {
+        // Advance the cursor BEFORE attempting the row. A row that throws
+        // must still move the keyset forward, or the next page returns the
+        // same failing row and the loop never ends.
+        afterId = row.id;
+        thumbRun.done += 1;
+        try {
+          const result = await recompressThumbBase64(row.photo_thumb_b64);
+          if (!result.changed) {
+            thumbRun.skipped += 1;
+          } else {
+            const { error: writeErr } = await EmployeesModel.updateThumb(row.id, result.base64);
+            if (writeErr) {
+              thumbRun.failed += 1;
+              console.warn(`Could not store the recompressed thumbnail for ${row.full_name || row.id}:`, writeErr.message);
+            } else {
+              thumbRun.changed += 1;
+              thumbRun.before += result.before;
+              thumbRun.after += result.after;
+            }
+          }
+        } catch (err) {
+          thumbRun.failed += 1;
+          console.warn(`Could not re-encode the thumbnail for ${row.full_name || row.id}:`, err);
+        }
+        paintThumbStats();
+        // Yield to the event loop between rows so the progress line above
+        // actually repaints and the page stays responsive through a
+        // several-hundred-row pass.
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      if (rows.length < PAGE) break;
+    }
+  } finally {
+    // In the finally, not after it: an unexpected throw must still release
+    // the buttons, or the panel is left permanently stuck on
+    // "Recompressing…" with no way to retry short of a reload.
+    thumbRun.finished = true;
+    setThumbButtons(false);
+    paintThumbStats();
+  }
+
+  const saved = thumbRun.before - thumbRun.after;
+  toast(thumbRun.changed
+    ? `Recompressed ${thumbRun.changed} thumbnail${thumbRun.changed === 1 ? '' : 's'} — saved ${fmtUsageBytes(saved)}`
+    : 'Nothing to recompress — every thumbnail is already small enough');
+  // Re-measure server-side so the panel's headline figures reflect the
+  // rewritten column rather than the pre-run snapshot.
+  await loadThumbStats();
+}
+
+// Re-queried each time rather than captured: paintThumbStats() only
+// replaces #th-body, but a full renderSettings() elsewhere (navigating away
+// and back mid-run) replaces these nodes entirely.
+function setThumbButtons(running) {
+  const run = $('#th-run');
+  const refresh = $('#th-refresh');
+  if (run) { run.disabled = running; run.textContent = running ? 'Recompressing…' : 'Recompress now'; }
+  if (refresh) refresh.disabled = running;
 }
 
 async function loadQueryStats() {

@@ -31,13 +31,51 @@ const WEBP_QUALITY = 0.85;
 // a server-side Drive fetch at a fixed `sz=w96` (see
 // upload-employee-photo/index.ts's change log), which looked fine at its
 // original small size but turns visibly blurry blown up to fill most of
-// the screen. 480px keeps it sharp at that display size without the
-// base64 payload getting out of hand — this rides in
-// get_scanner_offline_photos(), refreshed only every 30 minutes (see
-// OfflineScanModel.js), not the frequent 5-minute lookup cache, so it can
-// afford to be bigger than a typical "avatar" thumbnail.
-const OFFLINE_THUMB_MAX_DIMENSION = 480;
-const OFFLINE_THUMB_QUALITY = 0.8;
+// the screen. So this cannot be an "avatar"-sized thumbnail: it is the
+// single most prominent image the app renders.
+//
+// Sized down from 480px/q0.8 on 2026-10-06. At 480px/q0.8 these measured
+// ~17 KB each — 12.5 MB across 729 employees, making `employees` the
+// largest table in the database and the heaviest thing the kiosk offline
+// cache downloads (get_scanner_offline_photo_updates, OfflineScanModel.js).
+//
+// QUALITY is the axis that was actually wasteful, not dimension. 480px is
+// already being UPSCALED on every kiosk — min(82dvh,82dvw) is ~630 CSS px
+// on a 1366x768 tablet, ~885 on a 1080p display — and upscaling blurs away
+// exactly the high-frequency detail the extra quality bits encode, so q0.8
+// was paying for information the screen destroys. Dimension was cut only
+// slightly (480 -> 400, still a modest upscale) and quality more sharply
+// (0.8 -> 0.62), which together roughly halve the bytes while keeping the
+// photo's perceived sharpness governed by the upscale rather than by the
+// encoder.
+//
+// Changing these only affects NEW uploads. Existing rows are re-encoded by
+// Settings -> Employee photos -> "Recompress offline thumbnails", which
+// runs recompressThumbBase64() below over the stored bytes; that is the
+// part that actually shrinks the live database. Lower these further and
+// that action becomes re-runnable against the new target.
+const OFFLINE_THUMB_MAX_DIMENSION = 400;
+const OFFLINE_THUMB_QUALITY = 0.62;
+
+// Exported for the Settings recompress panel, which states the target it
+// is encoding to rather than hard-coding a second copy of these numbers in
+// its own copy text.
+export const OFFLINE_THUMB_TARGET = Object.freeze({
+  maxDimension: OFFLINE_THUMB_MAX_DIMENSION,
+  quality: OFFLINE_THUMB_QUALITY,
+  // Stored (base64) size at or below which a row is already small enough to
+  // leave alone. Empirical, not derived: it depends on the photos
+  // themselves, so there is no formula from maxDimension/quality to put
+  // here. 400px/q0.62 lands around 8 KB of image for a typical portrait,
+  // which is ~11 KB once base64 widens it by 4/3; 12 KB leaves headroom for
+  // a busier photo without letting a genuinely oversized row through.
+  //
+  // Only a filter on which rows are worth DOWNLOADING to try — it decides
+  // nothing about the result. pickSmallerThumb() still has the final say on
+  // every row it is handed, so setting this too low merely wastes a fetch
+  // and setting it too high merely leaves a few rows unshrunk.
+  overTargetStoredBytes: 12288,
+});
 
 export const EXTENSION_BY_MIME = {
   'image/webp': 'webp',
@@ -92,6 +130,85 @@ export async function fileToOfflineThumbWebp(file) {
   } finally {
     if (bitmap.close) bitmap.close();
   }
+}
+
+// Decoded byte count of a base64 string, WITHOUT decoding it. 4 base64
+// chars encode 3 bytes; trailing '=' padding encodes nothing. Used for
+// before/after accounting over hundreds of thumbnails at once, where
+// atob()-ing every one just to read .length would allocate megabytes for a
+// number that arithmetic already gives exactly.
+//
+// Matches Postgres's octet_length(photo_thumb_b64) only on the base64 TEXT
+// (which is what the column actually stores); this returns the size of the
+// image those characters represent, i.e. ~3/4 of the column's own width.
+export function base64ByteLength(base64) {
+  if (typeof base64 !== 'string' || base64.length === 0) return 0;
+  const clean = base64.replace(/[\r\n=]/g, '');
+  return Math.floor((clean.length * 3) / 4);
+}
+
+// Which of an original and a re-encoded thumbnail to actually keep.
+//
+// Re-encoding is NOT monotonically shrinking: a row already below the
+// target (an old `sz=w96` Drive fallback, or a photo that was tiny to begin
+// with) gets re-encoded at the same or larger dimension and can come back
+// BIGGER, and a second pass over an already-recompressed row costs a
+// generation of quality loss for nothing. Both cases must keep the
+// original, so the action is safely re-runnable and can never make a row
+// worse than it found it. MIN_GAIN_RATIO ignores trivial wins for the same
+// reason: a 2% saving is not worth a generation of lossy re-encoding, nor
+// the UPDATE's own cost (the trg_employees_updated_at bump makes every
+// rewritten row show up in the next scanner lookup-cache delta).
+const MIN_GAIN_RATIO = 0.1; // keep the re-encode only if it saves >=10%
+
+export function pickSmallerThumb(originalBase64, candidateBase64) {
+  const before = base64ByteLength(originalBase64);
+  const after = base64ByteLength(candidateBase64);
+  if (!before || !after || after >= before * (1 - MIN_GAIN_RATIO)) {
+    return { base64: originalBase64, before, after: before, saved: 0, changed: false };
+  }
+  return { base64: candidateBase64, before, after, saved: before - after, changed: true };
+}
+
+/**
+ * Re-encodes an already-stored `photo_thumb_b64` to the current offline
+ * target (OFFLINE_THUMB_MAX_DIMENSION / _QUALITY) without going back to
+ * Google Drive for the original.
+ *
+ * Deliberately sourced from the stored bytes rather than photo_url: Drive
+ * hot-links are opaque to a cross-origin canvas (the no-cors problem that
+ * sank an earlier bulk client-side prefetch — see README's 2026-09-18
+ * entry), and a `data:` URI built from our own column has no origin to be
+ * tainted by, so drawImage/toBlob work on it unconditionally. It also means
+ * this runs identically for rows whose Drive file has since been deleted.
+ *
+ * Re-encoding a lossy image is generation loss, so this is only worth doing
+ * when the saving is real — see pickSmallerThumb(), which this defers to
+ * and which returns the ORIGINAL unchanged when it isn't.
+ *
+ * @returns {Promise<{ base64: string, before: number, after: number, saved: number, changed: boolean }>}
+ *   bytes are decoded image bytes, not base64 character counts.
+ */
+export async function recompressThumbBase64(base64) {
+  if (!base64) return { base64, before: 0, after: 0, saved: 0, changed: false };
+
+  const bitmap = await loadBitmap(base64ToBlob(base64, sniffImageMimeFromBase64(base64)));
+  try {
+    const blob = await bitmapToWebpBlob(bitmap, OFFLINE_THUMB_MAX_DIMENSION, OFFLINE_THUMB_QUALITY);
+    return pickSmallerThumb(base64, await blobToBase64(blob));
+  } finally {
+    if (bitmap.close) bitmap.close();
+  }
+}
+
+// base64 -> Blob, for feeding stored thumbnails back through the same
+// decode path a picked File uses. Chunked for the same stack-depth reason
+// as the Edge Function's bytesToBase64().
+function base64ToBlob(base64, mime) {
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
 }
 
 async function bitmapToWebpBlob(bitmap, maxDimension, quality) {

@@ -249,4 +249,51 @@ export const EmployeesModel = {
     if (error) return { error: await readFunctionError(error) };
     return { data }; // { usage, limit, usageInDrive }
   },
+
+  // ---- offline-thumbnail recompression (Settings -> Employee photos) ----
+
+  // Size distribution of photo_thumb_b64 in STORED (base64) bytes, read
+  // server-side so the panel can decide whether a full pass is worth it
+  // without downloading the column to find out. Admin-only server-side.
+  async offlineThumbStats(overTargetBytes) {
+    return supabase.rpc('get_offline_thumb_stats', { p_over_target_bytes: overTargetBytes });
+  },
+
+  // One page of thumbnails to re-encode, keyed off the previous page's last
+  // id rather than .range(): a plain offset would re-read rows that the
+  // in-flight UPDATEs may already have shifted, and the recompressor writes
+  // as it walks. `id` is the primary key, so ordering by it is stable and
+  // `gt` can never revisit or skip a row.
+  //
+  // Only over-target rows are fetched. Under-target rows would be
+  // downloaded in full only for pickSmallerThumb() to reject them — pure
+  // egress for a decision the server already made in get_offline_thumb_stats.
+  // PostgREST has no octet_length filter, so the bound goes through a
+  // generated column's worth of work server-side instead; see
+  // get_thumbs_to_recompress in the migration.
+  async thumbsToRecompress({ afterId = null, limit = 20, overTargetBytes } = {}) {
+    return supabase.rpc('get_thumbs_to_recompress', {
+      p_after_id: afterId,
+      p_limit: limit,
+      p_over_target_bytes: overTargetBytes,
+    });
+  },
+
+  // Writes one re-encoded thumbnail back. Goes through the normal table
+  // UPDATE (RLS employees_update_admin_manager) rather than a dedicated
+  // RPC — there is nothing this needs that the existing policy doesn't
+  // already express.
+  //
+  // Note the side effect: trg_employees_updated_at bumps updated_at, so
+  // every rewritten row appears in the next scanner lookup-cache delta
+  // (get_scanner_offline_cache_delta). That delta carries no photos, so a
+  // full-roster pass costs one small lookup resync, not a photo resync.
+  // Kiosks that already hold the OLD thumbnails keep them: the photo cache
+  // is keyed on photo_file_id, which this does not touch, so recompressing
+  // deliberately does NOT push ~5 MB at every kiosk for a photo they can
+  // already display. They pick up the smaller ones on their next full
+  // cache rebuild.
+  async updateThumb(id, thumbB64) {
+    return supabase.from('employees').update({ photo_thumb_b64: thumbB64 }).eq('id', id);
+  },
 };

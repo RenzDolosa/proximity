@@ -183,10 +183,42 @@ an admin swaps it out.
   privileges. `PUBLIC` and `anon` revoked; `authenticated` and `service_role`
   granted. `database_limit_bytes` is the Free-plan 500 MB ceiling, held
   server-side so the constant is not duplicated client-side.
-  **The other four metrics on that panel (Egress, Cached Egress, Log
-  Ingestion, Log Query) have no database representation** — they are platform
-  billing figures from the Management API, fetched by the `project-usage`
-  Edge Function. Client: `Models/UsageModel.js`.
+  **Egress, Cached Egress, Log Ingestion and Log Query have no database
+  representation and no API at all** — they are platform billing figures, and
+  the `project-usage` Edge Function built to fetch them was deleted on
+  2026-10-05 once the live project proved every candidate endpoint 404s while
+  the token verifiably works. Read them from the dashboard's Usage page, and
+  attribute egress with the Logs Explorer queries in
+  `docs/SUPABASE_QUOTA_DECISION.md` §7. Client: `Models/UsageModel.js`.
+- **`get_offline_thumb_stats(p_over_target_bytes default 12288)`** — added
+  2026-10-06. Size distribution of `employees.photo_thumb_b64` in **stored
+  (base64) bytes**: `{ employees, with_thumb, total_bytes, avg_bytes,
+  max_bytes, over_target_bytes, over_target_rows, over_target_total_bytes,
+  measured_at }`. Backs Settings → Offline scanner thumbnails. It exists so the
+  panel can answer "is there anything to gain here?" in a few hundred bytes:
+  that column is the largest thing in this database *and* the heaviest payload
+  the kiosk cache pulls, so measuring it by downloading it would spend the
+  exact resource the panel exists to conserve. `SECURITY DEFINER`, gated on
+  `is_admin()` (matching `get_database_usage()` — the action it feeds rewrites
+  every employee row). Note the units: this reports the base64 **text** width,
+  which is what the column and every response actually carry, while the client
+  reports *decoded* image bytes via `base64ByteLength()`, which is what the
+  encoder controls. ~4/3 apart, both correct for their own question, and the
+  panel labels which is which. `PUBLIC`/`anon` revoked.
+- **`get_thumbs_to_recompress(p_after_id uuid, p_limit default 20,
+  p_over_target_bytes default 12288)`** — added 2026-10-06. One keyset page of
+  `{ id, full_name, photo_thumb_b64 }` for employees whose stored thumbnail
+  exceeds the target, ordered by `id`, limit clamped 1..100. An RPC rather than
+  a PostgREST select for two reasons: PostgREST cannot express
+  `octet_length(photo_thumb_b64) > n`, so without it the panel would download
+  every thumbnail including the ones already small enough purely to decline to
+  change them; and the caller `UPDATE`s rows as it walks, which an `OFFSET`
+  page would shift under. **Deliberately `SECURITY INVOKER`, unlike its
+  sibling above** — it returns employee photo data, so it must stay subject to
+  the caller's own RLS (`employees_select_scope`) rather than bypass it; the
+  `is_admin()` check sits on top of RLS, not instead of it. `PUBLIC`/`anon`
+  revoked. Client: `Models/EmployeesModel.js`
+  (`thumbsToRecompress` / `updateThumb`).
 - **`get_scanner_offline_cache_delta(p_since timestamptz, p_known_digest text)`**
   — added 2026-10-05. Returns
   `{ full, digest, cursor, rows }` with rows in exactly the shape
@@ -913,6 +945,43 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-10-06 — thumbnail recompression RPCs (`20261006000000_offline_thumb_recompression.sql`, NOT applied — apply by hand)**
+
+`employees.photo_thumb_b64` was 12.5 MB across 729 rows (~17 KB each) — the
+largest table in a 35 MB database on a 500 MB ceiling, and simultaneously the
+heaviest payload `get_scanner_offline_photo_updates()` serves. Its size is paid
+for twice: stored bytes, and egress on every fresh kiosk cache build. The
+client-side encoder target came down with it (480px/q0.80 → 400px/q0.62 — see
+the root README's entry for why *quality* was the wasteful axis and dimension
+barely moved), but that only affects future uploads, so these two RPCs exist to
+fix the rows already there.
+
+- **`get_offline_thumb_stats(p_over_target_bytes)`** — the cheap measurement,
+  `SECURITY DEFINER`, `is_admin()`. See the RPC section above for the full
+  contract and the stored-vs-decoded byte distinction.
+- **`get_thumbs_to_recompress(p_after_id, p_limit, p_over_target_bytes)`** — one
+  keyset page of over-target rows, `SECURITY INVOKER` so photos stay under the
+  caller's RLS. Keyset rather than `OFFSET` because the caller writes as it
+  walks.
+
+The write path needs no new RPC: the existing `employees_update_admin_manager`
+policy already authorizes exactly this, so the client uses a plain table
+`UPDATE`. Two consequences worth knowing before running it:
+
+- `trg_employees_updated_at` bumps `updated_at` on every rewritten row, so a
+  full pass makes all of them appear in the next
+  `get_scanner_offline_cache_delta()` response. That delta carries no photos, so
+  the cost is one small lookup resync per kiosk, not a photo resync.
+- The photo cache is keyed on `photo_file_id`, which recompression does not
+  touch, so kiosks **keep the thumbnails they already hold**. That is
+  intentional: forcing adoption would push megabytes at every kiosk for a photo
+  it can already display. They pick up the smaller ones on their next full
+  rebuild.
+
+Re-runnable by design — the client keeps the original unless re-encoding saves
+≥10%, so a second pass writes nothing. Lower the client target later and the
+same action becomes meaningful again against the new one.
 
 **2026-10-05 — `get_database_usage()` RPC + `project-usage` Edge Function (Settings → Usage)**
 - New `get_database_usage()` (`20261005120000_database_usage_rpc.sql`, **not
