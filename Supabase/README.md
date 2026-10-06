@@ -93,6 +93,39 @@ an admin swaps it out.
   `seconds_on_site` and `is_stale` (IN older than the window). Capped at
   10,000 rows. Gate: `is_admin_or_manager()`. The client counts only
   `status = 'active'` rows as on site, matching `get_dashboard_stats()`.
+  **No longer what the Dashboard's 30-second poll calls** — see
+  `get_onsite_roster_delta()` directly below. Still live, still the fallback, and
+  still what the periodic full resync would use if the delta were unavailable.
+- **`get_onsite_roster_delta(p_since timestamptz, p_stale_hours default 16)`** —
+  added 2026-10-06. Returns `{ full, cursor, stale_hours, rows }`.
+  `p_since` NULL ⇒ `full` true and `rows` is the complete current roster (client
+  replaces outright). Otherwise `rows` is every employee whose `updated_at` is
+  past `p_since` — **including ones who have left the roster** — each carrying
+  `on_roster`; the client upserts where true and drops where false. That flag is
+  the only way a delta can express a removal: someone who scans OUT does not
+  appear as a deleted row, they simply stop satisfying the roster predicate,
+  which a timestamp cursor can never observe.
+  Row shape is `{ id, full_name, employee_code, department, status, last_in_at,
+  last_scanner_id, on_roster }`. **`seconds_on_site` and `is_stale` are
+  deliberately absent** — both are pure functions of `last_in_at`, and `is_stale`
+  flipping with the clock was the entire reason the client used to refetch the
+  whole roster every 5 minutes. `stale_hours` is returned instead, once, so the
+  client's rule and the server's are the same rule
+  (`Utils/dashboard.js`'s `deriveRosterRow`).
+  `cursor` is lagged one minute behind `now()`, same guard as
+  `get_scanner_offline_cache_delta()`: a transaction committing after `now()` is
+  read but before the client stores the cursor would otherwise be skipped
+  forever. The overlap re-sends a few rows, and the client's merge is idempotent.
+  A full sync filters to on-roster rows only; an incremental one does not — for a
+  first sync the ~500 off-roster employees would be pure waste, for an
+  incremental one they are the point. Capped at 10,000 rows like its predecessor.
+  `SECURITY INVOKER` (so `employees` is read under the caller's RLS) with an
+  `is_admin_or_manager()` check on top. `PUBLIC`/`anon` revoked.
+  **Why it exists:** `roster_version` in `get_dashboard_pulse()` could never skip
+  the roster during working hours, because every scan bumps
+  `employees.updated_at`. This was ~90% of a 13.95 GB/month egress bill against a
+  5 GB quota — see `docs/EGRESS_BUDGET.md`. Client:
+  `Models/DashboardModel.js`'s `rosterDelta()`.
 - **`get_alerts(p_limit default 100, p_include_acknowledged default false)`**
   → jsonb array (newest first, each row plus `acknowledged_by_name`; limit
   clamped 1..500), **`get_unread_alert_count()`** (returns 0 for
@@ -945,6 +978,39 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-10-06 — `get_onsite_roster_delta()` (`20261006120000_onsite_roster_delta.sql`, NOT applied — apply by hand)**
+
+`roster_version`, added below on 2026-10-05, could never skip the roster during
+working hours. It is `md5(count(*) || max(updated_at))`, and every matched scan
+runs `UPDATE public.employees SET scan_logs = ..., scan_parity_count = ...` via
+`trg_scan_events_append_log`, which trips `trg_employees_updated_at` and moves
+`max(updated_at)`. So the version is in practice *"has anyone scanned in the last
+30 seconds?"* — always yes during a shift. The full roster went out every 30
+seconds per open tab: ~8.4 MB/hour each, roughly 90% of a 13.95 GB/month bill
+against a 5 GB quota. See `docs/EGRESS_BUDGET.md`.
+
+The new function returns only employees whose `updated_at` is past `p_since`,
+each with an **`on_roster`** flag. Full contract in the RPC section above. Three
+points worth repeating here:
+
+- **`on_roster` is what makes removals expressible.** An employee who scans OUT
+  does not appear as a deleted row — they stop satisfying the roster predicate,
+  which a timestamp cursor cannot observe. Without the flag the Dashboard would
+  show people as on site until the next full resync.
+- **A full sync filters to on-roster rows; an incremental one does not.** For a
+  first sync the ~500 employees who are not on site would be pure waste, worse
+  than the function this replaces. For an incremental sync they are the entire
+  point.
+- **`seconds_on_site` and `is_stale` are gone on purpose.** Clock-derived, so the
+  client computes them; `stale_hours` is returned once so both halves share one
+  rule. That is what let the client's unconditional 5-minute refetch go away.
+
+`get_onsite_roster()` stays live and unchanged as the fallback for a client
+deployed ahead of this migration. Because `DashboardPage.js` latches that
+fallback on `PGRST202`, **an unapplied migration is indistinguishable from no
+improvement** — check `list_migrations` before concluding the change did not
+work.
 
 **2026-10-06 — thumbnail recompression RPCs (`20261006000000_offline_thumb_recompression.sql`, NOT applied — apply by hand)**
 

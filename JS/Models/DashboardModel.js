@@ -33,7 +33,27 @@ export const DashboardModel = {
     return supabase.rpc('get_dashboard_stats', { p_window_hours: clampHours(windowHours, 16) });
   },
 
+  // Kept as the fallback for a client deployed ahead of
+  // 20261006120000_onsite_roster_delta.sql, and for the periodic full resync —
+  // see rosterDelta() below, which is what the 30-second poll actually calls.
   async onSiteRoster(staleHours = 16) {
     return supabase.rpc('get_onsite_roster', { p_stale_hours: clampHours(staleHours, 16) });
+  },
+
+  // { full, cursor, stale_hours, rows[] }. `since` null asks for the whole
+  // roster; otherwise only employees changed after it, each carrying
+  // `on_roster` so the client can drop the ones who left.
+  //
+  // This is the fix for the single largest egress consumer in the project.
+  // `roster_version` in pulse() above could never skip the roster during
+  // working hours: every matched scan bumps employees.updated_at (the scan_logs
+  // trigger), so the version changed on essentially every poll and the full
+  // ~70 KB roster was downloaded every 30 seconds per open tab. The data really
+  // had changed — one row of it — so the only real fix is to send one row.
+  async rosterDelta(since = null, staleHours = 16) {
+    return supabase.rpc('get_onsite_roster_delta', {
+      p_since: since,
+      p_stale_hours: clampHours(staleHours, 16),
+    });
   },
 };

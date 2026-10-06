@@ -18,7 +18,10 @@ const {
   PR_NUMBER,
   BASE_SHA,
   HEAD_SHA,
-  AI_REVIEW_MODEL = 'claude-opus-5-5', // fixed 2026-10-01 — 'claude-opus-5' was never a valid model string
+  // Default kept in sync with .github/workflows/ai-review.yml, which sets it
+  // explicitly — see the comment there about the 2026-10-01 regression that
+  // pointed this at a model ID that does not exist.
+  AI_REVIEW_MODEL = 'claude-opus-5',
 } = process.env;
 
 for (const [name, val] of Object.entries({ ANTHROPIC_API_KEY, GITHUB_TOKEN, GITHUB_REPOSITORY, PR_NUMBER, BASE_SHA, HEAD_SHA })) {
@@ -250,6 +253,19 @@ if (!anthropicRes.ok) {
     hint = 'The `ANTHROPIC_API_KEY` secret is missing, mistyped, or revoked. Reissue it at [console.anthropic.com](https://console.anthropic.com) and update the repository secret.';
   } else if (anthropicRes.status === 429) {
     hint = 'Rate limited by the Anthropic API. Re-running the job usually clears this; no change is needed to the pull request.';
+  } else if (anthropicRes.status === 404 || /not_found_error|model/i.test(body)) {
+    // The failure this check was missing. An unknown model ID 404s here, which
+    // reads as a generic API error and sends whoever is debugging it looking at
+    // credentials instead of at one wrong string in the workflow. It is also
+    // not a retry: every PR fails identically until the name is corrected.
+    hint = [
+      `\`AI_REVIEW_MODEL\` is set to \`${AI_REVIEW_MODEL}\`, which the Anthropic API does not recognise.`,
+      '',
+      'Fix the value in `.github/workflows/ai-review.yml`. Model IDs are not guessable —',
+      'check the API\'s own model list rather than inferring a name from a version number.',
+      '',
+      `Full response:\n\n\`\`\`\n${body}\n\`\`\``,
+    ].join('\n');
   }
   await reportCannotRun(`Anthropic API error (HTTP ${anthropicRes.status})`, hint);
   process.exit(1);

@@ -14,6 +14,69 @@ const isActive = (r) => r.status == null || r.status === 'active';
 const isLive = (r) => isActive(r) && !r.is_stale;
 const isStaleIn = (r) => isActive(r) && !!r.is_stale;
 
+// ---- incremental roster (get_onsite_roster_delta) ----
+
+// `seconds_on_site` and `is_stale` used to arrive from the server, which meant
+// the page had to re-ask for the whole roster just to find out that a clock had
+// advanced — see get_onsite_roster_delta's header for why that single fact cost
+// most of this project's egress. Both are pure functions of last_in_at, so they
+// belong here.
+//
+// Derived at PAINT time rather than merge time: the same row is repainted every
+// 30 seconds and these values are different each time. Computing them once when
+// a row arrives would freeze "Time on site" at whatever it was when the person
+// scanned in, which is exactly the bug the old server-computed fields had
+// between polls.
+export function deriveRosterRow(row, nowMs = Date.now(), staleHours = 16) {
+  const inAt = Date.parse(row?.last_in_at);
+  if (!Number.isFinite(inAt)) {
+    // No parseable IN time: show the row rather than hide it, but claim
+    // nothing about duration. A null duration renders as "—"; a 0 would read
+    // as "arrived just now", which is a specific and wrong claim.
+    return { ...row, seconds_on_site: null, is_stale: false };
+  }
+  const seconds = Math.max(0, Math.floor((nowMs - inAt) / 1000));
+  return { ...row, seconds_on_site: seconds, is_stale: seconds > staleHours * 3600 };
+}
+
+export function deriveRoster(rows, nowMs = Date.now(), staleHours = 16) {
+  return (Array.isArray(rows) ? rows : []).map((r) => deriveRosterRow(r, nowMs, staleHours));
+}
+
+// Applies one get_onsite_roster_delta() response to the roster already held.
+//
+// `full` replaces outright. An incremental delta carries every employee that
+// changed, each with `on_roster`: true upserts, false removes. That flag is the
+// whole mechanism for removals — someone who scans OUT does not appear as a
+// "deleted" row, they simply stop satisfying the roster predicate, which a
+// cursor alone can never observe.
+//
+// Ordered by `last_in_at` to match what the server returns on a full sync
+// (oldest IN first, the order the Dashboard table expects), so a row that
+// arrives through a delta sits where a full resync would have put it rather
+// than wherever it happened to be appended.
+export function mergeRosterDelta(currentRows, delta) {
+  const incoming = Array.isArray(delta?.rows) ? delta.rows : [];
+  if (delta?.full) return incoming.slice().sort(byLastIn);
+
+  const byId = new Map((Array.isArray(currentRows) ? currentRows : []).map((r) => [r.id, r]));
+  for (const row of incoming) {
+    if (row?.on_roster) byId.set(row.id, row);
+    else byId.delete(row?.id);
+  }
+  return [...byId.values()].sort(byLastIn);
+}
+
+// Rows with no IN time sort last rather than throwing the comparison off with
+// NaN, which would leave the array in an arbitrary order.
+function byLastIn(a, b) {
+  const x = Date.parse(a?.last_in_at);
+  const y = Date.parse(b?.last_in_at);
+  if (!Number.isFinite(x)) return Number.isFinite(y) ? 1 : 0;
+  if (!Number.isFinite(y)) return -1;
+  return x - y;
+}
+
 export function summarizeRoster(rows) {
   const list = Array.isArray(rows) ? rows : [];
   const live = list.filter(isLive);

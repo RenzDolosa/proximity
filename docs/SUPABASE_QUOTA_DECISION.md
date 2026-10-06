@@ -384,6 +384,11 @@ Dashboard left open — not people. That distinction decides whether the fix is
 
 ## 8. Related
 
+- `EGRESS_BUDGET.md` — the per-source bytes/hour budget, and the 2026-10-06
+  finding that the Dashboard's on-site roster was ~90% of the spend because
+  `roster_version` is defeated by the fact that every scan bumps
+  `employees.updated_at`
+
 - `SUPABASE_EXIT_RUNBOOK.md` — staged cutover plan for option C
 - `LOCAL_DATABASE_ARCHITECTURE.md` — the target architecture and phasing
 - `Supabase/local/export-project.sh` — the §4 capture tool

@@ -43,12 +43,19 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          # claude-opus-5-5 for review quality (this is the whole point of
-          # the job); swap to claude-sonnet-5 here if cost matters more than
-          # catching the subtle stuff. (Fixed 2026-10-01: this was
-          # 'claude-opus-5', not a real model string, so every run of this
-          # job was failing at the API call, not just reviewing poorly.)
-          AI_REVIEW_MODEL: claude-opus-5-5
+          # Opus for review quality (this is the whole point of the job);
+          # swap to claude-sonnet-5 here if cost matters more than catching
+          # the subtle stuff.
+          #
+          # 2026-10-06: corrected back to `claude-opus-5`. A 2026-10-01 edit
+          # changed it to `claude-opus-5-5` on the stated grounds that
+          # `claude-opus-5` "was never a valid model string" — that is
+          # backwards. `claude-opus-5` IS the Opus 5 model ID; there is no
+          # `claude-opus-5-5`. An unknown model is a 404 `not_found_error`
+          # from /v1/messages, which fails this job on every single PR with
+          # no review posted. Verify a model ID against the API's own model
+          # list before changing this line; the names are not guessable.
+          AI_REVIEW_MODEL: claude-opus-5
         run: node .github/scripts/ai-review.mjs
         # No `continue-on-error` — a failing step here is what makes this
         # job's status go red, which is exactly what "required status
