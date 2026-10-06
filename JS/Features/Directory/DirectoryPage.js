@@ -16,6 +16,7 @@ import { openExportScanLogsModal } from '../../Components/ExportScanLogsModal.js
 import { renderPagination } from '../../Components/Pagination.js';
 import { openConfirmModal, openConfirmProgressModal } from '../../Components/ConfirmModal.js';
 import { wireAvatarPreview } from '../../Utils/avatarPreview.js';
+import { buildIdentityIndex, identityKey } from '../../Utils/employeeCode.js';
 
 let page = 1;
 let pageSize = 50;
@@ -312,26 +313,18 @@ async function importEmployees(records, onProgress) {
   const claimedCodes = new Map(); // code(lower) -> the line that already claimed it
   const codesNeedingNewCard = new Map(); // code(lower) -> original-case code
 
-  // Existing employee_codes (DB + within-file) — employee_code is a unique
-  // column, so a repeat is always a duplicate, not just a validation error.
-  // Those are counted separately as "skipped" rather than lumped in with
-  // the error rows, since there's nothing wrong with the row itself.
-  const existingEmployeeCodes = new Set(
-    (appState.employeesCache || []).map((e) => (e.employee_code || '').trim().toLowerCase())
-  );
-  const claimedEmployeeCodes = new Map(); // employee_code(lower) -> line that already claimed it
-
-  // full_name isn't a unique DB column (unlike employee_code), so nothing
-  // stops two rows for the same person under different codes from both
-  // going through silently — which is exactly how a file re-imported with
-  // regenerated codes ends up duplicating the whole roster. This is an
-  // error (not a silent skip like employee_code) since, unlike an exact
-  // employee_code rematch, a name collision might also be two different
-  // people who happen to share a name — worth a human's attention either way.
-  const existingEmployeeNames = new Map(
-    (appState.employeesCache || []).map((e) => [(e.full_name || '').trim().toLowerCase(), e])
-  );
-  const claimedEmployeeNames = new Map(); // full_name(lower) -> line that already claimed it
+  // Codes and names already taken by CURRENT employees. Resigned holders are
+  // excluded on purpose: codes are recycled when staff leave, so a code whose
+  // only holder has resigned is a legitimate new hire, not a duplicate — see
+  // Utils/employeeCode.js. Treating it as a duplicate is what used to make the
+  // import silently drop re-hires.
+  const { codes: takenCodes, names: takenNames, resignedCodes } =
+    buildIdentityIndex(appState.employeesCache);
+  const claimedEmployeeCodes = new Map(); // key -> line that already claimed it
+  // Names are an error rather than a silent skip: unlike an exact code rematch,
+  // a name collision can also be two genuinely different people.
+  const claimedEmployeeNames = new Map();
+  let reusedCount = 0;
 
   const pending = [];
   for (let i = 0; i < records.length; i++) {
@@ -344,8 +337,8 @@ async function importEmployees(records, onProgress) {
       errors.push({ line, message: 'Fullname, Employee Code, and Proximity Code are all required.' });
       continue;
     }
-    const nameKey = full_name.toLowerCase();
-    const existingByName = existingEmployeeNames.get(nameKey);
+    const nameKey = identityKey(full_name);
+    const existingByName = takenNames.get(nameKey);
     if (existingByName) {
       errors.push({ line, message: `An employee named "${full_name}" already exists (code ${existingByName.employee_code}). If this is a different person, adjust the name; otherwise remove this row.` });
       continue;
@@ -354,15 +347,19 @@ async function importEmployees(records, onProgress) {
       errors.push({ line, message: `"${full_name}" is already used by row ${claimedEmployeeNames.get(nameKey)} in this file.` });
       continue;
     }
-    const empCodeKey = employee_code.toLowerCase();
-    if (existingEmployeeCodes.has(empCodeKey)) {
+    const empCodeKey = identityKey(employee_code);
+    if (takenCodes.has(empCodeKey)) {
       skippedCount++;
-      continue; // already an employee on file — duplicate, silently skipped
+      continue; // a current employee already holds this code
     }
     if (claimedEmployeeCodes.has(empCodeKey)) {
       skippedCount++;
       continue; // duplicate employee_code earlier in this same file
     }
+    // Free because its previous holder resigned. Allowed, but counted so the
+    // summary says so — reuse is intentional, and silently importing it would
+    // hide a typo that happens to match a former employee's code.
+    if (resignedCodes.has(empCodeKey)) reusedCount++;
     const codeKey = proximity_code.toLowerCase();
     if (claimedCodes.has(codeKey)) {
       errors.push({ line, message: `Proximity code is already used by row ${claimedCodes.get(codeKey)} in this file.` });
@@ -453,5 +450,5 @@ async function importEmployees(records, onProgress) {
   }
 
   errors.sort((a, b) => a.line - b.line);
-  return { successCount, skippedCount, errors };
+  return { successCount, skippedCount, reusedCount, errors };
 }

@@ -7,24 +7,20 @@ import { fetchAllRows } from '../Utils/fetchAllRows.js';
 
 const base = createModel('employees');
 
-// Every employee_directory column the client actually reads: the grid
-// (DirectoryPage.js), the edit modal (EmployeeModal.js), and the XLSX export.
-// Deliberately omits `last_scan` (a full jsonb scan-log entry per row),
-// `total_remarks`, `created_at` and `updated_at` — nothing renders them, and
-// this view is refetched in full on every visit to Employee Manager.
+// Every employee_directory column the client actually reads. Explicit rather than
+// '*' because this view is refetched in full on every visit, so it also exposes
+// `last_scan` (a whole jsonb entry per row), `total_remarks`, `created_at` and
+// `updated_at` — none of which anything renders. Keep in sync with what
+// DirectoryPage and EmployeeModal consume.
 const DIRECTORY_COLUMNS = [
   'id', 'employee_code', 'full_name', 'department', 'position', 'email', 'phone',
   'photo_url', 'photo_file_id', 'status', 'active_proximity_code',
   'proximity_card_active', 'proximity_card_id', 'total_scans', 'open_remarks',
 ].join(',');
 
-// supabase-js's functions.invoke() only gives a generic "Edge Function
-// returned a non-2xx status code" message for FunctionsHttpError — the
-// actual { error: "..." } JSON body the function sent back is on
-// error.context (the raw fetch Response), not surfaced automatically. This
-// pulls the real message out so upload/delete failures (missing Google
-// Drive secrets, permission denied, etc.) show something the user can
-// actually act on instead of the generic wrapper text.
+// invoke() surfaces only a generic "non-2xx status code" message; the function's
+// real { error } body sits unread on error.context. Pull it out so a failure says
+// something actionable.
 async function readFunctionError(error) {
   if (!error) return null;
   try {
@@ -41,19 +37,8 @@ async function readFunctionError(error) {
 export const EmployeesModel = {
   ...base,
 
-  // Employee Manager grid — denormalized view with card + scan totals.
-  // Pages through past Supabase's default 1000-row-per-request cap so the
-  // grid always reflects the true full roster, however large it grows —
-  // see Utils/fetchAllRows.js for why a plain .limit() can't do this.
-  //
-  // Explicit column list rather than '*': the view also exposes `last_scan`
-  // (a whole jsonb scan-log entry per employee — by far the heaviest column
-  // in it), `total_remarks`, `created_at` and `updated_at`, none of which the
-  // grid, the edit modal, or the XLSX export read. This payload is fetched in
-  // full on every visit to the page, so columns nobody renders are pure
-  // egress. Keep this list in sync with what DirectoryPage.js and
-  // EmployeeModal.js actually consume — adding a column to the view no longer
-  // silently adds it to this request.
+  // Employee Manager grid. Pages past Supabase's 1000-row cap — see
+  // Utils/fetchAllRows.js for why .limit() cannot.
   async listDirectory() {
     return fetchAllRows((from, to) =>
       supabase.from('employee_directory')
@@ -78,10 +63,8 @@ export const EmployeesModel = {
     return supabase.from('employees').insert(payload);
   },
 
-  // Bulk insert used by CSV import — one round-trip per chunk instead of
-  // one per row. Returns the same {data,error} shape as a single insert;
-  // on error the caller falls back to inserting that chunk row-by-row to
-  // find out exactly which row failed.
+  // One round-trip per chunk for CSV import. On error the caller retries that
+  // chunk row-by-row to find which row failed.
   async createMany(payloads) {
     return supabase.from('employees').insert(payloads).select('id');
   },
@@ -98,13 +81,9 @@ export const EmployeesModel = {
     return supabase.from('employees').delete().in('id', ids);
   },
 
-  // "Delete all" used to collect every employee id and call deleteMany()
-  // with all of them in one .in(...) — fine for a handful of rows, but
-  // with hundreds+ the resulting URL (PostgREST filters are query params,
-  // even for DELETE) blew past the API gateway's URL length limit and
-  // came back as a flat 400 Bad Request with no useful message. A filter
-  // that's true for every row sidesteps building that list entirely — one
-  // request, any table size, same admin-only RLS.
+  // An always-true filter rather than .in() over every id: PostgREST filters are
+  // query params even for DELETE, so a few hundred ids blow past the gateway's
+  // URL length limit and return a bare 400. One request, any table size.
   async deleteAll() {
     return supabase.from('employees').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   },
@@ -113,13 +92,9 @@ export const EmployeesModel = {
     return supabase.from('employees').select('full_name, scan_logs').eq('id', employeeId).single();
   },
 
-  // Deletes one entry from an employee's scan log — actually deletes the
-  // underlying scan_events row too (via the delete_employee_scan_log()
-  // RPC), not just the cached jsonb entry, so Recent Activity and this
-  // log stay in sync. Admin-only (enforced server-side by the RPC itself,
-  // not just hidden client-side) — this is an audit-trail correction,
-  // not a routine edit, same tier as deleting an employee or a card
-  // outright rather than the lighter admin-or-manager bar remarks use.
+  // Deletes the underlying scan_events row too, not just the cached jsonb entry,
+  // so Recent Activity stays in sync. Admin-only, enforced in the RPC: an
+  // audit-trail correction, not a routine edit.
   async deleteScanLog(employeeId, scanId) {
     return supabase.rpc('delete_employee_scan_log', { p_employee_id: employeeId, p_scan_id: scanId });
   },
@@ -128,50 +103,33 @@ export const EmployeesModel = {
     return supabase.from('employees').select('full_name, remarks_log').eq('id', employeeId).single();
   },
 
-  // Appends via the add_employee_remark() RPC (not a plain update) so two
-  // people adding a remark to the same employee at once can't clobber each
-  // other's entry — same reasoning as the scan_logs append trigger.
+  // An RPC rather than a plain update so two people remarking on the same
+  // employee cannot clobber each other's entry.
   async addRemark(employeeId, remark) {
     return supabase.rpc('add_employee_remark', { p_employee_id: employeeId, p_remark: remark });
   },
 
-  // Toggles a single remark's resolved flag (also via RPC, same
-  // concurrent-safe reasoning as addRemark).
+  // Also an RPC, same concurrency reasoning as addRemark.
   async resolveRemark(employeeId, remarkId, resolved) {
     return supabase.rpc('resolve_employee_remark', { p_employee_id: employeeId, p_remark_id: remarkId, p_resolved: resolved });
   },
 
-  // Uploads an already-converted .webp (or fallback jpg/png — see
-  // Utils/image.js) Blob to Google Drive via the upload-employee-photo
-  // Edge Function.
+  // Uploads a converted photo to Drive via the upload-employee-photo function.
   //
-  // Deliberately raw XMLHttpRequest instead of supabase.functions.invoke():
-  // invoke() is fetch()-based under the hood, and fetch has no upload
-  // progress event — it only resolves once the *whole* request/response
-  // round-trip is done. That's fine for tiny payloads (admin-users,
-  // proximity-scan) but a base64-encoded photo is large enough that
-  // "nothing happens for a few seconds" reads as broken. XHR's
-  // `upload.onprogress` gives real byte-level progress during the send,
-  // which onProgress(pct) below surfaces to the Employee Manager's photo
-  // picker as an actual moving progress bar.
+  // Raw XHR rather than supabase.functions.invoke(): invoke() is fetch-based, and
+  // fetch has no upload progress event — it resolves only once the whole
+  // round-trip is done. Fine for small payloads, but a base64 photo takes long
+  // enough that no feedback reads as broken. xhr.upload.onprogress gives real
+  // byte-level progress.
   //
-  // old_file_id (optional): the Drive file id being replaced, so the
-  // function can best-effort delete it after the new upload succeeds.
-  // mimeType: the ACTUAL type Utils/image.js's fileToWebp() produced
-  // (blob.type, not assumed) — the Edge Function only guesses `image/webp`
-  // when this is omitted, so an older/non-webp-capable browser's real
-  // output (canvas.toBlob() can silently fall back) doesn't get uploaded
-  // to Drive mislabeled.
-  // thumbBase64/thumbMimeType (optional): the small offline-Scanner
-  // thumbnail from Utils/image.js's fileToOfflineThumbWebp(), if it
-  // succeeded — see EmployeeModal.js. Passed straight through to skip the
-  // Edge Function's own (lower-res, format-unpredictable) server-side
-  // Drive thumbnail fetch. null is fine; the Edge Function falls back.
-  // onProgress (optional): (pct:number) => void, 0–100, called as the
-  // browser pushes bytes to Supabase. pct reaching 100 only means the
-  // upload finished sending — the function may still be talking to Google
-  // Drive server-side, which the caller should represent as an
-  // indeterminate/"finishing" state rather than treating 100% as done.
+  // mimeType must be the ACTUAL blob.type, since canvas.toBlob can silently
+  // produce something other than webp; the function only guesses when it is
+  // omitted. thumbBase64/thumbMimeType skip the function's own lower-res
+  // server-side thumbnail fetch, and null is fine — it falls back.
+  //
+  // onProgress(pct) reaching 100 means the bytes are sent, NOT that the upload is
+  // done: the function is still talking to Drive, so callers should show an
+  // indeterminate "finishing" state.
   uploadPhoto({ base64, mimeType, thumbBase64, thumbMimeType, filename, oldFileId, onProgress }) {
     return new Promise(async (resolve) => {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -218,10 +176,8 @@ export const EmployeesModel = {
     });
   },
 
-  // Best-effort delete of a Drive file — used when a photo is removed
-  // without being replaced by a new one. Tiny request/response, no
-  // meaningful upload progress to show, so this stays on invoke() rather
-  // than duplicating the XHR plumbing above.
+  // For a photo removed without a replacement. Tiny payload with no progress
+  // worth showing, so invoke() rather than the XHR plumbing above.
   async deletePhoto(fileId) {
     if (!fileId) return { data: true };
     const { data: sessionData } = await supabase.auth.getSession();
@@ -252,25 +208,18 @@ export const EmployeesModel = {
 
   // ---- offline-thumbnail recompression (Settings -> Employee photos) ----
 
-  // Size distribution of photo_thumb_b64 in STORED (base64) bytes, read
-  // server-side so the panel can decide whether a full pass is worth it
-  // without downloading the column to find out. Admin-only server-side.
+  // Size distribution of photo_thumb_b64 in STORED (base64) bytes, measured
+  // server-side so the panel can decide whether a pass is worth it without
+  // downloading the column to find out.
   async offlineThumbStats(overTargetBytes) {
     return supabase.rpc('get_offline_thumb_stats', { p_over_target_bytes: overTargetBytes });
   },
 
-  // One page of thumbnails to re-encode, keyed off the previous page's last
-  // id rather than .range(): a plain offset would re-read rows that the
-  // in-flight UPDATEs may already have shifted, and the recompressor writes
-  // as it walks. `id` is the primary key, so ordering by it is stable and
-  // `gt` can never revisit or skip a row.
-  //
-  // Only over-target rows are fetched. Under-target rows would be
-  // downloaded in full only for pickSmallerThumb() to reject them — pure
-  // egress for a decision the server already made in get_offline_thumb_stats.
-  // PostgREST has no octet_length filter, so the bound goes through a
-  // generated column's worth of work server-side instead; see
-  // get_thumbs_to_recompress in the migration.
+  // One page of over-target thumbnails. Keyset-paged on id, not .range(),
+  // because the caller UPDATEs rows as it walks and an offset would shift under
+  // its own writes. Only over-target rows: PostgREST cannot express an
+  // octet_length filter, and downloading already-small rows just to reject them
+  // is pure egress.
   async thumbsToRecompress({ afterId = null, limit = 20, overTargetBytes } = {}) {
     return supabase.rpc('get_thumbs_to_recompress', {
       p_after_id: afterId,
@@ -279,20 +228,13 @@ export const EmployeesModel = {
     });
   },
 
-  // Writes one re-encoded thumbnail back. Goes through the normal table
-  // UPDATE (RLS employees_update_admin_manager) rather than a dedicated
-  // RPC — there is nothing this needs that the existing policy doesn't
-  // already express.
+  // A plain table UPDATE — employees_update_admin_manager already expresses
+  // exactly this, so no RPC is needed.
   //
-  // Note the side effect: trg_employees_updated_at bumps updated_at, so
-  // every rewritten row appears in the next scanner lookup-cache delta
-  // (get_scanner_offline_cache_delta). That delta carries no photos, so a
-  // full-roster pass costs one small lookup resync, not a photo resync.
-  // Kiosks that already hold the OLD thumbnails keep them: the photo cache
-  // is keyed on photo_file_id, which this does not touch, so recompressing
-  // deliberately does NOT push ~5 MB at every kiosk for a photo they can
-  // already display. They pick up the smaller ones on their next full
-  // cache rebuild.
+  // Side effect: trg_employees_updated_at fires, so every rewritten row shows up
+  // in the next scanner lookup delta (which carries no photos, so the cost is one
+  // small resync). Kiosks keep the thumbnails they hold, because the photo cache
+  // keys on photo_file_id and this does not touch it.
   async updateThumb(id, thumbB64) {
     return supabase.from('employees').update({ photo_thumb_b64: thumbB64 }).eq('id', id);
   },

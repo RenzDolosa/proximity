@@ -17,21 +17,10 @@ import { DashboardModel } from '../../Models/DashboardModel.js';
 import { openDepartmentRosterModal } from '../../Components/DepartmentRosterModal.js';
 
 const REFRESH_MS = 30000;
-// How often to throw away the accumulated roster and ask for the whole thing
-// again, regardless of what the delta cursor says.
-//
-// Not a correctness requirement — it is the self-heal. A cursor can only
-// observe rows whose `updated_at` moved, so it cannot see a hard-DELETEd
-// employee, and it cannot recover on its own if a laptop slept through a
-// stretch of changes and resumed with a stale cursor. Rather than reason
-// about every such case, pay one full roster every 10 minutes and let all of
-// them fix themselves within that window.
-//
-// This REPLACES the old 5-minute unconditional refetch, which existed because
-// `is_stale` arrived from the server and flips with the clock alone. The client
-// derives both `is_stale` and `seconds_on_site` from `last_in_at` now
-// (Utils/dashboard.js's deriveRoster), so the passage of time is no longer a
-// reason to talk to the server at all.
+// The delta's self-heal, not a correctness requirement: a cursor only sees rows
+// whose updated_at moved, so it cannot observe a hard-DELETEd employee or recover
+// from a laptop that slept through a stretch of changes. One full roster every
+// 10 minutes fixes every such case without reasoning about them individually.
 const ROSTER_FULL_RESYNC_MS = 10 * 60 * 1000;
 
 let stats = null;
@@ -40,15 +29,14 @@ let rosterCursor = null;  // `cursor` from the last delta; null forces a full sy
 let rosterStaleHours = 16;
 let rosterSyncedAt = 0;
 let loaded = false;
-// Set once if get_dashboard_pulse() isn't on the project yet (client
-// deployed ahead of the migration), so every later refresh goes straight to
-// the legacy pair instead of paying a failed round trip first.
+// One-shot latches for a client deployed ahead of its migrations, so later
+// refreshes go straight to the legacy RPC instead of paying a failed round trip.
+//
+// Note what latching the roster one costs: a full roster on every poll, i.e.
+// exactly the behaviour the delta exists to remove. If the Dashboard feels
+// expensive again, check that 20261006120000_onsite_roster_delta.sql was applied.
 let pulseUnavailable = false;
 const MISSING_PULSE = { code: 'PGRST202', message: 'Could not find the function public.get_dashboard_pulse' };
-// Same one-shot latch for get_onsite_roster_delta. Falling back costs the full
-// roster on every poll — i.e. the behaviour this change exists to remove — so
-// if the Dashboard feels expensive again, check whether
-// 20261006120000_onsite_roster_delta.sql actually got applied.
 let rosterDeltaUnavailable = false;
 const MISSING_ROSTER_DELTA = { code: 'PGRST202', message: 'Could not find the function public.get_onsite_roster_delta' };
 
@@ -150,27 +138,18 @@ async function load({ force = false } = {}) {
   if (seq !== requestSeq) return; // superseded by a newer load
   if (p.error) { finish(seq, p.error); return; }
 
-  // The roster is the expensive half of this refresh, and `roster_version`
-  // from the pulse cannot make it cheap: every matched scan bumps
-  // employees.updated_at via the scan_logs trigger, so during a shift the
-  // version changes on essentially every poll and the old code re-downloaded
-  // all ~500 rows every 30 seconds per open tab. See
-  // get_onsite_roster_delta's header — that one fact was most of this
-  // project's egress bill.
-  //
-  // So the version is no longer consulted at all. A delta asks for what moved,
-  // which on a busy poll is a handful of rows and on a quiet one is none.
-  // `force` (the Refresh button) and the periodic self-heal both drop the
-  // cursor, which is what asks for the whole roster again.
+  // `roster_version` from the pulse is deliberately NOT consulted: every matched
+  // scan bumps employees.updated_at, so during a shift it changes on essentially
+  // every poll and the old code re-downloaded all ~500 rows every 30 seconds per
+  // tab — most of this project's egress bill (docs/EGRESS_BUDGET.md). A delta asks
+  // only for what moved. Refresh and the periodic self-heal drop the cursor, which
+  // is what asks for the whole roster.
   const wantsFull = force || !loaded || !rosterCursor
     || Date.now() - rosterSyncedAt > ROSTER_FULL_RESYNC_MS;
   const d = rosterDeltaUnavailable
     ? { error: MISSING_ROSTER_DELTA }
     : await DashboardModel.rosterDelta(wantsFull ? null : rosterCursor);
 
-  // Same forward-compatibility shape as the pulse above: a client deployed
-  // ahead of the migration falls back permanently to the full-roster RPC
-  // rather than failing every refresh.
   if (d.error && isMissingFunctionError(d.error)) {
     rosterDeltaUnavailable = true;
     const r = await DashboardModel.onSiteRoster();
@@ -181,20 +160,15 @@ async function load({ force = false } = {}) {
   if (seq !== requestSeq) return;
   if (d.error) { finish(seq, d.error, p.data?.stats); return; }
 
-  // Merge BEFORE the sequence guard's effects land, but only commit to the
-  // cursor inside finish() — a response that lost a race must not advance the
-  // cursor, or the rows it carried would never be requested again.
   finish(seq, null, p.data?.stats, mergeRosterDelta(roster, d.data), d.data);
 }
 
-// Shared tail of every path through load() above: re-enable the button, show
-// or clear the error, and repaint.
-//
-// `delta` is the raw response, present only on the incremental path. Its
-// `cursor` is committed here rather than at the call site for the same reason
-// the repaint is: a superseded response must change no state at all. The
-// legacy fallbacks pass no delta, which leaves `rosterCursor` null and so keeps
-// asking for full rosters — correct, because that is all those RPCs can give.
+// Shared tail of every path through load(). `delta` is present only on the
+// incremental path; its cursor is committed HERE, not at the call site, because a
+// superseded response must change no state at all — advancing the cursor for rows
+// that were discarded would mean never requesting them again. The legacy
+// fallbacks pass no delta, leaving the cursor null so they keep asking for full
+// rosters, which is all those RPCs can give.
 function finish(seq, err, nextStats, nextRoster, delta = null) {
   if (seq !== requestSeq) return;
   const b = $('#dash-refresh');
@@ -258,12 +232,10 @@ function paintStats() {
   });
 }
 
-// `roster` holds rows exactly as the server sent them. `seconds_on_site` and
-// `is_stale` are attached HERE, at paint time, because both change with nothing
-// but the clock — deriving them once on arrival would freeze "Time on site" at
-// whatever it was when the row came in, and would never flip `is_stale`.
-// Deriving on every paint is also what let the 5-minute unconditional refetch go
-// away: the passage of time is no longer a reason to call the server.
+// seconds_on_site and is_stale are attached at PAINT time, not on arrival: both
+// change with nothing but the clock, so deriving them once would freeze "Time on
+// site" and never flip is_stale. It is also what removed the old 5-minute
+// unconditional refetch — time passing is no longer a reason to call the server.
 function derivedRoster() { return deriveRoster(roster, Date.now(), rosterStaleHours); }
 
 function currentRows() { return filterRoster(derivedRoster(), filters); }

@@ -20,7 +20,7 @@ supabase functions download upload-employee-photo --project-ref kjwttqmbcjvkivgm
 | Table                       | Purpose                                                                                                                                                                                                    |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `profiles`                   | One row per login account (`auth.users` 1:1). `role` = `admin` / `manager` / `viewer`. `access_scope` = `all` / `employee_manager` / `scanner` — which sections the account can open at all. `is_active` — soft-disable; checked at boot, force signs out if false or missing. |
-| `employees`                  | Master employee record. Requires `employee_code` **and** `proximity_card_id` (NOT NULL + unique — every employee has exactly one card). `status` = `active`/`inactive`/`suspended`/`resigned`. Revoking an assigned proximity card updates this status and appends it, plus any additional remarks, to `remarks_log` in the same database transaction. `scan_logs` jsonb — append-only, written by `trg_append_scan_log` on every matched scan, and trimmed of entries older than 180 days by `trim_employee_scan_logs()` on a daily schedule (added 2026-10-01; see that function's entry and the change log). `scan_parity_count` integer (added 2026-10-01) — a durable, only-ever-incrementing counter that `trg_append_scan_log()` now reads for IN/OUT parity instead of `jsonb_array_length(scan_logs)`, so trimming `scan_logs` can never shift any future scan's direction; backfilled at migration time from each employee's count then, and never decreased afterward, including by the trim job. `remarks_log` jsonb — append-only notes, written via `add_employee_remark()` and the card-revocation RPC. `photo_url` / `photo_file_id` — Drive-hosted photo; `photo_file_id` changes to a fresh UUID on every replace (see Edge Functions below). `photo_thumb_b64` — small base64 thumbnail (added 2026-09-18), fetched server-side by `upload-employee-photo` at upload time; format is whatever Drive's `/thumbnail` endpoint returns (PNG or JPEG, not always JPEG despite this column's original 2026-09-18 write-up assuming so — client-side callers now sniff the real format rather than trusting a hardcoded label, see root `README.md`'s 2026-09-19 change log entry); feeds the offline Scanner's `offlineAvatarHTML()` with zero network requests — see "Offline scanning" below. |
+| `employees`                  | Master employee record. Requires `employee_code` **and** `proximity_card_id` (both NOT NULL; `proximity_card_id` unique — every employee has exactly one card). `employee_code` is unique only among **non-resigned** employees, via the partial index `employees_employee_code_current_key` (2026-10-06), so a code can be recycled once its holder is marked `resigned`. `status` = `active`/`inactive`/`suspended`/`resigned`. Revoking an assigned proximity card updates this status and appends it, plus any additional remarks, to `remarks_log` in the same database transaction. `scan_logs` jsonb — append-only, written by `trg_append_scan_log` on every matched scan, and trimmed of entries older than 180 days by `trim_employee_scan_logs()` on a daily schedule (added 2026-10-01; see that function's entry and the change log). `scan_parity_count` integer (added 2026-10-01) — a durable, only-ever-incrementing counter that `trg_append_scan_log()` now reads for IN/OUT parity instead of `jsonb_array_length(scan_logs)`, so trimming `scan_logs` can never shift any future scan's direction; backfilled at migration time from each employee's count then, and never decreased afterward, including by the trim job. `remarks_log` jsonb — append-only notes, written via `add_employee_remark()` and the card-revocation RPC. `photo_url` / `photo_file_id` — Drive-hosted photo; `photo_file_id` changes to a fresh UUID on every replace (see Edge Functions below). `photo_thumb_b64` — small base64 thumbnail (added 2026-09-18), fetched server-side by `upload-employee-photo` at upload time; format is whatever Drive's `/thumbnail` endpoint returns (PNG or JPEG, not always JPEG despite this column's original 2026-09-18 write-up assuming so — client-side callers now sniff the real format rather than trusting a hardcoded label, see root `README.md`'s 2026-09-19 change log entry); feeds the offline Scanner's `offlineAvatarHTML()` with zero network requests — see "Offline scanning" below. |
 | `proximity_cards`             | Standalone card inventory. Does **not** require an employee — a card can be issued and sit unassigned until linked from Employee Manager. `is_active` tracks whether the card is usable; optional `revoke_reason` stores additional remarks, while an assigned employee's selected status is recorded on the employee and in `remarks_log`. |
 | `scan_events`                 | FK to `employees` and `proximity_cards`. One row per scan of a **recognised** card: `matched`, `inactive_card`, `inactive_employee`, or `unassigned_card`. Scans of a code that matches no card (`unmatched`) are **not stored** — `scan_proximity_code()` skips the insert (`if v_result <> 'unmatched'`), so `unmatched` rows never exist today even though the column's vocabulary allows it. (This file previously said every attempt was logged; corrected 2026-09-28 against the live function body. Whether to start storing them is a product decision — it means unbounded inserts from junk scans — not something a docs fix should decide.) Direction (IN/OUT) is **not a column here**: `trg_append_scan_log()` derives it from the parity of the employee's `scan_logs` length at insert time and stores it only in `employees.scan_logs`. |
 | `scan_events_archive`        | Added 2026-09-30. Same shape as `scan_events`, minus foreign keys (deliberately — see below) plus `archived_at`. Rows older than 180 days are moved here by `archive_old_scan_events()` on a daily `pg_cron` schedule, so `scan_events` itself stays small as it accumulates (10,368 rows after 3 days live — see root `README.md`'s change log). Not a soft-delete: nothing is lost, `get_all_scan_events()` reads both tables so an admin's date-range export still reaches old rows. No FK to `employees`/`proximity_cards` (unlike `scan_events`, which cascades on delete) — an audit trail that disappeared when its parent row did would defeat the point of archiving it. Same read policy as `scan_events` (`is_admin() OR can_view_scanner()`); no write policy at all, since only `archive_old_scan_events()` (`SECURITY DEFINER`) ever writes here. |
@@ -978,6 +978,37 @@ future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
+
+**2026-10-06 — `employee_code` reusable after a resignation (`20261006140000_employee_code_reuse_after_resign.sql`, NOT applied — apply by hand)**
+
+Codes are recycled when staff leave, which `employees_employee_code_key UNIQUE`
+forbade. Dropping that constraint would also discard protection against a
+mistyped code — which silently merges two people's scans in an access-control
+system — and a UNIQUE cannot be re-added once duplicates exist. So it is
+**narrowed, not removed**:
+
+```sql
+ALTER TABLE public.employees DROP CONSTRAINT employees_employee_code_key;
+CREATE UNIQUE INDEX employees_employee_code_current_key
+  ON public.employees (employee_code) WHERE status <> 'resigned';
+```
+
+A partial unique index states the real rule — *a code identifies one current
+employee* — and needed no new status, since `resigned` has been valid since
+20261003060125.
+
+**No companion lookup RPC, deliberately.** Both callers that need to know whether
+a code is free (the XLSX import and the employee modal) run on Employee Manager,
+which already holds the whole directory including `status`, so they decide locally
+via `JS/Utils/employeeCode.js`. A per-row RPC would have added a round trip per
+import line for data already in memory. The index is the enforcement; the client
+check only buys a better error message.
+
+**Nothing in the schema keys on `employee_code`** — `scan_events` uses
+`employee_id`, `scan_logs` uses `proximity_code` — so history stays attributed
+correctly across a handover. The exposure is entirely in human-facing exports,
+which display the code as the identity; the Attendance export now carries
+`employee_id` alongside it.
 
 **2026-10-06 — `get_onsite_roster_delta()` (`20261006120000_onsite_roster_delta.sql`, NOT applied — apply by hand)**
 
