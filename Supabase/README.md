@@ -979,6 +979,29 @@ git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
 
+**2026-10-06 — missing kiosk thumbnails (`20261006160000_missing_offline_thumbs.sql`, NOT applied — apply by hand)**
+
+An employee with `photo_file_id` set and `photo_thumb_b64` NULL renders correctly
+in Employee Manager (which reads the live Drive `photo_url`) while being
+**invisible on every kiosk** — `get_scanner_offline_photo_updates` filters on
+`photo_thumb_b64 IS NOT NULL`, so they are never sent.
+
+- `get_offline_thumb_stats()` replaced (same signature) to add
+  **`missing_thumb_rows`** and `no_photo_rows`. The distinction matters: an
+  employee with no photo at all correctly shows initials everywhere and needs no
+  repair.
+- **`get_employees_missing_thumb(p_after_id, p_limit)`** — keyset page of
+  `{ id, full_name, employee_code }`. **No photo bytes**, deliberately: repair
+  happens server-side, so the thumbnail must never cross to the browser.
+  `SECURITY INVOKER` with an `is_admin()` check on top.
+
+Repair itself is `upload-employee-photo`'s new **`backfill_thumb`** action, which
+re-fetches from Drive (10s budget, versus 2.5s on the upload path) and **writes
+`employees.photo_thumb_b64` itself** under the caller's JWT — so
+`employees_update_admin_manager` is the authorization. Returning the thumbnail
+instead would have cost ~11 KB of egress per employee; a status reply costs ~100
+bytes. `photo_file_id` is read from the row, never taken from the request.
+
 **2026-10-06 — `employee_code` reusable after a resignation (`20261006140000_employee_code_reuse_after_resign.sql`, NOT applied — apply by hand)**
 
 Codes are recycled when staff leave, which `employees_employee_code_key UNIQUE`

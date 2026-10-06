@@ -612,6 +612,56 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-06 — employees with a photo but no kiosk thumbnail: repair, and stop making new ones**
+
+**The symptom:** an employee's photo shows correctly in Employee Manager but the
+Scanner shows their initials. The two read different columns — Employee Manager
+uses `photo_url` (a live Drive link), the kiosk uses `photo_thumb_b64`. A row
+with `photo_file_id` set and `photo_thumb_b64` NULL therefore looks fine in one
+place and is **invisible on every kiosk**, because
+`get_scanner_offline_photo_updates` filters on `photo_thumb_b64 IS NOT NULL` and
+never sends them at all. The condition was already anticipated in
+`OfflineScanModel.js`'s `photoSyncAttempted` map; what was missing was any way to
+repair it.
+
+**How rows got that way.** Every cause funnels into one place: when the browser
+can't produce a thumbnail, `upload-employee-photo` falls back to fetching one
+from Drive with a 2.5-second budget — and Drive's thumbnail generation routinely
+lags a file it has only just received. On timeout it logged a warning, returned
+null, and never retried. So: uploads predating client-side generation (~19 Sep),
+iPhone HEIC files (not canvas-decodable), a slow moment, or a client thumbnail
+over 1 MB.
+
+**Repair** — Settings → Offline scanner thumbnails → **Repair missing**. A new
+`backfill_thumb` action re-runs that fetch with a 10-second budget, now that
+Drive has had weeks.
+
+The design point worth keeping: **the Edge Function writes the row itself** and
+returns only `{ ok, bytes }`. Returning the thumbnail would have cost ~11 KB of
+egress per employee (~8 MB for the roster) for bytes the browser never renders;
+a status reply makes it **~100 bytes each**. The `UPDATE` runs under the caller's
+JWT, so `employees_update_admin_manager` authorizes it, and `photo_file_id` is
+read from the row rather than taken from the request — a caller can't point it at
+an arbitrary Drive file. The fetch is also now magic-number checked, because
+Drive can answer `200` with an HTML interstitial, and storing that would make an
+employee look repaired while still showing initials.
+
+Repairs run sequentially: each call makes Drive fetch an image, and firing dozens
+concurrently finds its rate limits, which would turn repairable rows into
+"unavailable" ones.
+
+**Prevention.** The failure is no longer silent. A client-side conversion failure
+now says so in the photo picker and names the likely cause (HEIC), and a save
+that produced no thumbnail by either path raises a warning naming the
+consequence — the employee will show as initials on kiosks — and where to fix it.
+
+**New:** `get_employees_missing_thumb()` (id/name only, no photo bytes), plus
+`missing_thumb_rows` and `no_photo_rows` on `get_offline_thumb_stats()`.
+Migration `20261006160000_missing_offline_thumbs.sql`.
+
+Some rows won't be repairable — Drive genuinely has no thumbnail for them. Those
+are counted separately and need their photo re-uploading, ideally as JPEG or PNG.
+
 **2026-10-06 — nav clicks and Alt-Tab stop refetching (Dashboard, Attendance, Employee Manager)**
 
 The router calls a page's render function on every sidebar click, and each one

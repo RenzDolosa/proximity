@@ -238,4 +238,34 @@ export const EmployeesModel = {
   async updateThumb(id, thumbB64) {
     return supabase.from('employees').update({ photo_thumb_b64: thumbB64 }).eq('id', id);
   },
+
+  // ---- missing kiosk thumbnails ----
+
+  // One keyset page of employees with a Drive photo but no photo_thumb_b64 —
+  // correct in Employee Manager, invisible on every kiosk. Returns id and name
+  // only; no photo bytes are involved on this side at all.
+  async employeesMissingThumb({ afterId = null, limit = 25 } = {}) {
+    return supabase.rpc('get_employees_missing_thumb', { p_after_id: afterId, p_limit: limit });
+  },
+
+  // Repairs one of them. The Edge Function fetches from Drive and writes the row
+  // itself, returning a status rather than the thumbnail: at ~11 KB each,
+  // returning the bytes would turn a roster-wide repair into megabytes of egress
+  // for data this browser never renders.
+  //
+  // Resolves to { data: { ok, bytes?, skipped?, reason? } }. `ok: false` with a
+  // reason is a normal answer, not a failure — Drive has no usable thumbnail for
+  // some files, and a caller repairing hundreds of rows must count it and
+  // continue rather than abort.
+  async backfillThumb(employeeId) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    if (!token) return { error: 'Your session has expired — please sign in again.' };
+    const { data, error } = await supabase.functions.invoke('upload-employee-photo', {
+      body: { action: 'backfill_thumb', employee_id: employeeId },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) return { error: await readFunctionError(error) };
+    return { data };
+  },
 };

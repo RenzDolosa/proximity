@@ -8,6 +8,13 @@
 //   employees.photo_thumb_b64. Falls back to a server-side Drive thumbnail fetch
 //   when the client sends none, which is NOT guaranteed .webp. null if neither
 //   worked — logged, but never fails the upload.
+// POST { action: "backfill_thumb", employee_id }
+//   -> { ok: true, bytes } | { ok: true, skipped } | { ok: false, reason }
+//   Repairs one employee whose photo_thumb_b64 is NULL despite having a Drive
+//   photo — correct in Employee Manager, invisible on every kiosk. Writes the row
+//   ITSELF and returns only a status: a thumbnail is ~11 KB, so returning the
+//   bytes would make a roster-wide repair cost megabytes of egress for data the
+//   browser never uses.
 // POST { action: "delete", old_file_id } -> { ok: true }
 // POST { action: "quota" } -> { usage, limit, usageInDrive }
 //   Drive's own about.get. `limit` is null for uncapped Workspace accounts, so
@@ -20,9 +27,9 @@
 //   503 google_client_invalid — invalid_client/unauthorized_client: the OAuth
 //        client itself was deleted or its secret rotated.
 //
-// Auth is per-action, both re-checked against the caller's own JWT, never a
+// Auth is per-action, all re-checked against the caller's own JWT, never a
 // service role: "quota" is read-only so can_view_settings() suffices (Viewers
-// included), while "upload"/"delete" write to Drive and need
+// included), while "upload"/"delete"/"backfill_thumb" write and need
 // is_admin_or_manager().
 //
 // mime_type must be the ACTUAL type of image_base64 — canvas.toBlob() can
@@ -104,6 +111,57 @@ Deno.serve(async (req: Request) => {
     }
     const accessToken = await getCachedGoogleAccessToken(clientId, clientSecret, refreshToken);
 
+    // Repairs one employee whose photo_thumb_b64 is NULL despite having a Drive
+    // photo — invisible on every kiosk, fine in Employee Manager. Re-runs the
+    // same fetch the upload path does, now that Drive has had time to generate
+    // the thumbnail it could not produce inside the upload's 2.5s budget.
+    //
+    // The function writes the row ITSELF rather than returning the bytes. That is
+    // the whole design: a thumbnail is ~11 KB, and returning it would make a
+    // roster-wide repair cost megabytes of egress for data the browser has no use
+    // for. The response is a status, so the repair costs ~100 bytes per employee.
+    //
+    // The UPDATE runs under the caller's JWT, so employees_update_admin_manager
+    // is what authorizes it — the is_admin_or_manager() gate above is on top of
+    // RLS, not instead of it. photo_file_id is read from the row rather than
+    // taken from the request, so a caller cannot point this at an arbitrary
+    // Drive file.
+    if (action === "backfill_thumb") {
+      const employeeId = body.employee_id;
+      if (typeof employeeId !== "string" || !employeeId) {
+        return json({ error: "employee_id is required" }, 400, cors);
+      }
+
+      const { data: row, error: readErr } = await supabase
+        .from("employees")
+        .select("id, photo_file_id, photo_thumb_b64")
+        .eq("id", employeeId)
+        .maybeSingle();
+      if (readErr) return json({ error: readErr.message }, 400, cors);
+      if (!row) return json({ error: "Employee not found, or not visible to this account." }, 404, cors);
+      // Both are "nothing to do", not failures: a concurrent repair may have
+      // already fixed it, and an employee with no photo at all correctly shows
+      // initials everywhere.
+      if (row.photo_thumb_b64) return json({ ok: true, skipped: "already_has_thumb" }, 200, cors);
+      if (!row.photo_file_id) return json({ ok: true, skipped: "no_photo" }, 200, cors);
+
+      const thumb = await fetchDriveThumbnail(row.photo_file_id, BACKFILL_THUMB_TIMEOUT_MS);
+      if (!thumb) {
+        // Not a 500: the function worked, Drive simply has no usable thumbnail
+        // for this file. A caller repairing hundreds of rows needs to count this
+        // and move on, not abort the run.
+        return json({ ok: false, reason: "drive_thumbnail_unavailable" }, 200, cors);
+      }
+
+      const { error: writeErr } = await supabase
+        .from("employees")
+        .update({ photo_thumb_b64: thumb })
+        .eq("id", employeeId);
+      if (writeErr) return json({ error: writeErr.message }, 400, cors);
+
+      return json({ ok: true, bytes: Math.floor((thumb.length * 3) / 4) }, 200, cors);
+    }
+
     if (action === "delete") {
       if (body.old_file_id) await deleteDriveFile(body.old_file_id, accessToken); // best-effort
       return json({ ok: true }, 200, cors);
@@ -177,22 +235,7 @@ Deno.serve(async (req: Request) => {
       // received by a second or more, and that lag sat directly in every upload's
       // response time. A timeout just yields null, like any best-effort failure.
       if (thumbB64 === null) {
-        const THUMB_FETCH_TIMEOUT_MS = 2500;
-        try {
-          const thumbRes = await fetch(`https://drive.google.com/thumbnail?id=${fileId}&sz=w400`, {
-            signal: AbortSignal.timeout(THUMB_FETCH_TIMEOUT_MS),
-          });
-          if (thumbRes.ok) {
-            thumbB64 = bytesToBase64(new Uint8Array(await thumbRes.arrayBuffer()));
-          } else {
-            console.warn(`Offline-thumbnail fetch for Drive file ${fileId} returned HTTP ${thumbRes.status} — photo_thumb_b64 will be null for this employee.`);
-          }
-        } catch (thumbErr) {
-          // The photo is already uploaded and public by now; a missing thumbnail
-          // only costs this one employee their offline photo, so it must never
-          // fail the upload. Covers both the timeout and any network error.
-          console.warn(`Offline-thumbnail fetch for Drive file ${fileId} threw (or timed out after ${THUMB_FETCH_TIMEOUT_MS}ms) — photo_thumb_b64 will be null for this employee.`, thumbErr);
-        }
+        thumbB64 = await fetchDriveThumbnail(fileId, UPLOAD_THUMB_TIMEOUT_MS);
       }
 
       // /thumbnail, NOT uc?export=view: the latter is deprecated for hot-linking
@@ -200,6 +243,9 @@ Deno.serve(async (req: Request) => {
       // is why avatars broke once uploads started sending real webp. w512 is
       // plenty for a 44-64px avatar on a retina display.
       const url = `https://drive.google.com/thumbnail?id=${fileId}&sz=w512`;
+      // thumb_b64 null tells the client this employee will show initials on every
+      // kiosk, so it can say so at upload time instead of letting the gap go
+      // unnoticed until someone notices a blank face on a scanner.
       return json({ url, file_id: fileId, thumb_b64: thumbB64 }, 200, cors);
     }
 
@@ -290,6 +336,59 @@ async function getGoogleAccessToken(clientId: string, clientSecret: string, refr
   // The conservative 1800s fallback means a missing expires_in costs an extra
   // refresh, never a token served past its real expiry.
   return { accessToken: data.access_token, expiresInSeconds: Number(data.expires_in) || 1800 };
+}
+
+// ---- offline thumbnail ----
+
+// Two budgets for the same fetch, because the two callers have opposite
+// constraints. On upload this sits in the critical path of a request a human is
+// watching, so it stays tight and a miss is accepted (the backfill repairs it
+// later). A backfill is a background repair nobody is waiting on, and its whole
+// purpose is to succeed where the upload did not, so it can afford to wait.
+const UPLOAD_THUMB_TIMEOUT_MS = 2500;
+const BACKFILL_THUMB_TIMEOUT_MS = 10000;
+
+// w400 matches OFFLINE_THUMB_MAX_DIMENSION in JS/Utils/image.js, so a
+// server-sourced thumbnail is no blurrier than a client-sourced one on the
+// kiosk's full-screen photo stage.
+//
+// Returns null rather than throwing on every failure path: both callers treat a
+// missing thumbnail as a degraded outcome (that employee shows initials), never
+// as a reason to fail the operation. Drive genuinely has no thumbnail for some
+// files, so this is an expected answer, not an error.
+async function fetchDriveThumbnail(fileId: string, timeoutMs: number): Promise<string | null> {
+  try {
+    const res = await fetch(`https://drive.google.com/thumbnail?id=${fileId}&sz=w400`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) {
+      console.warn(`Offline-thumbnail fetch for Drive file ${fileId} returned HTTP ${res.status}.`);
+      return null;
+    }
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    // Drive can answer 200 with an HTML interstitial instead of an image. Storing
+    // that would put unrenderable bytes on the row and make the employee look
+    // repaired while still showing initials, which is worse than leaving it null.
+    if (!looksLikeImage(bytes)) {
+      console.warn(`Offline-thumbnail fetch for Drive file ${fileId} returned ${bytes.length} bytes that are not an image.`);
+      return null;
+    }
+    return bytesToBase64(bytes);
+  } catch (err) {
+    console.warn(`Offline-thumbnail fetch for Drive file ${fileId} failed or timed out after ${timeoutMs}ms.`, err);
+    return null;
+  }
+}
+
+// Magic-number check mirroring sniffImageMimeFromBase64() in JS/Utils/image.js.
+function looksLikeImage(bytes: Uint8Array): boolean {
+  if (bytes.length < 12) return false;
+  const at = (i: number) => bytes[i];
+  const png = at(0) === 0x89 && at(1) === 0x50 && at(2) === 0x4e && at(3) === 0x47;
+  const jpeg = at(0) === 0xff && at(1) === 0xd8 && at(2) === 0xff;
+  const gif = at(0) === 0x47 && at(1) === 0x49 && at(2) === 0x46;
+  const webp = at(8) === 0x57 && at(9) === 0x45 && at(10) === 0x42 && at(11) === 0x50;
+  return png || jpeg || gif || webp;
 }
 
 // ---- Drive API ----
