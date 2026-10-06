@@ -612,6 +612,91 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-06 — employees with a photo but no kiosk thumbnail: repair, and stop making new ones**
+
+**The symptom:** an employee's photo shows correctly in Employee Manager but the
+Scanner shows their initials. The two read different columns — Employee Manager
+uses `photo_url` (a live Drive link), the kiosk uses `photo_thumb_b64`. A row
+with `photo_file_id` set and `photo_thumb_b64` NULL therefore looks fine in one
+place and is **invisible on every kiosk**, because
+`get_scanner_offline_photo_updates` filters on `photo_thumb_b64 IS NOT NULL` and
+never sends them at all. The condition was already anticipated in
+`OfflineScanModel.js`'s `photoSyncAttempted` map; what was missing was any way to
+repair it.
+
+**How rows got that way.** Every cause funnels into one place: when the browser
+can't produce a thumbnail, `upload-employee-photo` falls back to fetching one
+from Drive with a 2.5-second budget — and Drive's thumbnail generation routinely
+lags a file it has only just received. On timeout it logged a warning, returned
+null, and never retried. So: uploads predating client-side generation (~19 Sep),
+iPhone HEIC files (not canvas-decodable), a slow moment, or a client thumbnail
+over 1 MB.
+
+**Repair** — Settings → Offline scanner thumbnails → **Repair missing**. A new
+`backfill_thumb` action re-runs that fetch with a 10-second budget, now that
+Drive has had weeks.
+
+The design point worth keeping: **the Edge Function writes the row itself** and
+returns only `{ ok, bytes }`. Returning the thumbnail would have cost ~11 KB of
+egress per employee (~8 MB for the roster) for bytes the browser never renders;
+a status reply makes it **~100 bytes each**. The `UPDATE` runs under the caller's
+JWT, so `employees_update_admin_manager` authorizes it, and `photo_file_id` is
+read from the row rather than taken from the request — a caller can't point it at
+an arbitrary Drive file. The fetch is also now magic-number checked, because
+Drive can answer `200` with an HTML interstitial, and storing that would make an
+employee look repaired while still showing initials.
+
+Repairs run sequentially: each call makes Drive fetch an image, and firing dozens
+concurrently finds its rate limits, which would turn repairable rows into
+"unavailable" ones.
+
+**Prevention.** The failure is no longer silent. A client-side conversion failure
+now says so in the photo picker and names the likely cause (HEIC), and a save
+that produced no thumbnail by either path raises a warning naming the
+consequence — the employee will show as initials on kiosks — and where to fix it.
+
+**New:** `get_employees_missing_thumb()` (id/name only, no photo bytes), plus
+`missing_thumb_rows` and `no_photo_rows` on `get_offline_thumb_stats()`.
+Migration `20261006160000_missing_offline_thumbs.sql`.
+
+Some rows won't be repairable — Drive genuinely has no thumbnail for them. Those
+are counted separately and need their photo re-uploading, ideally as JPEG or PNG.
+
+**2026-10-06 — nav clicks and Alt-Tab stop refetching (Dashboard, Attendance, Employee Manager)**
+
+The router calls a page's render function on every sidebar click, and each one
+refetched unconditionally — so flicking between items re-downloaded the same
+rows. ~220 KB per Employee Manager visit, a whole report per Attendance visit.
+
+`JS/Utils/freshness.js` (new) is a timestamp per data set, not a cache: it stores
+no rows, only when a key was last fetched, so the pages keep whatever shape they
+already had. Inside a 60-second window the page paints from what it already has
+in memory and makes no request.
+
+- **Writes invalidate explicitly**, because a timestamp cannot observe a
+  mutation. Every Employee Manager write path now goes through
+  `reloadDirectory()`, which invalidates before rendering — an edit can never be
+  hidden by the window.
+- **Attendance keys on its range**, so changing the dates misses naturally. It
+  also checks `loadedRange`, which matters: `rowsCache` holds exactly one report,
+  so A → B → A inside the window would otherwise find key A fresh while the cache
+  still held B, and **paint B's rows under A's label**. The Run button always
+  forces a refetch.
+- **The Dashboard's Alt-Tab handler** respects `REFRESH_MS` instead of firing on
+  every flick away and back, so returning lands on the cadence the page would
+  have had if it had never been hidden.
+- `test/freshness.test.mjs` (new, 7 tests) covers the window boundary,
+  invalidation, key independence, a non-positive window meaning *always refetch*
+  rather than *fresh forever*, and a clock that moved backwards reading as stale.
+
+**On Employee Manager's photos specifically:** those are Google Drive requests,
+**not Supabase egress** — they cost page speed and the kiosk's connection, never
+the 5 GB quota. The Service Worker photo cache was deleted on 2026-09-18, so they
+rely on the browser's HTTP cache alone, and a full repaint recreates every
+`<img>`. Added `loading="lazy"` so a repaint only re-requests the rows actually on
+screen. Reinstating a photo cache is the real fix if the flashing is still
+annoying; say so and it's a small piece of work.
+
 **2026-10-06 — `employee_code` is reusable after a resignation; kiosk focus survives Chrome Remote Desktop; comments compressed**
 
 Three unrelated pieces of work.

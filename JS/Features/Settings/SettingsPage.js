@@ -81,6 +81,7 @@ let thumbStats = null;        // { with_thumb, total_bytes, avg_bytes, max_bytes
 let thumbStatsError = null;
 let thumbStatsLoaded = false;
 let thumbRun = null;          // { done, changed, skipped, failed, before, after, finished } | null
+let repairRun = null;         // { done, repaired, unavailable, failed, finished } | null
 
 export async function renderSettings() {
   const content = $('#content');
@@ -188,8 +189,9 @@ export async function renderSettings() {
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
         <h3 style="margin:0 0 4px;">Offline scanner thumbnails</h3>
         <div style="display:flex;align-items:center;gap:8px;">
-          <button type="button" class="ghost" id="th-refresh" ${thumbRun && !thumbRun.finished ? 'disabled' : ''}>Refresh</button>
-          <button type="button" class="ghost" id="th-run" ${thumbRun && !thumbRun.finished ? 'disabled' : ''}>${thumbRun && !thumbRun.finished ? 'Recompressing…' : 'Recompress now'}</button>
+          <button type="button" class="ghost" id="th-refresh" ${thumbBusy() ? 'disabled' : ''}>Refresh</button>
+          <button type="button" class="ghost" id="th-repair" ${thumbBusy() ? 'disabled' : ''}>${repairRun && !repairRun.finished ? 'Repairing…' : 'Repair missing'}</button>
+          <button type="button" class="ghost" id="th-run" ${thumbBusy() ? 'disabled' : ''}>${thumbRun && !thumbRun.finished ? 'Recompressing…' : 'Recompress now'}</button>
         </div>
       </div>
       <p class="sub" style="margin:0 0 10px;">
@@ -206,8 +208,19 @@ export async function renderSettings() {
         re-encoding actually saves at least 10%, so rows that are already
         small are left exactly as they are rather than losing another
         generation of quality. Kiosks keep the thumbnails they already hold
-        — they adopt the smaller ones on their next full cache rebuild — so
-        this costs no extra kiosk egress today.
+        — they adopt the smaller ones on their next full cache rebuild.
+      </p>
+      <p class="sub" style="margin:0 0 10px;">
+        <strong>Repair missing</strong> is a different problem: an employee can
+        have a photo that shows correctly in Employee Manager (a live Google
+        Drive link) while having no stored thumbnail at all, which makes them
+        <em>invisible on every kiosk</em> — the Scanner falls back to their
+        initials. That happens when the photo couldn't be converted in the
+        browser (iPhone HEIC files can't be) and Drive hadn't finished
+        generating its own thumbnail within the upload's time budget. Repair
+        re-fetches it server-side, now that Drive has had time. The image never
+        passes through this browser, so repairing the whole roster costs about
+        a hundred bytes per employee rather than ~11 KB.
       </p>
       <div id="th-body">${thumbStatsLoaded ? '' : 'Loading…'}</div>
     </div>
@@ -341,6 +354,17 @@ export async function renderSettings() {
     });
     if (thumbStatsLoaded) paintThumbStats();
     $('#th-refresh')?.addEventListener('click', () => loadThumbStats());
+    $('#th-repair')?.addEventListener('click', async () => {
+      const missing = thumbStats?.missing_thumb_rows ?? 0;
+      if (!missing) { toast('Every employee with a photo already has a kiosk thumbnail.'); return; }
+      const ok = await openConfirmModal({
+        title: 'Repair missing thumbnails?',
+        message: `Re-fetches a thumbnail from Google Drive for ${missing} employee${missing === 1 ? '' : 's'} who currently show as initials on every Scanner. Nothing else about their record changes, and employees that already have one are untouched. Drive may still have no usable thumbnail for some — those are reported and left alone.`,
+        confirmLabel: 'Repair',
+      });
+      if (!ok) return;
+      await runThumbRepair();
+    });
     $('#th-run')?.addEventListener('click', async () => {
       const ok = await openConfirmModal({
         title: 'Recompress offline thumbnails?',
@@ -513,10 +537,13 @@ function paintThumbStats() {
   if (!thumbStats) { body.innerHTML = 'Loading…'; return; }
 
   const { with_thumb: withThumb, total_bytes: total, avg_bytes: avg, max_bytes: max,
-          over_target_rows: overRows, over_target_total_bytes: overBytes } = thumbStats;
+          over_target_rows: overRows, over_target_total_bytes: overBytes,
+          missing_thumb_rows: missing = 0 } = thumbStats;
 
-  if (!withThumb) {
-    body.innerHTML = '<div class="empty-state">No employee has a stored offline thumbnail yet.</div>';
+  // A roster with no thumbnails at all is still worth the missing-count line:
+  // "nobody has one" and "nobody has a photo" need different actions.
+  if (!withThumb && !missing) {
+    body.innerHTML = '<div class="empty-state">No employee has a photo on file yet.</div>';
     return;
   }
 
@@ -531,7 +558,14 @@ function paintThumbStats() {
       ${withThumb} thumbnail${withThumb === 1 ? '' : 's'} · ${fmtUsageBytes(total)} stored
       · ${fmtUsageBytes(avg)} average · ${fmtUsageBytes(max)} largest
     </div>
-    ${overRows === 0 ? `
+    ${missing === 0 ? '' : `
+      <div class="emp-meta" style="margin-bottom:8px;color:var(--warn);">
+        <strong>${missing}</strong> employee${missing === 1 ? ' has a photo' : 's have photos'} with no kiosk
+        thumbnail — ${missing === 1 ? 'that person shows' : 'they show'} as initials on every Scanner despite
+        looking correct in Employee Manager. Use <strong>Repair missing</strong>.
+      </div>
+    `}
+    ${!withThumb ? '' : overRows === 0 ? `
       <div class="emp-meta">Every thumbnail is already at or under
       ${fmtUsageBytes(thumbStats.over_target_bytes)} — nothing to recompress.</div>
     ` : `
@@ -543,10 +577,21 @@ function paintThumbStats() {
         not a measurement; the run reports what it actually saved.
       </div>
     `}
+    ${!repairRun ? '' : `
+      <div class="progress" style="margin:0 0 8px;">
+        <div class="progress-track">
+          <div class="progress-fill" style="width:${runPercent(repairRun, missing + repairRun.repaired)}%;"></div>
+        </div>
+      </div>
+      <div class="emp-meta mono">
+        ${repairRun.finished ? 'Repair done' : 'Repairing'} — ${repairRun.done} tried,
+        ${repairRun.repaired} fixed${repairRun.unavailable ? `, ${repairRun.unavailable} with no thumbnail in Drive` : ''}${repairRun.failed ? `, ${repairRun.failed} failed` : ''}
+      </div>
+    `}
     ${!thumbRun ? '' : `
       <div class="progress" style="margin:0 0 8px;">
         <div class="progress-track">
-          <div class="progress-fill" style="width:${thumbRunPercent(overRows)}%;"></div>
+          <div class="progress-fill" style="width:${runPercent(thumbRun, overRows)}%;"></div>
         </div>
       </div>
       <div class="emp-meta mono">
@@ -559,20 +604,74 @@ function paintThumbStats() {
   `;
 }
 
-// How far through the pass we are. A determinate bar, not the shimmering
-// `.indeterminate` one upload progress uses: the row count is known up
-// front, so there is real progress to show.
+const thumbBusy = () => Boolean((thumbRun && !thumbRun.finished) || (repairRun && !repairRun.finished));
+
+// Determinate, since the row count is known up front. `expected` comes from the
+// last measurement, which the run is actively invalidating as it works — taking
+// the max of the two keeps the bar monotonic instead of dividing by a number
+// that shrank out from under it.
+function runPercent(run, expected) {
+  if (!run) return 0;
+  if (run.finished) return 100;
+  const denominator = Math.max(expected || 0, run.done, 1);
+  return Math.min(100, Math.round((run.done / denominator) * 100));
+}
+
+// Walks employees with a photo but no kiosk thumbnail, asking the Edge Function
+// to repair each one. The thumbnail is fetched from Drive and written to the row
+// server-side; only a status comes back here.
 //
-// `expected` is the over-target count from the LAST measurement, which the
-// run is actively invalidating as it rewrites rows — and after the run
-// finishes, loadThumbStats() re-measures it to near zero. Taking the max of
-// the two keeps the bar monotonic and pinned at 100% when done, instead of
-// dividing by a number that shrank out from under it.
-function thumbRunPercent(expected) {
-  if (!thumbRun) return 0;
-  if (thumbRun.finished) return 100;
-  const denominator = Math.max(expected || 0, thumbRun.done, 1);
-  return Math.min(100, Math.round((thumbRun.done / denominator) * 100));
+// Sequential on purpose. Each call makes Drive fetch an image, and firing dozens
+// concurrently is how you find Drive's rate limits — which would turn repairable
+// rows into "unavailable" ones and make the run look like it failed.
+async function runThumbRepair() {
+  const PAGE = 25;
+  repairRun = { done: 0, repaired: 0, unavailable: 0, failed: 0, finished: false };
+  setThumbButtons(true);
+  paintThumbStats();
+
+  let afterId = null;
+  try {
+    for (;;) {
+      const { data: page, error } = await EmployeesModel.employeesMissingThumb({ afterId, limit: PAGE });
+      if (error) { toast(error.message, 'error'); break; }
+      const rows = Array.isArray(page) ? page : [];
+      if (!rows.length) break;
+
+      for (const row of rows) {
+        // Advance before attempting, so a row that keeps failing cannot stall the
+        // walk on itself. A repaired row also drops out of the next page's
+        // results, which is why the cursor must come from the id and not a count.
+        afterId = row.id;
+        repairRun.done += 1;
+        const { data, error: repairErr } = await EmployeesModel.backfillThumb(row.id);
+        if (repairErr) {
+          repairRun.failed += 1;
+          console.warn(`Could not repair the kiosk thumbnail for ${row.full_name || row.id}:`, repairErr);
+        } else if (data?.ok && data.bytes) {
+          repairRun.repaired += 1;
+        } else {
+          // Drive has no usable thumbnail for this file. Expected for some
+          // uploads, and not something re-running will fix — the photo needs
+          // re-uploading from Employee Manager, ideally as JPEG or PNG.
+          repairRun.unavailable += 1;
+          console.info(`Google Drive has no usable thumbnail for ${row.full_name || row.id} (${data?.reason || data?.skipped || 'unknown'}) — re-upload that photo to fix it.`);
+        }
+        paintThumbStats();
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      if (rows.length < PAGE) break;
+    }
+  } finally {
+    repairRun.finished = true;
+    setThumbButtons(false);
+    paintThumbStats();
+  }
+
+  toast(repairRun.repaired
+    ? `Repaired ${repairRun.repaired} kiosk thumbnail${repairRun.repaired === 1 ? '' : 's'}`
+    : 'Nothing could be repaired — those photos need re-uploading');
+  await loadThumbStats();
 }
 
 // Walks the over-target rows a page at a time, re-encoding each in this
@@ -661,10 +760,20 @@ async function runThumbRecompress() {
 // Re-queried each time rather than captured: paintThumbStats() only
 // replaces #th-body, but a full renderSettings() elsewhere (navigating away
 // and back mid-run) replaces these nodes entirely.
+// Both actions share the panel, so either one running disables both — they write
+// the same column and would race each other over it.
 function setThumbButtons(running) {
   const run = $('#th-run');
+  const repair = $('#th-repair');
   const refresh = $('#th-refresh');
-  if (run) { run.disabled = running; run.textContent = running ? 'Recompressing…' : 'Recompress now'; }
+  if (run) {
+    run.disabled = running;
+    run.textContent = thumbRun && !thumbRun.finished ? 'Recompressing…' : 'Recompress now';
+  }
+  if (repair) {
+    repair.disabled = running;
+    repair.textContent = repairRun && !repairRun.finished ? 'Repairing…' : 'Repair missing';
+  }
   if (refresh) refresh.disabled = running;
 }
 

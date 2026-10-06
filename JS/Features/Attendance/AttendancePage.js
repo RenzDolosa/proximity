@@ -13,6 +13,7 @@ import { canViewAttendance } from '../../Core/state.js';
 import { renderPagination } from '../../Components/Pagination.js';
 import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
 import { AttendanceModel } from '../../Models/AttendanceModel.js';
+import { isFresh, markFetched } from '../../Utils/freshness.js';
 import {
   attendanceStatus, STATUS_LABEL, fmtDuration, toDecimalHours,
   validateRange, defaultRange, filterRows, summarize,
@@ -21,6 +22,11 @@ import {
 // Badge colors reuse the existing result-badge classes rather than adding
 // new CSS: green = fine, amber = needs a look, red = actually suspicious.
 const STATUS_BADGE = { complete: 'matched', open: 'unassigned_card', anomaly: 'inactive_card' };
+
+// How long a report for one range stays good enough to reuse on a nav click.
+// Attendance is historical — a 60-second-old report for a past range is the same
+// report — and the Run button always forces a refetch anyway.
+const ATTENDANCE_MAX_AGE_MS = 60 * 1000;
 
 let range = defaultRange();
 // True once the user has actually touched a date input. Before that, every
@@ -77,7 +83,9 @@ export async function renderAttendance() {
   $('#att-q').addEventListener('input', (e) => { filters.query = e.target.value; page = 1; paintTable(); });
   $('#att-dept').addEventListener('change', (e) => { filters.department = e.target.value; page = 1; paintBody(); });
   $('#att-status').addEventListener('change', (e) => { filters.status = e.target.value; page = 1; paintBody(); });
-  $('#att-run').addEventListener('click', runReport);
+  // Explicit Run always refetches — "I pressed the button and nothing happened"
+  // is never worth the saved request.
+  $('#att-run').addEventListener('click', () => runReport({ force: true }));
   $('#att-export').addEventListener('click', exportRows);
   $('#att-from').addEventListener('change', () => { userSetRange = true; });
   $('#att-to').addEventListener('change', () => { userSetRange = true; });
@@ -85,8 +93,9 @@ export async function renderAttendance() {
   // after to) is swapped into order rather than left always-invalid.
   wireDateRangeOrdering($('#att-from'), $('#att-to'));
 
-  // Stale-while-revalidate, same as AuditLogPage.js: paint what we already
-  // have immediately, then refresh for the range currently shown.
+  // Paint what we already have, then refresh for the range currently shown —
+  // unless that exact range was fetched moments ago, in which case the paint is
+  // the whole render. See runReport().
   if (loaded) paintBody();
   await runReport();
 }
@@ -98,7 +107,7 @@ function showError(message) {
   el.classList.toggle('hidden', !message);
 }
 
-async function runReport() {
+async function runReport({ force = false } = {}) {
   const fromEl = $('#att-from'), toEl = $('#att-to');
   if (!fromEl || !toEl) return; // navigated away
   const next = { from: fromEl.value, to: toEl.value };
@@ -106,6 +115,15 @@ async function runReport() {
   if (problem) { showError(problem); return; }
   showError('');
   range = next;
+
+  // Skip the refetch only when the rows already in hand ARE this range's rows.
+  // Freshness alone is not enough: rowsCache holds one report, so switching
+  // A -> B -> A inside the window would find key A fresh while rowsCache still
+  // held B, and paint B's rows under A's label. loadedRange is what makes that
+  // impossible.
+  const key = `attendance:${range.from}..${range.to}`;
+  const haveThisRange = loadedRange?.from === range.from && loadedRange?.to === range.to;
+  if (!force && loaded && haveThisRange && isFresh(key, ATTENDANCE_MAX_AGE_MS)) { paintBody(); return; }
 
   const seq = ++requestSeq;
   const runBtn = $('#att-run');
@@ -122,6 +140,7 @@ async function runReport() {
   rowsCache = data || [];
   loadedRange = { ...range };
   loaded = true;
+  markFetched(key);
   page = 1;
   // A department that no longer exists in the new data would otherwise
   // leave an invisible filter active and an empty-looking table.

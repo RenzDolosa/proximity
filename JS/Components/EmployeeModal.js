@@ -89,6 +89,7 @@ export async function openEmployeeModal(emp, onSaved) {
   let pendingPhotoBlob = null; // converted .webp Blob awaiting upload, or null
   let pendingThumbBlob = null; // smaller .webp Blob for the offline Scanner's photo_thumb_b64 — see Utils/image.js's fileToOfflineThumbWebp()
   let photoRemoved = false; // true if the existing photo should be cleared on save
+  let thumbMissing = false; // set on save when neither thumbnail path produced one
   const photoAvatar = $('#f-photo-avatar', overlay);
   const photoStatus = $('#f-photo-status', overlay);
   const photoRemoveBtn = $('#f-photo-remove', overlay);
@@ -106,19 +107,24 @@ export async function openEmployeeModal(emp, onSaved) {
     try {
       const { blob, previewUrl } = await fileToWebp(file);
       pendingPhotoBlob = blob;
-      // Best-effort: a failure here shouldn't block the main photo the
-      // admin is actively looking at and just approved via the preview.
-      // Falls back to null, same as the old server-side Drive thumbnail
-      // fetch failing (upload-employee-photo's fallback still covers it).
+      // Never blocks the photo the admin just approved in the preview — the Edge
+      // Function has its own server-side fallback. But the failure is reported
+      // rather than swallowed: when BOTH paths miss, the employee shows as
+      // initials on every kiosk while looking perfectly fine here, and that gap
+      // used to go unnoticed until someone spotted a blank face on a Scanner.
+      let thumbFailed = false;
       try {
         pendingThumbBlob = (await fileToOfflineThumbWebp(file)).blob;
       } catch {
         pendingThumbBlob = null;
+        thumbFailed = true;
       }
       photoRemoved = false;
       setAvatarPreview(previewUrl);
       photoRemoveBtn.style.display = '';
-      photoStatus.textContent = `Ready — ${Math.round(blob.size / 1024)} KB .webp, uploads on Save.`;
+      photoStatus.textContent = thumbFailed
+        ? `Ready — ${Math.round(blob.size / 1024)} KB .webp. Couldn't build the Scanner thumbnail from this file (iPhone HEIC photos aren't readable by the browser) — the server will try instead. A JPEG or PNG is more reliable.`
+        : `Ready — ${Math.round(blob.size / 1024)} KB .webp, uploads on Save.`;
     } catch (err) {
       photoStatus.textContent = err.message;
       e.target.value = '';
@@ -280,12 +286,13 @@ export async function openEmployeeModal(emp, onSaved) {
       photoStatus.textContent = 'Upload complete.';
       payload.photo_url = uploaded.url;
       payload.photo_file_id = uploaded.file_id;
-      // thumb_b64: null is a valid, expected outcome (the fallback
-      // server-side thumbnail fetch is itself best-effort — see
-      // upload-employee-photo's README) — this employee just falls back
-      // to initials on the offline Scanner until their next photo upload
-      // succeeds at producing one. Never treated as an upload failure.
+      // A null thumb_b64 is expected, not a failure — both the client-side
+      // conversion and the server's Drive fetch are best-effort. But it has a
+      // real consequence worth saying out loud: this employee will show as
+      // initials on every kiosk while looking correct here. Settings → Offline
+      // scanner thumbnails → Repair missing fixes it once Drive catches up.
       payload.photo_thumb_b64 = uploaded.thumb_b64 ?? null;
+      thumbMissing = !uploaded.thumb_b64;
     } else if (photoRemoved) {
       payload.photo_url = null;
       payload.photo_file_id = null;
@@ -318,6 +325,13 @@ export async function openEmployeeModal(emp, onSaved) {
     if (error) { saveBtn.disabled = false; showModalError(overlay, errSel, error.message); return; }
     closeModal(overlay);
     toast(isEdit ? 'Employee updated' : 'Employee added');
+    // Saved fine, but neither the browser nor Drive produced a Scanner
+    // thumbnail, so this person is about to show as initials on every kiosk
+    // while looking correct in the directory. Say so now rather than leaving it
+    // to be noticed at a door.
+    if (thumbMissing) {
+      toast('Photo saved, but no Scanner thumbnail could be made — this employee will show as initials on kiosks. Settings → Offline scanner thumbnails → Repair missing can retry it.', 'error');
+    }
     onSaved?.();
   });
 }

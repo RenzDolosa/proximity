@@ -51,7 +51,11 @@ export const avatarHTML = (name, photoUrl, cacheKey) => {
   const src = photoSrc(photoUrl, cacheKey);
   if (!src) return `<span class="avatar-fallback">${esc(initials(name))}</span>`;
   const onerror = `if(this.dataset.retried!=='1'){this.dataset.retried='1';var im=this,s=this.src;setTimeout(function(){im.src=s;},${PHOTO_RETRY_MS});}else{this.style.display='none';this.nextElementSibling.style.display='';}`;
-  const realHTML = `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" data-retried="0" onerror="${onerror}" />`;
+  // loading="lazy": these are live Google Drive requests, and a full repaint
+  // recreates every <img> in the table. Lazy means only the rows actually on
+  // screen request anything. (Drive bandwidth, not Supabase egress — this costs
+  // page speed and the kiosk's connection, not the database quota.)
+  const realHTML = `<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-retried="0" onerror="${onerror}" />`;
   return realHTML + defaultAvatarImg() + initialsHTML;
 };
 

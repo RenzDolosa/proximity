@@ -17,6 +17,21 @@ import { renderPagination } from '../../Components/Pagination.js';
 import { openConfirmModal, openConfirmProgressModal } from '../../Components/ConfirmModal.js';
 import { wireAvatarPreview } from '../../Utils/avatarPreview.js';
 import { buildIdentityIndex, identityKey } from '../../Utils/employeeCode.js';
+import { isFresh, markFetched, invalidate } from '../../Utils/freshness.js';
+
+const DIRECTORY_KEY = 'directory';
+// Long enough that flicking between sidebar items costs nothing, short enough
+// that another admin's edit shows up without a reload. Edits made HERE are not
+// subject to it — they invalidate explicitly.
+const DIRECTORY_MAX_AGE_MS = 60 * 1000;
+
+// Every path that changes the roster goes through this rather than
+// renderDirectory() directly, so the freshness window can never swallow a
+// just-made edit.
+export function reloadDirectory() {
+  invalidate(DIRECTORY_KEY);
+  return renderDirectory();
+}
 
 let page = 1;
 let pageSize = 50;
@@ -102,11 +117,11 @@ export async function renderDirectory() {
         },
       });
       if (!confirmed) return;
-      if (result.error) toast(result.error.message, 'error'); else { toast('All employees deleted'); renderDirectory(); }
+      if (result.error) toast(result.error.message, 'error'); else { toast('All employees deleted'); reloadDirectory(); }
     });
   }
   if (isAdminOrManager()) {
-    $('#dir-add').addEventListener('click', () => openEmployeeModal(null, renderDirectory));
+    $('#dir-add').addEventListener('click', () => openEmployeeModal(null, reloadDirectory));
     $('#dir-export-scans').addEventListener('click', () => openExportScanLogsModal());
     $('#dir-import').addEventListener('click', () => openImportModal({
       title: 'Import employees',
@@ -126,28 +141,29 @@ export async function renderDirectory() {
         department: 'Apparel', position: 'Process Engineer', email: '', phone: '', status: 'active',
       },
       onImport: importEmployees,
-    }, renderDirectory));
+    }, reloadDirectory));
   }
 
-  // Stale-while-revalidate: if we've already loaded this table once this
-  // session, paint immediately from the cache (no "Loading…" flash) while
-  // the fresh fetch runs in the background — this is what made every
-  // sidebar click, even back to a page you'd just been on, flash blank
-  // first.
+  // Paint from the in-memory roster first, so a repeat visit shows the table
+  // immediately instead of flashing "Loading…".
   if (loaded) paintDirectoryTable('');
+
+  // ~220 KB a visit (729 rows), previously refetched on every single sidebar
+  // click. Within the window, the paint above is the whole render. Mutations
+  // call reloadDirectory() below, which invalidates first, so an edit is never
+  // hidden by this.
+  if (loaded && isFresh(DIRECTORY_KEY, DIRECTORY_MAX_AGE_MS)) {
+    subscribeToScans();
+    return;
+  }
 
   const { data, error } = await EmployeesModel.listDirectory();
   if (error) { $('#dir-table-wrap').innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
   const next = data || [];
-  // Repainting the table recreates every row's DOM node, including each
-  // <img>, so a repeat visit to Employee Manager used to tear down and
-  // reload every already-loaded photo TWICE per click: once for the
-  // "paint from cache" line above (unavoidable — it's what shows anything
-  // before this fetch resolves), then again here once the fetch came back
-  // — even when the fetch returned byte-for-byte the same roster, which is
-  // the common case. Skipping this second repaint when nothing actually
-  // changed cuts that to once, and leaves already-decoded photos alone on
-  // every visit where nobody else edited the roster in the meantime.
+  markFetched(DIRECTORY_KEY);
+  // Repainting recreates every row's <img>, so skipping this second repaint when
+  // the roster came back identical — the common case — leaves already-decoded
+  // photos alone instead of reloading them on every visit.
   const changed = !loaded || JSON.stringify(next) !== JSON.stringify(appState.employeesCache);
   appState.employeesCache = next;
   loaded = true;
@@ -180,24 +196,15 @@ function subscribeToScans() {
     .subscribe();
 }
 
-// Refetches the roster and repaints, WITHOUT the full toolbar rebuild
-// renderDirectory() does. That distinction is what preserves page number,
-// the search box's current text, and scroll position across an edit-save
-// — paintDirectoryTable() alone only replaces #dir-table-wrap's own
-// innerHTML (already what a pagination click or typing in the search box
-// does today, neither of which bounces anyone back to page 1 or the top
-// of the screen). renderDirectory()'s full content.innerHTML rebuild is
-// what was actually losing all three: it recreates #dir-search from
-// scratch (empty, no value attribute — losing whatever was typed), and
-// explicitly sets `page = 1` outright. Used only for the edit-save path
-// below — Add/Import/Delete all still use the full renderDirectory(),
-// where landing back on page 1 with a clean toolbar is reasonable (a
-// newly added employee, or a bulk change, is a big enough event that
-// starting fresh isn't disruptive the way it is for "I fixed a typo in
-// someone's department and got kicked back to page 1" would be).
+// Refetches and repaints WITHOUT renderDirectory()'s full toolbar rebuild, which
+// is what preserves page number, search text and scroll position across an
+// edit-save — that rebuild recreates #dir-search empty and resets `page = 1`.
+// Used only for the edit path; Add/Import/Delete all still do a full render,
+// where landing back on page 1 is reasonable.
 async function refreshDirectoryInPlace() {
   const { data, error } = await EmployeesModel.listDirectory();
   if (error) { toast(error.message, 'error'); return; }
+  markFetched(DIRECTORY_KEY);
   appState.employeesCache = data || [];
   paintDirectoryTable($('#dir-search')?.value || '');
 }
