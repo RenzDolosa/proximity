@@ -16,12 +16,20 @@
 -- handover. It is the human-facing exports that need care; see
 -- JS/Utils/employeeCode.js and the README entry.
 
-ALTER TABLE public.employees DROP CONSTRAINT employees_employee_code_key;
+-- IF EXISTS / IF NOT EXISTS so this whole file is safely re-runnable: it is
+-- applied by hand, and a half-finished first attempt must not leave the only
+-- recovery path as editing SQL in the dashboard.
+ALTER TABLE public.employees DROP CONSTRAINT IF EXISTS employees_employee_code_key;
 
--- Partial, so resigned rows are exempt. CONCURRENTLY is not available inside
--- the implicit transaction a migration runs in; at this table's size the brief
--- lock is immaterial.
-CREATE UNIQUE INDEX employees_employee_code_current_key
+-- Partial, so resigned rows are exempt. CONCURRENTLY is unavailable inside the
+-- implicit transaction a migration runs in; at this table's size the brief lock
+-- is immaterial.
+--
+-- This fails if two NON-resigned employees already share a code. That should be
+-- impossible — the constraint just dropped forbade it — but if it does fail, the
+-- drop above has already happened, so re-running after fixing the duplicates is
+-- the correct recovery.
+CREATE UNIQUE INDEX IF NOT EXISTS employees_employee_code_current_key
   ON public.employees (employee_code)
   WHERE status <> 'resigned';
 
