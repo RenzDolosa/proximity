@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import {
   identityKey, isResigned, currentCodeHolder, currentNameHolder, buildIdentityIndex,
 } from '../JS/Utils/employeeCode.js';
+import {
+  EMPLOYEE_STATUSES, RELEASES_EMPLOYEE_CODE, releasesEmployeeCode,
+  employeeStatusLabel, employeeStatusOptionsHTML,
+} from '../JS/Utils/employeeStatus.js';
 
 // Codes are recycled when staff leave, so uniqueness applies to CURRENT
 // employees only — mirroring employees_employee_code_current_key, the partial
@@ -26,6 +30,34 @@ test('only resigned counts as terminal — inactive and suspended still hold the
   assert.equal(isResigned(roster[1]), false); // inactive
   assert.equal(isResigned(roster[2]), false); // suspended
   assert.equal(isResigned(roster[3]), true);
+});
+
+// The rule the status pickers explain and the rule the import/modal enforce must
+// be the same rule — they read one constant, and this pins that they agree.
+test('the status that frees a code is defined once and matches what the pickers say', () => {
+  assert.equal(RELEASES_EMPLOYEE_CODE, 'resigned');
+  assert.equal(releasesEmployeeCode('resigned'), true);
+  for (const held of ['active', 'inactive', 'suspended', '', null, undefined]) {
+    assert.equal(releasesEmployeeCode(held), false);
+    assert.equal(isResigned({ status: held }), false);
+  }
+  // Every status is offered, and the one that frees a code says so where it is
+  // chosen rather than only in a doc.
+  assert.equal(EMPLOYEE_STATUSES.length, 4);
+  for (const s of EMPLOYEE_STATUSES) assert.ok(employeeStatusLabel(s).length > 0);
+  assert.match(employeeStatusLabel(RELEASES_EMPLOYEE_CODE), /frees/i);
+  assert.match(employeeStatusLabel('inactive'), /keeps/i);
+  assert.match(employeeStatusLabel('suspended'), /keeps/i);
+});
+
+test('the options markup selects the current status and escapes nothing unexpected', () => {
+  const html = employeeStatusOptionsHTML('suspended');
+  assert.equal((html.match(/<option /g) || []).length, 4);
+  assert.match(html, /value="suspended" selected/);
+  assert.equal(/value="active" selected/.test(html), false);
+  // An unknown status simply selects nothing rather than throwing or inventing
+  // an option — a row saved before a status was retired must still open.
+  assert.equal(/ selected/.test(employeeStatusOptionsHTML('retired-long-ago')), false);
 });
 
 test('comparison ignores case and surrounding whitespace', () => {
