@@ -3,12 +3,13 @@
 //
 // Codes are recycled when staff leave, so uniqueness applies only to CURRENT
 // employees — mirroring employees_employee_code_current_key, the partial unique
-// index that actually enforces it (20261006140000). A resigned holder does not
-// block anything.
+// index that actually enforces it (20261006140000). A resigned holder blocks
+// nothing.
+import { releasesEmployeeCode } from './employeeStatus.js';
 
-// 'resigned' is the only terminal status; inactive and suspended are still
-// current employees whose code stays theirs.
-export const isResigned = (row) => row?.status === 'resigned';
+// Which status frees a code lives in Utils/employeeStatus.js, so the rule the
+// pickers explain and the rule this enforces cannot drift apart.
+export const isResigned = (row) => releasesEmployeeCode(row?.status);
 
 // Comparison key for both fields: trimmed and lowercased, matching how the
 // import has always matched. Deliberately looser than the database index, which

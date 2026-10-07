@@ -4,7 +4,7 @@ import { $ } from '../Utils/dom.js';
 import { esc } from '../Utils/format.js';
 import { openModal, closeModal, setModalLocked } from './Modal.js';
 import { ProximityCardsModel } from '../Models/ProximityCardsModel.js';
-import { EMPLOYEE_STATUSES } from '../Utils/employeeStatus.js';
+import { EMPLOYEE_STATUS_HINT, employeeStatusOptionsHTML } from '../Utils/employeeStatus.js';
 
 /**
  * @param {{ id: string, proximity_code: string }} card
@@ -24,9 +24,8 @@ export function openRevokeCardModal(card, employee) {
       ${employee ? `
         <div class="field">
           <label>Employee status</label>
-          <select id="rv-status">
-            ${EMPLOYEE_STATUSES.map((status) => `<option value="${status}" ${employee.status === status ? 'selected' : ''}>${status}</option>`).join('')}
-          </select>
+          <select id="rv-status">${employeeStatusOptionsHTML(employee.status)}</select>
+          <div class="emp-meta" style="margin-top:6px;">${esc(EMPLOYEE_STATUS_HINT)}</div>
         </div>
       ` : ''}
       <div class="field">

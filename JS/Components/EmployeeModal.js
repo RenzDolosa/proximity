@@ -6,7 +6,7 @@ import { appState } from '../Core/state.js';
 import { EmployeesModel } from '../Models/EmployeesModel.js';
 import { ProximityCardsModel } from '../Models/ProximityCardsModel.js';
 import { fileToWebp, fileToOfflineThumbWebp, blobToBase64 } from '../Utils/image.js';
-import { EMPLOYEE_STATUSES } from '../Utils/employeeStatus.js';
+import { EMPLOYEE_STATUS_HINT, employeeStatusOptionsHTML } from '../Utils/employeeStatus.js';
 import { currentCodeHolder, currentNameHolder } from '../Utils/employeeCode.js';
 
 // Opens instantly — the two network calls this needs (unassigned cards +
@@ -51,9 +51,8 @@ export async function openEmployeeModal(emp, onSaved) {
       <div class="field"><label>Phone</label><input id="f-phone" value="${esc(emp?.phone || '')}" /></div>
     </div>
     <div class="field"><label>Status</label>
-      <select id="f-status">
-        ${EMPLOYEE_STATUSES.map((s) => `<option value="${s}" ${emp?.status === s ? 'selected' : ''}>${s}</option>`).join('')}
-      </select>
+      <select id="f-status">${employeeStatusOptionsHTML(emp?.status)}</select>
+      <div class="emp-meta" style="margin-top:6px;">${esc(EMPLOYEE_STATUS_HINT)}</div>
     </div>
     <div class="field">
       <label>Proximity code <span style="color:red;">*</span> <span style="color:var(--text-faint)">(required — every employee needs one)</span></label>
