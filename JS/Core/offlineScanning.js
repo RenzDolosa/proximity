@@ -1,6 +1,43 @@
 // Offline scanning rules have no browser or Supabase dependency so they can
 // be exercised by the Node test runner. The RPC remains the final authority
 // when queued scans are replayed.
+
+// Shortest registered proximity code, or 0 when the roster is unknown.
+export function minCodeLength(rows) {
+  let min = 0;
+  for (const row of rows || []) {
+    const len = String(row?.proximity_code ?? '').trim().length;
+    if (len > 0 && (min === 0 || len < min)) min = len;
+  }
+  return min;
+}
+
+// Whether a typed/scanned value could be a card at all.
+//
+// The kiosk input auto-submits ~200ms after typing stops, because badge readers
+// are keyboard wedges with no trailing Enter. The cost is that ANY stray input
+// becomes a scan: a partial read, a bumped keyboard, someone idly typing. Each
+// one reaches the server, records an unmatched scan_event, and raises an
+// `unknown_card_scan` alert — which is how 786 alerts accumulated, almost all of
+// them codes like "0", "37" and "58" that no card could have.
+//
+// The bar is deliberately the SHORTEST code actually registered on this system,
+// taken from the offline cache the kiosk already holds, rather than a guessed
+// format or a hardcoded length. It therefore cannot reject a registered card,
+// and it adapts if the code scheme ever changes.
+//
+// Fails OPEN when the roster is unknown (a kiosk that has never synced): an
+// unrecognised card still deserves to be recorded, and a scanner that silently
+// swallows scans is far worse than a noisy alert list. The genuine tradeoff is
+// an UNREGISTERED card shorter than every registered one — that is ignored
+// rather than alerted. The operator still sees on-screen feedback, so it is not
+// silent to the person standing there.
+export function looksLikeCardCode(code, rows) {
+  const value = String(code ?? '').trim();
+  if (!value) return false;
+  const min = minCodeLength(rows);
+  return min === 0 || value.length >= min;
+}
 export function classifyCachedScan(proximityCode, rows, pendingBumps = new Map()) {
   const row = rows.find((candidate) => candidate.proximity_code === proximityCode);
   if (!row) return { result: 'unmatched', employee: null, offline: true };
