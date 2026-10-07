@@ -9,6 +9,7 @@ import { PROXIMITY_LOGO_SVG } from '../../Components/ProximityLogo.js';
 import { photoDataUri } from '../../Utils/image.js';
 import { loadScanSounds, playScanSound, scanSoundsLoaded, initAudioUnlock } from '../../Utils/scanSounds.js';
 import { OfflineScanModel, STALE_AFTER_MS } from '../../Models/OfflineScanModel.js';
+import { looksLikeCardCode } from '../../Core/offlineScanning.js';
 
 // Module-level, not per-render: renderStandaloneScanner() only actually
 // runs once per kiosk tab in practice, but guarding here means a second
@@ -20,6 +21,10 @@ let offlineSupportInited = false;
 // so doScan() always has a real flushIfPending to call, never undefined.
 let flushIfPendingShared = async () => {};
 let focusWatchdogTimer = null;
+// The cached lookup rows, kept here so looksLikeCardCode() can run on every
+// auto-submit without an IndexedDB read per keystroke. Refreshed alongside the
+// cache itself; an empty array simply means the check fails open.
+let cachedLookupRows = [];
 
 // The badge reader is a keyboard: if #ss-code is not focused, a scan types into
 // nothing and is silently lost. A blur listener alone is not enough, because the
@@ -120,6 +125,19 @@ function renderStandaloneScanner() {
   startFocusWatchdog(codeInput);
   const resultWrap = $('#ss-result');
   const photoStage = $('#ss-photo-stage');
+
+  // Brief, non-blocking feedback for input the kiosk discarded without scanning.
+  // Reuses the result area so the operator looks in the same place as always,
+  // and clears itself rather than lingering in front of the next real scan.
+  let hintTimer = null;
+  const showTransientHint = (text) => {
+    clearTimeout(hintTimer);
+    resultWrap.classList.remove('fade-out');
+    resultWrap.innerHTML = `<div class="result-card unmatched"><strong>${esc(text)}</strong></div>`;
+    hintTimer = setTimeout(() => {
+      if (resultWrap.querySelector('.result-card.unmatched')) resultWrap.innerHTML = '';
+    }, 2000);
+  };
   // The full-viewport match photo, so an operator can confirm the person from a
   // normal viewing distance. Shows the cached thumbnail instantly, then upgrades
   // to the sharper Drive photo once it loads.
@@ -174,6 +192,16 @@ function renderStandaloneScanner() {
     if (scanBusy) return; // a scan is already in flight — the debounce timer below can otherwise double-fire while awaiting the previous one
     const proximity_code = codeInput.value.trim();
     if (!proximity_code) return;
+    // Too short to be any card registered on this system — a partial read or a
+    // stray keystroke that the 200ms auto-submit would otherwise turn into a
+    // real unmatched scan and an `unknown_card_scan` alert. Discarded locally:
+    // no request, no scan_event, no alert. See looksLikeCardCode().
+    if (!looksLikeCardCode(proximity_code, cachedLookupRows)) {
+      clearTimeout(autoSubmitTimer);
+      codeInput.value = '';
+      showTransientHint('Partial read — please scan again');
+      return;
+    }
     scanBusy = true;
     clearTimeout(autoSubmitTimer);
     // Lock the input before the round-trip: a card read landing mid-request would
@@ -296,6 +324,10 @@ async function renderOfflineStatus() {
     OfflineScanModel.queueCount(),
     OfflineScanModel.getCacheMeta(),
   ]);
+  // Free ride: this already reads the cache, and it runs on mount, after every
+  // scan, and on every connectivity change — so looksLikeCardCode() stays
+  // current without a single extra IndexedDB read.
+  cachedLookupRows = meta.rows || [];
   const stale = meta.ageMs > STALE_AFTER_MS;
 
   if (headerEl) {

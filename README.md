@@ -612,6 +612,46 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-06 — the kiosk stops turning stray keystrokes into scans (and into `unknown_card_scan` alerts)**
+
+786 alerts had accumulated, nearly all "Unknown card scan", with a permanent
+"9+" badge. Looking at the codes — `0`, `37`, `58`, `71`, `77`, `78` alongside
+plausible ones like `781174` and `005117178` — two populations are obvious, and
+the short ones cannot be any card.
+
+**Cause.** The kiosk input auto-submits ~200 ms after typing stops, because badge
+readers are keyboard wedges that send no trailing Enter. The cost of that design
+is that *any* stray input becomes a scan: a partial read, a bumped keyboard,
+someone idly typing at a kiosk. Each one reached the server, recorded an
+unmatched `scan_event`, and raised an alert. Alerts dedupe per code, so every new
+piece of junk created a new row.
+
+**Fix.** `looksLikeCardCode()` rejects input shorter than the shortest proximity
+code **actually registered on this system**, read from the offline cache the
+kiosk already holds. No request, no `scan_event`, no alert — just a brief
+"Partial read — please scan again" on screen, so it is not silent to the person
+standing there.
+
+The bar is deliberately derived from the roster rather than a guessed format or a
+hardcoded length: it therefore **cannot reject a registered card**, and it adapts
+if the code scheme changes. It fails **open** when the roster is unknown (a kiosk
+that has never synced) — an unrecognised card still deserves recording, and a
+scanner that silently swallows reads is far worse than a noisy alert list.
+
+The genuine tradeoff, stated plainly: an **unregistered** card shorter than every
+registered one is now ignored rather than alerted. If cards shorter than your
+shortest registered one are ever presented, this will not flag them.
+
+**This was not the egress problem**, and the arithmetic is in
+`docs/EGRESS_BUDGET.md` §4: `get_alerts()` caps at 100 rows and the page has no
+auto-refresh, so alerts cost roughly 1% of quota whether the table holds 786 rows
+or 7,860. It was worth fixing because a permanent "9+" badge means the feature
+carries no signal.
+
+The existing 786 rows are untouched — "Acknowledge all" clears the badge. A
+retention job for acknowledged alerts, matching the `scan_events` and `scan_logs`
+convention, is the obvious follow-up and is not built.
+
 **2026-10-06 — employees with a photo but no kiosk thumbnail: repair, and stop making new ones**
 
 **The symptom:** an employee's photo shows correctly in Employee Manager but the

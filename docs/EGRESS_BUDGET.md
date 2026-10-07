@@ -152,6 +152,27 @@ actually on screen.
 
 ## 4. Considered and rejected
 
+### Were the `unknown_card_scan` alerts the cause?
+
+Asked 2026-10-06, with 786 rows in `alerts`, nearly all of them unrecognised
+cards. **No — about 1% of quota.** The arithmetic:
+
+| Source | Rate | Size | Monthly |
+|---|---|---|---|
+| Alerts page visit | on demand | ~45 KB (capped at 100 rows) | ~28 MB at 20 visits/day |
+| Unread badge count | 60/hour per signed-in tab | ~0.4 KB with overhead | ~18 MB at 3 tabs × 8 h |
+| The unmatched scan itself | ~79/day | ~0.3 KB | ~0.7 MB |
+
+`get_alerts()` is capped at 100 rows and the page has no auto-refresh, so the
+table growing to 786 — or 7,860 — does not change what any request costs. Alert
+*volume* is an operational problem, not a bandwidth one.
+
+It is still worth fixing, for a better reason: at 786 alerts and a permanent
+"9+" badge, the Alerts feature has stopped carrying signal. Fixed at the source —
+see §3's entry on implausible scan input.
+
+
+
 ### Moving `scan_events` / `scan_logs` into Google Drive as JSON files
 
 Asked 2026-10-06: store scan history in Drive as `<name>.jsonb`, mirroring the

@@ -1,12 +1,63 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { attachCachedPhoto, classifyCachedScan, flushQueuedScans, groupQueuedScans, mergeLookupDelta, mergePhotoUpdates, photoNeedsRefresh } from '../JS/Core/offlineScanning.js';
+import {
+  attachCachedPhoto, classifyCachedScan, flushQueuedScans, groupQueuedScans, looksLikeCardCode,
+  mergeLookupDelta, mergePhotoUpdates, minCodeLength, photoNeedsRefresh,
+} from '../JS/Core/offlineScanning.js';
 
 const matchedRow = {
   proximity_code: 'CARD-1', card_active: true, employee_id: 'employee-1',
   employee_status: 'active', scan_count: 4, full_name: 'Ari',
   employee_code: 'E-1', department: 'Ops', remarks_log: [{ resolved: false }],
 };
+
+// The kiosk auto-submits ~200ms after typing stops (badge readers send no
+// trailing Enter), so any stray input became a real unmatched scan and an
+// `unknown_card_scan` alert — 786 of them, mostly codes like "0", "37" and "58".
+// The bar is the shortest code actually registered, so it can never reject a
+// real card.
+const roster = [
+  { proximity_code: '0012345678' },
+  { proximity_code: '98765' },
+  { proximity_code: 'PRX-00099' },
+];
+
+test('the minimum length comes from the roster, ignoring blanks and junk', () => {
+  assert.equal(minCodeLength(roster), 5); // '98765'
+  assert.equal(minCodeLength([{ proximity_code: '  7654321  ' }]), 7); // trimmed
+  assert.equal(minCodeLength([{ proximity_code: '' }, { proximity_code: null }, {}]), 0);
+  assert.equal(minCodeLength([]), 0);
+  assert.equal(minCodeLength(null), 0);
+});
+
+test('input shorter than every registered card is not a scan', () => {
+  for (const junk of ['0', '37', '58', '71', '77', '78']) {
+    assert.equal(looksLikeCardCode(junk, roster), false);
+  }
+});
+
+test('a code at or above the shortest registered length is scanned', () => {
+  assert.equal(looksLikeCardCode('98765', roster), true);      // the shortest itself
+  assert.equal(looksLikeCardCode('781174', roster), true);     // unregistered but plausible — still alerts
+  assert.equal(looksLikeCardCode('005117178', roster), true);
+  assert.equal(looksLikeCardCode('  98765  ', roster), true);  // trimmed before measuring
+});
+
+// An unrecognised card must still be recorded, so a kiosk that has never synced
+// scans everything. A scanner that silently swallows reads is far worse than a
+// noisy alert list.
+test('an unknown roster fails open rather than swallowing scans', () => {
+  assert.equal(looksLikeCardCode('0', []), true);
+  assert.equal(looksLikeCardCode('0', null), true);
+  assert.equal(looksLikeCardCode('37', [{ proximity_code: '' }]), true);
+});
+
+test('empty input is never a scan, whatever the roster says', () => {
+  assert.equal(looksLikeCardCode('', roster), false);
+  assert.equal(looksLikeCardCode('   ', roster), false);
+  assert.equal(looksLikeCardCode(null, []), false);
+  assert.equal(looksLikeCardCode(undefined, []), false);
+});
 
 test('offline classification mirrors server result branches and direction alternation', () => {
   assert.equal(classifyCachedScan('missing', [matchedRow]).result, 'unmatched');
