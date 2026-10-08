@@ -39,7 +39,19 @@ let cachedLookupRows = [];
 // Hence a watchdog rather than an event list: poll, and reclaim focus whenever
 // nothing meaningful holds it. Still never steals focus from a control the
 // operator is actually using (Sign out) or from an open dialog.
-const FOCUS_WATCHDOG_MS = 1000;
+//
+// BUT POLLING ALONE CANNOT BE THE ANSWER, which the data proved on 2026-10-08:
+// 58 of 59 "unknown card" alerts were truncated reads of real cards. A reader
+// types ten digits in roughly 100ms, so ANY poll interval loses whole reads —
+// at 1000ms it lost all ten digits, and even 200ms would lose most of them.
+// Those were employees whose badge silently did not work.
+//
+// So the primary mechanism is not the poll: it is capturing the keystrokes
+// themselves (see adoptStrayKeystroke). A character typed while the input is
+// unfocused still reaches `document`, so it can be redirected into the input
+// rather than lost. The poll remains only as a backstop for the non-typing case
+// — an operator glancing at the kiosk and seeing the caret in the right place.
+const FOCUS_WATCHDOG_MS = 400;
 
 function canReclaimFocus(input) {
   if (!document.body.contains(input) || input.disabled) return false;
@@ -52,12 +64,53 @@ function reclaimFocus(input) {
   if (canReclaimFocus(input) && document.activeElement !== input) input.focus();
 }
 
+// Redirects a keystroke that landed on the document into the scan input, so a
+// read that begins before focus arrives is recovered instead of truncated.
+//
+// Capture phase, and preventDefault + manual append rather than just focusing:
+// focusing mid-keydown does not reliably deliver THIS character to the newly
+// focused element, and in some browsers delivers it twice. Appending explicitly
+// is deterministic. The synthetic `input` event is required — the auto-submit
+// debounce listens for it, and without it a recovered read would sit in the box
+// forever.
+//
+// Deliberately narrow: single printable characters only, no modifier combos, and
+// nothing at all while a dialog is open or the operator is using a control. A
+// stray single keypress is harmless — it lands in the box, auto-submit fires,
+// and looksLikeCardCode() rejects it as a partial read.
+function adoptStrayKeystroke(input, e) {
+  if (document.activeElement === input) return;
+  if (e.key == null || e.key.length !== 1) return;      // Tab, Shift, arrows, F-keys
+  if (e.ctrlKey || e.altKey || e.metaKey) return;       // a shortcut, not a card
+  if (!canReclaimFocus(input)) return;
+  e.preventDefault();
+  input.focus();
+  input.value += e.key;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+// The document/window listeners below are never removed, so they must be bound
+// at most once. A second keydown handler would append every character twice,
+// turning a correct read into a corrupt one — worse than the truncation this
+// exists to fix. The input itself is re-looked-up through `currentCodeInput`
+// rather than captured, so a re-render still reaches the live element.
+let focusListenersBound = false;
+let currentCodeInput = null;
+
 function startFocusWatchdog(input) {
+  currentCodeInput = input;
   clearInterval(focusWatchdogTimer);
-  const reclaim = () => reclaimFocus(input);
+  const reclaim = () => { if (currentCodeInput) reclaimFocus(currentCodeInput); };
   focusWatchdogTimer = setInterval(reclaim, FOCUS_WATCHDOG_MS);
-  // Immediate paths, so a returning operator does not wait out a poll.
   input.addEventListener('blur', () => setTimeout(reclaim, 50));
+
+  if (focusListenersBound) return;
+  focusListenersBound = true;
+  // The one that actually prevents truncated reads.
+  document.addEventListener('keydown', (e) => {
+    if (currentCodeInput) adoptStrayKeystroke(currentCodeInput, e);
+  }, true);
+  // Immediate paths, so a returning operator does not wait out a poll.
   window.addEventListener('focus', reclaim);
   window.addEventListener('resize', reclaim);   // CRD resizes the remote display on connect
   window.addEventListener('pageshow', reclaim);

@@ -2,41 +2,60 @@
 // be exercised by the Node test runner. The RPC remains the final authority
 // when queued scans are replayed.
 
-// Shortest registered proximity code, or 0 when the roster is unknown.
-export function minCodeLength(rows) {
-  let min = 0;
+// The length almost every issued card has — the MODE of registered code
+// lengths, not the minimum.
+//
+// Measured 2026-10-08: 761 of 762 cards are exactly 10 digits, and the lone
+// outlier is an inactive 3-character test card. Using the minimum therefore
+// produced a threshold of 3, which accepted every truncated read; the mode is
+// unaffected by that kind of stray row.
+export function expectedCodeLength(rows) {
+  const counts = new Map();
   for (const row of rows || []) {
     const len = String(row?.proximity_code ?? '').trim().length;
-    if (len > 0 && (min === 0 || len < min)) min = len;
+    if (len > 0) counts.set(len, (counts.get(len) || 0) + 1);
   }
-  return min;
+  let best = 0;
+  let bestCount = 0;
+  for (const [len, n] of counts) {
+    // Ties go to the longer length: accepting a short read is the failure mode
+    // that loses a scan, so err towards demanding more digits.
+    if (n > bestCount || (n === bestCount && len > best)) { best = len; bestCount = n; }
+  }
+  return best;
 }
 
-// Whether a typed/scanned value could be a card at all.
+// Whether a scanned value is a COMPLETE card read.
 //
-// The kiosk input auto-submits ~200ms after typing stops, because badge readers
-// are keyboard wedges with no trailing Enter. The cost is that ANY stray input
-// becomes a scan: a partial read, a bumped keyboard, someone idly typing. Each
-// one reaches the server, records an unmatched scan_event, and raises an
-// `unknown_card_scan` alert — which is how 786 alerts accumulated, almost all of
-// them codes like "0", "37" and "58" that no card could have.
+// Badge readers are keyboard wedges that send no trailing Enter, so the kiosk
+// auto-submits ~200ms after typing stops. If the input is not focused when a
+// read begins, the leading digits go nowhere and the timer fires on whatever
+// arrived — producing a short code that matches no card.
 //
-// The bar is deliberately the SHORTEST code actually registered on this system,
-// taken from the offline cache the kiosk already holds, rather than a guessed
-// format or a hardcoded length. It therefore cannot reject a registered card,
-// and it adapts if the code scheme ever changes.
+// That is not hypothetical. Measured against the live database on 2026-10-08:
+// 58 of 59 distinct "unknown card" codes were SUFFIXES of registered cards —
+// `037` of `0005204037`, `9295` of `0005669295`, `215056` of `0005215056`.
+// Every one was a real employee whose badge silently failed and who had to scan
+// again. The alerts blamed cards that do not exist.
 //
-// Fails OPEN when the roster is unknown (a kiosk that has never synced): an
-// unrecognised card still deserves to be recorded, and a scanner that silently
-// swallows scans is far worse than a noisy alert list. The genuine tradeoff is
-// an UNREGISTERED card shorter than every registered one — that is ignored
-// rather than alerted. The operator still sees on-screen feedback, so it is not
-// silent to the person standing there.
+// So a short read is rejected before it is sent: no failed scan, no misleading
+// alert, and the operator is told to scan again. Two escape hatches keep that
+// from being over-strict:
+//   * an EXACT match against a known code is always accepted, so a legitimately
+//     short card (there is one 3-character test card) still works;
+//   * an unknown roster fails OPEN, because a kiosk that has never synced must
+//     not silently swallow scans.
+//
+// The remaining tradeoff: an UNREGISTERED card shorter than the usual length is
+// now rejected rather than alerted. Given 98% of short reads are truncations of
+// real cards, that is the right way round.
 export function looksLikeCardCode(code, rows) {
   const value = String(code ?? '').trim();
   if (!value) return false;
-  const min = minCodeLength(rows);
-  return min === 0 || value.length >= min;
+  if (!rows?.length) return true; // never synced — fail open
+  if (rows.some((r) => String(r?.proximity_code ?? '').trim() === value)) return true;
+  const expected = expectedCodeLength(rows);
+  return expected === 0 || value.length >= expected;
 }
 export function classifyCachedScan(proximityCode, rows, pendingBumps = new Map()) {
   const row = rows.find((candidate) => candidate.proximity_code === proximityCode);

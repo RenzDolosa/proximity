@@ -612,6 +612,69 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-08 — the "unknown card" alerts were failed scans by real employees, not stray typing**
+
+Measured against the live database, which corrected the 2026-10-06 diagnosis
+below:
+
+- **761 of 762 proximity codes are exactly 10 digits.** The one outlier is
+  `"123"`, an inactive test card.
+- **58 of 59 distinct `unknown_card_scan` codes are suffixes of registered
+  cards** — `037` of `0005204037`, `9295` of `0005669295`, `215056` of
+  `0005215056`.
+
+So these were never unknown cards. Each one is a **real employee whose badge read
+lost its leading digits**, failed, and had to be scanned again. The reader is a
+keyboard wedge; when the input isn't focused as a read begins, the first
+characters go nowhere and the ~200 ms auto-submit fires on the remainder. It is
+the same root cause as the Chrome Remote Desktop focus bug, and it had been
+costing people failed taps while filing alerts that blamed cards which don't
+exist.
+
+**The previous fix barely worked.** `looksLikeCardCode()` used the *minimum*
+registered code length — which that one 3-character test card drags to 3, so
+almost every truncation passed. It now uses the **mode** (10), with two escape
+hatches: an exact match against a known code is always accepted, so the short
+test card still works, and an unsynced kiosk fails open rather than swallowing
+scans.
+
+**Server-side alert suppression was asked for, and is the wrong fix.** A
+minimum-length rule would have suppressed 1 of 59, and `unmatched` scans are
+never written to `scan_events` — so the alert is the *only* trace these failures
+leave. Suppressing them would delete the evidence. Instead
+`20261008000000_classify_truncated_card_reads.sql` keeps alerting but names the
+real problem: a code that is a strict suffix of a registered card raises
+**`truncated_card_read`**, identifying the employee whose card it is, deduped per
+*scanner* for an hour (every truncation is a different fragment, so a per-code
+key would mint a row each time). A code matching nothing stays
+`unknown_card_scan` — a genuine security event that keeps its weight.
+
+Worth checking separately: `"123"` is an inactive card on an inactive employee
+and looks like leftover test data.
+
+**Follow-up — the focus watchdog now captures keystrokes instead of racing them.**
+Tightening the poll was the obvious next step and would not have worked: a reader
+types ten digits in roughly 100 ms, so *any* interval loses whole reads. At
+1000 ms it lost all ten.
+
+The real fix is that a character typed while the input is unfocused still reaches
+`document`, so it can be **redirected into the input rather than lost**. A
+capture-phase `keydown` handler appends it explicitly (`preventDefault` first —
+focusing mid-keydown does not reliably deliver that character, and in some
+browsers delivers it twice) and dispatches a synthetic `input` event, without
+which the auto-submit debounce would never fire and a recovered read would sit in
+the box forever.
+
+Deliberately narrow: single printable characters, no modifier combos, nothing
+while a dialog is open or the operator is using a control. A stray keypress is
+harmless — it lands in the box, auto-submit fires, and `looksLikeCardCode()`
+rejects it as a partial read.
+
+The poll drops 1000 ms → 400 ms but is now only a backstop for the non-typing
+case. And the document/window listeners are bound **once** behind a flag: a
+second keydown handler would append every character twice, which is worse than
+the truncation being fixed.
+
 **2026-10-06 — the kiosk stops turning stray keystrokes into scans (and into `unknown_card_scan` alerts)**
 
 786 alerts had accumulated, nearly all "Unknown card scan", with a permanent
