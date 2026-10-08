@@ -10,6 +10,7 @@ import { photoDataUri } from '../../Utils/image.js';
 import { loadScanSounds, playScanSound, scanSoundsLoaded, initAudioUnlock } from '../../Utils/scanSounds.js';
 import { OfflineScanModel, STALE_AFTER_MS } from '../../Models/OfflineScanModel.js';
 import { looksLikeCardCode } from '../../Core/offlineScanning.js';
+import { registerBusyCheck } from '../../Utils/appUpdate.js';
 
 // Module-level, not per-render: renderStandaloneScanner() only actually
 // runs once per kiosk tab in practice, but guarding here means a second
@@ -25,6 +26,18 @@ let focusWatchdogTimer = null;
 // auto-submit without an IndexedDB read per keystroke. Refreshed alongside the
 // cache itself; an empty array simply means the check fails open.
 let cachedLookupRows = [];
+// Last known offline-queue depth, kept in sync by renderOfflineStatus() so
+// kioskIsBusy() can stay synchronous.
+let pendingScanCount = 0;
+
+// A kiosk must never be reloaded mid-read. The reader types a whole badge in
+// ~100ms, so a non-empty input is an in-progress scan, not idle UI.
+function kioskIsBusy() {
+  const input = document.querySelector('#ss-code');
+  if (!input) return false;
+  return input.disabled || input.value.length > 0 || pendingScanCount > 0
+    || Boolean(document.querySelector('.overlay'));
+}
 
 // The badge reader is a keyboard: if #ss-code is not focused, a scan types into
 // nothing and is silently lost. A blur listener alone is not enough, because the
@@ -381,6 +394,7 @@ async function renderOfflineStatus() {
   // scan, and on every connectivity change — so looksLikeCardCode() stays
   // current without a single extra IndexedDB read.
   cachedLookupRows = meta.rows || [];
+  pendingScanCount = pending;
   const stale = meta.ageMs > STALE_AFTER_MS;
 
   if (headerEl) {
@@ -422,6 +436,7 @@ function fmtAge(ms) {
 function initOfflineSupport(operatorName) {
   if (offlineSupportInited) { renderOfflineStatus(); return flushIfPendingShared; }
   offlineSupportInited = true;
+  registerBusyCheck(kioskIsBusy);
   // Load the local thumbnails into memory now so the first scan's result card
   // and the feed don't wait on an IndexedDB read (see OfflineScanModel.getPhotoCache()).
   OfflineScanModel.getPhotoCache().catch(() => {});

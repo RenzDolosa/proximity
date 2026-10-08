@@ -8,10 +8,16 @@ client* — request rates are exact (they are constants in the source), response
 sizes are not. The original measured input was the total: **~0.025 GB/hour**,
 from the Supabase usage page.
 
-**§2b carries the first direct measurement** (2026-10-07, 24 hours of
-`edge_logs`). Read it before trusting §2: it confirms some estimates, closes one
-hypothesis, and establishes that **byte totals from `edge_logs` cannot be used
-at all** — only 13% of responses report a size.
+**§2c is the one to read first.** On 2026-10-08 the actual cause was measured,
+and it is not what §2 says: a single kiosk tab, open since before 2026-09-19 and
+never reloaded, was calling a *superseded* RPC that no current source file
+mentions. It accounts for the entire bill on its own. §2's attribution of ~90%
+to the Dashboard roster was a plausible reading of the client that happened to
+be wrong, and no amount of source reading could have found the real one.
+
+**§2b** (2026-10-07) carries the first direct measurement and establishes that
+**byte totals from `edge_logs` cannot be used at all** — only 13% of responses
+report a size. Its request *counts* are what made §2c findable.
 
 **Quota:** 5 GB/month, Free plan. Uncached and cached egress have separate 5 GB
 allowances; essentially all of this project's traffic is uncached (PostgREST
@@ -160,6 +166,93 @@ night — precisely when egress does not matter.**
 
 A version string could never fix this, because the data genuinely did change.
 One row of it. The fix is to send one row.
+
+## 2c. Measured, 2026-10-08 — the actual cause
+
+Re-running §2b's request-count query a day later surfaced two paths that had not
+appeared before, because the earlier query filtered on `%roster%`:
+
+| Path | Requests/24h | Payload | Per day |
+|---|---|---|---|
+| **`get_scanner_offline_photos`** | **95** | **5,823 kB** | **~553 MB** |
+| **`get_scanner_offline_cache`** | **482** | full card lookup | — |
+| `get_scanner_offline_photo_updates` | 119 | delta | small |
+| `get_scanner_offline_cache_delta` | 577 | delta | small |
+
+`get_scanner_offline_photos()` returns **every** thumbnail — all 716 rows, 5,823
+kB measured from the column lengths. gzip over base64-of-JPEG recovers roughly a
+quarter, so call it **~415 MB/day on the wire**.
+
+The billing cycle (11 Sep – 8 Oct, 27 days elapsed, 9.958 GB) averaged **369
+MB/day**. **One endpoint meets or exceeds the entire measured bill.** There is no
+large unexplained remainder to go looking for.
+
+### Why no source-reading could find it
+
+**Nothing in the repository calls either function.** `OfflineScanModel.js` calls
+`get_scanner_offline_cache_delta` and falls back to
+`get_scanner_offline_cache_compact`; photos go through
+`get_scanner_offline_photo_updates`. The two expensive RPCs were superseded on
+2026-09-19 when the payload was split, and again on 2026-10-05 by the delta pair.
+
+The calls come from **one browser tab**. Three signatures identify it:
+
+- **Flat around the clock** — 20–25 full-cache calls every hour including
+  00:00–05:00, when §2b measured zero scans. Human use has a shape; this has none.
+- **One user agent** (`Chrome/154.0.0.0`, Windows) makes *all* 482 full-cache and
+  all 95 full-photo calls. The other two kiosks (`Chrome/135`, `Edg/154`) only
+  ever call the delta.
+- That same agent **also** calls the delta 240 times — so the machine has two
+  tabs open: one reloaded since the fixes, one not.
+
+A loaded page never re-fetches its own JS modules. The Service Worker is
+network-first and the SW itself updates fine, but `clients.claim()` does not
+re-run a page's already-loaded JavaScript. So a kiosk opened in mid-September
+kept executing mid-September code for three weeks, against a schema that had
+moved on twice — and the only symptom was a billing page.
+
+### What this means for §2 and §3
+
+§2's per-source table is still arithmetically correct about the Dashboard poll,
+and §3's delta work is still worth having — `get_onsite_roster` has zero calls
+and the mechanism is live everywhere. But §3's projected **~1.0 GB/month was
+never testable**, because a leak four times the size of the entire quota was
+running underneath it the whole time. The 11 Oct – 11 Nov cycle is the first
+clean measurement of that projection.
+
+### Fixed
+
+1. **`JS/Utils/appUpdate.js`** — a tab reloads itself when the app shell changes
+   *or* when it has simply been open longer than 12 hours, whichever comes first.
+   The age trigger is the important one: it needs no version bookkeeping and
+   catches a deploy that never touched `sw.js`, which is exactly the case that
+   produced this. `sw.js` now carries a `VERSION` and broadcasts `app-updated`
+   to open tabs on activate.
+
+   Reload is gated on the page being idle, and each feature defines its own
+   idleness (`registerBusyCheck`). The kiosk counts itself busy while the code
+   input holds text, while a scan is in flight, while scans are queued, or while
+   a dialog is open — a reader types a whole badge in ~100 ms, so a non-empty
+   input is a scan in progress, not idle UI. Saving bandwidth is never worth
+   eating a scan.
+
+2. **`20261008120000_revoke_superseded_offline_cache_rpcs.sql`** — `REVOKE
+   EXECUTE` on both functions from `anon` and `authenticated`. A stale tab now
+   gets 403 instead of 5.8 MB, shows its "offline data out of date" pill, and
+   keeps scanning from IndexedDB. Revoked rather than dropped so the definitions
+   remain as a rollback path; drop them once a cycle confirms nothing legitimate
+   calls them.
+
+Belt and braces on purpose. (1) is the general fix for stale kiosks and would
+have prevented this; (2) guarantees *this particular* leak cannot recur even if a
+tab escapes (1).
+
+### The lesson worth keeping
+
+A dead code path is not free if a long-lived client can still reach it. This
+project applies migrations by hand and deploys a buildless ES-module frontend, so
+client and schema drift independently and a kiosk is never reloaded by anyone.
+Deleting a caller is therefore **not** retiring an endpoint — revoking it is.
 
 ## 3. What changed (2026-10-06)
 
@@ -346,9 +439,26 @@ reality by roughly 8×, and Realtime WebSocket traffic never appears in
 `edge_logs` at all. Logs rank endpoints by traffic; only the usage page counts
 bytes.
 
+**Never filter the attribution query by path.** §2c was missed on 2026-10-07
+purely because the query said `like '%roster%'`, and the endpoint costing 13
+GB/month has no "roster" in its name. Rank *everything*, every time:
+
+```sql
+select log_attributes['request.path'] as path, count() as requests
+from logs
+where source = 'edge_logs'
+group by path
+order by requests desc
+```
+
+Then multiply the top rows by a payload size measured **from the database**, not
+from the logs. Anything flat across 00:00–05:00 is a machine loop, not a person.
+Splitting by `log_attributes['request.headers.user_agent']` names the offending
+client.
+
 Per-endpoint attribution is in `SUPABASE_QUOTA_DECISION.md` §7 (Logs Explorer,
-ClickHouse syntax). The query that settles this one — read the `requests` column,
-not `total_bytes`:
+ClickHouse syntax). The narrower query, kept for the roster question specifically
+— read the `requests` column, not `total_bytes`:
 
 ```sql
 select
@@ -380,6 +490,16 @@ table in §2 with its rate and size. The failure mode this document exists to
 prevent is not a big mistake — it is a 30-second poll that nobody costed,
 which is exactly how a 13 GB/month bill was built out of four reasonable-looking
 decisions.
+
+§2c adds a second failure mode, and it is the harder one: **an endpoint nobody
+calls any more, still reachable by a client nobody reloaded.** That one cannot be
+found by reading the source, because the source is already correct. Two habits
+catch it:
+
+- When a wide RPC is superseded, **revoke it in the same migration** that ships
+  the replacement. Deleting the caller is not retiring the endpoint.
+- Rank log paths unfiltered (§5) before trusting any attribution, including this
+  document's.
 
 ## 7. Related
 

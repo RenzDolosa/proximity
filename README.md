@@ -612,6 +612,61 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-08 — the egress bill was one kiosk tab calling a retired RPC; tabs now reload themselves**
+
+A month of egress work had attributed ~90% of the bill to the Dashboard's
+30-second roster poll, reasoning from the client source. That was wrong, and the
+real cause was unreachable by reading source at all.
+
+Ranking `edge_logs` request paths **without a path filter** (the 2026-10-07 pass
+filtered on `%roster%`, which is exactly why it missed this) surfaced
+`get_scanner_offline_photos` at **95 calls/24h**. That RPC returns every
+thumbnail: **5,823 kB** measured from the column lengths, ~415 MB/day on the wire
+after gzip. The billing cycle averaged 369 MB/day. **One endpoint accounted for
+the whole bill.** Alongside it, `get_scanner_offline_cache` — the pre-split full
+lookup — at 482 calls/day.
+
+Nothing in this repository calls either function. Both were superseded on
+2026-09-19 when the payload was split, and again on 2026-10-05 by the delta pair.
+The traffic came from **a single browser tab**, identified three ways: flat
+20–25 calls/hour right through 00:00–05:00 when no scan happens; one user agent
+making *all* of the legacy calls while the other two kiosks make only delta
+calls; and that same agent also making delta calls, so the machine had two tabs
+open — one reloaded, one not.
+
+A loaded page never re-fetches its own JS modules. `sw.js` is network-first and
+the worker updates correctly, but `clients.claim()` does not re-run a page's
+already-loaded JavaScript. A kiosk opened in mid-September ran mid-September code
+for three weeks against a schema that had moved on twice, and the only symptom
+was a billing page.
+
+- **`JS/Utils/appUpdate.js`** (new) — a tab reloads itself when the app shell
+  changes *or* when it has been open longer than 12 hours. The age trigger is the
+  one that matters: no version bookkeeping, and it catches a deploy that never
+  touched `sw.js` — precisely this case. `sw.js` gains a `VERSION` (which now
+  names `APP_CACHE`, so `activate` prunes the old one) and broadcasts
+  `app-updated` to open windows on activate.
+- **Reload is gated on idleness, defined per feature** via `registerBusyCheck`.
+  `StandaloneScanner` counts itself busy while `#ss-code` holds text, while a
+  scan is in flight, while scans are queued, or while a dialog is open. A reader
+  types a whole badge in ~100 ms, so a non-empty input is a scan in progress.
+  A predicate that throws counts as busy — saving bandwidth is never worth
+  eating a scan.
+- **`20261008120000_revoke_superseded_offline_cache_rpcs.sql`** — `REVOKE
+  EXECUTE` on both legacy functions from `anon` and `authenticated`. A stale tab
+  gets 403 instead of 5.8 MB, shows its "offline data out of date" pill, and
+  keeps scanning from IndexedDB. Revoked rather than dropped so the definitions
+  stay available as a rollback path.
+- 11 new tests in `test/app-update.test.mjs` cover both directions: a stale idle
+  tab reloads exactly once, a busy tab never does, repeat requests do not stack
+  retry timers.
+
+The generalisable lesson, now in `docs/EGRESS_BUDGET.md` §2c and §6: **deleting a
+caller is not retiring an endpoint.** This project applies migrations by hand and
+serves a buildless ES-module frontend, so client and schema drift independently
+and nobody ever reloads a kiosk. A superseded wide RPC should be revoked in the
+same migration that ships its replacement.
+
 **2026-10-08 — the "unknown card" alerts were failed scans by real employees, not stray typing**
 
 Measured against the live database, which corrected the 2026-10-06 diagnosis

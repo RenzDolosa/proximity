@@ -979,6 +979,43 @@ git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
 
+**2026-10-08 — revoke the superseded offline-cache RPCs (`20261008120000_revoke_superseded_offline_cache_rpcs.sql`, NOT applied — apply by hand)**
+
+`get_scanner_offline_photos()` and `get_scanner_offline_cache()` have had no
+caller in this repository since 2026-09-19, when the payload was split, and again
+since 2026-10-05 when the delta pair replaced the split. They were still being
+called — **95 and 482 times a day** — by a single kiosk tab opened before the
+split and never reloaded.
+
+`get_scanner_offline_photos()` returns every thumbnail: **5,823 kB** measured
+from `sum(octet_length(photo_thumb_b64))` over 716 rows, ~415 MB/day on the wire
+after gzip, against a cycle averaging 369 MB/day. **That one function was the
+entire egress bill.**
+
+- `REVOKE ALL` from `PUBLIC`, `anon`, and `authenticated` on both. A stale tab
+  gets 403 instead of 5.8 MB, shows its "offline data last synced" warning, and
+  keeps scanning from its IndexedDB cache.
+- **`service_role` keeps EXECUTE**: it bypasses RLS regardless, is never used
+  from a browser, and leaving it is what makes this reversible from the SQL
+  editor.
+- `COMMENT ON FUNCTION` on both records what superseded them and why EXECUTE
+  went away, so the next person reading `pg_proc` does not re-grant them.
+
+**Revoked, not dropped** — deliberately. Revoking removes the egress today while
+leaving the definitions as a rollback path. Drop them once a full billing cycle
+confirms nothing legitimate calls them.
+
+The client-side half of this is `JS/Utils/appUpdate.js` (see the root README's
+2026-10-08 entry): a tab now reloads itself when the app shell changes or after
+12 hours open, whichever comes first. This migration is the backstop for a tab
+that escapes it.
+
+**The rule this establishes:** when a wide RPC is superseded, revoke it in the
+**same migration** that ships its replacement. Migrations here are applied by
+hand and the frontend is buildless ES modules, so client and schema drift
+independently and a kiosk is never reloaded by anyone. Deleting the caller does
+not retire the endpoint.
+
 **2026-10-06 — missing kiosk thumbnails (`20261006160000_missing_offline_thumbs.sql`, NOT applied — apply by hand)**
 
 An employee with `photo_file_id` set and `photo_thumb_b64` NULL renders correctly

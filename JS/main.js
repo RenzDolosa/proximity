@@ -4,9 +4,13 @@ import { showAuth, showShell, showStandaloneScanner } from './Core/screens.js';
 import { initRouter } from './Core/router.js';
 import { initAuthScreen } from './Features/Auth/AuthScreen.js';
 import { toast } from './Utils/toast.js';
+import { initAppUpdates } from './Utils/appUpdate.js';
 
 initAuthScreen();
 initRouter();
+// Kiosk tabs stay open for weeks; without this they keep running the JS they
+// booted with. See JS/Utils/appUpdate.js.
+initAppUpdates();
 
 // Registered from the ABSOLUTE root path, not './sw.js': a Service Worker's scope
 // is its own directory downwards, and index.html lives in Public/ while JS/ and
