@@ -11,9 +11,9 @@ from the Supabase usage page.
 **§2c is the one to read first.** On 2026-10-08 the actual cause was measured,
 and it is not what §2 says: a single kiosk tab, open since before 2026-09-19 and
 never reloaded, was calling a *superseded* RPC that no current source file
-mentions. It accounts for the entire bill on its own. §2's attribution of ~90%
-to the Dashboard roster was a plausible reading of the client that happened to
-be wrong, and no amount of source reading could have found the real one.
+mentions. It is ~60% of the bill on its own — see §2d for the full attribution,
+and for why §2's "~90% is the Dashboard roster" was half right rather than
+simply wrong.
 
 **§2b** (2026-10-07) carries the first direct measurement and establishes that
 **byte totals from `edge_logs` cannot be used at all** — only 13% of responses
@@ -183,9 +183,24 @@ appeared before, because the earlier query filtered on `%roster%`:
 kB measured from the column lengths. gzip over base64-of-JPEG recovers roughly a
 quarter, so call it **~415 MB/day on the wire**.
 
-The billing cycle (11 Sep – 8 Oct, 27 days elapsed, 9.958 GB) averaged **369
-MB/day**. **One endpoint meets or exceeds the entire measured bill.** There is no
-large unexplained remainder to go looking for.
+**Corrected 2026-10-08 (same day, after the previous cycle was compared).** The
+first version of this section divided the cycle total by 27 elapsed days to get
+369 MB/day, and concluded this one endpoint was the entire bill. The divisor was
+wrong. `min(scanned_at)` over `scan_events` is **2026-09-27 12:25 UTC** — the
+first scan this database has ever recorded. The previous cycle (11 Aug – 11 Sep)
+billed **0.003 GB** against 3 MAU, 0 Realtime messages and zero scans.
+
+So the 10.013 GB was produced in **11 production days**, not 27:
+
+| | |
+|---|---|
+| Cycle total | 10.013 GB |
+| Days with traffic (28 Sep – 8 Oct) | **11** |
+| **Production rate** | **~910 MB/day** |
+
+Against 910 MB/day, `get_scanner_offline_photos` at ~553 MB/day raw is **~60%**
+of the bill — the largest single item by a wide margin, but not all of it. See
+§2d for the rest.
 
 ### Why no source-reading could find it
 
@@ -253,6 +268,60 @@ A dead code path is not free if a long-lived client can still reach it. This
 project applies migrations by hand and deploys a buildless ES-module frontend, so
 client and schema drift independently and a kiosk is never reloaded by anyone.
 Deleting a caller is therefore **not** retiring an endpoint — revoking it is.
+
+## 2d. Full attribution, 2026-10-08
+
+Prompted by comparing the two cycles side by side:
+
+| Cycle | Egress | MAU | Realtime msgs | Scans |
+|---|---|---|---|---|
+| 11 Aug – 11 Sep | **0.003 GB** | 3 | 0 | **0** |
+| 11 Sep – 11 Oct | **10.013 GB** | 11 | 21,691 | 38,821 |
+
+The database size is identical in both (0.054 GB). Nothing grew. What changed is
+that **the system went into production on 27 September** — the first scan ever
+recorded is `2026-09-27 12:25 UTC`, and three kiosks have run 3,000–4,700 scans a
+day ever since.
+
+Reconstructing the 11 production days against measured payload sizes:
+
+| Source | Running | Rate | Share of 10 GB |
+|---|---|---|---|
+| **Stale tab — `get_scanner_offline_photos`** (95/day × 5,823 kB) | 11 days | 553 MB/day | **~6.1 GB** |
+| **Stale tab — `get_scanner_offline_cache`** (482/day × 162 kB) | 11 days | 78 MB/day | **~0.9 GB** |
+| **Dashboard full roster, pre-delta** (120/hr × 100 kB, per open tab) | 9 days, to the 10-06 fix | 216 MB/day/tab | **~1.9 GB** |
+| Scans (3,359/day × ~1 kB) | 11 days | 3 MB/day | ~0.04 GB |
+| Alerts badge, profiles, feed, directory | 11 days | ~5 MB/day | ~0.06 GB |
+| Realtime (21,691 messages total) | 11 days | — | ~0.02 GB |
+
+**~9.0 GB with a single Dashboard tab**, against 10.013 GB measured. The gap is
+covered by gzip ratios differing from the estimate, a second Dashboard tab part
+of the time, and Employee Manager traffic during the 755-employee import before
+27 September.
+
+**Confidence.** The 07–08 Oct rates are measured from `edge_logs`. The Dashboard
+row is **reconstructed**, not observed: Free-tier log retention is one day, so
+28 Sep – 6 Oct cannot be re-examined. It is a known poll rate (a constant in the
+source) multiplied by a payload measured from the live database — the same method
+as §2, and carrying the same caveat.
+
+### Which features actually cost anything
+
+The hypothesis that prompted this was that the spike came from adding Dashboard,
+Alerts, Scanner Analytics, Attendance, Audit Log and the Settings panels. The
+measurement splits that cleanly:
+
+- **Dashboard — yes, materially.** Its 30-second full-roster poll was ~216 MB/day
+  per open tab, second only to the stale tab. Fixed 2026-10-06 (§3).
+- **Alerts — negligible.** 368 badge calls/day × ~0.4 kB ≈ 147 kB/day.
+- **Scanner Analytics, Attendance, Audit Log, Settings — effectively zero.** None
+  of them polls. They fetch once per visit and then sit there, so their cost is
+  bounded by how often a human clicks, not by wall-clock time.
+
+**The distinction that matters is polling, not features.** A page that fetches on
+a timer bills by the hour whether or not anyone is looking at it; a page that
+fetches on demand bills per visit. Everything expensive in this cycle was on a
+timer, and everything on a timer was expensive.
 
 ## 3. What changed (2026-10-06)
 

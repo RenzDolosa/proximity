@@ -622,9 +622,16 @@ Ranking `edge_logs` request paths **without a path filter** (the 2026-10-07 pass
 filtered on `%roster%`, which is exactly why it missed this) surfaced
 `get_scanner_offline_photos` at **95 calls/24h**. That RPC returns every
 thumbnail: **5,823 kB** measured from the column lengths, ~415 MB/day on the wire
-after gzip. The billing cycle averaged 369 MB/day. **One endpoint accounted for
-the whole bill.** Alongside it, `get_scanner_offline_cache` — the pre-split full
-lookup — at 482 calls/day.
+after gzip. Alongside it, `get_scanner_offline_cache` — the pre-split full
+lookup — at 482 calls/day × 162 kB ≈ 78 MB/day.
+
+**The cycle's 10.013 GB was produced in 11 days, not 30.** `min(scanned_at)` is
+2026-09-27 12:25 UTC — the first scan this database has ever recorded — and the
+previous cycle billed 0.003 GB against zero scans. So the production rate is
+~910 MB/day, of which this one endpoint is **~60%**: the largest single item by
+a wide margin, not the whole of it. `docs/EGRESS_BUDGET.md` §2d carries the full
+attribution, including the Dashboard's pre-delta roster poll at ~216 MB/day per
+open tab for the nine days before it was fixed.
 
 Nothing in this repository calls either function. Both were superseded on
 2026-09-19 when the payload was split, and again on 2026-10-05 by the delta pair.
