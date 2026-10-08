@@ -3,10 +3,15 @@
 **Purpose:** a per-source bytes/hour budget for this project, so a change that
 affects egress can be checked against a number instead of argued about.
 
-**Status:** the per-source figures are *estimates derived from reading the
+**Status:** §2's per-source figures are *estimates derived from reading the
 client* — request rates are exact (they are constants in the source), response
-sizes are not. The one measured input is the total: **~0.025 GB/hour**, the
-user's own figure from the Supabase usage page.
+sizes are not. The original measured input was the total: **~0.025 GB/hour**,
+from the Supabase usage page.
+
+**§2b carries the first direct measurement** (2026-10-07, 24 hours of
+`edge_logs`). Read it before trusting §2: it confirms some estimates, closes one
+hypothesis, and establishes that **byte totals from `edge_logs` cannot be used
+at all** — only 13% of responses report a size.
 
 **Quota:** 5 GB/month, Free plan. Uncached and cached egress have separate 5 GB
 allowances; essentially all of this project's traffic is uncached (PostgREST
@@ -51,6 +56,91 @@ including a 36-char UUID and an ISO timestamp).
 **Two open Dashboard tabs ≈ 17 MB/hour on their own.** Add three kiosks, badge
 polls, scans and occasional Employee Manager visits and ~25 MB/hour is fully
 accounted for. The Dashboard roster was roughly 90% of the bill.
+
+## 2b. Measured, 2026-10-07 (24 hours of `edge_logs`)
+
+The first direct look, taken *after* every fix below had shipped. Read it as
+evidence about the system's current shape, **not** as a before/after comparison —
+see "What this cannot tell us".
+
+### Byte totals from `edge_logs` are unusable
+
+```
+total_requests: 7,794 · with_content_length: 1,030 · pct_measurable: 13.2%
+```
+
+Compressed and chunked responses omit `response.headers.content_length`, so any
+`sum()` over it is roughly an eighth of reality. The symptom is obvious once
+seen: `scan_proximity_code_compact` averages "18 bytes" across 3,787 calls.
+
+**Use request counts from these logs, and take byte volume from the usage page.**
+§5's attribution query is still valid for *ranking* endpoints by traffic; its
+absolute numbers are not.
+
+### Request volume
+
+| Path | Requests/24h | Reading |
+|---|---|---|
+| `scan_proximity_code_compact` | **3,787** | the real workload |
+| `get_scanner_offline_cache_delta` | 774 | 3 kiosks ≈ every 5.5 min — correct |
+| `storage/scan-sounds/*` | 1,084 | 304s, see below |
+| `get_unread_alert_count` | 543 | badge polling |
+| `/rest/v1/profiles` | 207 | `loadProfile()` on auth events |
+| `get_alerts` | 184 | |
+| `get_scanner_offline_photo_updates` | 156 | 3 × 48 ≈ every 30 min — **no runaway** |
+| `/auth/v1/token` | 119 | token refresh |
+| `get_dashboard_pulse` | **7** | |
+| `get_onsite_roster_delta` | **7** | |
+| **`get_onsite_roster`** | **0** | the old full-roster RPC is never called |
+
+Scan volume follows the working day in Manila time (UTC+8): 472 at 07:00
+(arrival), ~330/hr through the morning, 258 at noon, 455 at 18:00 (departure),
+zero between midnight and 04:00. The shape is sane; nothing is polling at night.
+
+### Closed: scan sounds are not an egress source
+
+1,084 Storage requests a day for files up to 79 KB looked alarming. It is not:
+
+| Path | Requests | Bytes logged | File size |
+|---|---|---|---|
+| `scan-sounds/matched-in` | 604 | 81,354 | 81,354 |
+| `scan-sounds/matched-out` | 446 | 50,991 | 50,991 |
+
+Total transferred equals **exactly one file** in each case — 603 of 604 requests
+were `304 Not Modified`. `sw.js`'s cache-first-with-revalidate is doing its job.
+
+### Confirmed
+
+- **No tab is running pre-fix JavaScript.** `get_onsite_roster` has zero calls,
+  so `DashboardPage.js`'s `PGRST202` fallback never fires anywhere.
+- **The photo-sync leak is not occurring.** 156 calls matches the 30-minute timer
+  across 3 kiosks exactly; a failing IndexedDB write would show hundreds.
+- **Thumbnail recompression worked.** `employees.photo_thumb_b64` went
+  12.5 MB → **5,755 kB** across 716 rows (avg 8,231 stored bytes). Projected
+  "roughly half"; measured **54%**.
+
+### Corrected
+
+**No employee has a photo without a kiosk thumbnail.** The 2026-10-06 diagnosis —
+that a 2.5-second Drive-thumbnail timeout had left rows with `photo_file_id` set
+and `photo_thumb_b64` NULL — measured **zero** such rows. 716 have both, 39 have
+no photo at all (those correctly show initials everywhere). Employees appearing
+without a photo on a kiosk are almost certainly in that 39. The `backfill_thumb`
+repair built for it is a reasonable safety net but was not the cause.
+
+### What this cannot tell us
+
+**Whether egress fell.** This window postdates every fix *and* contains almost no
+Dashboard use — 7 pulse calls, about one hour out of twenty-four. The claim in §2
+that the Dashboard roster was ~90% of the bill is neither confirmed nor refuted
+here: there was nothing for the fix to save. If the original 0.025 GB/hour came
+from tabs left open all shift, the fix matters enormously; if it came from
+something else, that something is still unidentified.
+
+`edge_logs` also cannot see **Realtime WebSocket traffic** at all, which is a
+standing blind spot for any conclusion drawn from it.
+
+**The usage page remains the only ground truth.** §5.
 
 ### Why the 2026-10-05 fix did not help
 
@@ -113,7 +203,12 @@ every 10 minutes.
 Against a 5 GB quota that is **5× headroom** — enough to absorb more kiosks,
 more users, or a heavier month without revisiting this.
 
-These are projections. §5 is how to confirm them.
+These are projections and **remain unconfirmed**. The 2026-10-07 measurement
+(§2b) found the Dashboard open for about one hour in twenty-four, so the "2
+Dashboard tabs" row had nothing to measure. What it did confirm is that
+`get_onsite_roster` is never called — the delta is live everywhere — so the
+mechanism is in place even where the saving is not yet demonstrated. §5 is how to
+settle it.
 
 ### Nav clicks and Alt-Tab no longer refetch (2026-10-06)
 
@@ -245,8 +340,15 @@ The usage page's Egress figure is cumulative for the billing cycle, so the
 **rate** is what to watch: note the reading, wait a measured interval during a
 working shift, divide. Target **≤ 6.3 MB/hour**; expect ~1.8.
 
+**Do not substitute the Logs Explorer for this.** §2b measured only 13% of
+responses carrying `content_length`, so log-derived byte totals understate
+reality by roughly 8×, and Realtime WebSocket traffic never appears in
+`edge_logs` at all. Logs rank endpoints by traffic; only the usage page counts
+bytes.
+
 Per-endpoint attribution is in `SUPABASE_QUOTA_DECISION.md` §7 (Logs Explorer,
-ClickHouse syntax). The query that settles this one:
+ClickHouse syntax). The query that settles this one — read the `requests` column,
+not `total_bytes`:
 
 ```sql
 select
@@ -265,6 +367,7 @@ order by total_bytes desc
   `rosterDeltaUnavailable` and falls back permanently on `PGRST202`, so an
   unapplied migration looks exactly like no change at all. Check the migration
   first, then hard-reload (Ctrl+Shift+R).
+  *(Measured 2026-10-07: zero calls. This failure mode is not occurring.)*
 - **`get_onsite_roster_delta` dominant, bytes low** ⇒ working as intended.
 - **`get_onsite_roster_delta` dominant, bytes still high** ⇒ deltas are coming
   back large, meaning many employees change per 30-second window. Check whether
