@@ -17,7 +17,10 @@ let loaded = false;
 
 export function scannersPanelHTML() {
   return `
-    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
+    <!-- Width and spacing come from .settings-group-body, its only mount point
+       (Features/Settings/SettingsPage.js). Inline values here would beat the
+       stylesheet and make this one panel sit differently from its siblings. -->
+  <div class="panel" style="padding:20px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;">
         <h3 style="margin:0 0 4px;">Scanners</h3>
         <button type="button" class="ghost" id="sc-refresh">Refresh</button>

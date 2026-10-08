@@ -43,26 +43,40 @@
   <div id="standalone-scanner" class="hidden standalone-scan"></div>
 
   <div id="shell" class="hidden">
+    <!-- Grouped by intent — see JS/Core/navGroups.js for why, and for the
+         pure model the group-hiding rule is tested against. -->
     <aside id="sidebar">
       <div class="brand"><div class="dot"></div><span>Proximity</span></div>
-      <nav class="rail">
-        <button data-route="dashboard" class="hidden"><span class="ic">◉</span>Dashboard</button>
-        <button data-route="alerts" class="hidden"><span class="ic">△</span>Alerts<span class="nav-badge hidden" id="alerts-badge"></span></button>
-        <button data-route="directory" class="active"><span class="ic">▤</span>Employee Manager</button>
-        <button data-route="proximity"><span class="ic">◈</span>Proximity Cards</button>
-        <button data-route="scanner"><span class="ic">▣</span>Test Scan</button>
-        <button data-route="analytics"><span class="ic">▥</span>Scanner Analytics</button>
-        <button data-route="attendance"><span class="ic">◷</span>Attendance</button>
-        <button data-route="users" id="nav-users" class="hidden"><span class="ic">☺</span>Users &amp; Roles</button>
-      </nav>
-      <div class="rail-spacer"></div>
-      <nav class="rail rail-bottom">
-        <button data-route="settings" id="nav-settings" class="hidden"><span class="ic">⚙</span>Settings</button>
-        <button data-route="audit" id="nav-audit" class="hidden"><span class="ic">▦</span>Audit Log</button>
+      <nav class="rail" aria-label="Sections">
+        <div class="rail-group" data-nav-group="monitor">
+          <p class="rail-label">Monitor</p>
+          <button data-route="dashboard" class="hidden"><span class="ic">◉</span>Dashboard</button>
+          <button data-route="alerts" class="hidden"><span class="ic">△</span>Alerts<span class="nav-badge hidden" id="alerts-badge"></span></button>
+        </div>
+        <div class="rail-group" data-nav-group="manage">
+          <p class="rail-label">Manage</p>
+          <button data-route="directory" class="active"><span class="ic">▤</span>Employee Manager</button>
+          <button data-route="proximity"><span class="ic">◈</span>Proximity Cards</button>
+          <button data-route="scanner"><span class="ic">▣</span>Test Scan</button>
+        </div>
+        <div class="rail-group" data-nav-group="reports">
+          <p class="rail-label">Reports</p>
+          <button data-route="attendance"><span class="ic">◷</span>Attendance</button>
+          <button data-route="analytics"><span class="ic">▥</span>Scanner Analytics</button>
+        </div>
+        <div class="rail-group" data-nav-group="admin">
+          <p class="rail-label">Administration</p>
+          <button data-route="users" id="nav-users" class="hidden"><span class="ic">☺</span>Users &amp; Roles</button>
+          <button data-route="settings" id="nav-settings" class="hidden"><span class="ic">⚙</span>Settings</button>
+          <button data-route="audit" id="nav-audit" class="hidden"><span class="ic">▦</span>Audit Log</button>
+        </div>
       </nav>
     </aside>
+    <!-- Drawer scrim: only ever interactive at mobile widths (see layout.css). -->
+    <div id="nav-backdrop" hidden></div>
     <div id="main">
       <div id="topbar">
+        <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar"><span aria-hidden="true">☰</span></button>
         <div class="topbar-title">
           <h2 id="page-title">Employee Manager</h2>
           <div class="sub" id="page-sub"></div>

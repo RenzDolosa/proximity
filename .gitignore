@@ -17,3 +17,7 @@ device-push-debug.php
 # directory as sensitive at rest.
 supabase-export-*/
 *.dump
+
+# Wrangler's local dev state (Miniflare caches, local KV/D1). Regenerated on
+# every `npm run preview`; nothing in it is source.
+.wrangler/
