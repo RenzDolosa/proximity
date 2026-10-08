@@ -33,7 +33,19 @@
 // still Drive-URL-based and unaffected by any of this — see
 // Utils/format.js) is unrelated to PHOTO_CACHE's removal; DEFAULT_AVATAR_URL
 // below is precached independently of it.
-const APP_CACHE = 'proximity-app-v1';
+
+// Bump VERSION on every deploy that changes app code. It renames APP_CACHE
+// (so `activate` prunes the previous one) and is broadcast to open tabs, which
+// reload themselves when idle — see JS/Utils/appUpdate.js for why a kiosk tab
+// left open for three weeks became the single largest egress source.
+//
+// Forgetting to bump it is survivable: appUpdate.js also reloads on tab age
+// alone, precisely so freshness never depends on remembering this line.
+const VERSION = 'v2';
+const APP_CACHE = `proximity-app-${VERSION}`;
+// Deliberately unversioned: the sounds are the largest thing cached here and
+// change only when an admin replaces one, so a code deploy should not evict
+// them.
 const SOUND_CACHE = 'proximity-sounds-v1';
 
 // Bundled fallback scan sounds — precached at install time (not lazily on
@@ -81,6 +93,10 @@ self.addEventListener('activate', (event) => {
     const names = await caches.keys();
     await Promise.all(names.filter((n) => !keep.has(n)).map((n) => caches.delete(n)));
     await self.clients.claim();
+    // Claiming a client does not re-run its JS — the page keeps the modules it
+    // booted with. Tell it instead, and let it choose a safe moment.
+    const windows = await self.clients.matchAll({ type: 'window' });
+    for (const client of windows) client.postMessage({ type: 'app-updated', version: VERSION });
   })());
 });
 
