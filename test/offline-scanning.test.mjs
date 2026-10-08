@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  attachCachedPhoto, classifyCachedScan, flushQueuedScans, groupQueuedScans, looksLikeCardCode,
-  mergeLookupDelta, mergePhotoUpdates, expectedCodeLength, photoNeedsRefresh,
+  attachCachedPhoto, classifyCachedScan, codesAreNumeric, flushQueuedScans, groupQueuedScans,
+  looksLikeCardCode, maxCodeLength, mergeLookupDelta, mergePhotoUpdates, expectedCodeLength,
+  photoNeedsRefresh, readRejection,
 } from '../JS/Core/offlineScanning.js';
 
 const matchedRow = {
@@ -70,6 +71,62 @@ test('empty input is never a scan, whatever the roster says', () => {
   assert.equal(looksLikeCardCode('   ', roster), false);
   assert.equal(looksLikeCardCode(null, []), false);
   assert.equal(looksLikeCardCode(undefined, []), false);
+});
+
+test('the bounds are read from the roster, not hardcoded', () => {
+  assert.equal(maxCodeLength(roster), 10);
+  assert.equal(maxCodeLength([]), 0);
+  assert.equal(maxCodeLength(null), 0);
+  assert.equal(maxCodeLength([{ proximity_code: '  1234  ' }]), 4); // trimmed
+
+  assert.equal(codesAreNumeric(roster), true);
+  assert.equal(codesAreNumeric([{ proximity_code: 'AB12' }]), false);
+  assert.equal(codesAreNumeric([]), false); // nothing seen is not "all numeric"
+  assert.equal(codesAreNumeric([{ proximity_code: '' }, {}]), false);
+});
+
+// The eight alerts that survived the truncation fix: 40-71 characters of one
+// repeated digit, from a stuck key on the reader.
+test('a read longer than any issued card is discarded', () => {
+  assert.equal(looksLikeCardCode('2'.repeat(71), roster), false);
+  assert.equal(looksLikeCardCode('00052040371', roster), false); // one digit too many
+  assert.equal(readRejection('2'.repeat(71), roster), 'long');
+});
+
+// This is what makes the over-length rule safe where a length floor was not: a
+// truncation is a SUFFIX, and a suffix is never longer than its card.
+test('the over-length rule cannot hide a truncation', () => {
+  for (const truncated of ['0', '37', '037', '9295', '215056', '00520403']) {
+    assert.equal(readRejection(truncated, roster), 'short');
+  }
+});
+
+test('a character no card uses means it did not come from a badge', () => {
+  assert.equal(readRejection('00052O4O37', roster), 'charset'); // letter O for zero
+  assert.equal(readRejection('0005204-37', roster), 'charset');
+  // Relaxes on its own once an alphanumeric card is issued.
+  const mixed = [...roster, { proximity_code: 'AB12345678' }];
+  assert.equal(codesAreNumeric(mixed), false);
+  assert.equal(readRejection('CD12345678', mixed), null);
+});
+
+test('a plausible unregistered card still goes through, so it still alerts', () => {
+  // The security event this must never swallow: a real badge from another
+  // system, of a shape a card could have.
+  assert.equal(readRejection('0009999999', roster), null);
+  assert.equal(looksLikeCardCode('0009999999', roster), true);
+});
+
+test('an over-long read on a never-synced kiosk still fails open', () => {
+  assert.equal(readRejection('2'.repeat(71), []), null);
+  assert.equal(readRejection('2'.repeat(71), null), null);
+});
+
+test('readRejection and looksLikeCardCode never disagree', () => {
+  const cases = ['', '0', '037', '0005204037', '0009999999', '123', '2'.repeat(71), 'AB12'];
+  for (const value of cases) {
+    assert.equal(looksLikeCardCode(value, roster), readRejection(value, roster) === null, value);
+  }
 });
 
 test('offline classification mirrors server result branches and direction alternation', () => {

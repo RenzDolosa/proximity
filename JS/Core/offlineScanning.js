@@ -25,6 +25,53 @@ export function expectedCodeLength(rows) {
   return best;
 }
 
+// The longest card ever issued. A read longer than this cannot be any card:
+// a suffix is never longer than the string it is a suffix of, so an over-long
+// read is not a truncation either. Measured 2026-10-08, the eight surviving
+// `unknown_card_scan` alerts were 40-71 characters of one repeated digit
+// against a 10-digit card — a stuck key on the reader, not a badge.
+export function maxCodeLength(rows) {
+  let max = 0;
+  for (const row of rows || []) {
+    const len = String(row?.proximity_code ?? '').trim().length;
+    if (len > max) max = len;
+  }
+  return max;
+}
+
+// True when every registered card is digits only, which makes a letter in a
+// read proof it did not come from a badge. Derived rather than hardcoded so
+// issuing alphanumeric cards later relaxes this on its own.
+export function codesAreNumeric(rows) {
+  let seen = false;
+  for (const row of rows || []) {
+    const value = String(row?.proximity_code ?? '').trim();
+    if (!value) continue;
+    if (!/^[0-9]+$/.test(value)) return false;
+    seen = true;
+  }
+  return seen;
+}
+
+// Why a read was discarded, or null if it should be sent. One source of truth
+// for both the decision and the operator's message — "Partial read" is wrong
+// for 71 characters of a held-down key.
+export function readRejection(code, rows) {
+  const value = String(code ?? '').trim();
+  if (!value) return 'empty';
+  if (!rows?.length) return null; // never synced — fail open
+  // An exact hit always wins, so a legitimately odd registered card still works.
+  if (rows.some((r) => String(r?.proximity_code ?? '').trim() === value)) return null;
+
+  const max = maxCodeLength(rows);
+  if (max > 0 && value.length > max) return 'long';
+  if (codesAreNumeric(rows) && !/^[0-9]+$/.test(value)) return 'charset';
+
+  const expected = expectedCodeLength(rows);
+  if (expected > 0 && value.length < expected) return 'short';
+  return null;
+}
+
 // Whether a scanned value is a COMPLETE card read.
 //
 // Badge readers are keyboard wedges that send no trailing Enter, so the kiosk
@@ -49,13 +96,13 @@ export function expectedCodeLength(rows) {
 // The remaining tradeoff: an UNREGISTERED card shorter than the usual length is
 // now rejected rather than alerted. Given 98% of short reads are truncations of
 // real cards, that is the right way round.
+//
+// Added 2026-10-08: the same applies at the other end. A read longer than the
+// longest issued card, or carrying characters no card uses, is discarded too.
+// Unlike the short case this cannot hide a truncation, because a truncation is
+// a suffix and a suffix is never longer than its card. See readRejection().
 export function looksLikeCardCode(code, rows) {
-  const value = String(code ?? '').trim();
-  if (!value) return false;
-  if (!rows?.length) return true; // never synced — fail open
-  if (rows.some((r) => String(r?.proximity_code ?? '').trim() === value)) return true;
-  const expected = expectedCodeLength(rows);
-  return expected === 0 || value.length >= expected;
+  return readRejection(code, rows) === null;
 }
 export function classifyCachedScan(proximityCode, rows, pendingBumps = new Map()) {
   const row = rows.find((candidate) => candidate.proximity_code === proximityCode);
