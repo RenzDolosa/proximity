@@ -652,6 +652,29 @@ key would mint a row each time). A code matching nothing stays
 Worth checking separately: `"123"` is an inactive card on an inactive employee
 and looks like leftover test data.
 
+**Follow-up — the focus watchdog now captures keystrokes instead of racing them.**
+Tightening the poll was the obvious next step and would not have worked: a reader
+types ten digits in roughly 100 ms, so *any* interval loses whole reads. At
+1000 ms it lost all ten.
+
+The real fix is that a character typed while the input is unfocused still reaches
+`document`, so it can be **redirected into the input rather than lost**. A
+capture-phase `keydown` handler appends it explicitly (`preventDefault` first —
+focusing mid-keydown does not reliably deliver that character, and in some
+browsers delivers it twice) and dispatches a synthetic `input` event, without
+which the auto-submit debounce would never fire and a recovered read would sit in
+the box forever.
+
+Deliberately narrow: single printable characters, no modifier combos, nothing
+while a dialog is open or the operator is using a control. A stray keypress is
+harmless — it lands in the box, auto-submit fires, and `looksLikeCardCode()`
+rejects it as a partial read.
+
+The poll drops 1000 ms → 400 ms but is now only a backstop for the non-typing
+case. And the document/window listeners are bound **once** behind a flag: a
+second keydown handler would append every character twice, which is worse than
+the truncation being fixed.
+
 **2026-10-06 — the kiosk stops turning stray keystrokes into scans (and into `unknown_card_scan` alerts)**
 
 786 alerts had accumulated, nearly all "Unknown card scan", with a permanent
