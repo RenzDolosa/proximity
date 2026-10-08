@@ -428,6 +428,21 @@ It is still worth fixing, for a better reason: at 786 alerts and a permanent
 "9+" badge, the Alerts feature has stopped carrying signal. Fixed at the source —
 see §3's entry on implausible scan input.
 
+**Resolved 2026-10-08, and the 1% figure held.** 786 alerts became 8. Two
+changes did it: `20261008000000` reclassified the 58-of-59 that were truncated
+reads of real cards, and `20261008140000` stopped raising anything for codes
+that cannot be a card at all (longer than the longest registered card, or using
+a character no card uses — measured, the survivors were 40–71 characters of one
+repeated digit).
+
+**Neither was an egress fix, and neither is counted as one here.** The saving is
+~8 discarded reads/day × ~1 KB ≈ **8 KB/day**, plus marginally smaller
+`get_alerts` responses. What it bought is a badge that means something again.
+Recorded in this document only to close the question, and as the example worth
+remembering: **alert volume was an operations problem wearing a bandwidth
+costume**, and chasing it as bandwidth would have burned the week that found the
+stale tab (§2c).
+
 
 
 ### Moving `scan_events` / `scan_logs` into Google Drive as JSON files

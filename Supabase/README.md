@@ -979,6 +979,44 @@ git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
 
+**2026-10-08 — impossible card reads raise nothing (`20261008140000_drop_impossible_card_alerts.sql`, NOT applied — apply by hand)**
+
+`scan_proximity_code()`'s `unmatched` branch gains a third outcome: raise
+nothing at all. A code raises no alert when it is empty, **longer than the
+longest registered card**, or contains a character no registered card uses.
+
+Measured 2026-10-08, after `20261008000000` shipped: every surviving
+`unknown_card_scan` was 40–71 characters of one repeated digit, against 727
+active codes that are all exactly 10 digits.
+
+**Why this is safe where `20261008000000` said suppression was not.** That
+migration rejected a minimum-**length** rule, because a truncated read is short
+and suppressing it would have hidden real employees' failing scans. A truncated
+read is a **suffix** of a registered card, and a suffix is never longer than the
+card it came from — so an over-length rule cannot hide one. The two rules are
+not the same rule pointed in opposite directions.
+
+- Both bounds come from `proximity_cards` (`max(length(...))`,
+  `bool_and(... ~ '^[0-9]+$')`), never hardcoded, so issuing longer or
+  alphanumeric cards relaxes this with no migration.
+- **One pass, not two.** The bounds and the suffix match now come from a single
+  aggregate over `proximity_cards`, replacing the sequential scan the branch
+  already paid for the suffix lookup alone. An unmatched scan does **less** work
+  than before.
+- `right(c.proximity_code, length(p_code)) = p_code` replaces
+  `c.proximity_code like '%' || p_code`, fixing a latent bug: `%` or `_` inside
+  a scanned code was being interpreted as a LIKE wildcard.
+- A genuinely unregistered card of a plausible shape still raises
+  `unknown_card_scan` at full weight. Untouched.
+
+**This migration ends with a DELETE.** It clears the alerts the new rule would
+never have raised — 8 rows as measured, all `unknown_card_scan`, all already
+acknowledged. The migration carries the counting query to run first. Nothing
+matching a card, suffixing one, or of a plausible shape is touched.
+
+The client-side half is `readRejection()` in `JS/Core/offlineScanning.js`, which
+discards these before any request is made.
+
 **2026-10-08 — revoke the superseded offline-cache RPCs (`20261008120000_revoke_superseded_offline_cache_rpcs.sql`, NOT applied — apply by hand)**
 
 `get_scanner_offline_photos()` and `get_scanner_offline_cache()` have had no

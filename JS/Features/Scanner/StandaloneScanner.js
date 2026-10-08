@@ -9,7 +9,7 @@ import { PROXIMITY_LOGO_SVG } from '../../Components/ProximityLogo.js';
 import { photoDataUri } from '../../Utils/image.js';
 import { loadScanSounds, playScanSound, scanSoundsLoaded, initAudioUnlock } from '../../Utils/scanSounds.js';
 import { OfflineScanModel, STALE_AFTER_MS } from '../../Models/OfflineScanModel.js';
-import { looksLikeCardCode } from '../../Core/offlineScanning.js';
+import { readRejection } from '../../Core/offlineScanning.js';
 import { registerBusyCheck } from '../../Utils/appUpdate.js';
 
 // Module-level, not per-render: renderStandaloneScanner() only actually
@@ -258,14 +258,17 @@ function renderStandaloneScanner() {
     if (scanBusy) return; // a scan is already in flight — the debounce timer below can otherwise double-fire while awaiting the previous one
     const proximity_code = codeInput.value.trim();
     if (!proximity_code) return;
-    // Too short to be any card registered on this system — a partial read or a
-    // stray keystroke that the 200ms auto-submit would otherwise turn into a
-    // real unmatched scan and an `unknown_card_scan` alert. Discarded locally:
-    // no request, no scan_event, no alert. See looksLikeCardCode().
-    if (!looksLikeCardCode(proximity_code, cachedLookupRows)) {
+    // Cannot be any card registered on this system — a partial read, a stray
+    // keystroke, or a stuck key, each of which the 200ms auto-submit would
+    // otherwise turn into a real unmatched scan and an alert. Discarded
+    // locally: no request, no scan_event, no alert. See readRejection().
+    const rejection = readRejection(proximity_code, cachedLookupRows);
+    if (rejection) {
       clearTimeout(autoSubmitTimer);
       codeInput.value = '';
-      showTransientHint('Partial read — please scan again');
+      showTransientHint(rejection === 'short'
+        ? 'Partial read — please scan again'
+        : 'Invalid read — check the reader, then scan again');
       return;
     }
     scanBusy = true;

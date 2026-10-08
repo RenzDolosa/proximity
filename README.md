@@ -612,6 +612,49 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-08 — reads that cannot be a card raise nothing**
+
+After the truncation fix shipped, every surviving `unknown_card_scan` alert was
+**40–71 characters of a single repeated digit** — against a card set where all
+727 active codes are exactly 10 digits. A stuck key on a reader, not a badge.
+
+The 2026-10-08 truncation migration deliberately refused to suppress anything,
+and that reasoning still stands *for short reads*: the suppression proposed then
+was a minimum-**length** rule, which would have hidden the very employee scans
+that turned out to be the finding. It does not stand at the other end, and the
+asymmetry is the whole argument: **a truncated read is a suffix of a real card,
+and a suffix is never longer than its card.** So an over-length rule cannot hide
+a truncation, by construction. A length floor could.
+
+- **`readRejection(code, rows)`** in `JS/Core/offlineScanning.js` replaces the
+  bare boolean as the single source of truth, returning `null` or why the read
+  was discarded (`empty` / `short` / `long` / `charset`). `looksLikeCardCode()`
+  stays as a thin wrapper, and a test asserts the two can never disagree.
+  The kiosk now says *"Invalid read — check the reader"* for a stuck key instead
+  of *"Partial read"*, which was simply the wrong advice.
+- **Both bounds are derived from the synced roster, never hardcoded** —
+  `maxCodeLength()` and `codesAreNumeric()`. Issuing longer or alphanumeric
+  cards later relaxes the rule on its own, with no code change. A test covers
+  that: adding one `AB12345678` card makes `CD12345678` acceptable again.
+- **`20261008140000_drop_impossible_card_alerts.sql`** is the server-side half,
+  for anything calling the RPC directly. It also **deletes the 8 existing rows**
+  — all acknowledged, all over-length — and the migration carries the query to
+  verify that count before running.
+
+**A genuinely unregistered badge of a plausible shape still raises
+`unknown_card_scan` at full weight.** That is a security event and is untouched;
+a test pins it.
+
+**Egress:** this is not an egress fix and is not sold as one. The honest numbers
+are ~8 discarded reads/day × ~1 KB ≈ **8 KB/day** saved client-side, plus
+marginally smaller `get_alerts` responses. It does not *add* any: the client
+check is local string work over already-cached rows, and the server now answers
+the shape question and the suffix question from **one** pass over
+`proximity_cards` where it previously paid a sequential scan for the suffix
+alone — strictly less work, not more. That rewrite also removed a latent bug:
+`like '%' || code` treated `%` and `_` in a scanned code as LIKE wildcards, and
+`right(...) = ...` does not.
+
 **2026-10-08 — the egress bill was one kiosk tab calling a retired RPC; tabs now reload themselves**
 
 A month of egress work had attributed ~90% of the bill to the Dashboard's
