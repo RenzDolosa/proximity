@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   attachCachedPhoto, classifyCachedScan, flushQueuedScans, groupQueuedScans, looksLikeCardCode,
-  mergeLookupDelta, mergePhotoUpdates, minCodeLength, photoNeedsRefresh,
+  mergeLookupDelta, mergePhotoUpdates, expectedCodeLength, photoNeedsRefresh,
 } from '../JS/Core/offlineScanning.js';
 
 const matchedRow = {
@@ -11,42 +11,55 @@ const matchedRow = {
   employee_code: 'E-1', department: 'Ops', remarks_log: [{ resolved: false }],
 };
 
-// The kiosk auto-submits ~200ms after typing stops (badge readers send no
-// trailing Enter), so any stray input became a real unmatched scan and an
-// `unknown_card_scan` alert — 786 of them, mostly codes like "0", "37" and "58".
-// The bar is the shortest code actually registered, so it can never reject a
-// real card.
+// A short read is a TRUNCATED read, not a stray keystroke. Measured against the
+// live database 2026-10-08: 58 of 59 distinct "unknown card" codes were suffixes
+// of registered cards (`037` of `0005204037`), i.e. real employees whose badge
+// failed because the leading digits were lost before the input had focus.
+//
+// This roster mirrors the real shape: overwhelmingly one length, plus a single
+// short outlier (there is one inactive 3-character test card in production).
 const roster = [
-  { proximity_code: '0012345678' },
-  { proximity_code: '98765' },
-  { proximity_code: 'PRX-00099' },
+  ...Array.from({ length: 8 }, (_, i) => ({ proximity_code: `000520403${i}` })),
+  { proximity_code: '123' },
 ];
 
-test('the minimum length comes from the roster, ignoring blanks and junk', () => {
-  assert.equal(minCodeLength(roster), 5); // '98765'
-  assert.equal(minCodeLength([{ proximity_code: '  7654321  ' }]), 7); // trimmed
-  assert.equal(minCodeLength([{ proximity_code: '' }, { proximity_code: null }, {}]), 0);
-  assert.equal(minCodeLength([]), 0);
-  assert.equal(minCodeLength(null), 0);
+// Using the MINIMUM would make the threshold 3 and accept every truncation —
+// which is exactly the bug this replaces. The mode ignores the outlier.
+test('the expected length is the common one, not the shortest', () => {
+  assert.equal(expectedCodeLength(roster), 10);
+  assert.equal(expectedCodeLength([{ proximity_code: '  7654321  ' }]), 7); // trimmed
+  assert.equal(expectedCodeLength([{ proximity_code: '' }, { proximity_code: null }, {}]), 0);
+  assert.equal(expectedCodeLength([]), 0);
+  assert.equal(expectedCodeLength(null), 0);
 });
 
-test('input shorter than every registered card is not a scan', () => {
-  for (const junk of ['0', '37', '58', '71', '77', '78']) {
-    assert.equal(looksLikeCardCode(junk, roster), false);
+// Ties favour the longer length: accepting a short read loses a scan, which is
+// the worse failure.
+test('a tie in length counts resolves towards the longer code', () => {
+  assert.equal(expectedCodeLength([{ proximity_code: '1234' }, { proximity_code: '123456' }]), 6);
+});
+
+test('a truncated read of a real card is rejected before it is sent', () => {
+  for (const truncated of ['0', '37', '037', '9295', '215056', '00520403']) {
+    assert.equal(looksLikeCardCode(truncated, roster), false);
   }
 });
 
-test('a code at or above the shortest registered length is scanned', () => {
-  assert.equal(looksLikeCardCode('98765', roster), true);      // the shortest itself
-  assert.equal(looksLikeCardCode('781174', roster), true);     // unregistered but plausible — still alerts
-  assert.equal(looksLikeCardCode('005117178', roster), true);
-  assert.equal(looksLikeCardCode('  98765  ', roster), true);  // trimmed before measuring
+test('a full-length read is scanned, registered or not', () => {
+  assert.equal(looksLikeCardCode('0005204037', roster), true); // registered
+  assert.equal(looksLikeCardCode('0009999999', roster), true); // genuinely unknown card — must still alert
+  assert.equal(looksLikeCardCode('  0005204037  ', roster), true); // trimmed first
 });
 
-// An unrecognised card must still be recorded, so a kiosk that has never synced
-// scans everything. A scanner that silently swallows reads is far worse than a
-// noisy alert list.
-test('an unknown roster fails open rather than swallowing scans', () => {
+// The one legitimately short card in production would otherwise be unusable.
+test('an exact match on a known code is always accepted, however short', () => {
+  assert.equal(looksLikeCardCode('123', roster), true);
+  assert.equal(looksLikeCardCode('124', roster), false); // near miss is still a truncation
+});
+
+// A kiosk that has never synced must not silently swallow scans — that is worse
+// than a noisy alert list.
+test('an unknown roster fails open', () => {
   assert.equal(looksLikeCardCode('0', []), true);
   assert.equal(looksLikeCardCode('0', null), true);
   assert.equal(looksLikeCardCode('37', [{ proximity_code: '' }]), true);
