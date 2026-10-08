@@ -979,6 +979,36 @@ git commits here since nothing is deployed *from* this repo yet.*
 
 ### Change log (most recent first)
 
+**2026-10-08 — attendance totals and ordering (`20261008160000_attendance_summary_and_order.sql`, NOT applied — apply by hand)**
+
+`20260928000000`'s header claimed the 31-day range cap kept the report inside
+its own `limit 25000`, "so the row cap can never silently truncate a legitimate
+report." **It checked the wrong cap.** PostgREST's `db-max-rows` is 1000 here
+and truncates every response first.
+
+Measured for 02–08 Oct by running the new function's body against the live
+database: the report really holds **3,385** employee-days; the page got 1,000
+and derived all five stat cards from that slice — 594 employees against 672,
+12,032h against 34,368h, "3 No OUT yet" against **337**.
+
+- **`get_attendance_summary(p_from, p_to, p_tz)`** — one row:
+  `row_count, employees, worked_seconds, open_punches, anomalies`, all uncapped.
+  Same `is_admin_or_manager()` gate as the report.
+- **`get_attendance_report()`** — `order by 5 desc, s.ename`. Only the ORDER BY
+  changes; everything else is `20260928000000` verbatim, so a diff between the
+  two migrations shows one line. The cap truncates the **tail**, so ascending
+  order was dropping the newest days.
+- **`get_audit_log_count()`** — scalar `count(*)`, `is_admin()`-gated the same
+  way `get_audit_log()` is (returns 0 rather than raising for a non-admin).
+
+**The summary repeats the report's CTEs verbatim rather than sharing a view.**
+Two functions reading the same scan history must agree exactly, and identical
+SQL is the cheapest guarantee of that; a shared view adds an object that can
+drift from either caller. **If one is edited, edit both.**
+
+Costs two scalar reads (~150 bytes each) against the ~180 KB of rows already
+being sent. No query returns more rows than before.
+
 **2026-10-08 — impossible card reads raise nothing (`20261008140000_drop_impossible_card_alerts.sql`, NOT applied — apply by hand)**
 
 `scan_proximity_code()`'s `unmatched` branch gains a third outcome: raise

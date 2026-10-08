@@ -17,7 +17,9 @@ import { isFresh, markFetched } from '../../Utils/freshness.js';
 import {
   attendanceStatus, STATUS_LABEL, fmtDuration, toDecimalHours,
   validateRange, defaultRange, filterRows, summarize,
+  toSummary, attendanceTruncationNotice,
 } from '../../Utils/attendance.js';
+import { truncation } from '../../Utils/rowCap.js';
 
 // Badge colors reuse the existing result-badge classes rather than adding
 // new CSS: green = fine, amber = needs a look, red = actually suspicious.
@@ -35,7 +37,8 @@ let range = defaultRange();
 // leave this tab open across midnight and "today" silently means whatever
 // day the page happened to first load, not the day it actually is now.
 let userSetRange = false;
-let rowsCache = [];   // the last successfully loaded report, unfiltered
+let rowsCache = [];   // the last successfully loaded report, unfiltered — TRUNCATED at 1000 by PostgREST
+let rangeTotals = null; // get_attendance_summary() for loadedRange: true, uncapped, unfiltered
 let loaded = false;   // distinguishes "never fetched" from "fetched, zero rows"
 let loadedRange = null; // the range rowsCache actually covers (may differ from the inputs mid-edit)
 let filters = { query: '', department: '', status: '' };
@@ -130,7 +133,14 @@ async function runReport({ force = false } = {}) {
   runBtn.disabled = true;
   runBtn.textContent = 'Running…';
 
-  const { data, error } = await AttendanceModel.report(range);
+  // In parallel: the rows (capped at 1000 by PostgREST) and one row of true
+  // totals for the same range. The summary is what the stat cards read — see
+  // Utils/attendance.js's ROW_CAP for why deriving them from `data` was wrong.
+  const [rows, totals] = await Promise.all([
+    AttendanceModel.report(range),
+    AttendanceModel.summary(range),
+  ]);
+  const { data, error } = rows;
 
   if (seq !== requestSeq) return; // a newer run started; let it own the UI
   const btn = $('#att-run');
@@ -138,6 +148,10 @@ async function runReport({ force = false } = {}) {
   if (error) { showError(error.message); if (!loaded) { const b = $('#att-body'); if (b) b.innerHTML = ''; } return; }
 
   rowsCache = data || [];
+  // A failed summary must not blank a working report: fall back to deriving
+  // from the rows in hand, which is exactly the old behaviour — understated
+  // when truncated, but never worse than before this change.
+  rangeTotals = totals?.error ? null : toSummary(totals?.data);
   loadedRange = { ...range };
   loaded = true;
   markFetched(key);
@@ -169,17 +183,26 @@ function paintBody() {
     return;
   }
 
-  const shown = filterRows(rowsCache, filters);
-  const sum = summarize(shown);
+  // Headline numbers come from get_attendance_summary() — the whole range,
+  // uncapped and unfiltered — not from the rows in hand. Filters narrow the
+  // table below, not these: a filter changing "Total time on site" would make
+  // the figure impossible to quote, and deriving it from a 1000-row slice of
+  // a 3,342-row range was reporting a third of the truth as all of it.
+  const sum = rangeTotals || summarize(rowsCache);
+  const cut = truncation(rowsCache.length, sum.days);
+  const notice = attendanceTruncationNotice(cut);
+  const scope = rangeTotals ? 'the whole date range' : 'the rows loaded';
 
   body.innerHTML = `
     <div class="stat-grid" style="margin-bottom:14px;">
-      <div class="stat-card accent" title="Distinct employees who have at least one row below, after the current search/department/status filters."><div class="stat-value">${sum.employees}</div><div class="stat-label">Employees</div></div>
-      <div class="stat-card" title="Total rows shown — one per employee per day, so one employee working several days in the range contributes several rows."><div class="stat-value">${sum.days}</div><div class="stat-label">Employee-days</div></div>
-      <div class="stat-card good" title="Sum of every IN&#8594;OUT gap across the rows shown. Breaks that were scanned out and back in are excluded, and a day with no OUT yet contributes 0 until it's closed."><div class="stat-value">${esc(fmtDuration(sum.workedSeconds))}</div><div class="stat-label">Total time on site</div></div>
-      <div class="stat-card warn" title="Rows with an IN and no following OUT. Normal for someone still on shift; otherwise it usually means a missed OUT scan."><div class="stat-value">${sum.open}</div><div class="stat-label">No OUT yet</div></div>
-      <div class="stat-card bad" title="Rows where an OUT is timestamped before its IN — almost always a backdated offline sync landing out of order, not an actual time-travel shift."><div class="stat-value">${sum.anomalies}</div><div class="stat-label">Check times</div></div>
+      <div class="stat-card accent" title="Distinct employees with at least one recorded day across ${scope}."><div class="stat-value">${sum.employees.toLocaleString()}</div><div class="stat-label">Employees</div></div>
+      <div class="stat-card" title="One row per employee per day across ${scope}, so someone working several days contributes several rows."><div class="stat-value">${sum.days.toLocaleString()}</div><div class="stat-label">Employee-days</div></div>
+      <div class="stat-card good" title="Sum of every IN&#8594;OUT gap across ${scope}. Breaks scanned out and back in are excluded, and a day with no OUT yet contributes 0 until it's closed."><div class="stat-value">${esc(fmtDuration(sum.workedSeconds))}</div><div class="stat-label">Total time on site</div></div>
+      <div class="stat-card warn" title="Days with an IN and no following OUT, across ${scope}. Normal for someone still on shift; otherwise usually a missed OUT scan."><div class="stat-value">${sum.open.toLocaleString()}</div><div class="stat-label">No OUT yet</div></div>
+      <div class="stat-card bad" title="Days where an OUT is timestamped before its IN, across ${scope} — almost always a backdated offline sync landing out of order."><div class="stat-value">${sum.anomalies.toLocaleString()}</div><div class="stat-label">Check times</div></div>
     </div>
+
+    ${notice ? `<div class="empty-state" id="att-truncated" style="margin:0 0 12px;text-align:left;">${esc(notice)}</div>` : ''}
 
     <div class="table-scroll"><div id="att-table-wrap"></div></div>
     <div id="att-pagination"></div>
@@ -248,6 +271,14 @@ function paintTable() {
 function exportRows() {
   const rows = filterRows(rowsCache, filters);
   if (!rows.length || !loadedRange) return;
+  // A spreadsheet gets filed and quoted long after the screen it came from is
+  // gone, so a truncated export is worse than a truncated table: nothing in
+  // the file says it is partial. Say so at the moment it is written.
+  const cut = truncation(rowsCache.length, rangeTotals?.days ?? rowsCache.length);
+  if (cut.truncated) {
+    toast(`Exporting the ${cut.fetched.toLocaleString()} most recent of ${cut.total.toLocaleString()} employee-days — `
+      + `${cut.missing.toLocaleString()} older rows are not in this file. Narrow the date range to export them.`, 'error');
+  }
   try {
     exportXlsx({
       filename: `attendance-${loadedRange.from}_${loadedRange.to}-${todayStamp()}.xlsx`,

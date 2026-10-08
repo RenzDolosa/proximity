@@ -6,6 +6,8 @@
 // how a row is built (IN/OUT pairing from employees.scan_logs' own
 // sequence, day = the IN's date in the requested time zone).
 
+import { truncationNotice } from './rowCap.js';
+
 // Mirrors the RPC's own cap ("date range too large (max 31 days)") so the
 // page can refuse a bad range instantly instead of round-tripping to be
 // told no. The server check is still the real one.
@@ -86,7 +88,31 @@ export function filterRows(rows, { query = '', department = '', status = '' } = 
   });
 }
 
-/** Headline numbers for the rows currently shown. */
+/** get_attendance_summary()'s single row -> the shape the stat cards read. */
+export function toSummary(row) {
+  const r = Array.isArray(row) ? row[0] : row;
+  return {
+    days: Number(r?.row_count) || 0,
+    employees: Number(r?.employees) || 0,
+    workedSeconds: Number(r?.worked_seconds) || 0,
+    open: Number(r?.open_punches) || 0,
+    anomalies: Number(r?.anomalies) || 0,
+  };
+}
+
+/** This page's wording for Utils/rowCap.js's generic notice. */
+export function attendanceTruncationNotice(t) {
+  return truncationNotice(t, {
+    noun: 'employee-days',
+    hint: 'The totals above cover the whole range; narrow the dates to bring the rest into the table and the export.',
+  });
+}
+
+/**
+ * Headline numbers for a set of rows. Still used for the *filtered* count under
+ * the table; the stat cards read the server summary instead, because deriving
+ * them here silently reported a truncated slice as the whole range.
+ */
 export function summarize(rows) {
   const people = new Set();
   let workedSeconds = 0, open = 0, anomalies = 0;

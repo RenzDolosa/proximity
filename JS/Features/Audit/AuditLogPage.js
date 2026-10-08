@@ -15,8 +15,10 @@ import { esc, fmtTime } from '../../Utils/format.js';
 import { isAdmin } from '../../Core/state.js';
 import { AuditLogModel } from '../../Models/AuditLogModel.js';
 import { renderPagination } from '../../Components/Pagination.js';
+import { truncation } from '../../Utils/rowCap.js';
 
-let rowsCache = [];
+let rowsCache = [];      // newest AUDIT_PAGE_LIMIT rows, not necessarily all of them
+let totalRows = null;    // true count of audit_log, or null if the count failed
 let page = 1;
 let pageSize = 50;
 let loaded = false; // distinguishes "never fetched yet" from "fetched, zero rows"
@@ -37,10 +39,13 @@ export async function renderAuditLog() {
   // same pattern as UsersPage.js.
   if (loaded) paintAuditTable();
 
-  const { data, error } = await AuditLogModel.list();
+  const [listed, counted] = await Promise.all([AuditLogModel.list(), AuditLogModel.count()]);
+  const { data, error } = listed;
   const wrap = $('#audit-table-wrap');
   if (error) { wrap.innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
   rowsCache = data || [];
+  // A failed count just means no truncation notice — never a broken page.
+  totalRows = counted?.error ? null : Number(counted?.data) || 0;
   loaded = true;
   page = 1;
   paintAuditTable();
@@ -53,7 +58,9 @@ function paintAuditTable() {
   const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
   page = Math.min(Math.max(1, page), totalPages);
   const rows = data.slice((page - 1) * pageSize, page * pageSize);
+  const cut = truncation(data.length, totalRows ?? data.length);
   wrap.innerHTML = `
+    ${cut.truncated ? `<div class="empty-state" style="margin:0 0 12px;text-align:left;">Showing the ${cut.fetched.toLocaleString()} most recent of ${cut.total.toLocaleString()} audited actions — ${cut.missing.toLocaleString()} older entries are not loaded.</div>` : ''}
     <table>
       <thead><tr><th class="col-shrink">Time</th><th class="col-shrink">Actor</th><th>Event</th></tr></thead>
       <tbody>
