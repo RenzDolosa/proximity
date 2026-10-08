@@ -511,6 +511,34 @@ data somewhere that cannot answer them.
   per tab, ~0.2 GB/month across 10 users — worth doing eventually, not now;
   fixing the 8.4 MB/h first is 350× the return.
 
+## 4b. Settings fetched nine times per visit (fixed 2026-10-08)
+
+Found while regrouping the page by intent, not while hunting egress — which is
+how it had survived: the panels each had a `*Loaded` flag, so it *looked*
+cached. The flags gated **painting**, never fetching:
+
+```js
+if (isAdmin()) tasks.push(loadThumbStats());
+if (isAdmin()) tasks.push(loadUsage());
+if (isAdmin()) tasks.push(loadQueryStats());
+…
+await Promise.all(tasks);   // every render, unconditionally
+```
+
+Nine concurrent RPCs on **every** visit, so flicking to Settings five times
+cost forty-five round trips. The page now renders as three collapsible groups
+and each group fetches once, on first open; a visit that only changes the theme
+costs nothing.
+
+**Scale honestly: this is small.** Settings is opened roughly once a day
+(`get_offline_thumb_stats`, 9 calls/24h), so the saving is ~9 calls/day. It is
+recorded here because it is the same *shape* of defect as §2c — work nobody
+costed, invisible because the code looked like it had already been optimised —
+not because the bytes matter.
+
+The same page's nav rework (grouping, mobile drawer) is markup and CSS only and
+touches no request.
+
 ## 5. Confirming it
 
 The usage page's Egress figure is cumulative for the billing cycle, so the

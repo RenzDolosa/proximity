@@ -88,17 +88,26 @@ export async function renderSettings() {
   const showSounds = settingsShowSounds();
   const showPhotos = settingsShowPhotos();
 
-  content.innerHTML = `
-    <div class="panel" style="padding:20px;max-width:720px;">
+  // Each panel is built independently, then composed into intent groups
+  // below. Before 2026-10-08 these were one nested template whose
+  // conditionals interleaved concerns — "Offline scanner thumbnails" was
+  // nested inside the photo-scope branch, and "Database usage" sat between
+  // the password form and the scan sounds. Naming them first makes the
+  // grouping a list rather than a nesting puzzle, and lets an empty group
+  // disappear on its own.
+  const panels = {
+    appearance: `
+    <div class="panel" style="padding:20px;">
       <h3 style="margin:0 0 4px;">Appearance</h3>
       <p class="sub" style="margin:0 0 10px;">A personal preference for this browser — not shared with other accounts, and not saved to your profile, so it won't follow you to a different device or kiosk.</p>
       <div class="sub-nav" id="theme-picker" role="group" aria-label="Theme">
         <button type="button" data-theme-choice="dark">Dark</button>
         <button type="button" data-theme-choice="light">Light</button>
       </div>
-    </div>
+    </div>`,
 
-    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
+    password: `
+    <div class="panel" style="padding:20px;">
       <h3 style="margin:0 0 4px;">Change password</h3>
       <p class="sub" style="margin:0 0 10px;">Update the password for your own account (${esc(appState.profile?.email || appState.session?.user?.email || '')}). This only changes what you sign in with — it's separate from an admin resetting someone else's password from Users &amp; Roles.</p>
       <form id="cp-form" autocomplete="off">
@@ -130,13 +139,10 @@ export async function renderSettings() {
           <button type="submit" class="primary" id="cp-save">Update password</button>
         </div>
       </form>
-    </div>
+    </div>`,
 
-    ${(!showSounds && !showPhotos) ? `
-    <div class="empty-state" style="margin-top:16px;">You don't have access to any other Settings panels.</div>
-    ` : `
-    ${!isAdmin() ? '' : `
-    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
+    usage: !isAdmin() ? '' : `
+    <div class="panel" style="padding:20px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
         <h3 style="margin:0 0 4px;">Database usage</h3>
         <button type="button" class="ghost" id="us-refresh" ${usageRefreshing ? 'disabled' : ''}>${usageRefreshing ? 'Refreshing…' : 'Refresh'}</button>
@@ -152,11 +158,10 @@ export async function renderSettings() {
         Explorer queries in <span class="mono">docs/SUPABASE_QUOTA_DECISION.md</span>.
       </p>
       <div id="us-body">${usageLoaded ? '' : 'Loading…'}</div>
-    </div>
-    `}
+    </div>`,
 
-    ${!showSounds ? '' : `
-    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
+    sounds: !showSounds ? '' : `
+    <div class="panel" style="padding:20px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;">
         <h3 style="margin:0 0 4px;">Scan sounds</h3>
         <div class="emp-meta mono" id="sound-storage-summary" style="white-space:nowrap;">${loaded ? '' : 'Loading…'}</div>
@@ -170,11 +175,10 @@ export async function renderSettings() {
         <div class="progress-track"><div class="progress-fill" id="sound-storage-fill"></div></div>
       </div>
       <div id="sound-rows">${loaded ? '' : 'Loading…'}</div>
-    </div>
-    `}
+    </div>`,
 
-    ${!showPhotos ? '' : `
-    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
+    photos: !showPhotos ? '' : `
+    <div class="panel" style="padding:20px;">
       <h3 style="margin:0 0 4px;">Employee photos</h3>
       <p class="sub" style="margin:0 0 10px;">
         Photos upload into the Google Drive account connected to the
@@ -182,10 +186,10 @@ export async function renderSettings() {
         account before uploads start failing.
       </p>
       <div id="photo-storage-body">${photoLoaded ? '' : 'Loading…'}</div>
-    </div>
+    </div>`,
 
-    ${!isAdmin() ? '' : `
-    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
+    thumbs: !(showPhotos && isAdmin()) ? '' : `
+    <div class="panel" style="padding:20px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
         <h3 style="margin:0 0 4px;">Offline scanner thumbnails</h3>
         <div style="display:flex;align-items:center;gap:8px;">
@@ -223,15 +227,12 @@ export async function renderSettings() {
         a hundred bytes per employee rather than ~11 KB.
       </p>
       <div id="th-body">${thumbStatsLoaded ? '' : 'Loading…'}</div>
-    </div>
-    `}
-    `}
-    `}
+    </div>`,
 
-    ${canViewScannerRegistry() ? scannersPanelHTML() : ''}
+    scanners: canViewScannerRegistry() ? scannersPanelHTML() : '',
 
-    ${!isAdmin() ? '' : `
-    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
+    queryPerf: !isAdmin() ? '' : `
+    <div class="panel" style="padding:20px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
         <h3 style="margin:0 0 4px;">Query performance</h3>
         <div style="display:flex;align-items:center;gap:8px;">
@@ -256,9 +257,10 @@ export async function renderSettings() {
         and post-fix numbers together.
       </p>
       <div id="qs-body">${queryStatsLoaded ? '' : 'Loading…'}</div>
-    </div>
+    </div>`,
 
-    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
+    archival: !isAdmin() ? '' : `
+    <div class="panel" style="padding:20px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
         <h3 style="margin:0 0 4px;">Scan data archival</h3>
         <button type="button" class="ghost" id="sa-run" ${archiveRunning ? 'disabled' : ''}>${archiveRunning ? 'Running…' : 'Run archival now'}</button>
@@ -277,9 +279,10 @@ export async function renderSettings() {
         schedule, or just to see it work.
       </p>
       <div id="sa-body">${archiveStatusLoaded ? '' : 'Loading…'}</div>
-    </div>
+    </div>`,
 
-    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
+    trimming: !isAdmin() ? '' : `
+    <div class="panel" style="padding:20px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
         <h3 style="margin:0 0 4px;">Scan log trimming</h3>
         <button type="button" class="ghost" id="st-run" ${trimRunning ? 'disabled' : ''}>${trimRunning ? 'Running…' : 'Run trim now'}</button>
@@ -296,9 +299,10 @@ export async function renderSettings() {
         job on demand.
       </p>
       <div id="st-body">${trimStatusLoaded ? '' : 'Loading…'}</div>
-    </div>
+    </div>`,
 
-    <div class="panel" style="padding:20px;max-width:720px;margin-top:16px;">
+    silence: !isAdmin() ? '' : `
+    <div class="panel" style="padding:20px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
         <h3 style="margin:0 0 4px;">Scanner silence alerts</h3>
         <button type="button" class="ghost" id="ss-run" ${silenceChecking ? 'disabled' : ''}>${silenceChecking ? 'Checking…' : 'Check now'}</button>
@@ -318,8 +322,35 @@ export async function renderSettings() {
         demand.
       </p>
       <div id="ss-body">${silenceStatusLoaded ? '' : 'Loading…'}</div>
+    </div>`,
+  };
+
+  // Grouped by what you came to Settings to do. "Your account" is open by
+  // default because it costs nothing to show; the other two are collapsed,
+  // which is what makes the lazy loading below possible.
+  const groups = [
+    { id: 'account', label: 'Your account', hint: 'How this browser looks, and your own sign-in', open: true,
+      html: panels.appearance + panels.password },
+    { id: 'scanning', label: 'Scanning & kiosks', hint: 'The scanners themselves, and what they play and show',
+      html: panels.scanners + panels.sounds + panels.thumbs + panels.silence },
+    { id: 'data', label: 'Data & maintenance', hint: 'Storage, retention jobs, and query health',
+      html: panels.usage + panels.photos + panels.archival + panels.trimming + panels.queryPerf },
+  ].filter((group) => group.html.trim());
+
+  const onlyAccount = groups.length === 1;
+  content.innerHTML = `
+    <div class="settings-groups">
+      ${groups.map((group) => `
+        <details class="settings-group" data-settings-group="${group.id}"${group.open ? ' open' : ''}>
+          <summary>
+            <span class="settings-group-title">${esc(group.label)}</span>
+            <span class="settings-group-hint">${esc(group.hint)}</span>
+          </summary>
+          <div class="settings-group-body">${group.html}</div>
+        </details>
+      `).join('')}
+      ${onlyAccount ? '<div class="empty-state">You don\'t have access to any other Settings panels.</div>' : ''}
     </div>
-    `}
   `;
   paintThemePicker();
   $$('button[data-theme-choice]', $('#theme-picker')).forEach((btn) => {
@@ -436,43 +467,68 @@ export async function renderSettings() {
     });
   }
 
-  const tasks = [];
-  if (showSounds) {
-    tasks.push((async () => {
-      const { data, error } = await ScanSoundsModel.list();
-      if (error) { $('#sound-rows').innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
-      const byPath = Object.fromEntries((data || []).map((o) => [o.name, o]));
-      soundsCache = Object.fromEntries(Object.keys(SOUND_KEYS).map((key) => {
-        const obj = byPath[SOUND_KEYS[key]];
-        return [key, obj ? { updated_at: obj.updated_at, size: obj.metadata?.size ?? 0 } : null];
-      }));
-      loaded = true;
-      paintRows();
-      paintStorageSummary();
-    })());
-  }
-  if (showPhotos) {
-    tasks.push((async () => {
-      const { data, error } = await EmployeesModel.getPhotoStorageQuota();
-      photoQuotaError = error || null;
-      photoQuota = error ? null : data;
-      photoLoaded = true;
-      paintPhotoStorage();
-    })());
-  }
-  if (isAdmin()) tasks.push(loadThumbStats());
-  if (isAdmin()) tasks.push(loadUsage());
-  if (isAdmin()) tasks.push(loadQueryStats());
-  if (isAdmin()) tasks.push(loadArchiveStatus());
-  if (isAdmin()) tasks.push(loadTrimStatus());
-  if (isAdmin()) tasks.push(loadSilenceStatus());
-  if (canViewScannerRegistry()) tasks.push(mountScannersPanel());
+  const loadSounds = async () => {
+    const { data, error } = await ScanSoundsModel.list();
+    if (error) { $('#sound-rows').innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
+    const byPath = Object.fromEntries((data || []).map((o) => [o.name, o]));
+    soundsCache = Object.fromEntries(Object.keys(SOUND_KEYS).map((key) => {
+      const obj = byPath[SOUND_KEYS[key]];
+      return [key, obj ? { updated_at: obj.updated_at, size: obj.metadata?.size ?? 0 } : null];
+    }));
+    loaded = true;
+    paintRows();
+    paintStorageSummary();
+  };
+  const loadPhotoQuota = async () => {
+    const { data, error } = await EmployeesModel.getPhotoStorageQuota();
+    photoQuotaError = error || null;
+    photoQuota = error ? null : data;
+    photoLoaded = true;
+    paintPhotoStorage();
+  };
 
-  // Independent panels, each backed by its own API call — run them
-  // concurrently rather than awaiting one before starting the other, and
-  // let each repaint itself as soon as its own data is back instead of
-  // making the faster one wait on the slower.
-  await Promise.all(tasks);
+  // Which panels each intent group is responsible for fetching. Keep in step
+  // with the `groups` array above — a loader listed under the wrong group
+  // fires when the wrong section is opened, which looks exactly like a panel
+  // that never loads.
+  const groupLoaders = {
+    scanning: () => [
+      canViewScannerRegistry() ? mountScannersPanel() : null,
+      showSounds ? loadSounds() : null,
+      showPhotos && isAdmin() ? loadThumbStats() : null,
+      isAdmin() ? loadSilenceStatus() : null,
+    ],
+    data: () => [
+      isAdmin() ? loadUsage() : null,
+      showPhotos ? loadPhotoQuota() : null,
+      isAdmin() ? loadArchiveStatus() : null,
+      isAdmin() ? loadTrimStatus() : null,
+      isAdmin() ? loadQueryStats() : null,
+    ],
+  };
+
+  // Settings used to fire all nine of these on every single visit — the
+  // `*Loaded` flags gated PAINTING, never fetching, so flicking to Settings
+  // five times cost forty-five round trips. Now a group fetches once, the
+  // first time it is opened, and a visit that only changes the theme costs
+  // nothing at all. Each group's panels still run concurrently with each
+  // other, which is what the old Promise.all was actually for.
+  const started = new Set();
+  const openGroup = async (id) => {
+    if (started.has(id) || !groupLoaders[id]) return;
+    started.add(id);
+    await Promise.all(groupLoaders[id]().filter(Boolean));
+  };
+
+  const pending = [];
+  $$('details[data-settings-group]').forEach((details) => {
+    const id = details.dataset.settingsGroup;
+    details.addEventListener('toggle', () => { if (details.open) openGroup(id); });
+    // A group rendered already-open (or restored open by the browser) has no
+    // toggle event to wait for.
+    if (details.open) pending.push(openGroup(id));
+  });
+  await Promise.all(pending);
 }
 
 // Marks whichever button matches the CURRENT theme as .active — reads

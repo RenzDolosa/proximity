@@ -106,6 +106,45 @@ td.row-actions{display:table-cell;}
 .panel{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:20px;}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
 
+/* Settings: intent groups (Features/Settings/SettingsPage.js).
+   Native <details>/<summary>, so keyboard, screen readers and the browser's
+   own Find-in-page all work without a line of JS. The only script involved
+   is the `toggle` listener that fetches a group's data the first time it is
+   opened — collapsing is what makes that lazy load possible, and it is why
+   Settings no longer costs nine round trips just to look at it. */
+.settings-groups{display:flex;flex-direction:column;gap:14px;max-width:760px;}
+.settings-group{background:var(--surface);border:1px solid var(--border);border-radius:6px;}
+.settings-group > summary{
+  cursor:pointer;padding:14px 18px;display:flex;align-items:baseline;gap:10px;
+  flex-wrap:wrap;list-style:none;border-radius:6px;
+}
+/* Both spellings: ::-webkit-details-marker for Safari, ::marker elsewhere. */
+.settings-group > summary::-webkit-details-marker{display:none;}
+.settings-group > summary::marker{content:'';}
+.settings-group > summary::before{
+  content:'▸';display:inline-block;font-family:var(--mono);
+  color:var(--text-faint);font-size:11px;transition:transform .15s ease;
+}
+.settings-group[open] > summary::before{transform:rotate(90deg);}
+.settings-group[open] > summary{border-bottom:1px solid var(--border-soft);border-radius:6px 6px 0 0;}
+.settings-group > summary:hover{background:var(--surface-raised);}
+.settings-group > summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
+.settings-group-title{font-weight:600;font-size:13.5px;}
+.settings-group-hint{color:var(--text-muted);font-size:12px;}
+.settings-group-body{display:flex;flex-direction:column;gap:14px;padding:14px;}
+/* Panels composed into a group get their spacing from the gap above, not
+   from the inline margins they carry when used standalone. */
+.settings-group-body > .panel{margin-top:0;max-width:none;}
+
+@media (prefers-reduced-motion: reduce){
+  .settings-group > summary::before{transition:none;}
+}
+@media (max-width: 560px){
+  .settings-group-hint{display:none;}
+  .settings-group > summary{padding:13px 14px;}
+  .settings-group-body{padding:12px 10px;}
+}
+
 /* modal — every component that opens a dialog (see JS/Components/Modal.js)
    reuses this exact overlay + .modal structure so all modals look/behave the same. */
 .overlay{position:fixed;inset:0;background:rgba(6,8,12,.6);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50;}

@@ -612,6 +612,58 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-08 — navigation and Settings grouped by intent; the app finally has a mobile layout**
+
+**There was no mobile layout.** `#sidebar` was `flex:0 0 216px` at every width,
+and the only `@media` rule in the shell hid two topbar labels. On a 375px phone
+the nav took 58% of the screen and every page rendered into the remaining
+159px. Below 860px the sidebar is now a drawer that slides over the content:
+`#main` gets the full width (measured 375px of 375), and the rail opens from a
+topbar control, closing on the scrim, Escape, picking a route, or growing past
+the breakpoint.
+
+**The sidebar is grouped by what you came to do**, not by the order features
+were built:
+
+| Group | Routes |
+|---|---|
+| **Monitor** | Dashboard, Alerts |
+| **Manage** | Employee Manager, Proximity Cards, Test Scan |
+| **Reports** | Attendance, Scanner Analytics |
+| **Administration** | Users & Roles, Settings, Audit Log |
+
+Test Scan moves next to Proximity Cards deliberately — it is the step straight
+after issuing a card, not a sibling of the analytics page it merely sounds
+like. Administration stays last, so Settings and Audit Log keep roughly the
+position the old pinned-bottom rail gave them.
+
+Access control can empty a whole group (a scanner-only account sees two of the
+four), and a lone *Reports* heading over nothing reads as a bug — so the group
+model lives in `JS/Core/navGroups.js` as pure functions, and `screens.js`
+derives group visibility from the buttons' own hidden state rather than
+re-deriving permissions. One place decides, and a test covers the empty,
+partial, and nothing-visible cases.
+
+**Settings is three collapsible groups** — *Your account*, *Scanning & kiosks*,
+*Data & maintenance* — built from named panel constants instead of one nested
+template whose conditionals interleaved concerns (*Offline scanner thumbnails*
+was nested inside the photo-scope branch; *Database usage* sat between the
+password form and the scan sounds). Native `<details>`, so keyboard, screen
+readers and Find-in-page work with no JS beyond one `toggle` listener.
+
+**This one does reduce egress, as a side effect of the collapsing.** Settings
+fired **nine concurrent RPCs on every visit** — the `*Loaded` flags gated
+*painting*, never fetching, so flicking to Settings five times cost forty-five
+round trips. Each group now fetches once, the first time it is opened, and a
+visit that only changes the theme costs nothing at all. In absolute terms this
+is small (Settings is visited roughly once a day), and it is reported here as a
+correctness improvement rather than a billing one.
+
+Nothing else here touches the network: the nav grouping and the drawer are
+markup and CSS. 135 tests passing (13 new in `test/nav-groups.test.mjs`),
+including a drift guard asserting the groups cover the sidebar markup exactly —
+a route added to one and not the other is otherwise silent.
+
 **2026-10-08 — reads that cannot be a card raise nothing**
 
 After the truncation fix shipped, every surviving `unknown_card_scan` alert was

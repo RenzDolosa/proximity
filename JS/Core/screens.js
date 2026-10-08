@@ -1,10 +1,11 @@
 // The app has exactly three top-level "screens" (#auth-screen, #shell,
 // #standalone-scanner) and only one is ever visible at a time. This module
 // owns that switch so main.js's auth-state handler stays a one-liner.
-import { $ } from '../Utils/dom.js';
+import { $, $$ } from '../Utils/dom.js';
 import { appState, isAdmin, canViewEmployeeManager, canViewScanner, canViewSettings, canViewAttendance, canViewDashboard, canViewAlerts } from './state.js';
 import { render } from './router.js';
 import { startAlertsBadge, stopAlertsBadge } from './alertsBadge.js';
+import { hiddenGroupIds } from './navGroups.js';
 
 export function showAuth() {
   $('#auth-screen').classList.remove('hidden');
@@ -28,6 +29,20 @@ export function showAuth() {
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
 }
 
+// Reads the buttons' own .hidden state rather than re-deriving permissions,
+// so there is exactly one place a route's visibility is decided (above) and
+// this can never disagree with it. The grouping itself is in navGroups.js.
+function paintNavGroups() {
+  const routeVisible = (route) => {
+    const btn = $(`nav.rail button[data-route="${route}"]`);
+    return Boolean(btn) && !btn.classList.contains('hidden');
+  };
+  const hidden = new Set(hiddenGroupIds(routeVisible));
+  $$('.rail-group').forEach((group) => {
+    group.classList.toggle('hidden', hidden.has(group.dataset.navGroup));
+  });
+}
+
 export function showShell() {
   $('#auth-screen').classList.add('hidden');
   $('#standalone-scanner').classList.add('hidden');
@@ -44,6 +59,7 @@ export function showShell() {
   $('button[data-route="scanner"]').classList.toggle('hidden', !canViewScanner());
   $('button[data-route="analytics"]').classList.toggle('hidden', !canViewScanner());
   $('button[data-route="attendance"]').classList.toggle('hidden', !canViewAttendance());
+  paintNavGroups();
   // land on the first route this account is actually allowed to see
   if ((appState.route === 'dashboard' && !canViewDashboard()) || (appState.route === 'alerts' && !canViewAlerts())) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users')));
   if (appState.route === 'directory' && !canViewEmployeeManager()) appState.route = canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users'));

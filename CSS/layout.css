@@ -7,7 +7,17 @@
 .brand{display:flex;align-items:center;gap:9px;padding:0 18px 20px;border-bottom:1px solid var(--border-soft);margin-bottom:14px;}
 .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);}
 .brand span{font-weight:600;font-size:14.5px;}
-nav.rail{display:flex;flex-direction:column;gap:2px;padding:0 10px;}
+/* Grouped by intent (JS/Core/navGroups.js). The gap between groups is what
+   does the work — the labels are a legend for it, not the separator. */
+nav.rail{display:flex;flex-direction:column;gap:16px;padding:0 10px;}
+.rail-group{display:flex;flex-direction:column;gap:2px;}
+/* A group whose every route is hidden by access control hides entirely,
+   rather than leaving a heading over nothing. Toggled in Core/screens.js. */
+.rail-group.hidden{display:none;}
+.rail-label{
+  margin:0 0 3px;padding:0 10px;font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.8px;color:var(--text-faint);
+}
 nav.rail button{
   text-align:left;border:none;background:transparent;color:var(--text-muted);
   padding:9px 10px;border-radius:var(--radius);font-size:13.5px;font-weight:500;
@@ -17,8 +27,6 @@ nav.rail button .ic{width:15px;text-align:center;font-family:var(--mono);color:v
 nav.rail button:hover{background:var(--surface-raised);color:var(--text);}
 nav.rail button.active{background:var(--surface-raised);color:var(--text);}
 nav.rail button.active .ic{color:var(--accent);}
-.rail-spacer{flex:1;}
-.rail-bottom{padding-top:10px;margin-top:8px;border-top:1px solid var(--border-soft);}
 
 #main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;}
 #topbar{
@@ -39,6 +47,48 @@ nav.rail button.active .ic{color:var(--accent);}
 @media (max-width: 560px){
   .topbar-title .sub{display:none;}
   .who-text{display:none;}
+}
+
+/* Mobile: the sidebar becomes a drawer.
+   Until 2026-10-08 #sidebar was flex:0 0 216px at EVERY width, so on a 375px
+   phone the nav took 58% of the screen and every page rendered into the
+   remaining 159px. There was no mobile layout at all — only the two rules
+   above, which hid two labels. Below the breakpoint the rail now slides over
+   the content instead of competing with it, and #main gets the full width.
+   Pure CSS plus a class toggle (Core/navDrawer.js) — no layout library, and
+   nothing here touches what any page fetches. */
+.nav-toggle{display:none;}
+
+@media (max-width: 860px){
+  .nav-toggle{
+    display:inline-flex;align-items:center;justify-content:center;
+    flex:0 0 auto;width:36px;height:36px;padding:0;
+    border:1px solid var(--border);border-radius:var(--radius);
+    background:transparent;color:var(--text);font-size:15px;line-height:1;
+  }
+  .nav-toggle:hover{background:var(--surface-raised);}
+  #sidebar{
+    position:fixed;top:0;bottom:0;left:0;z-index:40;
+    width:min(272px, 82vw);flex-basis:auto;
+    transform:translateX(-100%);transition:transform .18s ease;
+  }
+  #shell.nav-open #sidebar{transform:translateX(0);}
+  #nav-backdrop{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.55);}
+  #topbar{padding:10px 14px;gap:10px;}
+  #content{padding:16px 14px;}
+}
+
+/* Resizing from a mobile width with the drawer open must not leave a scrim
+   over the desktop layout. navDrawer.js also closes on resize; this is the
+   rule that makes it harmless in the frame before that runs. */
+@media (min-width: 861px){
+  #nav-backdrop{display:none;}
+}
+
+#nav-backdrop[hidden]{display:none;}
+
+@media (prefers-reduced-motion: reduce){
+  #sidebar{transition:none;}
 }
 
 #content{
