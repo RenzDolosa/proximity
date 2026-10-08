@@ -612,6 +612,65 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-08 — the Attendance report was showing a third of the data, and every headline number was wrong**
+
+"Limited to 1000 rows" turned out to be true of **one** page, and much worse
+there than a missing row count.
+
+`20260928000000`'s header reasoned that a 31-day cap kept the report under its
+own `limit 25000`, "so the row cap can never silently truncate a legitimate
+report." That checked the wrong cap. **PostgREST's `db-max-rows` is 1000 on
+this project** and truncates every response long before the function's limit
+is reached.
+
+Measured against the live database for 02–08 Oct:
+
+| Stat card | Showed | Actually |
+|---|---|---|
+| Employee-days | 1,000 | **3,385** |
+| Employees | 594 | **672** |
+| Total time on site | 12,032h | **34,368h** |
+| No OUT yet | 3 | **337** |
+| Check times | 26 | **70** |
+
+Those five were computed **in the browser** from whatever rows arrived, so the
+truncation propagated into all of them. "No OUT yet" read 3 while 337 people
+had an unclosed day. Export wrote the same truncated set into a spreadsheet
+with nothing in the file to say it was partial.
+
+- **`get_attendance_summary()`** returns one row of true, uncapped totals for
+  the range. The stat cards read that instead of deriving from rows in hand.
+  They now describe the **whole range**, unfiltered — filters narrow the table
+  below, not the totals, because a figure that moves when you type in a search
+  box can't be quoted to anyone.
+- **`get_attendance_report()` orders newest day first.** The cap truncates the
+  *tail*, so under the old ascending order the rows being dropped were the most
+  recent ones — exactly what an attendance report is read for.
+- **The truncation is now stated**, above the table and again in a toast when
+  Export runs, naming how many rows are missing and that narrowing the dates
+  brings them back.
+- **Audit Log** gets the same treatment via `get_audit_log_count()`. At 15 rows
+  its 200-row cap is invisible today, which is the point — it would have read
+  "1–200 of 200" at ten thousand rows with nothing to distinguish complete
+  from truncated.
+- `JS/Utils/rowCap.js` holds the shared `truncation()` / `truncationNotice()`
+  so both pages describe the same situation the same way.
+
+**The other three pages named in the request were already correct**, and are
+unchanged: Employee Manager (755 of 755), Proximity Cards (762 of 762) and
+Users all page past the cap through `Utils/fetchAllRows.js`, and the Dashboard
+roster is bounded by headcount (402 on site). Their "of N" was already the true
+N.
+
+**Egress:** two scalar reads added — one per Attendance run, one per Audit Log
+visit, ~150 bytes each against the ~180 KB of rows already being sent. Nothing
+fetches more rows than before. Fetching the missing 2,385 rows *would* have
+cost roughly +26 MB/month, which is why the fix is to report the cap honestly
+rather than quietly pay to hide it.
+
+148 tests passing (13 new in `test/row-cap.test.mjs`), including that a failed
+count degrades to "no notice" rather than to a bogus one.
+
 **2026-10-08 — navigation and Settings grouped by intent; the app finally has a mobile layout**
 
 **There was no mobile layout.** `#sidebar` was `flex:0 0 216px` at every width,

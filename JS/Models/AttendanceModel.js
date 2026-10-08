@@ -16,9 +16,21 @@ function browserTimeZone() {
 export const AttendanceModel = {
   // from/to: inclusive 'YYYY-MM-DD' strings.
   async report({ from, to }) {
-    const args = { p_from: from, p_to: to };
-    const tz = browserTimeZone();
-    if (tz) args.p_tz = tz;
-    return supabase.rpc('get_attendance_report', args);
+    return supabase.rpc('get_attendance_report', rangeArgs(from, to));
+  },
+
+  // One row of true, uncapped totals for the same range. The rows above are
+  // truncated by PostgREST's db-max-rows (1000) long before the RPC's own
+  // 25000 limit, so headline numbers derived from them understate a busy
+  // range — measured 1,000 against a real 3,385. ~150 bytes, once per run.
+  async summary({ from, to }) {
+    return supabase.rpc('get_attendance_summary', rangeArgs(from, to));
   },
 };
+
+function rangeArgs(from, to) {
+  const args = { p_from: from, p_to: to };
+  const tz = browserTimeZone();
+  if (tz) args.p_tz = tz;
+  return args;
+}
