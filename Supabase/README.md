@@ -989,8 +989,10 @@ split and never reloaded.
 
 `get_scanner_offline_photos()` returns every thumbnail: **5,823 kB** measured
 from `sum(octet_length(photo_thumb_b64))` over 716 rows, ~415 MB/day on the wire
-after gzip, against a cycle averaging 369 MB/day. **That one function was the
-entire egress bill.**
+after gzip — **~60% of a cycle that ran at ~910 MB/day** across its 11
+production days (the first scan this database ever recorded is 2026-09-27; the
+previous cycle billed 0.003 GB against zero scans). The largest single item by a
+wide margin; `docs/EGRESS_BUDGET.md` §2d has the rest.
 
 - `REVOKE ALL` from `PUBLIC`, `anon`, and `authenticated` on both. A stale tab
   gets 403 instead of 5.8 MB, shows its "offline data last synced" warning, and
