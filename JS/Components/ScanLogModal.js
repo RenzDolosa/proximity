@@ -1,11 +1,11 @@
 import { $ } from '../Utils/dom.js';
 import { esc, fmtTime } from '../Utils/format.js';
-import { wireDateRangeOrdering } from '../Utils/dateRange.js';
 import { toast } from '../Utils/toast.js';
 import { exportXlsx, todayStamp } from '../Utils/xlsxExport.js';
 import { isAdmin } from '../Core/state.js';
 import { openModal, closeModal, startModalOpen, isStaleModalOpen, onModalClose } from './Modal.js';
 import { openConfirmModal } from './ConfirmModal.js';
+import { dateRangePickerHTML, mountDateRangePicker } from './DateRangePicker.js';
 import { supabase } from '../Core/supabaseClient.js';
 import { EmployeesModel } from '../Models/EmployeesModel.js';
 
@@ -65,8 +65,8 @@ export async function openScanLogModal(employeeId) {
   });
 
   const paintList = () => {
-    const fromVal = $('#log-date-from', overlay)?.value;
-    const toVal = $('#log-date-to', overlay)?.value;
+    const fromVal = $('#log-range .drp-from', overlay)?.value;
+    const toVal = $('#log-range .drp-to', overlay)?.value;
     const scannerVal = $('#log-scanner', overlay)?.value || 'all';
     const filtered = logs.filter((l) => {
       const key = localDateKey(l.scanned_at);
@@ -87,9 +87,13 @@ export async function openScanLogModal(employeeId) {
       ? `<div class="emp-meta" style="padding:6px 2px;">Showing the most recent ${RENDER_CAP} of ${filtered.length} matching scans — narrow the date range or scanner filter to see others. Export uses all ${filtered.length}.</div>`
       : '';
     listEl.innerHTML = notice + capped.map((l) => `
-      <div class="feed-row">
+      <!-- .log-row keeps the time pushed to the right edge. The scanner's own
+           feed moved its time under the name on 2026-10-09 and dropped
+           .feed-time's margin-left:auto to do it, which left this row's time
+           floating in the middle. -->
+      <div class="feed-row log-row">
         <span class="badge ${l.direction === 'out' ? 'suspended' : 'active'}">${(l.direction || '—').toUpperCase()}</span>
-        <div>
+        <div class="log-row-who">
           <div style="font-weight:500;">${esc(l.scanner_id || '—')}</div>
           <div class="emp-meta mono">${esc(l.proximity_code || '')}</div>
         </div>
@@ -133,16 +137,14 @@ export async function openScanLogModal(employeeId) {
     }
 
     const scanners = [...new Set(logs.map((l) => l.scanner_id).filter(Boolean))].sort();
-    const prevFrom = $('#log-date-from', overlay)?.value || '';
-    const prevTo = $('#log-date-to', overlay)?.value || '';
+    const prevFrom = $('#log-range .drp-from', overlay)?.value || '';
+    const prevTo = $('#log-range .drp-to', overlay)?.value || '';
     const prevScanner = $('#log-scanner', overlay)?.value || 'all';
 
     bodyEl.className = '';
     bodyEl.innerHTML = `
       <div class="filter-row" id="log-filter-row" style="margin-bottom:10px;">
-        <input type="date" id="log-date-from" title="From" value="${esc(prevFrom)}" />
-        <span class="emp-meta" style="flex:0 0 auto;">to</span>
-        <input type="date" id="log-date-to" title="To" value="${esc(prevTo)}" />
+        ${dateRangePickerHTML('log-range', { from: prevFrom, to: prevTo, emptyLabel: 'All dates' })}
         <select id="log-scanner">
           <option value="all">All scanners</option>
           ${scanners.map((s) => `<option value="${esc(s)}" ${s === prevScanner ? 'selected' : ''}>${esc(s)}</option>`).join('')}
@@ -152,12 +154,13 @@ export async function openScanLogModal(employeeId) {
       <div id="log-list" style="max-height:340px;overflow-y:auto;"></div>
     `;
 
-    // Inverted range → swap the two dates into order (Utils/dateRange.js), then repaint.
-    wireDateRangeOrdering($('#log-date-from', overlay), $('#log-date-to', overlay), paintList);
+    // Filtering is local to the rows already fetched, so repainting on apply
+    // costs nothing — the picker itself never triggers a request.
+    const picker = mountDateRangePicker($('#log-range', overlay), { onApply: paintList });
+    onModalClose(() => picker?.destroy());
     $('#log-scanner', overlay).addEventListener('change', paintList);
     $('#log-clear', overlay).addEventListener('click', () => {
-      $('#log-date-from', overlay).value = '';
-      $('#log-date-to', overlay).value = '';
+      picker?.set({ from: '', to: '' });
       $('#log-scanner', overlay).value = 'all';
       paintList();
     });

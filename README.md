@@ -612,6 +612,84 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-09 — the hint stops covering the dropdown; the range reorders as you pick it**
+
+Three follow-ups, each verified by measuring the real DOM rather than by
+reading the CSS.
+
+**The hint covered the options it describes.** `:focus-within` matches a
+*mouse* click on a `<select>`, so opening the status dropdown showed the
+bubble right over the open list. Two changes: `:focus-visible` replaces
+`:focus-within`, which is the browser's own "this focus came from the
+keyboard" signal and is exactly the distinction wanted; and because the OS
+draws the option list *outside* the page — leaving `:hover` true underneath
+it — a delegated watcher in `Components/Hint.js` also suppresses the bubble
+outright while a dropdown is genuinely open. Measured: `visibility: hidden`
+on pointerdown, restored on change.
+
+**The date range reorders the moment you pick it.** With To already set to
+2 Oct, choosing 9 Oct as the From now reads `02/10/2026 – 09/10/2026`
+straight away instead of waiting for Apply. Measured, including that it still
+**does not notify the caller** — reordering repaints, it does not fetch.
+
+**The picker matches the reference shape**: presets in a left rail, the two
+dates side by side on the right. The first version let the grid stretch its
+inputs to the full height of the rail beside them (`align-items` defaults to
+`stretch`), which is what produced those tall empty boxes. Measured at 406px
+wide: 102px rail, two 141px inputs, 34px tall, side by side.
+
+**Scan-log columns line up.** "IN" and "OUT" are different widths, and a
+shrink-to-fit badge shifted every scanner name and proximity code a few pixels
+down the list. The badge is now a fixed 46px: measured across mixed IN/OUT
+rows, every scanner column starts at the same x and every time ends at the
+same right edge.
+
+**Egress:** unchanged. CSS, one delegated listener, and a repaint.
+
+165 tests passing.
+
+**2026-10-09 — one date-range control everywhere; the focus warning stops crying wolf**
+
+**The out-of-focus warning fired on every successful scan.** `doScan()`
+disables `#ss-code` for the second a scan is in flight so a second read cannot
+pile onto the first — and a disabled input is not `document.activeElement`, so
+`paintFocusState()` read the deliberate pause as "not listening". A warning
+that appears when nothing is wrong trains people to ignore it, which would
+have cost the real case it was built for. A `scanInFlight` flag now suppresses
+it, alongside the two other legitimate reasons focus moves: an open dialog,
+and an input that has not mounted yet.
+
+**`JS/Components/DateRangePicker.js`** replaces four pairs of bare
+`<input type="date">` boxes with one control: a trigger showing the current
+range, and a popover holding both inputs plus Today / Last 7 days / Last 30
+days / This month. Applied in Attendance, the scan-log dialog and "Export all
+scan logs".
+
+Native date inputs stay *inside* the popover deliberately — a hand-built
+calendar grid is a lot of surface to get wrong (locale, week start, keyboard,
+mobile) and buys nothing. The presets are what people actually reach for.
+
+**The picker never fetches.** Typing a date updates only the label; `onApply`
+fires on Apply, Clear or a preset — explicit acts — so Attendance cannot
+issue a request per keystroke. Verified in a real DOM rather than asserted:
+preset applies and closes, typing does not notify, an inverted pair is swapped
+on Apply, Clear reports an empty range, an outside click closes.
+
+The pure half is `JS/Utils/dateRangePresets.js` (10 tests), including that
+"last 7 days" counts today as one of the seven, and that dates stay in the
+**local** calendar — `toISOString()` would report the previous day for a range
+picked at 23:30 east of Greenwich.
+
+**Fixed a regression from earlier today:** the scan-log dialog's time column
+drifted into the middle of each row. Moving the Scanner feed's time under the
+name meant dropping `.feed-time`'s `margin-left:auto`, which that dialog
+relied on. It now has its own `.log-row` scope; measured at 520px, the time
+sits 10px from the delete button at the right edge.
+
+**Egress:** unchanged. One component, four call sites, no new requests.
+
+164 tests passing (10 new).
+
 **2026-10-09 — the kiosk says when it has stopped listening; hints move to hover**
 
 **Why the focus watchdog didn't close the Chrome Remote Desktop issue.** The

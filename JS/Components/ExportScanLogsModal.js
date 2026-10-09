@@ -8,7 +8,7 @@
 // whole collect-input-then-act flow" pattern as RevokeCardModal.js.
 import { $ } from '../Utils/dom.js';
 import { fmtTime } from '../Utils/format.js';
-import { wireDateRangeOrdering } from '../Utils/dateRange.js';
+import { dateRangePickerHTML, mountDateRangePicker } from './DateRangePicker.js';
 import { openModal, closeModal, setModalLocked } from './Modal.js';
 import { ScanEventsModel } from '../Models/ScanEventsModel.js';
 import { exportXlsx, todayStamp } from '../Utils/xlsxExport.js';
@@ -20,14 +20,7 @@ export function openExportScanLogsModal() {
       <h3>Export all scan logs</h3>
       <p class="sub" style="margin:-4px 0 14px;">Optional date range — leave either side blank for no lower/upper bound.</p>
       <div class="filter-row" style="margin-bottom:14px;">
-        <div class="field" style="flex:1;">
-          <label>From</label>
-          <input type="date" id="esl-from" />
-        </div>
-        <div class="field" style="flex:1;">
-          <label>To</label>
-          <input type="date" id="esl-to" />
-        </div>
+        ${dateRangePickerHTML('esl-range', { emptyLabel: 'All dates' })}
       </div>
       <div class="auth-error hidden" id="esl-error"></div>
       <div class="actions">
@@ -39,11 +32,17 @@ export function openExportScanLogsModal() {
     let settled = false;
     const finish = (result) => { if (settled) return; settled = true; resolve(result); };
 
-    $('#esl-cancel', overlay).addEventListener('click', () => { finish({ confirmed: false }); closeModal(overlay); });
+    // Declared before the handlers that close over it — a `const` referenced
+    // from a listener defined above it is a TDZ error the moment that listener
+    // runs, which `node --check` will not catch.
+    //
+    // No onApply: this modal reads the range only when Export is pressed, so
+    // the picker never triggers anything by itself. An inverted range is
+    // swapped into order by normaliseRange() rather than silently returning
+    // nothing.
+    const picker = mountDateRangePicker($('#esl-range', overlay));
 
-    // An inverted range (from after to) would be silently empty, so the two
-    // values are swapped into order instead — see Utils/dateRange.js.
-    wireDateRangeOrdering($('#esl-from', overlay), $('#esl-to', overlay));
+    $('#esl-cancel', overlay).addEventListener('click', () => { picker?.destroy(); finish({ confirmed: false }); closeModal(overlay); });
 
     $('#esl-ok', overlay).addEventListener('click', async () => {
       const errEl = $('#esl-error', overlay);
@@ -56,8 +55,8 @@ export function openExportScanLogsModal() {
         setModalLocked(overlay, false);
       };
 
-      const fromVal = $('#esl-from', overlay).value; // 'YYYY-MM-DD' or ''
-      const toVal = $('#esl-to', overlay).value;
+      const fromVal = picker.get().from; // 'YYYY-MM-DD' or ''
+      const toVal = picker.get().to;
       // Widened to the full local day (00:00:00.000 through 23:59:59.999)
       // so the "to" day is inclusive — a bare date-only ISO string would
       // otherwise mean midnight UTC and silently exclude that whole day

@@ -83,15 +83,29 @@ function scanInputIsLive(input) {
   return Boolean(input) && document.activeElement === input && document.hasFocus();
 }
 
+// Set while a scan is in flight. doScan() disables #ss-code for that second so
+// a second read cannot pile onto the first — which also means activeElement
+// stops being the input, which the warning below read as "not listening" and
+// fired on EVERY successful scan. The deliberate disable is not focus loss.
+let scanInFlight = false;
+
+export function setScanInFlight(busy) {
+  scanInFlight = busy;
+  if (!busy && currentCodeInput) reclaimFocus(currentCodeInput);
+}
+
 // Paints the out-of-focus warning. Separated from reclaiming so the state is
 // shown honestly even in the case nothing can be done about from script.
 function paintFocusState(input) {
   const wrap = document.querySelector('#standalone-scanner');
   const note = document.querySelector('#ss-focus-note');
   if (!wrap) return;
-  // A dialog legitimately owns focus; that is not a broken scanner.
+  // Three states are NOT a broken scanner, and each would otherwise raise a
+  // false alarm: a scan in progress (the input is disabled on purpose), a
+  // dialog that legitimately owns focus, and an input that has not been
+  // mounted yet.
   const dialogOpen = Boolean(document.querySelector('.overlay'));
-  const lost = !dialogOpen && !scanInputIsLive(input);
+  const lost = !scanInFlight && !dialogOpen && Boolean(input) && !scanInputIsLive(input);
   wrap.classList.toggle('ss-unfocused', lost);
   if (note) note.hidden = !lost;
 }
@@ -313,6 +327,7 @@ function renderStandaloneScanner() {
       return;
     }
     scanBusy = true;
+    setScanInFlight(true);
     clearTimeout(autoSubmitTimer);
     // Lock the input before the round-trip: a card read landing mid-request would
     // otherwise append onto the field instead of counting as its own scan.
@@ -378,6 +393,7 @@ function renderStandaloneScanner() {
       codeInput.disabled = false;
       codeInput.focus();
       scanBusy = false;
+    setScanInFlight(false);
     }, POST_SCAN_COOLDOWN_MS);
     // An offline scan is not in scan_events yet, so a feed reload would show
     // nothing for it. Show an optimistic row; the real reload after the queue
