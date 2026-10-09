@@ -340,7 +340,7 @@ function renderStandaloneScanner() {
     // nothing for it. Show an optimistic row; the real reload after the queue
     // syncs replaces it with the authoritative entry.
     if (offlineHandled) {
-      prependPendingRow('ss-feed', data, operatorName, 10);
+      prependPendingRow('ss-feed', data, 10);
     } else {
       // A plain loadScanFeed() here used to wholesale-replace the feed
       // with whatever's authoritative in scan_events RIGHT NOW — which
@@ -361,7 +361,7 @@ function renderStandaloneScanner() {
       if (pendingBefore > 0) {
         await flushPendingQueue();
       } else if (data.result === 'matched' && data.scan_id && data.scanned_at) {
-        prependScanEvent('ss-feed', data, operatorName, 10);
+        prependScanEvent('ss-feed', data, 10);
       } else {
         loadScanFeed('ss-feed', 10, operatorName);
       }

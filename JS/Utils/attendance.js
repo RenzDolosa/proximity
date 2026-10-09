@@ -6,8 +6,6 @@
 // how a row is built (IN/OUT pairing from employees.scan_logs' own
 // sequence, day = the IN's date in the requested time zone).
 
-import { truncationNotice } from './rowCap.js';
-
 // Mirrors the RPC's own cap ("date range too large (max 31 days)") so the
 // page can refuse a bad range instantly instead of round-tripping to be
 // told no. The server check is still the real one.
@@ -77,17 +75,6 @@ export function defaultRange(today = new Date()) {
   return { from: localDateString(start), to: localDateString(today) };
 }
 
-/** Case-insensitive filter over name/code, plus an exact department match ('' = all). */
-export function filterRows(rows, { query = '', department = '', status = '' } = {}) {
-  const q = query.trim().toLowerCase();
-  return rows.filter((r) => {
-    if (department && (r.department || '') !== department) return false;
-    if (status && attendanceStatus(r) !== status) return false;
-    if (!q) return true;
-    return (r.full_name || '').toLowerCase().includes(q) || (r.employee_code || '').toLowerCase().includes(q);
-  });
-}
-
 /** get_attendance_summary()'s single row -> the shape the stat cards read. */
 export function toSummary(row) {
   const r = Array.isArray(row) ? row[0] : row;
@@ -100,28 +87,7 @@ export function toSummary(row) {
   };
 }
 
-/** This page's wording for Utils/rowCap.js's generic notice. */
-export function attendanceTruncationNotice(t) {
-  return truncationNotice(t, {
-    noun: 'employee-days',
-    hint: 'The totals above cover the whole range; narrow the dates to bring the rest into the table and the export.',
-  });
-}
-
-/**
- * Headline numbers for a set of rows. Still used for the *filtered* count under
- * the table; the stat cards read the server summary instead, because deriving
- * them here silently reported a truncated slice as the whole range.
- */
-export function summarize(rows) {
-  const people = new Set();
-  let workedSeconds = 0, open = 0, anomalies = 0;
-  for (const r of rows) {
-    people.add(r.employee_id);
-    workedSeconds += Number(r.worked_seconds) || 0;
-    const s = attendanceStatus(r);
-    if (s === 'open') open++;
-    if (s === 'anomaly') anomalies++;
-  }
-  return { employees: people.size, days: rows.length, workedSeconds, open, anomalies };
-}
+// filterRows() and summarize() lived here until 2026-10-09. Both moved into
+// SQL (20261009000000): filtering one downloaded page would have filtered the
+// page rather than the report, and totals derived from a page describe the
+// page. The server now answers both for the whole filtered set.

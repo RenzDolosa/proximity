@@ -29,6 +29,7 @@ import { fmtUsageBytes, fmtPercent } from '../../Utils/usage.js';
 import { OFFLINE_THUMB_TARGET, recompressThumbBase64 } from '../../Utils/image.js';
 import { openConfirmModal } from '../../Components/ConfirmModal.js';
 import { showModalError } from '../../Components/Modal.js';
+import { reportError } from '../../Utils/userError.js';
 
 let soundsCache = {}; // key -> { updated_at, size } | null, once loaded
 let loaded = false;
@@ -148,14 +149,9 @@ export async function renderSettings() {
         <button type="button" class="ghost" id="us-refresh" ${usageRefreshing ? 'disabled' : ''}>${usageRefreshing ? 'Refreshing…' : 'Refresh'}</button>
       </div>
       <p class="sub" style="margin:0 0 10px;">
-        How much of the database's size ceiling is in use, and which tables
-        account for it. Read on demand, never on a timer.
-        <strong>Egress, Cached Egress, Log Ingestion and Log Query are not
-        here</strong> — Supabase publishes no API for them (verified against
-        this project: every candidate endpoint returns 404), so they can only
-        be read from the dashboard's Usage page. To find out <em>what</em> is
-        spending egress, which a billing total never tells you, use the Logs
-        Explorer queries in <span class="mono">docs/SUPABASE_QUOTA_DECISION.md</span>.
+        How much storage is in use, and which records account for it. Updated
+        only when you open this or press Refresh. Bandwidth figures are not
+        shown here — those live on your hosting provider's usage page.
       </p>
       <div id="us-body">${usageLoaded ? '' : 'Loading…'}</div>
     </div>`,
@@ -199,32 +195,24 @@ export async function renderSettings() {
         </div>
       </div>
       <p class="sub" style="margin:0 0 10px;">
-        Every employee photo is also stored as a small image inside the
-        database (<span class="mono">employees.photo_thumb_b64</span>) so the
-        Scanner can show a face while offline. That column is the largest
-        thing in this database and the heaviest part of every kiosk's cache
-        sync, so its size is paid for twice — once in Database size above,
-        and again in egress on every fresh sync.
-        <strong>Recompress now</strong> re-encodes the oversized ones to the
-        current target (${OFFLINE_THUMB_TARGET.maxDimension}px,
-        quality ${OFFLINE_THUMB_TARGET.quality}) in this browser and writes
-        them back. It is safe to re-run: a row is only replaced when
-        re-encoding actually saves at least 10%, so rows that are already
-        small are left exactly as they are rather than losing another
-        generation of quality. Kiosks keep the thumbnails they already hold
-        — they adopt the smaller ones on their next full cache rebuild.
+        Each employee photo is also kept as a small copy so a Scanner can show
+        a face while offline. These are the largest thing stored here and the
+        heaviest part of every kiosk's sync.
       </p>
       <p class="sub" style="margin:0 0 10px;">
-        <strong>Repair missing</strong> is a different problem: an employee can
-        have a photo that shows correctly in Employee Manager (a live Google
-        Drive link) while having no stored thumbnail at all, which makes them
-        <em>invisible on every kiosk</em> — the Scanner falls back to their
-        initials. That happens when the photo couldn't be converted in the
-        browser (iPhone HEIC files can't be) and Drive hadn't finished
-        generating its own thumbnail within the upload's time budget. Repair
-        re-fetches it server-side, now that Drive has had time. The image never
-        passes through this browser, so repairing the whole roster costs about
-        a hundred bytes per employee rather than ~11 KB.
+        <strong>Recompress now</strong> shrinks the oversized ones
+        (${OFFLINE_THUMB_TARGET.maxDimension}px, quality
+        ${OFFLINE_THUMB_TARGET.quality}). Safe to re-run — a photo is only
+        replaced when shrinking saves at least 10%, so already-small ones are
+        left alone rather than losing more quality. Kiosks pick up the smaller
+        copies on their next full sync.
+      </p>
+      <p class="sub" style="margin:0 0 10px;">
+        <strong>Repair missing</strong> fixes a different problem: an employee
+        whose photo shows correctly in Employee Manager but who appears as
+        initials on every kiosk, because no offline copy was made at upload
+        time. Repair rebuilds it. The photo never passes through this browser,
+        so repairing the whole roster is cheap.
       </p>
       <div id="th-body">${thumbStatsLoaded ? '' : 'Loading…'}</div>
     </div>`,
@@ -243,18 +231,11 @@ export async function renderSettings() {
         </div>
       </div>
       <p class="sub" style="margin:0 0 10px;">
-        Every distinct query shape the app has run (grouped the way
-        Postgres itself groups them — same query text with different
-        literal values counts as one row), whose <em>average</em> time is
-        at or above the threshold above. "How often" is Calls; "how much
-        resource" is Total time (Calls × Mean — the actual cumulative
-        load a query puts on the database, which a single slow-but-rare
-        query might not). Scoped to this app's own traffic — Supabase's
-        internal housekeeping queries are left out. Stats accumulate
-        since the last reset (see "since" below); Reset stats clears them
-        to get a clean baseline, e.g. right after a fix, to confirm it
-        actually worked rather than reading a history that mixes pre-
-        and post-fix numbers together.
+        The app's slowest operations, averaged. <strong>Calls</strong> is how
+        often one ran; <strong>Total time</strong> is the cumulative load it
+        puts on the system, which a slow-but-rare operation may not. Figures
+        build up since the last reset — clear them to get a fresh baseline
+        after a change, rather than reading a mix of before and after.
       </p>
       <div id="qs-body">${queryStatsLoaded ? '' : 'Loading…'}</div>
     </div>`,
@@ -266,17 +247,12 @@ export async function renderSettings() {
         <button type="button" class="ghost" id="sa-run" ${archiveRunning ? 'disabled' : ''}>${archiveRunning ? 'Running…' : 'Run archival now'}</button>
       </div>
       <p class="sub" style="margin:0 0 10px;">
-        A daily scheduled job (pg_cron, 03:00 UTC) moves scan_events rows
-        older than 180 days into scan_events_archive — same data, just out
-        of the table the scanner and live Dashboard/Analytics pages read
-        from, so it stays fast as history accumulates. Nothing is deleted:
-        "Export all scan logs" in Employee Manager still reaches archived
-        rows for an old date range. 180 days is comfortably past every
-        other feature's own lookback (Attendance caps at 31 days, Scanner
-        Analytics at 90), so the scheduled job can never remove a row
-        anything else might still ask for. "Run archival now" runs the
-        exact same job on demand — useful right after changing the
-        schedule, or just to see it work.
+        A nightly job moves scans older than 180 days out of the live history,
+        so the Scanner, Dashboard and Analytics stay fast as records build up.
+        <strong>Nothing is deleted</strong> — "Export all scan logs" still
+        reaches archived scans for an older date range. 180 days is well past
+        every report's own limit (Attendance 31 days, Scanner Analytics 90),
+        so archiving can never remove something another page still needs.
       </p>
       <div id="sa-body">${archiveStatusLoaded ? '' : 'Loading…'}</div>
     </div>`,
@@ -288,15 +264,12 @@ export async function renderSettings() {
         <button type="button" class="ghost" id="st-run" ${trimRunning ? 'disabled' : ''}>${trimRunning ? 'Running…' : 'Run trim now'}</button>
       </div>
       <p class="sub" style="margin:0 0 10px;">
-        A daily scheduled job (pg_cron, 03:10 UTC) removes entries older
-        than 180 days from each employee's scan log history
-        (employees.scan_logs), the per-employee record behind the Scan log
-        dialog and the Attendance/on-site-roster calculations. Nothing is
-        lost: every entry's scan still lives in Export all scan logs
-        (which reaches archived scans too). IN/OUT direction for new scans
-        does not depend on this history's length, so trimming it never
-        affects a scan going forward. "Run trim now" runs the exact same
-        job on demand.
+        A nightly job trims each employee's personal scan history to the last
+        180 days — the record behind the Scan log dialog, Attendance and the
+        on-site roster. <strong>Nothing is lost</strong>: every scan still
+        appears in "Export all scan logs". IN/OUT direction for new scans does
+        not depend on how long this history is, so trimming never affects a
+        future scan.
       </p>
       <div id="st-body">${trimStatusLoaded ? '' : 'Loading…'}</div>
     </div>`,
@@ -308,18 +281,13 @@ export async function renderSettings() {
         <button type="button" class="ghost" id="ss-run" ${silenceChecking ? 'disabled' : ''}>${silenceChecking ? 'Checking…' : 'Check now'}</button>
       </div>
       <p class="sub" style="margin:0 0 10px;">
-        A scheduled job (pg_cron, every 15 minutes) raises an alert for
-        any enabled scanner that hasn't reported in over 60 minutes — a
-        kiosk whose tab crashed, lost power, or fell off the network
-        would otherwise go unnoticed until someone physically checks it.
-        Independent of the Dashboard's own 10-minute "online" indicator
-        (Utils/dashboard.js's scannerState()) — that's a glance-level
-        status for a page you're already looking at; this is what
-        actually notifies someone who isn't. Re-raising the same alert
-        every 15 minutes while a scanner stays silent would just be
-        noise, so each one is deduplicated (one alert per scanner, until
-        it reports again). "Check now" runs the exact same job on
-        demand.
+        Every 15 minutes, any enabled scanner that hasn't reported for over an
+        hour raises an alert — a kiosk that crashed, lost power or fell off the
+        network would otherwise go unnoticed until someone walked past it.
+        This is separate from the Dashboard's "online" dot: that tells you at a
+        glance on a page you are already looking at; this notifies someone who
+        isn't. One alert per scanner until it reports again, so a silent kiosk
+        doesn't flood the list.
       </p>
       <div id="ss-body">${silenceStatusLoaded ? '' : 'Loading…'}</div>
     </div>`,
@@ -379,7 +347,7 @@ export async function renderSettings() {
       });
       if (!ok) return;
       const { error } = await QueryStatsModel.reset();
-      if (error) { toast(error.message, 'error'); return; }
+      if (error) { toast(reportError(error, 'settings'), 'error'); return; }
       toast('Query statistics reset');
       loadQueryStats();
     });
@@ -426,7 +394,7 @@ export async function renderSettings() {
       archiveRunning = false;
       const btnAfter = $('#sa-run'); // re-query: a repaint between the two awaits above could have replaced this node
       if (btnAfter) { btnAfter.disabled = false; btnAfter.textContent = 'Run archival now'; }
-      if (error) { toast(error.message, 'error'); return; }
+      if (error) { toast(reportError(error, 'settings'), 'error'); return; }
       const row = Array.isArray(data) ? data[0] : data;
       toast(row?.archived_count ? `Archived ${row.archived_count} scan${row.archived_count === 1 ? '' : 's'}` : 'Nothing to archive — already current');
       loadArchiveStatus();
@@ -441,7 +409,7 @@ export async function renderSettings() {
       trimRunning = false;
       const btnAfter = $('#st-run'); // re-query: a repaint between the two awaits above could have replaced this node
       if (btnAfter) { btnAfter.disabled = false; btnAfter.textContent = 'Run trim now'; }
-      if (error) { toast(error.message, 'error'); return; }
+      if (error) { toast(reportError(error, 'settings'), 'error'); return; }
       const row = Array.isArray(data) ? data[0] : data;
       toast(row?.entries_removed
         ? `Trimmed ${row.entries_removed} entr${row.entries_removed === 1 ? 'y' : 'ies'} across ${row.employees_trimmed} employee${row.employees_trimmed === 1 ? '' : 's'}`
@@ -458,7 +426,7 @@ export async function renderSettings() {
       silenceChecking = false;
       const btnAfter = $('#ss-run'); // re-query: a repaint between the two awaits above could have replaced this node
       if (btnAfter) { btnAfter.disabled = false; btnAfter.textContent = 'Check now'; }
-      if (error) { toast(error.message, 'error'); return; }
+      if (error) { toast(reportError(error, 'settings'), 'error'); return; }
       const row = Array.isArray(data) ? data[0] : data;
       toast(row?.scanners_flagged
         ? `${row.scanners_flagged} scanner${row.scanners_flagged === 1 ? '' : 's'} flagged as silent`
@@ -469,7 +437,7 @@ export async function renderSettings() {
 
   const loadSounds = async () => {
     const { data, error } = await ScanSoundsModel.list();
-    if (error) { $('#sound-rows').innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
+    if (error) { $('#sound-rows').innerHTML = `<div class="empty-state">${esc(reportError(error, 'settings.sounds', "Couldn't load the scan sounds."))}</div>`; return; }
     const byPath = Object.fromEntries((data || []).map((o) => [o.name, o]));
     soundsCache = Object.fromEntries(Object.keys(SOUND_KEYS).map((key) => {
       const obj = byPath[SOUND_KEYS[key]];
@@ -577,7 +545,7 @@ function paintPhotoStorage() {
 
 async function loadThumbStats() {
   const { data, error } = await EmployeesModel.offlineThumbStats(OFFLINE_THUMB_TARGET.overTargetStoredBytes);
-  thumbStatsError = error ? error.message : null;
+  thumbStatsError = error ? reportError(error, 'settings.thumbs', "Couldn't load photo details.") : null;
   thumbStats = error ? null : data;
   thumbStatsLoaded = true;
   paintThumbStats();
@@ -690,7 +658,7 @@ async function runThumbRepair() {
   try {
     for (;;) {
       const { data: page, error } = await EmployeesModel.employeesMissingThumb({ afterId, limit: PAGE });
-      if (error) { toast(error.message, 'error'); break; }
+      if (error) { toast(reportError(error, 'settings'), 'error'); break; }
       const rows = Array.isArray(page) ? page : [];
       if (!rows.length) break;
 
@@ -758,7 +726,7 @@ async function runThumbRecompress() {
         limit: PAGE,
         overTargetBytes: OFFLINE_THUMB_TARGET.overTargetStoredBytes,
       });
-      if (error) { toast(error.message, 'error'); break; }
+      if (error) { toast(reportError(error, 'settings'), 'error'); break; }
       const rows = Array.isArray(page) ? page : [];
       if (!rows.length) break;
 
@@ -835,7 +803,7 @@ function setThumbButtons(running) {
 
 async function loadQueryStats() {
   const { data, error } = await QueryStatsModel.list(queryThresholdMs);
-  queryStatsError = error ? error.message : null;
+  queryStatsError = error ? reportError(error, 'settings.queryStats', "Couldn't load performance figures.") : null;
   queryStats = error ? null : (data || []);
   queryStatsLoaded = true;
   paintQueryStats();
@@ -882,7 +850,7 @@ function paintQueryStats() {
 
 async function loadUsage() {
   const { data, error } = await UsageModel.databaseUsage();
-  dbUsageError = error ? error.message : null;
+  dbUsageError = error ? reportError(error, 'settings.usage', "Couldn't load storage usage.") : null;
   dbUsage = error ? null : data;
   usageLoaded = true;
   paintUsage();
@@ -946,7 +914,7 @@ function paintUsage() {
 
 async function loadArchiveStatus() {
   const { data, error } = await ScanArchiveModel.status();
-  archiveStatusError = error ? error.message : null;
+  archiveStatusError = error ? reportError(error, 'settings.archive', "Couldn't load archive status.") : null;
   archiveStatus = error ? null : data;
   archiveStatusLoaded = true;
   paintArchiveStatus();
@@ -979,7 +947,7 @@ function paintArchiveStatus() {
 
 async function loadTrimStatus() {
   const { data, error } = await ScanLogsTrimModel.status();
-  trimStatusError = error ? error.message : null;
+  trimStatusError = error ? reportError(error, 'settings.trim', "Couldn't load trim status.") : null;
   trimStatus = error ? null : data;
   trimStatusLoaded = true;
   paintTrimStatus();
@@ -1009,7 +977,7 @@ function paintTrimStatus() {
 
 async function loadSilenceStatus() {
   const { data, error } = await ScannerSilenceModel.status();
-  silenceStatusError = error ? error.message : null;
+  silenceStatusError = error ? reportError(error, 'settings.silence', "Couldn't load scanner status.") : null;
   silenceStatus = error ? null : data;
   silenceStatusLoaded = true;
   paintSilenceStatus();
@@ -1150,7 +1118,7 @@ async function handleUpload(key, file, inputEl) {
   progressEl.classList.add('hidden');
   inputEl.value = '';
   if (error) {
-    toast(`Upload failed: ${error.message || error}`, 'error');
+    toast(reportError(error, 'settings.soundUpload', 'Upload failed. Try a smaller file.'), 'error');
     // repaint this row back to its last-known-good state rather than
     // leaving it stuck on "Uploading…"
     paintRows();
@@ -1167,7 +1135,7 @@ async function handleRemove(key) {
   $$('button', row).forEach((b) => (b.disabled = true));
   const { error } = await ScanSoundsModel.remove(key);
   if (error) {
-    toast(`Remove failed: ${error.message || error}`, 'error');
+    toast(reportError(error, 'settings.soundRemove', "Couldn't remove that sound."), 'error');
     $$('button', row).forEach((b) => (b.disabled = false));
     return;
   }

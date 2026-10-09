@@ -11,6 +11,7 @@ import { toast } from '../Utils/toast.js';
 import { canEditScannerRegistry } from '../Core/state.js';
 import { ScannersModel } from '../Models/ScannersModel.js';
 import { scannerState, SCANNER_STATE_LABEL, scannerStateBadgeClass } from '../Utils/dashboard.js';
+import { reportError } from '../Utils/userError.js';
 
 let rows = [];
 let loaded = false;
@@ -45,7 +46,7 @@ export async function mountScannersPanel() {
 async function load() {
   const { data, error } = await ScannersModel.list();
   const err = $('#sc-error');
-  if (error) { if (err) { err.textContent = error.message; err.classList.remove('hidden'); } return; }
+  if (error) { if (err) { err.textContent = reportError(error, 'scanners', "Couldn't load the scanner list."); err.classList.remove('hidden'); } return; }
   err?.classList.add('hidden');
   rows = data || [];
   loaded = true;
@@ -81,7 +82,7 @@ function paint() {
     const next = window.prompt(`Label for ${id} (leave empty to clear):`, current);
     if (next === null) return;
     const { error } = await ScannersModel.update(id, { label: next.trim() });
-    if (error) { toast(error.message, 'error'); return; }
+    if (error) { toast(reportError(error, 'scanners'), 'error'); return; }
     toast('Label saved.');
     load();
   }));
@@ -91,7 +92,7 @@ function paint() {
     if (!row) return;
     b.disabled = true;
     const { error } = await ScannersModel.update(id, { enabled: !row.is_enabled });
-    if (error) { toast(error.message, 'error'); b.disabled = false; return; }
+    if (error) { toast(reportError(error, 'scanners'), 'error'); b.disabled = false; return; }
     toast(row.is_enabled ? 'Scanner disabled.' : 'Scanner enabled.');
     load();
   }));

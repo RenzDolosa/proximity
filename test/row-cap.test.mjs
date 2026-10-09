@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { truncation, truncationNotice, POSTGREST_MAX_ROWS } from '../JS/Utils/rowCap.js';
-import { toSummary, attendanceTruncationNotice, summarize } from '../JS/Utils/attendance.js';
+import { toSummary } from '../JS/Utils/attendance.js';
 
 // The defect this guards: a page showing "1-500 of 1000" was reporting the
 // cap it hit, not the size of its data. Measured 2026-10-08, one week of
@@ -54,15 +54,8 @@ test('the notice says the missing rows are the older ones', () => {
 test('no notice when nothing is missing, whatever the wording', () => {
   assert.equal(truncationNotice(truncation(10, 10), { noun: 'rows' }), null);
   assert.equal(truncationNotice(null), null);
-  assert.equal(attendanceTruncationNotice(truncation(10, 10)), null);
 });
 
-test('the attendance wording points at the fix', () => {
-  const msg = attendanceTruncationNotice(truncation(1000, 3385));
-  assert.match(msg, /employee-days/);
-  assert.match(msg, /narrow the dates/i);
-  assert.match(msg, /totals above cover the whole range/i);
-});
 
 test('the summary row maps onto the stat cards', () => {
   const row = { row_count: 3385, employees: 594, worked_seconds: 43315680, open_punches: 11, anomalies: 87 };
@@ -90,25 +83,6 @@ test('bigint columns arriving as strings still become numbers', () => {
   assert.equal(s.employees, 594);
 });
 
-// The old client-side path is kept as the fallback for a failed summary, so
-// it has to stay correct — understated when truncated, never wrong in shape.
-test('the client-side fallback still summarises the rows it holds', () => {
-  const rows = [
-    { employee_id: 'a', worked_seconds: 3600, open_punch: false, anomaly: false },
-    { employee_id: 'a', worked_seconds: 1800, open_punch: true, anomaly: false },
-    { employee_id: 'b', worked_seconds: 0, open_punch: false, anomaly: true },
-  ];
-  assert.deepEqual(summarize(rows), {
-    employees: 2, days: 3, workedSeconds: 5400, open: 1, anomalies: 1,
-  });
-});
-
-test('the fallback understates a truncated range, which is why the summary exists', () => {
-  const truncated = Array.from({ length: 1000 }, (_, i) => ({
-    employee_id: `e${i % 594}`, worked_seconds: 3600, open_punch: false, anomaly: false,
-  }));
-  const derived = summarize(truncated);
-  const real = toSummary({ row_count: 3385, employees: 594, worked_seconds: 12031200 });
-  assert.equal(derived.days, 1000);
-  assert.ok(derived.days < real.days, 'this gap is the bug the summary RPC closes');
-});
+// The client-side fallback tested here is gone: filtering and totalling moved
+// into SQL on 2026-10-09, so there is no browser-side summariser left to
+// understate anything.
