@@ -357,7 +357,9 @@ function renderStandaloneScanner() {
       resultWrap.innerHTML = `<div class="result-card unmatched"><strong style="color:var(--bad)">Scan failed</strong><div class="emp-meta">${esc(error.message)}</div></div>`;
       resetHeroIcon();
     } else {
-      resultWrap.innerHTML = renderScanResult(data) + (offlineHandled
+      // No avatar here: .ss-photo-stage already shows this face full-screen, and
+    // a duplicate inside a 280px card leaves no room for the fields.
+    resultWrap.innerHTML = renderScanResult(data, { showAvatar: false }) + (offlineHandled
         ? `<div class="emp-meta" style="margin-top:6px;">⚠ Offline — recorded locally, will sync automatically</div>`
         : '');
       playScanSound(data);
