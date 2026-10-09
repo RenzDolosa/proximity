@@ -6,18 +6,21 @@ import { esc, offlineAvatarHTML, fmtTime } from '../Utils/format.js';
 import { ScanEventsModel } from '../Models/ScanEventsModel.js';
 import { OfflineScanModel } from '../Models/OfflineScanModel.js';
 
+// Two columns beside the avatar: who and when on the left, what happened on
+// the right, each stacked. The scanner id used to sit under the name, but the
+// feed is already scoped to one operator (loadScanFeed's scannerId) — every
+// row said the same thing, so it was a column of noise where the time belongs.
 function feedRowHTML(row) {
   return `
     <div class="feed-row${row.pending ? ' feed-row-pending' : ''}">
       <div class="avatar">${row.employee_name ? offlineAvatarHTML(row.employee_name, row.photo_thumb_b64) : '?'}</div>
-      <div>
-        <div style="font-weight:500;">${row.employee_name ? esc(row.employee_name) : 'Unmatched scan'}</div>
-        <div class="emp-meta mono">${esc(row.scanner_id)}</div>
-      </div>
-      <div>
-        <span class="badge ${row.result}" style="margin-left:8px;">${esc(row.result)}</span>
-        ${row.direction ? `<span class="badge ${row.direction === 'out' ? 'suspended' : 'active'}" style="margin-left:6px;">${esc(row.direction.toUpperCase())}</span>` : ''}
+      <div class="feed-who">
+        <div class="feed-name">${row.employee_name ? esc(row.employee_name) : 'Unmatched scan'}</div>
         <div class="feed-time">${row.pending ? 'Queued — syncing…' : fmtTime(row.scanned_at)}</div>
+      </div>
+      <div class="feed-badges">
+        <span class="badge ${esc(row.result)}">${esc(row.result)}</span>
+        ${row.direction ? `<span class="badge ${row.direction === 'out' ? 'suspended' : 'active'}">${esc(row.direction.toUpperCase())}</span>` : ''}
       </div>
     </div>
   `;
@@ -57,13 +60,12 @@ export async function loadScanFeed(targetId = 'scan-feed', limit = 10, scannerId
 // Matched online scans already return the exact row needed for this
 // operator-scoped feed. Prepending it avoids downloading the same recent
 // rows (including their photo thumbnails) again after every scan.
-export function prependScanEvent(targetId, scan, scannerId, limit = 10) {
+export function prependScanEvent(targetId, scan, limit = 10) {
   const feedEl = $('#' + targetId);
   if (!feedEl) return;
   const employee = scan.employee || {};
   const rowHTML = feedRowHTML({
     result: scan.result,
-    scanner_id: scannerId,
     scanned_at: scan.scanned_at,
     employee_name: employee.full_name || null,
     photo_thumb_b64: employee.photo_thumb_b64 || null,
@@ -82,14 +84,13 @@ export function prependScanEvent(targetId, scan, scannerId, limit = 10) {
 // Purpose is purely "don't leave the operator staring at a feed that
 // looks like nothing happened" while the kiosk is offline — previously
 // offline scans were invisible here until sync, sometimes minutes later.
-export function prependPendingRow(targetId, classifyResult, scannerId, limit = 10) {
+export function prependPendingRow(targetId, classifyResult, limit = 10) {
   const feedEl = $('#' + targetId);
   if (!feedEl) return;
   const e = classifyResult.employee;
   const rowHTML = feedRowHTML({
     pending: true,
     result: classifyResult.result,
-    scanner_id: scannerId,
     employee_name: e?.full_name || null,
     photo_thumb_b64: e?.photo_thumb_b64 || null,
     direction: classifyResult.direction || null,

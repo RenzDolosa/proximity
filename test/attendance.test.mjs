@@ -56,26 +56,6 @@ test('localDateString / defaultRange use the local calendar day and cover 7 days
   assert.equal(att.daysInRange(att.defaultRange(d).from, att.defaultRange(d).to), 7);
 });
 
-const rows = [
-  { employee_id: 'a', full_name: 'Ana Cruz', employee_code: 'E-001', department: 'Ops', worked_seconds: 3600, open_punch: false, anomaly: false },
-  { employee_id: 'a', full_name: 'Ana Cruz', employee_code: 'E-001', department: 'Ops', worked_seconds: 1800, open_punch: true, anomaly: false },
-  { employee_id: 'b', full_name: 'Ben Diaz', employee_code: 'E-002', department: 'Admin', worked_seconds: 0, open_punch: false, anomaly: true },
-  { employee_id: 'c', full_name: 'Cy Tan', employee_code: 'X-9', department: null, worked_seconds: 60, open_punch: false, anomaly: false },
-];
-
-test('filterRows: name/code search, department, status, combined', () => {
-  assert.equal(att.filterRows(rows, {}).length, 4);
-  assert.equal(att.filterRows(rows, { query: '  ana ' }).length, 2);
-  assert.equal(att.filterRows(rows, { query: 'e-002' }).length, 1);
-  assert.equal(att.filterRows(rows, { department: 'Ops' }).length, 2);
-  assert.equal(att.filterRows(rows, { status: 'open' }).length, 1);
-  assert.equal(att.filterRows(rows, { status: 'anomaly', department: 'Admin' }).length, 1);
-  assert.equal(att.filterRows(rows, { query: 'zzz' }).length, 0);
-  // A null department must not crash the exact-match filter.
-  assert.equal(att.filterRows(rows, { department: 'Ops', query: 'cy' }).length, 0);
-});
-
-test('summarize counts distinct employees and totals', () => {
-  assert.deepEqual(att.summarize(rows), { employees: 3, days: 4, workedSeconds: 5460, open: 1, anomalies: 1 });
-  assert.deepEqual(att.summarize([]), { employees: 0, days: 0, workedSeconds: 0, open: 0, anomalies: 0 });
-});
+// filterRows() and summarize() were tested here until 2026-10-09. Both moved
+// into SQL (20261009000000) — filtering or totalling one downloaded page
+// describes the page, not the report.

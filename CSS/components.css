@@ -188,7 +188,12 @@ td.row-actions{display:table-cell;}
    distinguishes "we saw this happen" from a confirmed, synced entry,
    without needing a whole separate visual style. */
 .feed-row-pending{opacity:.65;border-left:2px dashed var(--warn);padding-left:8px;}
-.feed-time{margin-left:auto;color:var(--text-faint);font-size:11.5px;font-family:var(--mono);}
+/* Name over time on the left, result over direction on the right. The time
+   lost its `margin-left:auto` when it moved out of the badge column. */
+.feed-who{flex:1;min-width:0;}
+.feed-name{font-weight:500;}
+.feed-time{color:var(--text-faint);font-size:11.5px;font-family:var(--mono);}
+.feed-badges{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;}
 
 .search-results{max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);margin-top:6px;}
 .search-result-item{padding:8px 10px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border-soft);display:flex;align-items:center;gap:8px;}

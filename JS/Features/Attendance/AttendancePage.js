@@ -1,10 +1,16 @@
 // Attendance report — per-employee, per-day first IN / last OUT / time on
 // site, built from the scan history the kiosks already record. Read-only.
 //
-// All the numbers come from get_attendance_report() (see
-// Supabase/README.md for exactly how a row is derived and why); the rules
-// for what a row *means* (complete / no OUT yet / check times) live in
-// Utils/attendance.js so they're unit-tested rather than buried here.
+// Paging, filtering and the headline totals are all SERVER-side as of
+// 2026-10-09 (see 20261009000000). The browser used to download 1000 rows —
+// PostgREST's cap, not the report's size — and display 50 of them, which both
+// hid the rest of a 3,382-row week and paid for rows nobody looked at. Now a
+// page fetch returns the page, so every row is reachable AND a typical visit
+// moves fewer bytes than before.
+//
+// What a row *means* (complete / no OUT yet / check times) still lives in
+// Utils/attendance.js so it stays unit-tested; the SQL mirrors the same
+// precedence (anomaly beats open beats complete).
 import { $ } from '../../Utils/dom.js';
 import { esc, fmtTime } from '../../Utils/format.js';
 import { wireDateRangeOrdering } from '../../Utils/dateRange.js';
@@ -13,55 +19,46 @@ import { canViewAttendance } from '../../Core/state.js';
 import { renderPagination } from '../../Components/Pagination.js';
 import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
 import { AttendanceModel } from '../../Models/AttendanceModel.js';
-import { isFresh, markFetched } from '../../Utils/freshness.js';
+import { reportError } from '../../Utils/userError.js';
 import {
   attendanceStatus, STATUS_LABEL, fmtDuration, toDecimalHours,
-  validateRange, defaultRange, filterRows, summarize,
-  toSummary, attendanceTruncationNotice,
+  validateRange, defaultRange, toSummary,
 } from '../../Utils/attendance.js';
-import { truncation } from '../../Utils/rowCap.js';
 
-// Badge colors reuse the existing result-badge classes rather than adding
-// new CSS: green = fine, amber = needs a look, red = actually suspicious.
 const STATUS_BADGE = { complete: 'matched', open: 'unassigned_card', anomaly: 'inactive_card' };
 
-// How long a report for one range stays good enough to reuse on a nav click.
-// Attendance is historical — a 60-second-old report for a past range is the same
-// report — and the Run button always forces a refetch anyway.
-const ATTENDANCE_MAX_AGE_MS = 60 * 1000;
+// Typing in the search box now costs a round trip, so wait for a pause rather
+// than firing per keystroke. Long enough to swallow a word, short enough that
+// it still feels live.
+const SEARCH_DEBOUNCE_MS = 350;
+
+// PostgREST refuses more than 1000 rows per response whatever we ask for, so
+// the export pages at that size rather than pretending one request can do it.
+const EXPORT_PAGE_SIZE = 1000;
 
 let range = defaultRange();
-// True once the user has actually touched a date input. Before that, every
-// render recomputes range = defaultRange() from *today* (see below) — a
-// module-level `range` set once at import time would otherwise go stale:
-// leave this tab open across midnight and "today" silently means whatever
-// day the page happened to first load, not the day it actually is now.
 let userSetRange = false;
-let rowsCache = [];   // the last successfully loaded report, unfiltered — TRUNCATED at 1000 by PostgREST
-let rangeTotals = null; // get_attendance_summary() for loadedRange: true, uncapped, unfiltered
-let loaded = false;   // distinguishes "never fetched" from "fetched, zero rows"
-let loadedRange = null; // the range rowsCache actually covers (may differ from the inputs mid-edit)
 let filters = { query: '', department: '', status: '' };
 let page = 1;
 let pageSize = 50;
-let requestSeq = 0;   // drops a slow, superseded response instead of letting it overwrite a newer one
+let pageRows = [];        // just the rows on screen
+let totals = null;        // filtered, uncapped — drives the stat cards and the pager
+let departments = [];
+let loaded = false;
+let requestSeq = 0;
+let searchTimer = null;
 
 export async function renderAttendance() {
   const content = $('#content');
   if (!canViewAttendance()) { content.innerHTML = `<div class="empty-state">You don't have access to this page.</div>`; return; }
 
-  // Keep the default anchored to *today* until the user picks their own
-  // range — once they do, their choice is what "unless the date picker is
-  // used" means, and it survives navigating away and back within this tab.
   if (!userSetRange) range = defaultRange();
 
   content.innerHTML = `
     <div class="toolbar">
       <div class="filter-row">
         <input class="search" id="att-q" type="search" placeholder="Search name or code…" value="${esc(filters.query)}" />
-        <select id="att-dept">
-          <option value="">All departments</option>
-        </select>
+        <select id="att-dept"><option value="">All departments</option></select>
         <select id="att-status">
           <option value="">All statuses</option>
           ${Object.entries(STATUS_LABEL).map(([k, v]) => `<option value="${k}" ${k === filters.status ? 'selected' : ''}>${esc(v)}</option>`).join('')}
@@ -78,29 +75,23 @@ export async function renderAttendance() {
     <div id="att-body">${loaded ? '' : 'Loading…'}</div>
   `;
 
-  // Search/department/status live in the persistent page shell above (same
-  // one-row toolbar as Employee Manager and Proximity Cards), not inside
-  // #att-body, so painting the results never replaces them: the search
-  // <input> keeps focus and caret while typing, and the handlers are wired
-  // once here instead of being re-bound on every paintBody().
-  $('#att-q').addEventListener('input', (e) => { filters.query = e.target.value; page = 1; paintTable(); });
-  $('#att-dept').addEventListener('change', (e) => { filters.department = e.target.value; page = 1; paintBody(); });
-  $('#att-status').addEventListener('change', (e) => { filters.status = e.target.value; page = 1; paintBody(); });
-  // Explicit Run always refetches — "I pressed the button and nothing happened"
-  // is never worth the saved request.
-  $('#att-run').addEventListener('click', () => runReport({ force: true }));
+  paintDepartments();
+
+  $('#att-q').addEventListener('input', (e) => {
+    filters.query = e.target.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { page = 1; load(); }, SEARCH_DEBOUNCE_MS);
+  });
+  $('#att-dept').addEventListener('change', (e) => { filters.department = e.target.value; page = 1; load(); });
+  $('#att-status').addEventListener('change', (e) => { filters.status = e.target.value; page = 1; load(); });
+  $('#att-run').addEventListener('click', () => { page = 1; load({ force: true }); });
   $('#att-export').addEventListener('click', exportRows);
   $('#att-from').addEventListener('change', () => { userSetRange = true; });
   $('#att-to').addEventListener('change', () => { userSetRange = true; });
-  // Same behaviour as the scan-log export modal: an inverted range (from
-  // after to) is swapped into order rather than left always-invalid.
   wireDateRangeOrdering($('#att-from'), $('#att-to'));
 
-  // Paint what we already have, then refresh for the range currently shown —
-  // unless that exact range was fetched moments ago, in which case the paint is
-  // the whole render. See runReport().
   if (loaded) paintBody();
-  await runReport();
+  await load();
 }
 
 function showError(message) {
@@ -110,100 +101,85 @@ function showError(message) {
   el.classList.toggle('hidden', !message);
 }
 
-async function runReport({ force = false } = {}) {
+function currentQuery() {
+  return { from: range.from, to: range.to, ...filters };
+}
+
+async function load({ force = false } = {}) {
   const fromEl = $('#att-from'), toEl = $('#att-to');
   if (!fromEl || !toEl) return; // navigated away
   const next = { from: fromEl.value, to: toEl.value };
   const problem = validateRange(next.from, next.to);
   if (problem) { showError(problem); return; }
   showError('');
+  const rangeChanged = next.from !== range.from || next.to !== range.to;
   range = next;
-
-  // Skip the refetch only when the rows already in hand ARE this range's rows.
-  // Freshness alone is not enough: rowsCache holds one report, so switching
-  // A -> B -> A inside the window would find key A fresh while rowsCache still
-  // held B, and paint B's rows under A's label. loadedRange is what makes that
-  // impossible.
-  const key = `attendance:${range.from}..${range.to}`;
-  const haveThisRange = loadedRange?.from === range.from && loadedRange?.to === range.to;
-  if (!force && loaded && haveThisRange && isFresh(key, ATTENDANCE_MAX_AGE_MS)) { paintBody(); return; }
+  if (rangeChanged) departments = [];
 
   const seq = ++requestSeq;
   const runBtn = $('#att-run');
-  runBtn.disabled = true;
-  runBtn.textContent = 'Running…';
+  if (runBtn) { runBtn.disabled = true; runBtn.textContent = 'Running…'; }
 
-  // In parallel: the rows (capped at 1000 by PostgREST) and one row of true
-  // totals for the same range. The summary is what the stat cards read — see
-  // Utils/attendance.js's ROW_CAP for why deriving them from `data` was wrong.
-  const [rows, totals] = await Promise.all([
-    AttendanceModel.report(range),
-    AttendanceModel.summary(range),
+  const q = currentQuery();
+  const wantsDepartments = force || !departments.length;
+  const [rowsRes, totalsRes, deptRes] = await Promise.all([
+    AttendanceModel.report({ ...q, limit: pageSize, offset: (page - 1) * pageSize }),
+    AttendanceModel.summary(q),
+    wantsDepartments ? AttendanceModel.departments(range) : Promise.resolve(null),
   ]);
-  const { data, error } = rows;
 
-  if (seq !== requestSeq) return; // a newer run started; let it own the UI
+  if (seq !== requestSeq) return; // a newer request owns the UI
   const btn = $('#att-run');
   if (btn) { btn.disabled = false; btn.textContent = 'Run report'; }
-  if (error) { showError(error.message); if (!loaded) { const b = $('#att-body'); if (b) b.innerHTML = ''; } return; }
 
-  rowsCache = data || [];
-  // A failed summary must not blank a working report: fall back to deriving
-  // from the rows in hand, which is exactly the old behaviour — understated
-  // when truncated, but never worse than before this change.
-  rangeTotals = totals?.error ? null : toSummary(totals?.data);
-  loadedRange = { ...range };
+  if (rowsRes.error) {
+    showError(reportError(rowsRes.error, 'attendance.report', "Couldn't load the attendance report."));
+    if (!loaded) { const b = $('#att-body'); if (b) b.innerHTML = ''; }
+    return;
+  }
+
+  pageRows = rowsRes.data || [];
+  totals = totalsRes?.error ? null : toSummary(totalsRes?.data);
+  if (deptRes && !deptRes.error) {
+    departments = (deptRes.data || []).map((r) => r.department).filter(Boolean);
+  }
   loaded = true;
-  markFetched(key);
-  page = 1;
-  // A department that no longer exists in the new data would otherwise
-  // leave an invisible filter active and an empty-looking table.
-  if (filters.department && !rowsCache.some((r) => (r.department || '') === filters.department)) filters.department = '';
+  paintDepartments();
   paintBody();
+}
+
+// Populated from its own RPC, so the list covers the whole range instead of
+// only the departments that happen to appear on the loaded page.
+function paintDepartments() {
+  const el = $('#att-dept');
+  if (!el) return;
+  el.innerHTML = `<option value="">All departments</option>${
+    departments.map((d) => `<option value="${esc(d)}" ${d === filters.department ? 'selected' : ''}>${esc(d)}</option>`).join('')}`;
 }
 
 function paintBody() {
   const body = $('#att-body');
   if (!body) return;
+  const total = totals?.days ?? pageRows.length;
   const exportBtn = $('#att-export');
-  if (exportBtn) exportBtn.disabled = !rowsCache.length;
+  if (exportBtn) exportBtn.disabled = !total;
 
-  // Department choices come from the loaded report, so they're refreshed
-  // here (into the persistent toolbar's <select>) every time the data or a
-  // filter changes — including down to just "All departments" when a new
-  // range comes back empty.
-  const departments = [...new Set(rowsCache.map((r) => r.department || '').filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  const deptEl = $('#att-dept');
-  if (deptEl) {
-    deptEl.innerHTML = `<option value="">All departments</option>${departments.map((d) => `<option value="${esc(d)}" ${d === filters.department ? 'selected' : ''}>${esc(d)}</option>`).join('')}`;
-  }
-
-  if (!rowsCache.length) {
-    body.innerHTML = `<div class="empty-state">No IN/OUT scans recorded in this range.</div>`;
-    return;
-  }
-
-  // Headline numbers come from get_attendance_summary() — the whole range,
-  // uncapped and unfiltered — not from the rows in hand. Filters narrow the
-  // table below, not these: a filter changing "Total time on site" would make
-  // the figure impossible to quote, and deriving it from a 1000-row slice of
-  // a 3,342-row range was reporting a third of the truth as all of it.
-  const sum = rangeTotals || summarize(rowsCache);
-  const cut = truncation(rowsCache.length, sum.days);
-  const notice = attendanceTruncationNotice(cut);
-  const scope = rangeTotals ? 'the whole date range' : 'the rows loaded';
+  // The totals describe the same filtered set the table is paging through, so
+  // they move with the filters and always match the pager's count. If the
+  // totals request failed, say so rather than printing zeroes that look like
+  // real figures — a wrong number here is worse than a missing one.
+  const statsHTML = totals ? `
+    <div class="stat-grid" style="margin-bottom:14px;">
+      <div class="stat-card accent" title="Distinct employees matching the current filters."><div class="stat-value">${totals.employees.toLocaleString()}</div><div class="stat-label">Employees</div></div>
+      <div class="stat-card" title="One row per employee per day, so someone working several days contributes several rows."><div class="stat-value">${totals.days.toLocaleString()}</div><div class="stat-label">Employee-days</div></div>
+      <div class="stat-card good" title="Sum of every IN&#8594;OUT gap. Breaks scanned out and back in are excluded, and a day with no OUT yet contributes 0 until it's closed."><div class="stat-value">${esc(fmtDuration(totals.workedSeconds))}</div><div class="stat-label">Total time on site</div></div>
+      <div class="stat-card warn" title="Days with an IN and no following OUT. Normal for someone still on shift; otherwise usually a missed OUT scan."><div class="stat-value">${totals.open.toLocaleString()}</div><div class="stat-label">No OUT yet</div></div>
+      <div class="stat-card bad" title="Days where an OUT is timestamped before its IN — almost always a backdated offline sync landing out of order."><div class="stat-value">${totals.anomalies.toLocaleString()}</div><div class="stat-label">Check times</div></div>
+    </div>`
+    : `<div class="empty-state" style="margin:0 0 12px;text-align:left;">Totals are unavailable right now. The rows below are still correct.</div>`;
 
   body.innerHTML = `
-    <div class="stat-grid" style="margin-bottom:14px;">
-      <div class="stat-card accent" title="Distinct employees with at least one recorded day across ${scope}."><div class="stat-value">${sum.employees.toLocaleString()}</div><div class="stat-label">Employees</div></div>
-      <div class="stat-card" title="One row per employee per day across ${scope}, so someone working several days contributes several rows."><div class="stat-value">${sum.days.toLocaleString()}</div><div class="stat-label">Employee-days</div></div>
-      <div class="stat-card good" title="Sum of every IN&#8594;OUT gap across ${scope}. Breaks scanned out and back in are excluded, and a day with no OUT yet contributes 0 until it's closed."><div class="stat-value">${esc(fmtDuration(sum.workedSeconds))}</div><div class="stat-label">Total time on site</div></div>
-      <div class="stat-card warn" title="Days with an IN and no following OUT, across ${scope}. Normal for someone still on shift; otherwise usually a missed OUT scan."><div class="stat-value">${sum.open.toLocaleString()}</div><div class="stat-label">No OUT yet</div></div>
-      <div class="stat-card bad" title="Days where an OUT is timestamped before its IN, across ${scope} — almost always a backdated offline sync landing out of order."><div class="stat-value">${sum.anomalies.toLocaleString()}</div><div class="stat-label">Check times</div></div>
-    </div>
-
-    ${notice ? `<div class="empty-state" id="att-truncated" style="margin:0 0 12px;text-align:left;">${esc(notice)}</div>` : ''}
-
+    ${statsHTML}
     <div class="table-scroll"><div id="att-table-wrap"></div></div>
     <div id="att-pagination"></div>
   `;
@@ -222,15 +198,14 @@ function fmtWorkDate(ymd) {
 function paintTable() {
   const wrap = $('#att-table-wrap');
   if (!wrap) return;
-  const all = filterRows(rowsCache, filters);
-  if (!all.length) {
-    wrap.innerHTML = `<div class="empty-state">Nothing matches these filters.</div>`;
+  const total = totals?.days ?? pageRows.length;
+
+  if (!pageRows.length) {
+    const anyFilter = filters.query || filters.department || filters.status;
+    wrap.innerHTML = `<div class="empty-state">${anyFilter ? 'Nothing matches these filters.' : 'No IN/OUT scans recorded in this range.'}</div>`;
     $('#att-pagination').innerHTML = '';
     return;
   }
-  const totalPages = Math.max(1, Math.ceil(all.length / pageSize));
-  if (page > totalPages) page = totalPages;
-  const rows = all.slice((page - 1) * pageSize, page * pageSize);
 
   wrap.innerHTML = `
     <table>
@@ -240,7 +215,7 @@ function paintTable() {
         <th class="col-shrink">Time on site</th><th class="col-shrink">INs</th><th class="col-shrink">Status</th>
       </tr></thead>
       <tbody>
-        ${rows.map((r) => {
+        ${pageRows.map((r) => {
           const st = attendanceStatus(r);
           return `
             <tr>
@@ -259,36 +234,52 @@ function paintTable() {
   `;
 
   renderPagination($('#att-pagination'), {
-    total: all.length, page, pageSize,
-    onChange: (next) => { page = next.page; pageSize = next.pageSize; paintTable(); },
+    total, page, pageSize,
+    onChange: (next) => {
+      const sizeChanged = next.pageSize !== pageSize;
+      page = sizeChanged ? 1 : next.page;
+      pageSize = next.pageSize;
+      load();
+    },
   });
 }
 
-// Exports every row matching the current filters (not just the visible
-// page), labelled with the range the data was actually loaded for — not
-// whatever the date inputs say right now, which may have been edited
-// without re-running the report.
-function exportRows() {
-  const rows = filterRows(rowsCache, filters);
-  if (!rows.length || !loadedRange) return;
-  // A spreadsheet gets filed and quoted long after the screen it came from is
-  // gone, so a truncated export is worse than a truncated table: nothing in
-  // the file says it is partial. Say so at the moment it is written.
-  const cut = truncation(rowsCache.length, rangeTotals?.days ?? rowsCache.length);
-  if (cut.truncated) {
-    toast(`Exporting the ${cut.fetched.toLocaleString()} most recent of ${cut.total.toLocaleString()} employee-days — `
-      + `${cut.missing.toLocaleString()} older rows are not in this file. Narrow the date range to export them.`, 'error');
+// Exports every row matching the current filters, not just the page on
+// screen — so it pages through the whole filtered set first. Deliberately the
+// only thing in this page that fetches more than it displays: a spreadsheet
+// that silently stopped at one page is the failure this replaces.
+async function exportRows() {
+  const btn = $('#att-export');
+  const total = totals?.days ?? 0;
+  if (!total) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
+
+  const q = currentQuery();
+  const all = [];
+  try {
+    for (let offset = 0; offset < total; offset += EXPORT_PAGE_SIZE) {
+      const { data, error } = await AttendanceModel.report({ ...q, limit: EXPORT_PAGE_SIZE, offset });
+      if (error) throw error;
+      if (!data?.length) break;
+      all.push(...data);
+    }
+  } catch (err) {
+    toast(reportError(err, 'attendance.export', "Couldn't prepare the export."), 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'Export'; }
+    return;
   }
+  if (btn) { btn.disabled = false; btn.textContent = 'Export'; }
+  if (!all.length) return;
+
   try {
     exportXlsx({
-      filename: `attendance-${loadedRange.from}_${loadedRange.to}-${todayStamp()}.xlsx`,
+      filename: `attendance-${range.from}_${range.to}-${todayStamp()}.xlsx`,
       sheetName: 'Attendance',
       columns: [
         { key: 'work_date', label: 'Date' },
-        // employee_code is recycled when staff resign
-        // (employees_employee_code_current_key), so across a handover the same
-        // code can appear under two names in one report. employee_id is the
-        // only key that stays unambiguous — group or pivot on it, not the code.
+        // employee_code is recycled when staff resign, so across a handover
+        // the same code can appear under two names in one report.
+        // employee_id is the only key that stays unambiguous.
         { key: 'employee_id', label: 'Employee ID', text: true },
         { key: 'employee_code', label: 'Employee code', text: true },
         { key: 'full_name', label: 'Employee' },
@@ -300,7 +291,7 @@ function exportRows() {
         { key: 'in_count', label: 'IN scans' },
         { key: 'status', label: 'Status' },
       ],
-      rows: rows.map((r) => ({
+      rows: all.map((r) => ({
         work_date: r.work_date,
         employee_id: r.employee_id || '',
         employee_code: r.employee_code,
@@ -315,6 +306,6 @@ function exportRows() {
       })),
     });
   } catch (err) {
-    toast(err.message || 'Export failed', 'error');
+    toast(reportError(err, 'attendance.xlsx', 'Export failed.'), 'error');
   }
 }

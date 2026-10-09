@@ -14,17 +14,32 @@ function browserTimeZone() {
 }
 
 export const AttendanceModel = {
-  // from/to: inclusive 'YYYY-MM-DD' strings.
-  async report({ from, to }) {
-    return supabase.rpc('get_attendance_report', rangeArgs(from, to));
+  // One page of rows. Paging and filtering are the SERVER's job: the browser
+  // used to download 1000 rows (PostgREST's cap, not the report's size) and
+  // display 50 of them, which both hid the other 2,382 employee-days and paid
+  // for rows nobody looked at. Now it fetches what it shows.
+  async report({ from, to, limit, offset, query, department, status }) {
+    return supabase.rpc('get_attendance_report', {
+      ...rangeArgs(from, to),
+      p_limit: limit,
+      p_offset: offset,
+      ...filterArgs({ query, department, status }),
+    });
   },
 
-  // One row of true, uncapped totals for the same range. The rows above are
-  // truncated by PostgREST's db-max-rows (1000) long before the RPC's own
-  // 25000 limit, so headline numbers derived from them understate a busy
-  // range — measured 1,000 against a real 3,385. ~150 bytes, once per run.
-  async summary({ from, to }) {
-    return supabase.rpc('get_attendance_summary', rangeArgs(from, to));
+  // Totals for the same filtered set, uncapped — this is what the stat cards
+  // and the pagination count against. One row, ~150 bytes.
+  async summary({ from, to, query, department, status }) {
+    return supabase.rpc('get_attendance_summary', {
+      ...rangeArgs(from, to),
+      ...filterArgs({ query, department, status }),
+    });
+  },
+
+  // Every department in the range, so the dropdown does not depend on which
+  // page happens to be loaded. A handful of short strings.
+  async departments({ from, to }) {
+    return supabase.rpc('get_attendance_departments', rangeArgs(from, to));
   },
 };
 
@@ -33,4 +48,14 @@ function rangeArgs(from, to) {
   const tz = browserTimeZone();
   if (tz) args.p_tz = tz;
   return args;
+}
+
+// Empty string and null mean the same thing to the RPC ("no filter"); send
+// null so an empty search box cannot be mistaken for a search for ''.
+function filterArgs({ query, department, status }) {
+  return {
+    p_query: query || null,
+    p_department: department || null,
+    p_status: status || null,
+  };
 }

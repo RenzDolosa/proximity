@@ -612,6 +612,71 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-09 — Attendance pages server-side; errors stop naming the schema**
+
+**"Show all attendance rows" and "don't increase egress" are only opposites
+while the client does the paging.** The browser was downloading 1,000 rows —
+PostgREST's cap, not the report's size — and displaying 50. Moving
+`LIMIT`/`OFFSET` *and* the filters into SQL means it downloads what it shows:
+
+| Viewing | Before | After (500/page) |
+|---|---|---|
+| First page only | 1,000 rows | **500** |
+| Two pages | 1,000 | 1,000 |
+| The whole 3,382-row set | **impossible** | 3,382 |
+
+Typical use gets cheaper, the cap disappears, and the only way to pay more
+than before is to deliberately read rows that were previously unreachable.
+The truncation notice is gone because there is nothing left to truncate.
+
+- Filters had to move too — filtering one downloaded page filters the page,
+  not the report. `get_attendance_report` and `get_attendance_summary` now
+  share one `WHERE`, so the stat cards describe exactly the rows the table is
+  paging through. That also settles yesterday's awkwardness, where the totals
+  covered the whole range while the table showed a filtered subset.
+- **A precedence bug from yesterday is fixed.** The summary counted every
+  `open_punch`, including days that are *also* anomalies, while the status
+  filter and `attendanceStatus()` treat anomaly as beating open. "No OUT yet"
+  and filtering by "No OUT yet" disagreed; now they can't.
+- Ordering is total (`work_date desc, full_name, employee_id`) — OFFSET paging
+  over ties can repeat or skip a row between pages.
+- `get_attendance_departments()` feeds the dropdown, so it lists every
+  department in the range instead of whichever appear on the loaded page.
+- Search is debounced 350 ms, since a keystroke now costs a round trip.
+- Export is the one thing that deliberately fetches more than it displays: it
+  pages the whole filtered set, because a spreadsheet that silently stopped at
+  one page is the failure this replaces.
+
+**`JS/Utils/userError.js` — raw database errors no longer reach the screen.**
+Postgres and PostgREST write for whoever wrote the query, naming tables,
+columns, constraints and sometimes the offending value:
+
+```
+duplicate key value violates unique constraint "employees_employee_code_current_key"
+```
+
+That is a schema disclosure to anyone who can make the app fail, and it tells
+the person using it nothing. Every message is now mapped to a sentence written
+in advance; anything unrecognised gets a generic one, and the original goes to
+the console. Permission errors deliberately don't distinguish "you may not"
+from "it isn't there". Defence in depth, not the boundary — RLS and the RPCs'
+own checks remain that.
+
+**Settings descriptions are rewritten in plain language** with no internal
+names: no `employees.photo_thumb_b64`, no `scan_events_archive`, no `pg_cron`,
+no file paths. The panels say what they do and what pressing the button will
+change.
+
+**Scanner recent activity** drops the operator line — the feed is already
+scoped to one operator, so every row repeated it — and stacks name over time
+on the left, result over direction on the right.
+
+**Egress:** paging reduces it for normal use. The two scalar reads per report
+run are unchanged from yesterday. Nothing else here touches the network.
+
+151 tests passing (8 new in `test/user-error.test.mjs`, which assert that no
+real Postgres error text survives the mapping).
+
 **2026-10-08 — the Attendance report was showing a third of the data, and every headline number was wrong**
 
 "Limited to 1000 rows" turned out to be true of **one** page, and much worse
