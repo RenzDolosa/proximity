@@ -55,6 +55,56 @@
   color:var(--text);
 }
 .ss-bg-logo .proximity-logo-mark{width:min(72dvh, 72dvw);height:min(72dvh, 72dvw);}
+
+/* OUT OF FOCUS. A badge reader is a keyboard: if #ss-code does not hold
+   focus, a scan types into nothing and is silently lost. The watchdog and
+   adoptStrayKeystroke() recover most cases, but neither can work when the
+   BROWSER WINDOW itself is unfocused — a page cannot take OS focus back, and
+   that is exactly what a Chrome Remote Desktop reconnect leaves behind.
+   So the remaining case is told, not fixed: the logo goes red with a white
+   halo and a banner says what to do. Visible across a room, which a caret is
+   not. The whole surface is clickable to recover (see StandaloneScanner.js).
+   The logo is fill="currentColor", so recolouring is just `color`. */
+.ss-unfocused .ss-bg-logo{
+  color:var(--bad);
+  filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 2px #fff) drop-shadow(0 0 6px rgba(255,255,255,.55));
+  animation:ss-focus-pulse 1.6s ease-in-out infinite;
+}
+.ss-unfocused .ss-ring::before,.ss-unfocused .ss-ring::after{border-color:var(--bad);}
+@keyframes ss-focus-pulse{0%,100%{opacity:1;}50%{opacity:.55;}}
+
+.ss-focus-note{
+  position:fixed;left:50%;top:14px;transform:translateX(-50%);
+  z-index:30;max-width:min(560px, 92vw);
+  background:var(--bad);color:#fff;
+  border:2px solid #fff;border-radius:8px;
+  padding:12px 20px;text-align:center;
+  font-size:clamp(14px, 2.1dvh, 19px);font-weight:600;line-height:1.35;
+  box-shadow:0 10px 32px rgba(0,0,0,.5);
+}
+.ss-focus-note[hidden]{display:none;}
+
+@media (prefers-reduced-motion: reduce){
+  .ss-unfocused .ss-bg-logo{animation:none;}
+}
+
+/* The result card is the whole point of the screen, so it is sized for a
+   glance from a step back rather than for a dense admin table. */
+.ss-result-wrap .result-card{padding:clamp(18px, 3dvh, 30px);}
+.ss-result-wrap .result-card > .badge{font-size:clamp(13px, 1.9dvh, 18px);padding:6px 14px;}
+.ss-result-wrap .emp-line{gap:clamp(12px, 2dvh, 20px);align-items:center;}
+.ss-result-wrap .emp-line .avatar{
+  width:clamp(64px, 11dvh, 104px);height:clamp(64px, 11dvh, 104px);
+  font-size:clamp(20px, 3.4dvh, 32px);flex-shrink:0;
+}
+.ss-result-wrap .emp-name{font-size:clamp(19px, 3.2dvh, 30px);line-height:1.2;font-weight:600;}
+.result-ident{min-width:0;}
+.result-fields{
+  display:grid;grid-template-columns:auto 1fr;gap:2px 12px;
+  margin:clamp(6px, 1.2dvh, 12px) 0 0;
+}
+.result-fields dt{color:var(--text-faint);font-size:clamp(10px, 1.4dvh, 13px);text-transform:uppercase;letter-spacing:.5px;align-self:center;}
+.result-fields dd{margin:0;font-size:clamp(13px, 2dvh, 18px);overflow-wrap:anywhere;}
 .ss-header{position:relative;z-index:1;width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:14px;border-bottom:1px solid var(--border-soft);}
 .ss-offline-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .ss-operator{font-size:12.5px;color:var(--text-muted);}

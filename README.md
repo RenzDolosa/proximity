@@ -612,6 +612,57 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-09 — the kiosk says when it has stopped listening; hints move to hover**
+
+**Why the focus watchdog didn't close the Chrome Remote Desktop issue.** The
+2026-10-08 work polled every 400 ms and captured stray keystrokes, and it was
+reporting success while the window was deaf:
+
+```js
+document.activeElement === input   // true
+document.hasFocus()                // false  ← the keyboard is elsewhere
+```
+
+After a CRD reconnect the caret sits in the box but the **browser window**
+isn't focused, and a page cannot take OS focus back — `input.focus()` moves
+the caret and changes nothing. So the remaining case is now **told, not
+fixed**: `scanInputIsLive()` checks `document.hasFocus()` too, the background
+logo turns red with a white halo and pulses, and a banner says what to do.
+Visible across a room, which a caret is not.
+
+- **A click anywhere recovers it** (capture-phase `pointerdown`, skipping real
+  controls), so the operator no longer has to hit the input itself.
+- `window.blur` is now listened for — it is the only event that fires in this
+  case, and nothing else would have noticed.
+
+**The scan result card is sized for a glance from a step back**: larger badge,
+avatar and name, with Department / Position / Code as a labelled grid instead
+of one dot-separated run of small text.
+
+**Recent activity is colour-coded by direction** — green IN, amber OUT, red
+for anything unmatched — as a tint plus a left border, so it reads at distance
+and does not depend on separating two background colours. The rule is pure and
+tested in `JS/Utils/scanTone.js`; a matched scan with no direction yet (an
+offline row awaiting sync) reads as IN rather than as a failure.
+
+**Hints moved from permanent text to hover** (`JS/Components/Hint.js`,
+`withHint()`). The employee-status explanation was three lines sitting under
+the dropdown forever, pushing the form down and read once. The bubble appears
+**above** the control on purpose — a native `<select>` opens downward, so a
+hint below would cover the options it describes. Pure CSS (`:hover` plus
+`:focus-within`), so it costs no JS, works for keyboard users, and can't leak
+a listener when a modal is torn down. Applied to both places that hint.
+
+**Attendance rows open the scan log.** A row raises "what actually happened
+that day?" and the answer already exists as Employee Manager's dialog. Click
+or Enter; it fetches only when opened, so reading the report costs nothing
+extra.
+
+**Egress:** unchanged. Everything here is markup, CSS and local event
+handling, except the scan-log dialog, which fetches only on an explicit click.
+
+154 tests passing (3 new).
+
 **2026-10-09 — Attendance pages server-side; errors stop naming the schema**
 
 **"Show all attendance rows" and "don't increase egress" are only opposites

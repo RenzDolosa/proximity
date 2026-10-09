@@ -20,6 +20,7 @@ import { renderPagination } from '../../Components/Pagination.js';
 import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
 import { AttendanceModel } from '../../Models/AttendanceModel.js';
 import { reportError } from '../../Utils/userError.js';
+import { openScanLogModal } from '../../Components/ScanLogModal.js';
 import {
   attendanceStatus, STATUS_LABEL, fmtDuration, toDecimalHours,
   validateRange, defaultRange, toSummary,
@@ -218,7 +219,8 @@ function paintTable() {
         ${pageRows.map((r) => {
           const st = attendanceStatus(r);
           return `
-            <tr>
+            <tr class="row-clickable" data-emp="${esc(r.employee_id || '')}" tabindex="0"
+                title="Open ${esc(r.full_name)}'s scan log">
               <td class="col-shrink mono">${esc(fmtWorkDate(r.work_date))}</td>
               <td>${esc(r.full_name)}<div class="sub mono" style="margin:0;">${esc(r.employee_code)}</div></td>
               <td>${esc(r.department || '—')}</td>
@@ -232,6 +234,20 @@ function paintTable() {
       </tbody>
     </table>
   `;
+
+  // A row raises the question "what actually happened that day?", and the
+  // answer already exists as Employee Manager's scan-log dialog. It fetches
+  // only when opened, so this adds no cost to simply reading the report.
+  const openLog = (tr) => {
+    const id = tr?.dataset.emp;
+    if (id) openScanLogModal(id);
+  };
+  wrap.querySelectorAll('tr.row-clickable').forEach((tr) => {
+    tr.addEventListener('click', () => openLog(tr));
+    tr.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLog(tr); }
+    });
+  });
 
   renderPagination($('#att-pagination'), {
     total, page, pageSize,

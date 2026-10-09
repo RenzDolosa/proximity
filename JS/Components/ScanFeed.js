@@ -5,6 +5,7 @@ import { $ } from '../Utils/dom.js';
 import { esc, offlineAvatarHTML, fmtTime } from '../Utils/format.js';
 import { ScanEventsModel } from '../Models/ScanEventsModel.js';
 import { OfflineScanModel } from '../Models/OfflineScanModel.js';
+import { feedTone } from '../Utils/scanTone.js';
 
 // Two columns beside the avatar: who and when on the left, what happened on
 // the right, each stacked. The scanner id used to sit under the name, but the
@@ -12,7 +13,7 @@ import { OfflineScanModel } from '../Models/OfflineScanModel.js';
 // row said the same thing, so it was a column of noise where the time belongs.
 function feedRowHTML(row) {
   return `
-    <div class="feed-row${row.pending ? ' feed-row-pending' : ''}">
+    <div class="feed-row ${feedTone(row)}${row.pending ? ' feed-row-pending' : ''}">
       <div class="avatar">${row.employee_name ? offlineAvatarHTML(row.employee_name, row.photo_thumb_b64) : '?'}</div>
       <div class="feed-who">
         <div class="feed-name">${row.employee_name ? esc(row.employee_name) : 'Unmatched scan'}</div>

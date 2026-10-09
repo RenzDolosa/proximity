@@ -73,8 +73,32 @@ function canReclaimFocus(input) {
   return !active || active === input || active === document.body || active === document.documentElement;
 }
 
+// True only when a scan typed right now would actually land in the box.
+// `document.hasFocus()` is the part that matters and the part a page cannot
+// fix: if the browser WINDOW is unfocused, input.focus() moves the caret but
+// the keyboard still goes somewhere else entirely. That is the state a Chrome
+// Remote Desktop reconnect leaves behind, and why the 2026-10-08 watchdog did
+// not close the issue — it was reporting success while the window was deaf.
+function scanInputIsLive(input) {
+  return Boolean(input) && document.activeElement === input && document.hasFocus();
+}
+
+// Paints the out-of-focus warning. Separated from reclaiming so the state is
+// shown honestly even in the case nothing can be done about from script.
+function paintFocusState(input) {
+  const wrap = document.querySelector('#standalone-scanner');
+  const note = document.querySelector('#ss-focus-note');
+  if (!wrap) return;
+  // A dialog legitimately owns focus; that is not a broken scanner.
+  const dialogOpen = Boolean(document.querySelector('.overlay'));
+  const lost = !dialogOpen && !scanInputIsLive(input);
+  wrap.classList.toggle('ss-unfocused', lost);
+  if (note) note.hidden = !lost;
+}
+
 function reclaimFocus(input) {
   if (canReclaimFocus(input) && document.activeElement !== input) input.focus();
+  paintFocusState(input);
 }
 
 // Redirects a keystroke that landed on the document into the scan input, so a
@@ -128,6 +152,22 @@ function startFocusWatchdog(input) {
   window.addEventListener('resize', reclaim);   // CRD resizes the remote display on connect
   window.addEventListener('pageshow', reclaim);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) reclaim(); });
+  // `blur` on the WINDOW is the Chrome Remote Desktop case: the page keeps
+  // document.activeElement pointing at the input while the keyboard goes
+  // elsewhere, so nothing else here would notice. Repaint rather than try to
+  // reclaim — script cannot take OS focus back.
+  window.addEventListener('blur', () => paintFocusState(currentCodeInput));
+  // Recovery that needs no aim: a click anywhere on the kiosk puts the caret
+  // back. Previously the operator had to find and hit the input itself.
+  // Capture phase so it still runs when the click lands on the background
+  // logo, and it never fights a real control — reclaimFocus()'s own
+  // canReclaimFocus() declines while a dialog or another field is active.
+  document.addEventListener('pointerdown', (e) => {
+    if (!currentCodeInput) return;
+    if (e.target.closest('button, a, select, textarea, input, .overlay')) return;
+    // After the browser has finished its own focus handling for this click.
+    setTimeout(reclaim, 0);
+  }, true);
 }
 
 export function showStandaloneScanner() {
@@ -151,6 +191,7 @@ function renderStandaloneScanner() {
   const operatorName = appState.profile?.full_name || appState.session.user.email;
   wrap.innerHTML = `
     <div class="ss-bg-logo" aria-hidden="true"><div class="ss-ring">${PROXIMITY_LOGO_SVG}</div></div>
+    <div class="ss-focus-note" id="ss-focus-note" role="status" hidden>⚠ Scanner not listening — click anywhere on this screen, then scan again</div>
     <div class="ss-photo-stage" id="ss-photo-stage" aria-hidden="true"></div>
     <div class="ss-header">
       <div class="ss-operator" style="display: flex; align-items: center;">Operator: <strong class="mono" style="margin: 0 8px 0 8px;">${esc(operatorName)}</strong><div class="ss-offline-status" id="ss-offline-status"></div></div>
