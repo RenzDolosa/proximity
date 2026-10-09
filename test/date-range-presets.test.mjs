@@ -65,6 +65,15 @@ test('an inverted range is swapped, not rejected', () => {
   assert.deepEqual(normaliseRange('2026-10-03', '2026-10-09'), { from: '2026-10-03', to: '2026-10-09' });
 });
 
+// The reported case, which the picker now resolves the moment the date is
+// chosen rather than waiting for Apply: To is already 2 Oct, you pick 9 Oct
+// as the From, and the control should read 2 Oct – 9 Oct straight away.
+test('picking a start after the existing end reorders both ends', () => {
+  const picked = normaliseRange('2026-10-09', '2026-10-02');
+  assert.deepEqual(picked, { from: '2026-10-02', to: '2026-10-09' });
+  assert.equal(formatRangeLabel(picked.from, picked.to), '02/10/2026 – 09/10/2026');
+});
+
 test('a half-open range is left half-open, since blank means unbounded', () => {
   assert.deepEqual(normaliseRange('2026-10-03', ''), { from: '2026-10-03', to: '' });
   assert.deepEqual(normaliseRange('', '2026-10-09'), { from: '', to: '2026-10-09' });

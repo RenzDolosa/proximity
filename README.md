@@ -612,6 +612,42 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-09 — the hint stops covering the dropdown; the range reorders as you pick it**
+
+Three follow-ups, each verified by measuring the real DOM rather than by
+reading the CSS.
+
+**The hint covered the options it describes.** `:focus-within` matches a
+*mouse* click on a `<select>`, so opening the status dropdown showed the
+bubble right over the open list. Two changes: `:focus-visible` replaces
+`:focus-within`, which is the browser's own "this focus came from the
+keyboard" signal and is exactly the distinction wanted; and because the OS
+draws the option list *outside* the page — leaving `:hover` true underneath
+it — a delegated watcher in `Components/Hint.js` also suppresses the bubble
+outright while a dropdown is genuinely open. Measured: `visibility: hidden`
+on pointerdown, restored on change.
+
+**The date range reorders the moment you pick it.** With To already set to
+2 Oct, choosing 9 Oct as the From now reads `02/10/2026 – 09/10/2026`
+straight away instead of waiting for Apply. Measured, including that it still
+**does not notify the caller** — reordering repaints, it does not fetch.
+
+**The picker matches the reference shape**: presets in a left rail, the two
+dates side by side on the right. The first version let the grid stretch its
+inputs to the full height of the rail beside them (`align-items` defaults to
+`stretch`), which is what produced those tall empty boxes. Measured at 406px
+wide: 102px rail, two 141px inputs, 34px tall, side by side.
+
+**Scan-log columns line up.** "IN" and "OUT" are different widths, and a
+shrink-to-fit badge shifted every scanner name and proximity code a few pixels
+down the list. The badge is now a fixed 46px: measured across mixed IN/OUT
+rows, every scanner column starts at the same x and every time ends at the
+same right edge.
+
+**Egress:** unchanged. CSS, one delegated listener, and a repaint.
+
+165 tests passing.
+
 **2026-10-09 — one date-range control everywhere; the focus warning stops crying wolf**
 
 **The out-of-focus warning fired on every successful scan.** `doScan()`

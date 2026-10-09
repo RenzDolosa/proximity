@@ -36,13 +36,15 @@ export function dateRangePickerHTML(id, { from = '', to = '', emptyLabel = 'All 
         <div class="drp-presets">
           ${RANGE_PRESETS.map((p) => `<button type="button" data-preset="${esc(p.id)}">${esc(p.label)}</button>`).join('')}
         </div>
-        <div class="drp-fields">
-          <label>From<input type="date" class="drp-from" value="${esc(from)}" /></label>
-          <label>To<input type="date" class="drp-to" value="${esc(to)}" /></label>
-        </div>
-        <div class="drp-actions">
-          <button type="button" class="ghost drp-clear">Clear</button>
-          <button type="button" class="primary drp-apply">Apply</button>
+        <div class="drp-body">
+          <div class="drp-fields">
+            <label><span>From</span><input type="date" class="drp-from" value="${esc(from)}" /></label>
+            <label><span>To</span><input type="date" class="drp-to" value="${esc(to)}" /></label>
+          </div>
+          <div class="drp-actions">
+            <button type="button" class="ghost drp-clear">Clear</button>
+            <button type="button" class="primary drp-apply">Apply</button>
+          </div>
         </div>
       </div>
     </div>`;
@@ -94,9 +96,21 @@ export function mountDateRangePicker(root, { onApply } = {}) {
     toEl.value = r.to;
     apply();
   }));
-  // Typing updates the label live, but never notifies the caller — see onApply.
-  fromEl.addEventListener('change', paint);
-  toEl.addEventListener('change', paint);
+  // Picking a date that inverts the pair reorders it there and then, rather
+  // than waiting for Apply: choosing From = 9 Oct while To = 2 Oct leaves the
+  // range reading 2 Oct – 9 Oct immediately, which is what was meant. Waiting
+  // meant staring at a backwards range and wondering if it was broken.
+  //
+  // Still only repaints — the caller is not notified until Apply, so this
+  // cannot turn date-picking into a request per change.
+  const syncOrder = () => {
+    const ordered = normaliseRange(fromEl.value, toEl.value);
+    if (ordered.from !== fromEl.value) fromEl.value = ordered.from;
+    if (ordered.to !== toEl.value) toEl.value = ordered.to;
+    paint();
+  };
+  fromEl.addEventListener('change', syncOrder);
+  toEl.addEventListener('change', syncOrder);
 
   const onDocPointer = (e) => { if (!root.contains(e.target)) setOpen(false); };
   const onKey = (e) => {

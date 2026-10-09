@@ -6,10 +6,14 @@ import { initAuthScreen } from './Features/Auth/AuthScreen.js';
 import { toast } from './Utils/toast.js';
 import { initAppUpdates } from './Utils/appUpdate.js';
 import { initNavDrawer } from './Core/navDrawer.js';
+import { initHintDropdownWatch } from './Components/Hint.js';
 
 initAuthScreen();
 initRouter();
 initNavDrawer();
+// Delegated from the document, so modals rebuilt from innerHTML need no
+// re-wiring. See Components/Hint.js.
+initHintDropdownWatch();
 // Kiosk tabs stay open for weeks; without this they keep running the JS they
 // booted with. See JS/Utils/appUpdate.js.
 initAppUpdates();
