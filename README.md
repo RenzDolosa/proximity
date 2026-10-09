@@ -635,9 +635,22 @@ Visible across a room, which a caret is not.
 - `window.blur` is now listened for — it is the only event that fires in this
   case, and nothing else would have noticed.
 
-**The scan result card is sized for a glance from a step back**: larger badge,
-avatar and name, with Department / Position / Code as a labelled grid instead
-of one dot-separated run of small text.
+**The scan result card is sized for a glance from a step back**: larger badge
+and name, with Department / Position / Code as labelled fields instead of one
+dot-separated run of small text.
+
+*Corrected same day.* The first version of that card broke the layout: it sits
+in a **280px** column (`.ss-layout`), and three changes compounded — a
+`clamp(…, 104px)` avatar took a third of the width, `grid-template-columns:
+auto 1fr` gave the label ("DEPARTMENT") the `auto` column, and
+`overflow-wrap:anywhere` turned the few pixels left into **one character per
+line**. Fixed by dropping the avatar from the Scanner entirely
+(`renderScanResult(data, { showAvatar: false })` — `.ss-photo-stage` is
+already showing the same face full-screen), stacking each label above its
+value so no width negotiation happens at all, and using `break-word`, which
+only splits a word that genuinely cannot fit. Measured in a real 280px column
+afterwards: every field on one line at 243px wide. Test Scan keeps its avatar,
+since it has no photo stage.
 
 **Recent activity is colour-coded by direction** — green IN, amber OUT, red
 for anything unmatched — as a tint plus a left border, so it reads at distance

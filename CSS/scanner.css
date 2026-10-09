@@ -89,22 +89,33 @@
 }
 
 /* The result card is the whole point of the screen, so it is sized for a
-   glance from a step back rather than for a dense admin table. */
-.ss-result-wrap .result-card{padding:clamp(18px, 3dvh, 30px);}
-.ss-result-wrap .result-card > .badge{font-size:clamp(13px, 1.9dvh, 18px);padding:6px 14px;}
-.ss-result-wrap .emp-line{gap:clamp(12px, 2dvh, 20px);align-items:center;}
-.ss-result-wrap .emp-line .avatar{
-  width:clamp(64px, 11dvh, 104px);height:clamp(64px, 11dvh, 104px);
-  font-size:clamp(20px, 3.4dvh, 32px);flex-shrink:0;
+   glance from a step back rather than for a dense admin table.
+   It lives in a 280px column (.ss-layout above), which is the constraint
+   every value here is chosen against — the scanner drops the avatar
+   entirely (renderScanResult's showAvatar:false) because .ss-photo-stage
+   is already showing the same face at full height. */
+.ss-result-wrap .result-card{padding:clamp(16px, 2.4dvh, 26px);}
+.ss-result-wrap .result-card > .badge{font-size:clamp(12px, 1.7dvh, 16px);padding:5px 12px;}
+.ss-result-wrap .emp-line{gap:12px;align-items:center;}
+.ss-result-wrap .emp-name{font-size:clamp(18px, 2.6dvh, 25px);line-height:1.2;font-weight:600;}
+
+.result-ident{min-width:0;flex:1;}
+
+/* Label ABOVE value, never beside it. A two-column `auto 1fr` grid gave the
+   label ("DEPARTMENT") the auto column and left the value a few pixels,
+   which — with overflow-wrap:anywhere — rendered one character per line.
+   Stacking needs no width negotiation at all, and break-word only splits a
+   word that genuinely cannot fit. */
+.result-fields{display:block;margin:clamp(8px, 1.4dvh, 14px) 0 0;}
+.result-fields dt{
+  color:var(--text-faint);font-size:11px;
+  text-transform:uppercase;letter-spacing:.5px;margin-top:8px;
 }
-.ss-result-wrap .emp-name{font-size:clamp(19px, 3.2dvh, 30px);line-height:1.2;font-weight:600;}
-.result-ident{min-width:0;}
-.result-fields{
-  display:grid;grid-template-columns:auto 1fr;gap:2px 12px;
-  margin:clamp(6px, 1.2dvh, 12px) 0 0;
+.result-fields dt:first-child{margin-top:0;}
+.result-fields dd{
+  margin:0;font-size:clamp(13px, 1.9dvh, 17px);line-height:1.3;
+  overflow-wrap:break-word;
 }
-.result-fields dt{color:var(--text-faint);font-size:clamp(10px, 1.4dvh, 13px);text-transform:uppercase;letter-spacing:.5px;align-self:center;}
-.result-fields dd{margin:0;font-size:clamp(13px, 2dvh, 18px);overflow-wrap:anywhere;}
 .ss-header{position:relative;z-index:1;width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:14px;border-bottom:1px solid var(--border-soft);}
 .ss-offline-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .ss-operator{font-size:12.5px;color:var(--text-muted);}

@@ -19,7 +19,15 @@ const LABELS = {
   unassigned_card: 'Card not assigned',
 };
 
-export function renderScanResult(data) {
+/**
+ * @param {object} data  the scan RPC's response
+ * @param {{ showAvatar?: boolean }} [options]
+ *   `showAvatar: false` for the standalone Scanner, which already shows the
+ *   same face full-screen in `.ss-photo-stage`. Repeating it inside a 280px
+ *   card spent a third of the width on a duplicate and squeezed the fields
+ *   until they wrapped one character per line.
+ */
+export function renderScanResult(data, { showAvatar = true } = {}) {
   const result = data.result;
   if (result === 'matched' && data.employee) {
     const e = data.employee;
@@ -31,7 +39,7 @@ export function renderScanResult(data) {
         <span class="badge matched">${esc(LABELS[result])}</span>
         ${data.direction ? `<span class="badge ${data.direction === 'out' ? 'suspended' : 'active'}" style="margin-left:6px;">${esc(data.direction.toUpperCase())}</span>` : ''}
         <div class="emp-line" style="margin-top:12px;">
-          <div class="avatar">${offlineAvatarHTML(e.full_name, e.photo_thumb_b64)}</div>
+          ${showAvatar ? `<div class="avatar">${offlineAvatarHTML(e.full_name, e.photo_thumb_b64)}</div>` : ''}
           <div class="result-ident">
             <div class="emp-name">${esc(e.full_name)}</div>
             <!-- One field per line rather than a single dot-separated run:
