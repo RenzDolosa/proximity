@@ -32,9 +32,17 @@ export function renderScanResult(data) {
         ${data.direction ? `<span class="badge ${data.direction === 'out' ? 'suspended' : 'active'}" style="margin-left:6px;">${esc(data.direction.toUpperCase())}</span>` : ''}
         <div class="emp-line" style="margin-top:12px;">
           <div class="avatar">${offlineAvatarHTML(e.full_name, e.photo_thumb_b64)}</div>
-          <div>
+          <div class="result-ident">
             <div class="emp-name">${esc(e.full_name)}</div>
-            <div class="emp-meta">${esc(e.department || '—')} · ${esc(e.position || '—')} · <span class="mono">${esc(e.employee_code)}</span></div>
+            <!-- One field per line rather than a single dot-separated run:
+                 on a kiosk this is read at a glance from a step back, and a
+                 run of small text separated by dots is the hardest version
+                 of that to scan. -->
+            <dl class="result-fields">
+              <dt>Department</dt><dd>${esc(e.department || '—')}</dd>
+              <dt>Position</dt><dd>${esc(e.position || '—')}</dd>
+              <dt>Code</dt><dd class="mono">${esc(e.employee_code)}</dd>
+            </dl>
           </div>
         </div>
         ${unresolved.length ? `
