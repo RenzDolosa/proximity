@@ -13,7 +13,6 @@
 // precedence (anomaly beats open beats complete).
 import { $ } from '../../Utils/dom.js';
 import { esc, fmtTime } from '../../Utils/format.js';
-import { wireDateRangeOrdering } from '../../Utils/dateRange.js';
 import { toast } from '../../Utils/toast.js';
 import { canViewAttendance } from '../../Core/state.js';
 import { renderPagination } from '../../Components/Pagination.js';
@@ -21,6 +20,7 @@ import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
 import { AttendanceModel } from '../../Models/AttendanceModel.js';
 import { reportError } from '../../Utils/userError.js';
 import { openScanLogModal } from '../../Components/ScanLogModal.js';
+import { dateRangePickerHTML, mountDateRangePicker } from '../../Components/DateRangePicker.js';
 import {
   attendanceStatus, STATUS_LABEL, fmtDuration, toDecimalHours,
   validateRange, defaultRange, toSummary,
@@ -47,7 +47,9 @@ let totals = null;        // filtered, uncapped — drives the stat cards and th
 let departments = [];
 let loaded = false;
 let requestSeq = 0;
+let loadedRange = null;  // the range the current rows cover
 let searchTimer = null;
+let rangePicker = null;
 
 export async function renderAttendance() {
   const content = $('#content');
@@ -66,8 +68,7 @@ export async function renderAttendance() {
         </select>
       </div>
       <div class="filter-row">
-        <input type="date" id="att-from" value="${esc(range.from)}" />
-        <input type="date" id="att-to" value="${esc(range.to)}" />
+        ${dateRangePickerHTML('att-range', { from: range.from, to: range.to, emptyLabel: 'Pick dates' })}
         <button class="primary" id="att-run">Run report</button>
         <button class="ghost" id="att-export" disabled>Export</button>
       </div>
@@ -87,9 +88,18 @@ export async function renderAttendance() {
   $('#att-status').addEventListener('change', (e) => { filters.status = e.target.value; page = 1; load(); });
   $('#att-run').addEventListener('click', () => { page = 1; load({ force: true }); });
   $('#att-export').addEventListener('click', exportRows);
-  $('#att-from').addEventListener('change', () => { userSetRange = true; });
-  $('#att-to').addEventListener('change', () => { userSetRange = true; });
-  wireDateRangeOrdering($('#att-from'), $('#att-to'));
+  // Applying a range is an explicit act (Apply / Clear / a preset), so this
+  // reloads immediately; typing a date does not reach here, and so cannot
+  // fire a request per keystroke.
+  rangePicker?.destroy();
+  rangePicker = mountDateRangePicker($('#att-range'), {
+    onApply: ({ from, to }) => {
+      userSetRange = true;
+      range = { from, to };
+      page = 1;
+      load({ force: true });
+    },
+  });
 
   if (loaded) paintBody();
   await load();
@@ -107,15 +117,16 @@ function currentQuery() {
 }
 
 async function load({ force = false } = {}) {
-  const fromEl = $('#att-from'), toEl = $('#att-to');
-  if (!fromEl || !toEl) return; // navigated away
-  const next = { from: fromEl.value, to: toEl.value };
-  const problem = validateRange(next.from, next.to);
+  if (!$('#att-body')) return; // navigated away
+  // `range` is the source of truth now, kept current by the picker's onApply.
+  // Reading it back out of two inputs was what made an inverted pair or a
+  // half-typed year reach the RPC at all.
+  const problem = validateRange(range.from, range.to);
   if (problem) { showError(problem); return; }
   showError('');
-  const rangeChanged = next.from !== range.from || next.to !== range.to;
-  range = next;
+  const rangeChanged = loadedRange?.from !== range.from || loadedRange?.to !== range.to;
   if (rangeChanged) departments = [];
+  loadedRange = { ...range };
 
   const seq = ++requestSeq;
   const runBtn = $('#att-run');
