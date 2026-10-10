@@ -11,6 +11,16 @@ import { loadScanSounds, playScanSound, scanSoundsLoaded, initAudioUnlock } from
 import { OfflineScanModel, STALE_AFTER_MS } from '../../Models/OfflineScanModel.js';
 import { readRejection } from '../../Core/offlineScanning.js';
 import { registerBusyCheck } from '../../Utils/appUpdate.js';
+import { connectionState, CONNECTION_LABEL, CONNECTION_BADGE } from '../../Utils/connectionState.js';
+
+// Whether the LAST attempt to reach the server actually failed. navigator
+// .onLine cannot tell us this, and it is the difference between "this device
+// has Wi-Fi" and "this kiosk can record a scan".
+let lastRequestFailed = false;
+
+export function markRequestOutcome(failed) {
+  lastRequestFailed = failed;
+}
 
 // Module-level, not per-render: renderStandaloneScanner() only actually
 // runs once per kiosk tab in practice, but guarding here means a second
@@ -350,7 +360,12 @@ function renderStandaloneScanner() {
       // committed to the offline path for this attempt.
       if (error?.timedOut) scanPromise.catch(() => {});
     }
-    if (!navigator.onLine || error?.timedOut || OfflineScanModel.isNetworkError(error)) {
+    const unreachable = !navigator.onLine || error?.timedOut || OfflineScanModel.isNetworkError(error);
+    // This, not navigator.onLine, is what the connectivity pill reads. A real
+    // error FROM Supabase means the server answered, so the connection is
+    // fine even though the scan was not.
+    markRequestOutcome(unreachable);
+    if (unreachable) {
       // Offline, or the request never reached the network. A real error FROM
       // Supabase is not this case and still surfaces as a failed scan below.
       const meta = await OfflineScanModel.getCacheMeta();
@@ -461,11 +476,15 @@ async function renderOfflineStatus() {
 
   if (headerEl) {
     const parts = [];
-    if (navigator.onLine) {
-      parts.push(`<span class="badge active">● Online</span>`);
-    } else {
-      parts.push(`<span class="badge suspended">◌ Offline</span>`);
-    }
+    // navigator.onLine alone said "Online" while scans were queueing beside
+    // it — see Utils/connectionState.js. The last request's actual outcome is
+    // what decides this now.
+    const state = connectionState({
+      online: navigator.onLine,
+      queued: pending,
+      lastRequestFailed,
+    });
+    parts.push(`<span class="badge ${CONNECTION_BADGE[state]}">${CONNECTION_LABEL[state]}</span>`);
     if (meta.syncedAt && stale) {
       parts.push(`<span class="emp-meta" style="color:var(--bad)">⚠ Offline data last synced ${esc(fmtAge(meta.ageMs))} ago — may be out of date</span>`);
     } else if (!meta.syncedAt) {

@@ -2,8 +2,24 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<!-- viewport-fit=cover lets the app paint under a phone's notch and home
+     indicator; the safe-area insets in layout.css keep content out from
+     under them. Without it an installed app shows letterbox bars. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Proximity — ID &amp; Access Console</title>
+
+<!-- Installable app. `display: standalone` is what drops the browser chrome
+     so this opens from a home screen like an .apk would; the Service Worker
+     (sw.js) already supplies the offline half that makes that honest. -->
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#0B0F17" />
+<link rel="icon" type="image/svg+xml" href="Assets/app-icon.svg" />
+<link rel="apple-touch-icon" href="Assets/app-icon.svg" />
+<!-- iOS ignores the manifest for all of this and needs its own tags. -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Proximity" />
+<meta name="mobile-web-app-capable" content="yes" />
 <!-- Applies a saved light-mode preference (JS/Utils/theme.js) before the
      stylesheet below is even requested, so a returning user who chose
      light mode never sees a one-frame flash of dark first. Deliberately
