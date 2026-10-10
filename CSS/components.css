@@ -171,6 +171,91 @@ td.row-actions{display:table-cell;}
 .drp-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;}
 .drp-actions button{font-size:12px;padding:6px 14px;}
 
+/* Tables become cards on a phone.
+ *
+ * A table is a grid of comparisons — you read DOWN a column. That falls apart
+ * at 375px: eight columns either scroll sideways (so you cannot see a row's
+ * name and its status at once) or squeeze until every cell wraps to one word
+ * per line. On a phone you are not comparing rows, you are reading one record
+ * at a time, which is a card.
+ *
+ * Done in CSS off a `data-label` on each cell rather than by rendering two
+ * different markups. One source of truth per page, no branch to keep in sync,
+ * and the labels double as the accessible names the hidden <thead> stops
+ * providing. Add `.table-as-cards` to a <table> and `data-label` to its cells
+ * and the page gets this for free.
+ *
+ * The first cell is the card's title (avatar, name — no label), and a cell
+ * carrying no data-label is treated as the action row.
+ */
+@media (max-width: 640px){
+  /* The wrapper exists to allow horizontal scroll; cards never need it, and
+     leaving it on traps vertical swipes at the edges. */
+  .table-scroll:has(.table-as-cards){overflow-x:visible;border:none;}
+  .table-as-cards{display:block;width:100%;}
+  /* Visually hidden, not display:none — the header text is still what a
+     screen reader announces for each cell. */
+  .table-as-cards thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
+  .table-as-cards tbody,
+  .table-as-cards td{display:block;width:auto;}
+  /* flex, not block, so a cell can be promoted to the card's title with
+     `order` — see .card-title. That keeps the desktop column order in the
+     markup where it belongs instead of reshuffling cells per breakpoint. */
+  .table-as-cards tr{
+    display:flex;flex-direction:column;
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:12px 14px;margin-bottom:10px;
+  }
+  .table-as-cards tr:hover{background:var(--surface);}
+  .table-as-cards tr.row-clickable:active{background:var(--surface-raised);}
+  .table-as-cards td{
+    border:none;padding:5px 0;display:flex;gap:12px;align-items:baseline;
+    white-space:normal;
+  }
+  .table-as-cards td::before{
+    content:attr(data-label);flex:0 0 36%;min-width:0;
+    color:var(--text-faint);font-size:10.5px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.5px;line-height:1.5;
+  }
+  /* col-shrink is a desktop width hint and means nothing once stacked. */
+  .table-as-cards td.col-shrink{width:auto;}
+
+  /* Card title: the first cell by default, or any cell marked .card-title
+     when the headline is not the first column (Audit Log's Event). */
+  .table-as-cards td:first-child,
+  .table-as-cards td.card-title{
+    display:flex;align-items:center;gap:10px;
+    font-size:15px;font-weight:600;
+    padding:0 0 10px;margin-bottom:8px;
+    border-bottom:1px solid var(--border-soft);
+  }
+  .table-as-cards td:first-child::before,
+  .table-as-cards td.card-title::before{content:none;}
+  .table-as-cards td:first-child .avatar{width:38px;height:38px;flex:0 0 38px;}
+  /* Promoted to the top of the card; the cell it displaced falls back to a
+     normal labelled row. */
+  .table-as-cards td.card-title{order:-1;}
+  .table-as-cards:has(td.card-title) td:first-child{
+    display:flex;font-size:inherit;font-weight:inherit;
+    padding:5px 0;margin-bottom:0;border-bottom:none;
+  }
+  .table-as-cards:has(td.card-title) td:first-child::before{content:attr(data-label);}
+
+  /* Actions: the one cell with no data-label. Full width, wrapping, with a
+     rule above it — the reference's button row. */
+  .table-as-cards td:not([data-label]):not(:first-child){
+    display:flex;flex-wrap:wrap;gap:6px;
+    margin-top:8px;padding-top:10px;
+    border-top:1px solid var(--border-soft);
+  }
+  .table-as-cards td:not([data-label]):not(:first-child)::before{content:none;}
+  .table-as-cards .row-actions{display:flex;flex-wrap:wrap;gap:6px;width:100%;}
+  .table-as-cards .row-actions button{flex:1 1 auto;min-width:88px;text-align:center;}
+
+  /* An empty cell would otherwise render as a lonely label. */
+  .table-as-cards td:empty{display:none;}
+}
+
 /* Toolbar overflow menu (Components/Menu.js). Same popover mechanics as the
    date picker, including measuring on open and flipping when it would run
    off the right edge. */

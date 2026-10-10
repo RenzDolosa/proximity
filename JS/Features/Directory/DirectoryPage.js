@@ -252,7 +252,7 @@ function paintDirectoryTable(filter) {
   page = Math.min(Math.max(1, page), totalPages);
   const rows = allRows.slice((page - 1) * pageSize, page * pageSize);
   wrap.innerHTML = `
-    <table>
+    <table class="table-as-cards">
       <thead><tr>
         <th>Employee</th><th>Code</th><th>Department</th><th>Position</th>
         <th>Proximity ID</th><th class="col-shrink">Status</th><th class="col-shrink">Scans</th><th class="col-shrink"></th>
@@ -261,15 +261,15 @@ function paintDirectoryTable(filter) {
         ${rows.map((e) => `
           <tr>
             <td><div class="emp-line"><div class="avatar">${e.photo_url ? `<img class="avatar-photo" src="${esc(e.photo_url)}" alt="" />` : esc(initials(e.full_name))}</div><div><div style="font-weight:600">${esc(e.full_name)}</div><div class="emp-meta">${esc(e.email || '')}</div></div></div></td>
-            <td class="mono">${esc(e.employee_code)}</td>
-            <td>${esc(e.department || '—')}</td>
-            <td>${esc(e.position || '—')}</td>
-            <td class="mono">${e.active_proximity_code ? `
+            <td class="mono" data-label="Code">${esc(e.employee_code)}</td>
+            <td data-label="Department">${esc(e.department || '—')}</td>
+            <td data-label="Position">${esc(e.position || '—')}</td>
+            <td class="mono" data-label="Proximity ID">${e.active_proximity_code ? `
               ${copyableHTML(e.active_proximity_code, { label: 'proximity ID' })}
               ${!e.proximity_card_active ? '<span class="badge inactive" style="margin-left:6px;">revoked</span>' : ''}
             ` : '<span style="color:var(--text-faint)">unassigned</span>'}</td>
-            <td class="col-shrink"><span class="badge ${e.status}">${esc(e.status)}</span></td>
-            <td class="mono col-shrink"><button class="ghost" data-log="${e.id}" style="padding:3px 8px;">${e.total_scans ?? 0} <span style="text-transform:none;">view</span></button></td>
+            <td class="col-shrink" data-label="Status"><span class="badge ${e.status}">${esc(e.status)}</span></td>
+            <td class="mono col-shrink" data-label="Scans"><button class="ghost" data-log="${e.id}" style="padding:3px 8px;">${e.total_scans ?? 0} <span style="text-transform:none;">view</span></button></td>
             <td class="col-shrink"><div class="row-actions">
               ${isAdminOrManager() ? `<button class="ghost" data-edit="${e.id}">Edit</button>` : ''}
               <button class="ghost" data-remarks="${e.id}">Remarks${e.open_remarks > 0 ? ' <span class="remark-dot" title="Unresolved remarks"></span>' : ''}</button>

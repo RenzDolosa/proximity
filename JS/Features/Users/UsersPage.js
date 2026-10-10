@@ -47,16 +47,16 @@ function paintUsersTable() {
   page = Math.min(Math.max(1, page), totalPages);
   const rows = data.slice((page - 1) * pageSize, page * pageSize);
   wrap.innerHTML = `
-    <table>
+    <table class="table-as-cards">
       <thead><tr><th>Name</th><th>Email</th><th class="col-shrink">Role</th><th class="col-shrink">Access</th><th class="col-shrink">Account</th><th class="col-shrink"></th></tr></thead>
       <tbody>
         ${rows.map((u) => `
           <tr class="row-clickable" data-user="${esc(u.id)}" tabindex="0" title="Edit ${esc(u.full_name)}">
             <td>${esc(u.full_name)}</td>
-            <td class="mono">${esc(u.email)}</td>
-            <td class="col-shrink"><span class="badge role-${u.role}">${esc(u.role)}</span></td>
-            <td class="col-shrink">${esc(scopeLabel[u.access_scope] || u.access_scope)}</td>
-            <td class="col-shrink"><span class="badge ${u.is_active ? 'active' : 'inactive'}">${u.is_active ? 'active' : 'disabled'}</span></td>
+            <td class="mono" data-label="Email">${esc(u.email)}</td>
+            <td class="col-shrink" data-label="Role"><span class="badge role-${u.role}">${esc(u.role)}</span></td>
+            <td class="col-shrink" data-label="Access">${esc(scopeLabel[u.access_scope] || u.access_scope)}</td>
+            <td class="col-shrink" data-label="Account"><span class="badge ${u.is_active ? 'active' : 'inactive'}">${u.is_active ? 'active' : 'disabled'}</span></td>
             <td class="col-shrink"><div class="row-actions">
               <button class="ghost" data-edit="${u.id}">Edit</button>
               <button class="ghost" data-pw="${u.id}">Reset password</button>

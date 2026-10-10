@@ -124,6 +124,32 @@ test('the drawer breakpoint is inclusive at its own width', () => {
   assert.equal(isMobileWidth(1280), false); // desktop
 });
 
+// Tables-as-cards is a CSS contract that six pages opt into by adding one
+// class and some data-labels. If the CSS half is edited away, those pages
+// silently go back to scrolling sideways on a phone with no error anywhere.
+test('the card layout keeps the contract its tables rely on', () => {
+  const css = readFileSync(fileURLToPath(new URL('../CSS/components.css', import.meta.url)), 'utf8');
+  const block = css.slice(css.indexOf('@media (max-width: 640px)'));
+  assert.ok(block.includes('.table-as-cards tr{'), 'rows must become cards');
+  assert.ok(block.includes('display:flex;flex-direction:column'), 'rows need flex so order: works');
+  assert.ok(block.includes('content:attr(data-label)'), 'cells need their label injected');
+  assert.ok(block.includes('.table-as-cards td.card-title'), 'a cell must be promotable to the title');
+  assert.ok(block.includes('order:-1'), 'the promoted title must sort above its siblings');
+});
+
+test('every page that opts into cards also labels its cells', () => {
+  const pages = [
+    'Directory/DirectoryPage', 'Proximity/ProximityPage', 'Users/UsersPage',
+    'Audit/AuditLogPage', 'Attendance/AttendancePage', 'Dashboard/DashboardPage',
+  ];
+  for (const page of pages) {
+    const src = readFileSync(fileURLToPath(new URL(`../JS/Features/${page}.js`, import.meta.url)), 'utf8');
+    assert.ok(src.includes('table-as-cards'), `${page} should opt in`);
+    // Without labels the cards render as a column of bare values.
+    assert.ok(/data-label="/.test(src), `${page} opted in but labels no cells`);
+  }
+});
+
 // Before 2026-10-08 the only mobile rule hid two topbar labels, so a 375px
 // phone gave 216px of nav and 159px of content.
 test('the sidebar is a drawer below the breakpoint, not a column', () => {

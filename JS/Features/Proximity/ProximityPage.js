@@ -162,15 +162,15 @@ function paintProximityTable() {
   page = Math.min(Math.max(1, page), totalPages);
   const rows = allRows.slice((page - 1) * pageSize, page * pageSize);
   wrap.innerHTML = `
-    <table>
+    <table class="table-as-cards">
       <thead><tr><th>Proximity code</th><th>Assigned to</th><th class="col-shrink">Status</th><th class="col-shrink">Issued</th><th class="col-shrink"></th></tr></thead>
       <tbody>
         ${rows.map((c) => { const e = assignedByCard.get(c.id); return `
           <tr>
             <td class="mono">${copyableHTML(c.proximity_code, { label: 'proximity code' })}</td>
-            <td>${e ? esc(e.full_name) + ' <span class="emp-meta mono">(' + esc(e.employee_code) + ')</span>' : '<span style="color:var(--text-faint)">unassigned</span>'}</td>
-            <td class="col-shrink"><span class="badge ${c.is_active ? 'active' : 'inactive'}">${c.is_active ? 'active' : 'revoked'}</span></td>
-            <td class="col-shrink mono">${fmtTime(c.issued_at)}</td>
+            <td data-label="Assigned to">${e ? esc(e.full_name) + ' <span class="emp-meta mono">(' + esc(e.employee_code) + ')</span>' : '<span style="color:var(--text-faint)">unassigned</span>'}</td>
+            <td class="col-shrink" data-label="Status"><span class="badge ${c.is_active ? 'active' : 'inactive'}">${c.is_active ? 'active' : 'revoked'}</span></td>
+            <td class="col-shrink mono" data-label="Issued">${fmtTime(c.issued_at)}</td>
             <td class="col-shrink"><div class="row-actions">
               ${isAdminOrManager() && c.is_active ? `<button class="ghost" data-revoke="${c.id}" style="color:var(--warn)">Revoke</button>` : ''}
               ${isAdminOrManager() && !c.is_active ? `<button class="ghost" data-renew="${c.id}" style="color:var(--good)">Renew</button>` : ''}

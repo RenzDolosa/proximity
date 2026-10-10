@@ -61,14 +61,17 @@ function paintAuditTable() {
   const cut = truncation(data.length, totalRows ?? data.length);
   wrap.innerHTML = `
     ${cut.truncated ? `<div class="empty-state" style="margin:0 0 12px;text-align:left;">Showing the ${cut.fetched.toLocaleString()} most recent of ${cut.total.toLocaleString()} audited actions — ${cut.missing.toLocaleString()} older entries are not loaded.</div>` : ''}
-    <table>
+    <table class="table-as-cards">
       <thead><tr><th class="col-shrink">Time</th><th class="col-shrink">Actor</th><th>Event</th></tr></thead>
       <tbody>
         ${rows.map((r) => `
           <tr>
-            <td class="col-shrink mono">${fmtTime(r.created_at)}</td>
-            <td class="col-shrink">${esc(r.actor_name || '—')}</td>
-            <td>${describeEvent(r)}</td>
+            <td class="col-shrink mono" data-label="Time">${fmtTime(r.created_at)}</td>
+            <td class="col-shrink" data-label="Actor">${esc(r.actor_name || '—')}</td>
+            <!-- card-title moves this to the top of the card on a phone (CSS
+                 order), without touching the desktop column order. What
+                 happened is the headline; when and who are the detail. -->
+            <td class="card-title">${describeEvent(r)}</td>
           </tr>
         `).join('')}
       </tbody>
