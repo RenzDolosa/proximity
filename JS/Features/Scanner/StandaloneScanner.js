@@ -12,6 +12,7 @@ import { OfflineScanModel, STALE_AFTER_MS } from '../../Models/OfflineScanModel.
 import { readRejection } from '../../Core/offlineScanning.js';
 import { registerBusyCheck } from '../../Utils/appUpdate.js';
 import { wireAvatarPreview } from '../../Utils/avatarPreview.js';
+import { openModal, closeModal, onModalClose } from '../../Components/Modal.js';
 import { connectionState, CONNECTION_LABEL, CONNECTION_BADGE } from '../../Utils/connectionState.js';
 
 // Whether the LAST attempt to reach the server actually failed. navigator
@@ -77,6 +78,22 @@ function kioskIsBusy() {
 // — an operator glancing at the kiosk and seeing the caret in the right place.
 const FOCUS_WATCHDOG_MS = 400;
 
+// ...but none of that applies to a phone. A badge reader is a keyboard WEDGE;
+// a touch device has no wedge, it has an on-screen keyboard that autofocus
+// summons and that then covers half the screen for as long as the page is
+// open. Every mechanism below — autofocus, the watchdog, stray-keystroke
+// adoption, the "not listening" warning — exists for the kiosk case and is
+// actively wrong here, so all of it is skipped and the field becomes
+// tap-to-focus like any normal input.
+//
+// `(hover: none) and (pointer: coarse)` is the pair that means "finger, no
+// mouse". Either alone is too loose: a touchscreen laptop has coarse pointer
+// AND hover, and should keep the kiosk behaviour.
+export function isTouchOnly() {
+  return typeof matchMedia === 'function'
+    && matchMedia('(hover: none) and (pointer: coarse)').matches;
+}
+
 function canReclaimFocus(input) {
   if (!document.body.contains(input) || input.disabled) return false;
   if (document.querySelector('.overlay')) return false;
@@ -116,7 +133,9 @@ function paintFocusState(input) {
   // dialog that legitimately owns focus, and an input that has not been
   // mounted yet.
   const dialogOpen = Boolean(document.querySelector('.overlay'));
-  const lost = !scanInFlight && !dialogOpen && Boolean(input) && !scanInputIsLive(input);
+  // On a phone an unfocused field is the normal resting state, not a fault.
+  const lost = !isTouchOnly() && !scanInFlight && !dialogOpen
+    && Boolean(input) && !scanInputIsLive(input);
   wrap.classList.toggle('ss-unfocused', lost);
   if (note) note.hidden = !lost;
 }
@@ -160,6 +179,9 @@ let focusListenersBound = false;
 let currentCodeInput = null;
 
 function startFocusWatchdog(input) {
+  // See isTouchOnly(): on a phone this whole mechanism only summons a
+  // keyboard nobody asked for.
+  if (isTouchOnly()) return;
   currentCodeInput = input;
   clearInterval(focusWatchdogTimer);
   const reclaim = () => { if (currentCodeInput) reclaimFocus(currentCodeInput); };
@@ -220,7 +242,12 @@ function renderStandaloneScanner() {
     <div class="ss-photo-stage" id="ss-photo-stage" aria-hidden="true"></div>
     <div class="ss-header">
       <div class="ss-operator" style="display: flex; align-items: center;">Operator: <strong class="mono" style="margin: 0 8px 0 8px;">${esc(operatorName)}</strong><div class="ss-offline-status" id="ss-offline-status"></div></div>
-      <button class="ghost" id="ss-signout">Sign out</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <!-- Mobile only (see scanner.css): the feed column has nowhere to sit
+             beside the hero on a phone, so it becomes a dialog instead. -->
+        <button class="ghost ss-feed-open" id="ss-feed-open">Recent activity</button>
+        <button class="ghost" id="ss-signout">Sign out</button>
+      </div>
     </div>
     <div class="ss-layout">
       <div class="ss-result-wrap" id="ss-result"></div>
@@ -232,7 +259,10 @@ function renderStandaloneScanner() {
                prompts here — Chrome deliberately ignores autocomplete="off"
                on type="password" specifically, which is why that attribute
                alone never fixed it. -->
-          <input id="ss-code" type="text" class="mono masked-code-input" placeholder="Live Search — scan or type code…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore autofocus />
+          <!-- autofocus only where a badge reader is plausible: on a phone it
+               opens the on-screen keyboard immediately and nothing closes it
+               again. See isTouchOnly(). -->
+          <input id="ss-code" type="text" class="mono masked-code-input" placeholder="${isTouchOnly() ? 'Tap to enter a code…' : 'Live Search — scan or type code…'}" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore ${isTouchOnly() ? '' : 'autofocus'} />
         </div>
       </div>
       <div class="ss-feed-col">
@@ -245,6 +275,25 @@ function renderStandaloneScanner() {
     </div>
   `;
   $('#ss-signout').addEventListener('click', async () => { await supabase.auth.signOut(); });
+
+  // The feed NODE is moved into the dialog and moved back on close, rather
+  // than rendered twice. Everything that updates it — loadScanFeed(),
+  // prependScanEvent(), prependPendingRow() — finds it by id, so one node in
+  // two possible parents keeps all of those working untouched, and a scan
+  // that lands while the dialog is open still appears in it.
+  $('#ss-feed-open').addEventListener('click', () => {
+    const feed = $('#ss-feed');
+    const home = $('.ss-feed-panel');
+    if (!feed || !home) return;
+    const overlay = openModal(`
+      <h3 style="margin:0 0 10px;">Recent activity</h3>
+      <div id="ss-feed-dock" class="ss-feed-dock"></div>
+      <div class="actions"><button class="ghost" id="ss-feed-close">Close</button></div>
+    `, { maxWidth: '520px' });
+    $('#ss-feed-dock', overlay).appendChild(feed);
+    $('#ss-feed-close', overlay).addEventListener('click', () => closeModal(overlay));
+    onModalClose(() => home.appendChild(feed));
+  });
   // Loaded once per kiosk session, not per-scan — see Utils/scanSounds.js.
   // A stray unhandled rejection here (e.g. offline on load) shouldn't
   // block the scanner from working; scans just stay silent until a retry.

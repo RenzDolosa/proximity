@@ -31,7 +31,8 @@ export function render() {
   if (location.hash.replace('#', '') !== appState.route) {
     history.replaceState(null, '', `#${appState.route}`);
   }
-  $$('nav.rail button[data-route]').forEach((b) => b.classList.toggle('active', b.dataset.route === appState.route));
+  $$('nav.rail button[data-route], #bottom-nav button[data-route]')
+    .forEach((b) => b.classList.toggle('active', b.dataset.route === appState.route));
   const [title, sub] = titles[appState.route];
   $('#page-title').textContent = title;
   $('#page-sub').textContent = sub;

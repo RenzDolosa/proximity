@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { NAV_GROUPS, GROUPED_ROUTES, visibleGroups, hiddenGroupIds } from '../JS/Core/navGroups.js';
+import {
+  NAV_GROUPS, GROUPED_ROUTES, visibleGroups, hiddenGroupIds,
+  bottomNavRoutes, BOTTOM_NAV_LABEL,
+} from '../JS/Core/navGroups.js';
 import { isMobileWidth, MOBILE_MAX_WIDTH } from '../JS/Core/navDrawer.js';
 
 const INDEX_HTML = readFileSync(fileURLToPath(new URL('../Public/index.html', import.meta.url)), 'utf8');
@@ -78,6 +81,39 @@ test('an account that can see nothing hides every group', () => {
 test('visibleGroups does not mutate the shared group model', () => {
   visibleGroups((route) => route === 'dashboard');
   assert.deepEqual(NAV_GROUPS.find((g) => g.id === 'monitor').routes, ['dashboard', 'alerts']);
+});
+
+// The phone tab bar. It must never offer a route the account cannot open,
+// and must never collapse to one lonely tab for a restricted login.
+test('an admin gets the three routes a phone is actually opened for', () => {
+  assert.deepEqual(bottomNavRoutes(() => true), ['dashboard', 'directory', 'attendance']);
+});
+
+test('a scanner-only account still gets a usable bar, backfilled in order', () => {
+  const canSee = (r) => ['scanner', 'settings'].includes(r);
+  const tabs = bottomNavRoutes(canSee);
+  assert.deepEqual(tabs, ['scanner', 'settings']);
+  assert.ok(tabs.every(canSee), 'must never offer a route the account cannot open');
+});
+
+test('a manager without the Dashboard backfills rather than showing two tabs', () => {
+  const canSee = (r) => r !== 'dashboard';
+  const tabs = bottomNavRoutes(canSee);
+  assert.equal(tabs.length, 3);
+  assert.ok(tabs.includes('directory') && tabs.includes('attendance'));
+  assert.ok(!tabs.includes('dashboard'));
+});
+
+test('an account that can see nothing gets an empty bar, not a broken one', () => {
+  assert.deepEqual(bottomNavRoutes(() => false), []);
+});
+
+test('every route has a tab label short enough for a tab bar', () => {
+  for (const route of GROUPED_ROUTES) {
+    const label = BOTTOM_NAV_LABEL[route];
+    assert.ok(label, `${route} needs a short label`);
+    assert.ok(label.length <= 9, `${route}: "${label}" is too long for a tab`);
+  }
 });
 
 test('the drawer breakpoint is inclusive at its own width', () => {
