@@ -1,7 +1,6 @@
 import { $, $$ } from '../../Utils/dom.js';
 import { esc, initials, chunkArray } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
-import { wireCopyableCodes } from '../../Utils/clipboard.js';
 import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
 import { appState, isAdmin, isAdminOrManager } from '../../Core/state.js';
 import { supabase } from '../../Core/supabaseClient.js';
@@ -14,6 +13,7 @@ import { openRemarksModal } from '../../Components/RemarksModal.js';
 import { openImportModal } from '../../Components/ImportModal.js';
 import { openExportScanLogsModal } from '../../Components/ExportScanLogsModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
+import { copyableHTML } from '../../Components/Copyable.js';
 import { openConfirmModal, openConfirmProgressModal } from '../../Components/ConfirmModal.js';
 import { wireAvatarPreview } from '../../Utils/avatarPreview.js';
 import { buildIdentityIndex, identityKey } from '../../Utils/employeeCode.js';
@@ -249,7 +249,7 @@ function paintDirectoryTable(filter) {
             <td>${esc(e.department || '—')}</td>
             <td>${esc(e.position || '—')}</td>
             <td class="mono">${e.active_proximity_code ? `
-              <span class="copyable-code" data-copy-code="${esc(e.active_proximity_code)}" title="Click to copy">${esc(e.active_proximity_code)}</span>
+              ${copyableHTML(e.active_proximity_code, { label: 'proximity ID' })}
               ${!e.proximity_card_active ? '<span class="badge inactive" style="margin-left:6px;">revoked</span>' : ''}
             ` : '<span style="color:var(--text-faint)">unassigned</span>'}</td>
             <td class="col-shrink"><span class="badge ${e.status}">${esc(e.status)}</span></td>
@@ -272,7 +272,6 @@ function paintDirectoryTable(filter) {
     const emp = appState.employeesCache.find((e) => e.id === b.dataset.edit);
     openEmployeeModal(emp, refreshDirectoryInPlace);
   }));
-  wireCopyableCodes(wrap, 'Copied proximity code');
   $$('button[data-log]', wrap).forEach((b) => b.addEventListener('click', () => openScanLogModal(b.dataset.log)));
   $$('button[data-remarks]', wrap).forEach((b) => b.addEventListener('click', () => openRemarksModal(b.dataset.remarks)));
   $$('button[data-del]', wrap).forEach((b) => b.addEventListener('click', async () => {

@@ -69,9 +69,21 @@ export function mountDateRangePicker(root, { onApply } = {}) {
     valueEl.textContent = formatRangeLabel(fromEl.value, toEl.value, emptyLabel);
     root.classList.toggle('drp-set', Boolean(fromEl.value || toEl.value));
   };
+  // Flip to right-aligned when a left-aligned popover would run off the
+  // screen. The Attendance toolbar puts this control near the right edge, so
+  // a 400px panel opening leftwards overflowed the viewport; inside a modal
+  // it overflowed the dialog. Measured on open rather than guessed from the
+  // call site, because the same component is used in both.
+  const placePopover = () => {
+    root.classList.remove('drp-end');
+    const right = pop.getBoundingClientRect().right;
+    const limit = document.documentElement.clientWidth - 8;
+    if (right > limit) root.classList.add('drp-end');
+  };
   const setOpen = (open) => {
     pop.hidden = !open;
     trigger.setAttribute('aria-expanded', String(open));
+    if (open) placePopover();
   };
   const apply = () => {
     const next = normaliseRange(fromEl.value, toEl.value);

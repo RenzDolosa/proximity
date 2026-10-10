@@ -1,0 +1,26 @@
+{
+  "name": "Proximity — ID & Access Console",
+  "short_name": "Proximity",
+  "description": "Employee ID and access control: scan badges, track who is on site, and manage cards.",
+  "start_url": "/Public/index.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0B0F17",
+  "theme_color": "#0B0F17",
+  "icons": [
+    {
+      "src": "/Public/Assets/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open the Scanner",
+      "short_name": "Scanner",
+      "url": "/Public/index.html?scanner=1"
+    }
+  ]
+}

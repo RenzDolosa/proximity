@@ -70,6 +70,26 @@ code, .mono{font-family:var(--mono);}
 /* Click-to-copy affordance for the Employee Manager's Proximity ID column
    (and anywhere else data-copy-code is used) — a dotted underline signals
    it's actionable without the visual weight of a full button. */
-.copyable-code{cursor:pointer;border-bottom:1px dotted var(--text-muted);}
-.copyable-code:hover{color:var(--accent);border-bottom-color:var(--accent);}
+/* Components/Copyable.js. The button stays out of the way until hover or
+   keyboard focus — a column of these would otherwise be a column of icons.
+   Replaced .copyable-code / Utils/clipboard.js on 2026-10-10: that worked,
+   but it re-bound a listener to every cell on every repaint. This one is a
+   single delegated listener, adds the hover affordance, and falls back to
+   execCommand where the async clipboard API is unavailable (plain-http
+   kiosks). */
+.copyable{display:inline-flex;align-items:center;gap:4px;max-width:100%;}
+.copyable-text{overflow-wrap:anywhere;}
+.copyable-btn{
+  flex:0 0 auto;padding:0 4px;line-height:1;font-size:12px;
+  background:transparent;border:none;color:var(--text-faint);
+  opacity:0;transition:opacity .12s ease;
+}
+.copyable:hover .copyable-btn,
+.copyable-btn:focus-visible{opacity:1;}
+.copyable-btn:hover{color:var(--accent);}
+.copyable-btn.copied{opacity:1;color:var(--good);}
+.copyable-btn.copy-failed{opacity:1;color:var(--bad);}
+/* Touch has no hover, so the affordance has to be permanent there. */
+@media (hover: none){ .copyable-btn{opacity:.6;} }
+@media (prefers-reduced-motion: reduce){ .copyable-btn{transition:none;} }
 .hidden{display:none !important;}
