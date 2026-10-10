@@ -15,7 +15,7 @@ export function openConfirmModal({ title, message, confirmLabel = 'Delete', canc
   return new Promise((resolve) => {
     const overlay = openModal(`
       <h3>${esc(title)}</h3>
-      <p class="sub" style="margin:-4px 0 18px;">${esc(message)}</p>
+      <p class="modal-message">${esc(message)}</p>
       <div class="actions">
         <button class="ghost" id="confirm-cancel">${esc(cancelLabel)}</button>
         <button class="danger" id="confirm-ok">${esc(confirmLabel)}</button>
@@ -47,7 +47,7 @@ export function openConfirmProgressModal({ title, message, confirmLabel = 'Delet
     const overlay = openModal(`
       <h3>${esc(title)}</h3>
       <div id="cp-body">
-        <p class="sub" style="margin:-4px 0 18px;">${esc(message)}</p>
+        <p class="modal-message">${esc(message)}</p>
         <div class="actions">
           <button class="ghost" id="cp-cancel">Cancel</button>
           <button class="danger" id="cp-ok">${esc(confirmLabel)}</button>

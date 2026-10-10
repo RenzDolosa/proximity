@@ -65,6 +65,13 @@ input:disabled,select:disabled,textarea:disabled{opacity:.55;cursor:not-allowed;
 input[type="password"]::-ms-reveal,input[type="password"]::-ms-clear{display:none;}
 input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
 label{display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;}
+/* Explanatory text under a heading — 25 of these across the panels and
+   modals, and until now none of them were styled: .sub only existed scoped
+   to #topbar and .auth-card, so everywhere else it rendered as full-weight
+   14px body text. A five-line explanation then looked exactly as important
+   as the data under it, which is most of why Settings read as a wall on a
+   phone. Both scoped rules above still win on specificity. */
+.sub{color:var(--text-muted);font-size:12.5px;}
 .field{margin-bottom:12px;}
 code, .mono{font-family:var(--mono);}
 /* Click-to-copy affordance for the Employee Manager's Proximity ID column

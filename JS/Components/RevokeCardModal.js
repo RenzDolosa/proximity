@@ -17,7 +17,7 @@ export function openRevokeCardModal(card, employee) {
   return new Promise((resolve) => {
     const overlay = openModal(`
       <h3>Revoke proximity card</h3>
-      <p class="sub" style="margin:-4px 0 14px;">
+      <p class="modal-message" style="margin-bottom:14px;">
         ${employee
           ? `Revoking <span class="mono">${esc(card.proximity_code)}</span>, currently assigned to <strong>${esc(employee.full_name)}</strong>. The selected status will update Employee Manager and be recorded as a remark.`
           : `Revoking <span class="mono">${esc(card.proximity_code)}</span>. It isn't assigned to anyone, so only the additional remarks will be saved on the card.`}

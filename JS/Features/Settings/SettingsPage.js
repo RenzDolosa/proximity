@@ -28,6 +28,7 @@ import { UsageModel } from '../../Models/UsageModel.js';
 import { fmtUsageBytes, fmtPercent } from '../../Utils/usage.js';
 import { OFFLINE_THUMB_TARGET, recompressThumbBase64 } from '../../Utils/image.js';
 import { openConfirmModal } from '../../Components/ConfirmModal.js';
+import { panelNote } from '../../Components/PanelNote.js';
 import { showModalError } from '../../Components/Modal.js';
 import { reportError } from '../../Utils/userError.js';
 
@@ -100,7 +101,11 @@ export async function renderSettings() {
     appearance: `
     <div class="panel" style="padding:20px;">
       <h3 style="margin:0 0 4px;">Appearance</h3>
-      <p class="sub" style="margin:0 0 10px;">A personal preference for this browser — not shared with other accounts, and not saved to your profile, so it won't follow you to a different device or kiosk.</p>
+      ${panelNote(
+        'A personal preference for this browser only.',
+        `<p>It isn't shared with other accounts and isn't saved to your
+         profile, so it won't follow you to a different device or kiosk.</p>`,
+      )}
       <div class="sub-nav" id="theme-picker" role="group" aria-label="Theme">
         <button type="button" data-theme-choice="dark">Dark</button>
         <button type="button" data-theme-choice="light">Light</button>
@@ -110,7 +115,11 @@ export async function renderSettings() {
     password: `
     <div class="panel" style="padding:20px;">
       <h3 style="margin:0 0 4px;">Change password</h3>
-      <p class="sub" style="margin:0 0 10px;">Update the password for your own account (${esc(appState.profile?.email || appState.session?.user?.email || '')}). This only changes what you sign in with — it's separate from an admin resetting someone else's password from Users &amp; Roles.</p>
+      ${panelNote(
+        `Update the password for your own account (${esc(appState.profile?.email || appState.session?.user?.email || '')}).`,
+        `<p>This only changes what you sign in with — it's separate from an
+         admin resetting someone else's password from Users &amp; Roles.</p>`,
+      )}
       <form id="cp-form" autocomplete="off">
         <div class="field"><label>Current password</label>
           <!-- autocomplete="new-password" here is deliberate, not a typo: it's the
@@ -148,11 +157,12 @@ export async function renderSettings() {
         <h3 style="margin:0 0 4px;">Database usage</h3>
         <button type="button" class="ghost" id="us-refresh" ${usageRefreshing ? 'disabled' : ''}>${usageRefreshing ? 'Refreshing…' : 'Refresh'}</button>
       </div>
-      <p class="sub" style="margin:0 0 10px;">
-        How much storage is in use, and which records account for it. Updated
-        only when you open this or press Refresh. Bandwidth figures are not
-        shown here — those live on your hosting provider's usage page.
-      </p>
+      ${panelNote(
+        'How much storage is in use, and which records account for it.',
+        `<p>Updated only when you open this or press Refresh.</p>
+         <p>Bandwidth figures are not shown here — those live on your hosting
+         provider's usage page.</p>`,
+      )}
       <div id="us-body">${usageLoaded ? '' : 'Loading…'}</div>
     </div>`,
 
@@ -162,11 +172,14 @@ export async function renderSettings() {
         <h3 style="margin:0 0 4px;">Scan sounds</h3>
         <div class="emp-meta mono" id="sound-storage-summary" style="white-space:nowrap;">${loaded ? '' : 'Loading…'}</div>
       </div>
-      <p class="sub" style="margin:0 0 10px;">
-        ${canManageScanSounds()
-          ? 'Upload a short audio clip for each scan outcome. They play on the live Scanner and Test Scan as soon as a result comes back. Uploading a new file replaces the previous one immediately.'
-          : 'Audio clips played on the live Scanner and Test Scan for each outcome. Your account can view these, not change them.'}
-      </p>
+      ${canManageScanSounds()
+        ? panelNote(
+          'Upload a short audio clip for each scan outcome.',
+          `<p>They play on the live Scanner and Test Scan as soon as a result
+           comes back. Uploading a new file replaces the previous one
+           immediately.</p>`,
+        )
+        : panelNote('Audio clips played on the live Scanner and Test Scan for each outcome. Your account can view these, not change them.')}
       <div class="progress" style="margin:0 0 16px;">
         <div class="progress-track"><div class="progress-fill" id="sound-storage-fill"></div></div>
       </div>
@@ -176,11 +189,11 @@ export async function renderSettings() {
     photos: !showPhotos ? '' : `
     <div class="panel" style="padding:20px;">
       <h3 style="margin:0 0 4px;">Employee photos</h3>
-      <p class="sub" style="margin:0 0 10px;">
-        Photos upload into the Google Drive account connected to the
-        photo-upload function — this is how much room is left on that
-        account before uploads start failing.
-      </p>
+      ${panelNote(
+        'How much room is left before photo uploads start failing.',
+        `<p>Photos upload into the Google Drive account connected to the
+         photo-upload function; this is that account's remaining space.</p>`,
+      )}
       <div id="photo-storage-body">${photoLoaded ? '' : 'Loading…'}</div>
     </div>`,
 
@@ -194,26 +207,22 @@ export async function renderSettings() {
           <button type="button" class="ghost" id="th-run" ${thumbBusy() ? 'disabled' : ''}>${thumbRun && !thumbRun.finished ? 'Recompressing…' : 'Recompress now'}</button>
         </div>
       </div>
-      <p class="sub" style="margin:0 0 10px;">
-        Each employee photo is also kept as a small copy so a Scanner can show
-        a face while offline. These are the largest thing stored here and the
-        heaviest part of every kiosk's sync.
-      </p>
-      <p class="sub" style="margin:0 0 10px;">
-        <strong>Recompress now</strong> shrinks the oversized ones
-        (${OFFLINE_THUMB_TARGET.maxDimension}px, quality
-        ${OFFLINE_THUMB_TARGET.quality}). Safe to re-run — a photo is only
-        replaced when shrinking saves at least 10%, so already-small ones are
-        left alone rather than losing more quality. Kiosks pick up the smaller
-        copies on their next full sync.
-      </p>
-      <p class="sub" style="margin:0 0 10px;">
-        <strong>Repair missing</strong> fixes a different problem: an employee
-        whose photo shows correctly in Employee Manager but who appears as
-        initials on every kiosk, because no offline copy was made at upload
-        time. Repair rebuilds it. The photo never passes through this browser,
-        so repairing the whole roster is cheap.
-      </p>
+      ${panelNote(
+        'Each employee photo is also kept as a small copy so a Scanner can show a face while offline.',
+        `<p>These are the largest thing stored here and the heaviest part of
+         every kiosk's sync.</p>
+         <p><strong>Recompress now</strong> shrinks the oversized ones
+         (${OFFLINE_THUMB_TARGET.maxDimension}px, quality
+         ${OFFLINE_THUMB_TARGET.quality}). Safe to re-run — a photo is only
+         replaced when shrinking saves at least 10%, so already-small ones are
+         left alone rather than losing more quality. Kiosks pick up the smaller
+         copies on their next full sync.</p>
+         <p><strong>Repair missing</strong> fixes a different problem: an
+         employee whose photo shows correctly in Employee Manager but who
+         appears as initials on every kiosk, because no offline copy was made
+         at upload time. Repair rebuilds it. The photo never passes through
+         this browser, so repairing the whole roster is cheap.</p>`,
+      )}
       <div id="th-body">${thumbStatsLoaded ? '' : 'Loading…'}</div>
     </div>`,
 
@@ -230,13 +239,15 @@ export async function renderSettings() {
           <button type="button" class="ghost danger" id="qs-reset">Reset stats</button>
         </div>
       </div>
-      <p class="sub" style="margin:0 0 10px;">
-        The app's slowest operations, averaged. <strong>Calls</strong> is how
-        often one ran; <strong>Total time</strong> is the cumulative load it
-        puts on the system, which a slow-but-rare operation may not. Figures
-        build up since the last reset — clear them to get a fresh baseline
-        after a change, rather than reading a mix of before and after.
-      </p>
+      ${panelNote(
+        "The app's slowest operations, averaged.",
+        `<p><strong>Calls</strong> is how often one ran; <strong>Total
+         time</strong> is the cumulative load it puts on the system, which a
+         slow-but-rare operation may not.</p>
+         <p>Figures build up since the last reset — clear them to get a fresh
+         baseline after a change, rather than reading a mix of before and
+         after.</p>`,
+      )}
       <div id="qs-body">${queryStatsLoaded ? '' : 'Loading…'}</div>
     </div>`,
 
@@ -246,14 +257,14 @@ export async function renderSettings() {
         <h3 style="margin:0 0 4px;">Scan data archival</h3>
         <button type="button" class="ghost" id="sa-run" ${archiveRunning ? 'disabled' : ''}>${archiveRunning ? 'Running…' : 'Run archival now'}</button>
       </div>
-      <p class="sub" style="margin:0 0 10px;">
-        A nightly job moves scans older than 180 days out of the live history,
-        so the Scanner, Dashboard and Analytics stay fast as records build up.
-        <strong>Nothing is deleted</strong> — "Export all scan logs" still
-        reaches archived scans for an older date range. 180 days is well past
-        every report's own limit (Attendance 31 days, Scanner Analytics 90),
-        so archiving can never remove something another page still needs.
-      </p>
+      ${panelNote(
+        'A nightly job moves scans older than 180 days out of the live history, so the Scanner, Dashboard and Analytics stay fast as records build up.',
+        `<p><strong>Nothing is deleted</strong> — "Export all scan logs" still
+         reaches archived scans for an older date range.</p>
+         <p>180 days is well past every report's own limit (Attendance 31 days,
+         Scanner Analytics 90), so archiving can never remove something another
+         page still needs.</p>`,
+      )}
       <div id="sa-body">${archiveStatusLoaded ? '' : 'Loading…'}</div>
     </div>`,
 
@@ -263,14 +274,14 @@ export async function renderSettings() {
         <h3 style="margin:0 0 4px;">Scan log trimming</h3>
         <button type="button" class="ghost" id="st-run" ${trimRunning ? 'disabled' : ''}>${trimRunning ? 'Running…' : 'Run trim now'}</button>
       </div>
-      <p class="sub" style="margin:0 0 10px;">
-        A nightly job trims each employee's personal scan history to the last
-        180 days — the record behind the Scan log dialog, Attendance and the
-        on-site roster. <strong>Nothing is lost</strong>: every scan still
-        appears in "Export all scan logs". IN/OUT direction for new scans does
-        not depend on how long this history is, so trimming never affects a
-        future scan.
-      </p>
+      ${panelNote(
+        "A nightly job trims each employee's personal scan history to the last 180 days.",
+        `<p>That history is the record behind the Scan log dialog, Attendance
+         and the on-site roster. <strong>Nothing is lost</strong>: every scan
+         still appears in "Export all scan logs".</p>
+         <p>IN/OUT direction for new scans does not depend on how long this
+         history is, so trimming never affects a future scan.</p>`,
+      )}
       <div id="st-body">${trimStatusLoaded ? '' : 'Loading…'}</div>
     </div>`,
 
@@ -280,15 +291,15 @@ export async function renderSettings() {
         <h3 style="margin:0 0 4px;">Scanner silence alerts</h3>
         <button type="button" class="ghost" id="ss-run" ${silenceChecking ? 'disabled' : ''}>${silenceChecking ? 'Checking…' : 'Check now'}</button>
       </div>
-      <p class="sub" style="margin:0 0 10px;">
-        Every 15 minutes, any enabled scanner that hasn't reported for over an
-        hour raises an alert — a kiosk that crashed, lost power or fell off the
-        network would otherwise go unnoticed until someone walked past it.
-        This is separate from the Dashboard's "online" dot: that tells you at a
-        glance on a page you are already looking at; this notifies someone who
-        isn't. One alert per scanner until it reports again, so a silent kiosk
-        doesn't flood the list.
-      </p>
+      ${panelNote(
+        "Every 15 minutes, any enabled scanner that hasn't reported for over an hour raises an alert.",
+        `<p>A kiosk that crashed, lost power or fell off the network would
+         otherwise go unnoticed until someone walked past it.</p>
+         <p>This is separate from the Dashboard's "online" dot: that tells you
+         at a glance on a page you are already looking at; this notifies
+         someone who isn't. One alert per scanner until it reports again, so a
+         silent kiosk doesn't flood the list.</p>`,
+      )}
       <div id="ss-body">${silenceStatusLoaded ? '' : 'Loading…'}</div>
     </div>`,
   };

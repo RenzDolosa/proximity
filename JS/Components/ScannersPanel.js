@@ -12,6 +12,7 @@ import { canEditScannerRegistry } from '../Core/state.js';
 import { ScannersModel } from '../Models/ScannersModel.js';
 import { scannerState, SCANNER_STATE_LABEL, scannerStateBadgeClass } from '../Utils/dashboard.js';
 import { reportError } from '../Utils/userError.js';
+import { panelNote } from './PanelNote.js';
 
 let rows = [];
 let loaded = false;
@@ -26,12 +27,14 @@ export function scannersPanelHTML() {
         <h3 style="margin:0 0 4px;">Scanners</h3>
         <button type="button" class="ghost" id="sc-refresh">Refresh</button>
       </div>
-      <p class="sub" style="margin:0 0 10px;">
-        Every scanner that has scanned at least once. A scanner counts as online if it was seen in the last
-        10 minutes. ${canEditScannerRegistry()
-          ? 'Give a scanner a friendly label, or disable one that should no longer be used — changes are recorded in the Audit Log.'
-          : 'Your account can view scanners, not change them.'}
-      </p>
+      ${panelNote(
+        'Every scanner that has scanned at least once.',
+        `<p>A scanner counts as online if it was seen in the last 10
+         minutes.</p>
+         <p>${canEditScannerRegistry()
+           ? 'Give a scanner a friendly label, or disable one that should no longer be used — changes are recorded in the Audit Log.'
+           : 'Your account can view scanners, not change them.'}</p>`,
+      )}
       <div class="auth-error hidden" id="sc-error"></div>
       <div id="sc-body">${loaded ? '' : 'Loading…'}</div>
     </div>`;
