@@ -5,7 +5,7 @@ import { $, $$ } from '../Utils/dom.js';
 import { appState, isAdmin, canViewEmployeeManager, canViewScanner, canViewSettings, canViewAttendance, canViewDashboard, canViewAlerts } from './state.js';
 import { render } from './router.js';
 import { startAlertsBadge, stopAlertsBadge } from './alertsBadge.js';
-import { hiddenGroupIds } from './navGroups.js';
+import { hiddenGroupIds, bottomNavRoutes, BOTTOM_NAV_LABEL } from './navGroups.js';
 
 export function showAuth() {
   $('#auth-screen').classList.remove('hidden');
@@ -41,6 +41,33 @@ function paintNavGroups() {
   $$('.rail-group').forEach((group) => {
     group.classList.toggle('hidden', hidden.has(group.dataset.navGroup));
   });
+  paintBottomNav(routeVisible);
+}
+
+// The phone tab bar. Reuses each route's existing rail button for its icon
+// and its route id, so there is exactly one place a route is defined and
+// this cannot drift from the rail.
+function paintBottomNav(routeVisible) {
+  const bar = $('#bottom-nav');
+  if (!bar) return;
+  const routes = bottomNavRoutes(routeVisible);
+  const tab = (route) => {
+    const btn = $(`nav.rail button[data-route="${route}"]`);
+    const icon = btn?.querySelector('.ic')?.textContent || '•';
+    return `<button type="button" data-route="${route}">
+      <span class="ic" aria-hidden="true">${icon}</span>
+      <span class="bn-label">${BOTTOM_NAV_LABEL[route] || route}</span>
+    </button>`;
+  };
+  bar.innerHTML = routes.map(tab).join('')
+    // "More" opens the existing drawer rather than a second navigation
+    // surface — one list of routes, two ways in.
+    + `<button type="button" id="bn-more"><span class="ic" aria-hidden="true">☰</span><span class="bn-label">More</span></button>`;
+  $$('button[data-route]', bar).forEach((b) => b.addEventListener('click', () => {
+    appState.route = b.dataset.route;
+    render();
+  }));
+  $('#bn-more', bar).addEventListener('click', () => $('#nav-toggle')?.click());
 }
 
 export function showShell() {

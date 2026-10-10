@@ -12,6 +12,7 @@ import { canEditScannerRegistry } from '../Core/state.js';
 import { ScannersModel } from '../Models/ScannersModel.js';
 import { scannerState, SCANNER_STATE_LABEL, scannerStateBadgeClass } from '../Utils/dashboard.js';
 import { reportError } from '../Utils/userError.js';
+import { panelNote } from './PanelNote.js';
 
 let rows = [];
 let loaded = false;
@@ -26,12 +27,14 @@ export function scannersPanelHTML() {
         <h3 style="margin:0 0 4px;">Scanners</h3>
         <button type="button" class="ghost" id="sc-refresh">Refresh</button>
       </div>
-      <p class="sub" style="margin:0 0 10px;">
-        Every scanner that has scanned at least once. A scanner counts as online if it was seen in the last
-        10 minutes. ${canEditScannerRegistry()
-          ? 'Give a scanner a friendly label, or disable one that should no longer be used — changes are recorded in the Audit Log.'
-          : 'Your account can view scanners, not change them.'}
-      </p>
+      ${panelNote(
+        'Every scanner that has scanned at least once.',
+        `<p>A scanner counts as online if it was seen in the last 10
+         minutes.</p>
+         <p>${canEditScannerRegistry()
+           ? 'Give a scanner a friendly label, or disable one that should no longer be used — changes are recorded in the Audit Log.'
+           : 'Your account can view scanners, not change them.'}</p>`,
+      )}
       <div class="auth-error hidden" id="sc-error"></div>
       <div id="sc-body">${loaded ? '' : 'Loading…'}</div>
     </div>`;
@@ -58,17 +61,17 @@ function paint() {
   if (!body) return;
   if (!rows.length) { body.innerHTML = `<div class="empty-state">No scanners have scanned yet.</div>`; return; }
   const edit = canEditScannerRegistry();
-  body.innerHTML = `<div class="table-scroll"><table>
+  body.innerHTML = `<div class="table-scroll"><table class="table-as-cards">
     <thead><tr><th>Scanner</th><th>Status</th><th>Last seen</th><th>24h scans</th><th>Matched</th><th>Offline</th>${edit ? '<th></th>' : ''}</tr></thead>
     <tbody>${rows.map((s) => {
       const st = scannerState(s);
       return `<tr>
         <td>${esc(s.label || s.scanner_id)}${s.label ? `<div class="emp-meta mono">${esc(s.scanner_id)}</div>` : ''}</td>
-        <td><span class="badge ${scannerStateBadgeClass(st)}">${esc(SCANNER_STATE_LABEL[st])}</span></td>
-        <td>${s.last_seen_at ? esc(fmtTime(s.last_seen_at)) : '—'}</td>
-        <td class="mono">${esc(s.scans_24h)}</td>
-        <td class="mono">${esc(s.matched_24h)}</td>
-        <td class="mono">${esc(s.offline_24h)}</td>
+        <td data-label="Status"><span class="badge ${scannerStateBadgeClass(st)}">${esc(SCANNER_STATE_LABEL[st])}</span></td>
+        <td data-label="Last seen">${s.last_seen_at ? esc(fmtTime(s.last_seen_at)) : '—'}</td>
+        <td class="mono" data-label="24h scans">${esc(s.scans_24h)}</td>
+        <td class="mono" data-label="Matched">${esc(s.matched_24h)}</td>
+        <td class="mono" data-label="Offline">${esc(s.offline_24h)}</td>
         ${edit ? `<td style="white-space:nowrap;">
           <button class="ghost" data-rename="${esc(s.scanner_id)}">Label</button>
           <button class="ghost ${s.is_enabled ? 'danger' : ''}" data-toggle="${esc(s.scanner_id)}">${s.is_enabled ? 'Disable' : 'Enable'}</button>

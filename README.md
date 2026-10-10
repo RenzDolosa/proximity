@@ -166,6 +166,26 @@ JS/
     ImportModal.js                CSV bulk-import dialog, shared by Employee
                                   Manager and Proximity Cards; both show
                                   upload progress
+    DateRangePicker.js            the one date-range control (added
+                                  2026-10-09) — presets in a left rail, From/To
+                                  on the right; typing never fetches, only
+                                  Apply/Clear/a preset calls onApply
+    Hint.js                       withHint() — explanation on hover/keyboard
+                                  focus instead of permanent text under a
+                                  control; the bubble sits *above* so a
+                                  <select>'s own options stay visible
+    Copyable.js                   copyableHTML() — a copy button that appears
+                                  on hover, one delegated listener for the
+                                  whole app, execCommand fallback for
+                                  plain-http kiosks
+    Menu.js                       menuHTML()/mountMenu() — one button that
+                                  opens a list of actions, so a toolbar does
+                                  not grow a button per export
+    PanelNote.js                  panelNote(lead, detail) — a panel's
+                                  explanation as a visible lead sentence plus
+                                  the rest behind a native <details>; added
+                                  2026-10-10, see the change log for why
+                                  Settings' paragraphs could not simply be cut
   Features/                   one folder per screen/area of the app
     Auth/AuthScreen.js               (sign-in only — no self-service account
                                        creation, removed 2026-09-19; Enter in
@@ -611,6 +631,75 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-10-10 — the phone layout: cards, toolbars, and prose that stops filling the screen**
+
+A pass over what the app looks like at 375px, measured against a real DOM at
+that width rather than read off the CSS. Earlier entries covered the shell
+(a bottom tab bar, a drawer, the PWA manifest, `.table-as-cards`); these are
+the things still wrong once the shell was right.
+
+**An orphaned stat card looked like a rendering fault.** Attendance's five
+cards came out 2+2+1, and the fifth sat half-width against an empty track.
+`.stat-grid` is `repeat(2,1fr)` on a phone with
+`.stat-card:last-child:nth-child(odd){grid-column:1 / -1}`, so an odd last
+card spans instead. `nth-child` counts elements and a card that isn't shown
+is an empty string rather than an element (Dashboard's alerts card,
+Analytics' Unmatched), so the parity follows what is actually on screen.
+Measured at 375px: 5 cards → 2/2/1-spanning, 7 → 2/2/2/1-spanning, 8 → four
+even rows, 3 → 2/1-spanning. Desktop is untouched (one row of five at
+1280px).
+
+**That rule had to be moved after it was written.** The first version lived
+with the other mobile rules earlier in `components.css`, where
+`.stat-card{padding}` and `.stat-value{font-size}` are the same specificity
+as the base rules further down the file — so source order decided it and the
+base won. Only the span survived, because it carries an extra pseudo-class.
+The computed style said `12px 14px` and `22px` where the stylesheet said
+`10px 12px` and `19px`. The block now sits directly after the rules it
+overrides. Same failure as the safe-area padding on 2026-10-08; the cheap
+check is to read `getComputedStyle`, not the file.
+
+The 19px value size is load-bearing: "Total time on site" is a six-digit
+hour count once a thousand-odd employees are summed over 31 days, and
+`318432h 00m` wrapped to two lines at 22px in a 160px card.
+
+**`JS/Components/PanelNote.js` — Settings' explanations stop being a wall.**
+Each panel carried one to three paragraphs in a single `<p class="sub">`.
+On a desktop that reads as a margin note; at 375px "Offline scanner
+thumbnails" was three paragraphs and 532px of a 812px screen before the
+controls. The text is worth keeping — these panels run nightly jobs and
+overwrite stored photos, and the paragraph saying *nothing is deleted* is
+the reason an admin is willing to press the button — so `panelNote(lead,
+detail)` splits rather than cuts: the lead answers "what is this", the
+detail answers "what exactly happens, and why".
+
+Collapsed at every width, not only narrow ones. Markup that depends on the
+viewport goes stale the moment someone resizes, and this page is already
+built out of disclosures — the three intent groups are `<details>` too. It
+is native `<details>`/`<summary>`, so keyboard, screen readers and
+find-in-page work with no JS at all. Measured: the thumbnails panel 532px →
+214px, and four representative panels 914px → 546px (1.13 screens of prose
+down to 0.67).
+
+**`.sub` had no styling at all.** It existed only scoped to `#topbar` and
+`.auth-card`, so the other 25 uses rendered as full-weight 14px body text —
+a five-line explanation looked exactly as important as the data under it,
+which is most of why Settings read as a wall. It is now muted 12.5px
+globally; both scoped rules still win on specificity.
+
+**That exposed a latent misuse, and fixing it mattered more than the
+styling.** Three of those 25 were not subtitles: the confirm dialog's
+message and the revoke dialog's "revoking CODE, currently assigned to NAME".
+Those are the consequence someone must read before pressing a red button,
+and demoting them to muted 12.5px is the wrong direction. They use a new
+`.modal-message` — full text colour, 13.5px, no smaller than the buttons
+beneath it.
+
+**Egress:** unchanged. CSS, one pure component, and a `<details>` the
+browser opens on its own. The collapsed panels fetch exactly what they did
+before — Settings' lazy loading is keyed to the *group* disclosures, which
+are untouched.
 
 **2026-10-09 — the hint stops covering the dropdown; the range reorders as you pick it**
 

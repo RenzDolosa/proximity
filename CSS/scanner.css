@@ -229,6 +229,36 @@
 .ss-feed-panel .feed-row .avatar{width:22px;height:22px;font-size:9px;}
 .ss-feed-panel .feed-row div > div{font-size:11.5px;}
 .ss-feed-panel .feed-badges{gap:3px;}
+
+/* The feed column is a desktop/kiosk idea. On a phone it has nowhere to sit
+   beside the hero — it ended up overlaying it — so the column is hidden and
+   a header button opens the same feed in a dialog instead. The feed NODE is
+   moved rather than duplicated (see StandaloneScanner.js), so live updates
+   keep landing in it while the dialog is open. */
+.ss-feed-open{display:none;}
+.ss-feed-dock{max-height:60dvh;overflow-y:auto;}
+
+@media (max-width: 860px){
+  /* Bottom right, thumb-reachable, out of the way of the card target — the
+     header is for identity and sign-out, not for an action used mid-shift. */
+  .ss-feed-open{
+    display:inline-flex;align-items:center;justify-content:center;gap:7px;
+    position:fixed;z-index:30;
+    right:calc(14px + env(safe-area-inset-right));
+    bottom:calc(14px + env(safe-area-inset-bottom));
+    /* min-height, not padding: .ghost's own padding wins the cascade and
+       left this at 30px — under the 44px a thumb needs. */
+    min-height:44px;padding:0 18px;font-size:13px;
+    border-radius:999px;
+    background:var(--surface-raised);border:1px solid var(--border);
+    box-shadow:0 8px 24px rgba(0,0,0,.45);
+  }
+  .ss-feed-col{display:none;}
+  /* With the feed gone the hero owns the width; shrink it so the card input
+     and the result card are not pushed off the bottom. */
+  .ss-ring{width:66dvw;height:34dvh;}
+  .ss-bg-logo .proximity-logo-mark{width:min(48dvh, 62dvw);height:min(48dvh, 62dvw);}
+}
 .ss-feed-panel .feed-time{font-size:10px;}
 .ss-feed-panel .badge{font-size:9px;padding:2px 6px;}
 /* Queued/syncing count — deliberately separate from the header's

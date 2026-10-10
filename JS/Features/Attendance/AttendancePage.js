@@ -220,7 +220,7 @@ function paintTable() {
   }
 
   wrap.innerHTML = `
-    <table>
+    <table class="table-as-cards">
       <thead><tr>
         <th class="col-shrink">Date</th><th>Employee</th><th>Department</th>
         <th class="col-shrink">First IN</th><th class="col-shrink">Last OUT</th>
@@ -232,14 +232,16 @@ function paintTable() {
           return `
             <tr class="row-clickable" data-emp="${esc(r.employee_id || '')}" tabindex="0"
                 title="Open ${esc(r.full_name)}'s scan log">
-              <td class="col-shrink mono">${esc(fmtWorkDate(r.work_date))}</td>
-              <td>${esc(r.full_name)}<div class="sub mono" style="margin:0;">${esc(r.employee_code)}</div></td>
-              <td>${esc(r.department || '—')}</td>
-              <td class="col-shrink mono">${esc(fmtTime(r.first_in))}</td>
-              <td class="col-shrink mono">${r.last_out ? esc(fmtTime(r.last_out)) : '—'}</td>
-              <td class="col-shrink mono">${esc(fmtDuration(Number(r.worked_seconds)))}</td>
-              <td class="col-shrink mono">${r.in_count}</td>
-              <td class="col-shrink"><span class="badge ${STATUS_BADGE[st]}">${esc(STATUS_LABEL[st])}</span></td>
+              <td class="col-shrink mono" data-label="Date">${esc(fmtWorkDate(r.work_date))}</td>
+              <!-- The employee is the headline on a phone; the date is one of
+                   several details. Desktop column order is untouched. -->
+              <td class="card-title">${esc(r.full_name)}<div class="sub mono" style="margin:0;">${esc(r.employee_code)}</div></td>
+              <td data-label="Department">${esc(r.department || '—')}</td>
+              <td class="col-shrink mono" data-label="First IN">${esc(fmtTime(r.first_in))}</td>
+              <td class="col-shrink mono" data-label="Last OUT">${r.last_out ? esc(fmtTime(r.last_out)) : '—'}</td>
+              <td class="col-shrink mono" data-label="Time on site">${esc(fmtDuration(Number(r.worked_seconds)))}</td>
+              <td class="col-shrink mono" data-label="INs">${r.in_count}</td>
+              <td class="col-shrink" data-label="Status"><span class="badge ${STATUS_BADGE[st]}">${esc(STATUS_LABEL[st])}</span></td>
             </tr>`;
         }).join('')}
       </tbody>

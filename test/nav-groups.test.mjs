@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { NAV_GROUPS, GROUPED_ROUTES, visibleGroups, hiddenGroupIds } from '../JS/Core/navGroups.js';
+import {
+  NAV_GROUPS, GROUPED_ROUTES, visibleGroups, hiddenGroupIds,
+  bottomNavRoutes, BOTTOM_NAV_LABEL,
+} from '../JS/Core/navGroups.js';
 import { isMobileWidth, MOBILE_MAX_WIDTH } from '../JS/Core/navDrawer.js';
 
 const INDEX_HTML = readFileSync(fileURLToPath(new URL('../Public/index.html', import.meta.url)), 'utf8');
@@ -80,12 +83,71 @@ test('visibleGroups does not mutate the shared group model', () => {
   assert.deepEqual(NAV_GROUPS.find((g) => g.id === 'monitor').routes, ['dashboard', 'alerts']);
 });
 
+// The phone tab bar. It must never offer a route the account cannot open,
+// and must never collapse to one lonely tab for a restricted login.
+test('an admin gets the three routes a phone is actually opened for', () => {
+  assert.deepEqual(bottomNavRoutes(() => true), ['dashboard', 'directory', 'attendance']);
+});
+
+test('a scanner-only account still gets a usable bar, backfilled in order', () => {
+  const canSee = (r) => ['scanner', 'settings'].includes(r);
+  const tabs = bottomNavRoutes(canSee);
+  assert.deepEqual(tabs, ['scanner', 'settings']);
+  assert.ok(tabs.every(canSee), 'must never offer a route the account cannot open');
+});
+
+test('a manager without the Dashboard backfills rather than showing two tabs', () => {
+  const canSee = (r) => r !== 'dashboard';
+  const tabs = bottomNavRoutes(canSee);
+  assert.equal(tabs.length, 3);
+  assert.ok(tabs.includes('directory') && tabs.includes('attendance'));
+  assert.ok(!tabs.includes('dashboard'));
+});
+
+test('an account that can see nothing gets an empty bar, not a broken one', () => {
+  assert.deepEqual(bottomNavRoutes(() => false), []);
+});
+
+test('every route has a tab label short enough for a tab bar', () => {
+  for (const route of GROUPED_ROUTES) {
+    const label = BOTTOM_NAV_LABEL[route];
+    assert.ok(label, `${route} needs a short label`);
+    assert.ok(label.length <= 9, `${route}: "${label}" is too long for a tab`);
+  }
+});
+
 test('the drawer breakpoint is inclusive at its own width', () => {
   assert.equal(isMobileWidth(MOBILE_MAX_WIDTH), true);
   assert.equal(isMobileWidth(MOBILE_MAX_WIDTH + 1), false);
   assert.equal(isMobileWidth(375), true);   // phone
   assert.equal(isMobileWidth(768), true);   // tablet portrait
   assert.equal(isMobileWidth(1280), false); // desktop
+});
+
+// Tables-as-cards is a CSS contract that six pages opt into by adding one
+// class and some data-labels. If the CSS half is edited away, those pages
+// silently go back to scrolling sideways on a phone with no error anywhere.
+test('the card layout keeps the contract its tables rely on', () => {
+  const css = readFileSync(fileURLToPath(new URL('../CSS/components.css', import.meta.url)), 'utf8');
+  const block = css.slice(css.indexOf('@media (max-width: 640px)'));
+  assert.ok(block.includes('.table-as-cards tr{'), 'rows must become cards');
+  assert.ok(block.includes('display:flex;flex-direction:column'), 'rows need flex so order: works');
+  assert.ok(block.includes('content:attr(data-label)'), 'cells need their label injected');
+  assert.ok(block.includes('.table-as-cards td.card-title'), 'a cell must be promotable to the title');
+  assert.ok(block.includes('order:-1'), 'the promoted title must sort above its siblings');
+});
+
+test('every page that opts into cards also labels its cells', () => {
+  const pages = [
+    'Directory/DirectoryPage', 'Proximity/ProximityPage', 'Users/UsersPage',
+    'Audit/AuditLogPage', 'Attendance/AttendancePage', 'Dashboard/DashboardPage',
+  ];
+  for (const page of pages) {
+    const src = readFileSync(fileURLToPath(new URL(`../JS/Features/${page}.js`, import.meta.url)), 'utf8');
+    assert.ok(src.includes('table-as-cards'), `${page} should opt in`);
+    // Without labels the cards render as a column of bare values.
+    assert.ok(/data-label="/.test(src), `${page} opted in but labels no cells`);
+  }
 });
 
 // Before 2026-10-08 the only mobile rule hid two topbar labels, so a 375px

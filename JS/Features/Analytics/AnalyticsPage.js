@@ -184,16 +184,16 @@ function renderTrendChart(daily) {
 function renderScannerTable(byScanner) {
   if (!byScanner.length) return `<div class="empty-state">No scanner activity in this window.</div>`;
   return `
-    <table>
+    <table class="table-as-cards">
       <thead><tr><th>Scanner</th><th class="col-shrink">Total</th><th class="col-shrink">Matched</th><th class="col-shrink">Match rate</th><th class="col-shrink">Last scan</th></tr></thead>
       <tbody>
         ${byScanner.map((r) => `
           <tr class="clickable-row" data-drill="all" data-scanner="${esc(r.scanner_id || '')}" tabindex="0" title="Show this scanner's scans">
             <td class="mono">${esc(r.scanner_id || '—')}</td>
-            <td class="col-shrink mono">${r.total}</td>
-            <td class="col-shrink mono">${r.matched}</td>
-            <td class="col-shrink mono">${r.match_rate_pct}%</td>
-            <td class="col-shrink mono">${fmtTime(r.last_scan_at)}</td>
+            <td class="col-shrink mono" data-label="Total">${r.total}</td>
+            <td class="col-shrink mono" data-label="Matched">${r.matched}</td>
+            <td class="col-shrink mono" data-label="Match rate">${r.match_rate_pct}%</td>
+            <td class="col-shrink mono" data-label="Last scan">${fmtTime(r.last_scan_at)}</td>
           </tr>
         `).join('')}
       </tbody>

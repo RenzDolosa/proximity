@@ -35,6 +35,40 @@ export function visibleGroups(isRouteVisible) {
     .filter((group) => group.routes.length > 0);
 }
 
+// The three routes a phone gets as bottom tabs, before the "More" button
+// that opens the full drawer. Chosen by what someone opens the app ON a
+// phone to do — check who is in, look someone up, pull a day's attendance —
+// not by the desktop rail's order.
+export const BOTTOM_NAV_PREFERRED = Object.freeze(['dashboard', 'directory', 'attendance']);
+
+// Short labels: a tab bar has roughly 70px per item, and "Employee Manager"
+// is not going to fit in it.
+export const BOTTOM_NAV_LABEL = Object.freeze({
+  dashboard: 'Home',
+  alerts: 'Alerts',
+  directory: 'People',
+  proximity: 'Cards',
+  scanner: 'Scan',
+  attendance: 'Hours',
+  analytics: 'Scanners',
+  users: 'Users',
+  settings: 'Settings',
+  audit: 'Audit',
+});
+
+/**
+ * Which routes the bottom bar shows. A restricted account may not be able to
+ * see any of the preferred three — a scanner-only login sees none of them —
+ * so the rest is backfilled in grouped order rather than leaving a bar with
+ * one tab in it.
+ */
+export function bottomNavRoutes(isRouteVisible, max = 3) {
+  const preferred = BOTTOM_NAV_PREFERRED.filter((r) => isRouteVisible(r));
+  if (preferred.length >= max) return preferred.slice(0, max);
+  const rest = GROUPED_ROUTES.filter((r) => isRouteVisible(r) && !preferred.includes(r));
+  return [...preferred, ...rest].slice(0, max);
+}
+
 // Group ids that should be hidden, for the DOM half to toggle directly.
 export function hiddenGroupIds(isRouteVisible) {
   const shown = new Set(visibleGroups(isRouteVisible).map((g) => g.id));

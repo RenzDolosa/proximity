@@ -91,36 +91,28 @@ nav.rail button.active .ic{color:var(--accent);}
   #sidebar{transition:none;}
 }
 
-/* Installed-app polish. With viewport-fit=cover the page paints under the
-   notch and the home indicator, so the chrome has to inset itself back out
-   — otherwise the topbar sits under the status bar and the last table row
-   under the gesture bar. env() resolves to 0 in a normal browser tab, so
-   these are inert everywhere except an installed app on a device that has
-   them. */
-#topbar{
-  padding-top:calc(10px + env(safe-area-inset-top));
-  padding-left:calc(24px + env(safe-area-inset-left));
-  padding-right:calc(24px + env(safe-area-inset-right));
-}
-#content{padding-bottom:calc(24px + env(safe-area-inset-bottom));}
-#sidebar{padding-top:calc(18px + env(safe-area-inset-top));}
+/* Phone tab bar. Desktop keeps the rail; this is the thumb-reachable
+   equivalent, with "More" opening that same rail as a drawer rather than
+   introducing a second list of routes to keep in step. */
+.bottom-nav{display:none;}
 
 @media (max-width: 860px){
-  #topbar{padding-left:calc(14px + env(safe-area-inset-left));padding-right:calc(14px + env(safe-area-inset-right));}
-  #content{padding-left:calc(14px + env(safe-area-inset-left));padding-right:calc(14px + env(safe-area-inset-right));}
-}
-
-/* An installed app should not feel like a web page: no rubber-band overscroll
-   revealing the background, no long-press text selection on chrome, and no
-   double-tap zoom on controls. Text inside tables stays selectable — people
-   copy names and codes out of them. */
-@media (display-mode: standalone){
-  html, body{overscroll-behavior:none;}
-  #shell, #topbar, nav.rail, .ss-header{
-    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+  .bottom-nav{
+    display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
+    position:fixed;left:0;right:0;bottom:0;z-index:35;
+    background:var(--surface);border-top:1px solid var(--border);
+    padding-bottom:env(safe-area-inset-bottom);
   }
-  #content, .table-scroll, .modal{-webkit-user-select:text;user-select:text;}
-  button, .nav-toggle, .drp-trigger{touch-action:manipulation;}
+  .bottom-nav button{
+    display:flex;flex-direction:column;align-items:center;gap:3px;
+    padding:9px 4px 7px;background:transparent;border:none;
+    color:var(--text-faint);font-size:10.5px;min-height:52px;
+  }
+  .bottom-nav button .ic{font-family:var(--mono);font-size:15px;line-height:1;}
+  .bottom-nav button.active{color:var(--accent);}
+  .bottom-nav button:active{background:var(--surface-raised);}
+  /* The drawer must sit above the bar it was opened from. */
+  #sidebar{z-index:40;}
 }
 
 #content{
@@ -185,3 +177,46 @@ nav.rail button.active .ic{color:var(--accent);}
 /* Unread-alerts count on the sidebar's Alerts button (Core/alertsBadge.js). */
 nav.rail button .nav-badge{margin-left:auto;min-width:18px;padding:1px 6px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;font-weight:600;line-height:16px;text-align:center;}
 nav.rail button .nav-badge.hidden{display:none;}
+
+/* EVERYTHING BELOW MUST STAY LAST IN THIS FILE.
+   `#content{padding:24px}` above is a shorthand, so it resets padding-bottom
+   outright — these rules lost to it until they were moved here, which is how
+   the tab bar ended up covering the last table row.
+
+   Installed-app polish. With viewport-fit=cover the page paints under the
+   notch and the home indicator, so the chrome has to inset itself back out
+   — otherwise the topbar sits under the status bar and the last table row
+   under the gesture bar. env() resolves to 0 in a normal browser tab, so
+   these are inert everywhere except an installed app on a device that has
+   them. */
+#topbar{
+  padding-top:calc(10px + env(safe-area-inset-top));
+  padding-left:calc(24px + env(safe-area-inset-left));
+  padding-right:calc(24px + env(safe-area-inset-right));
+}
+#content{padding-bottom:calc(24px + env(safe-area-inset-bottom));}
+#sidebar{padding-top:calc(18px + env(safe-area-inset-top));}
+
+@media (max-width: 860px){
+  #topbar{padding-left:calc(14px + env(safe-area-inset-left));padding-right:calc(14px + env(safe-area-inset-right));}
+  /* Clears the tab bar, so the last table row and the pagination are
+     reachable rather than tucked behind it. */
+  #content{
+    padding-left:calc(14px + env(safe-area-inset-left));
+    padding-right:calc(14px + env(safe-area-inset-right));
+    padding-bottom:calc(68px + env(safe-area-inset-bottom));
+  }
+}
+
+/* An installed app should not feel like a web page: no rubber-band overscroll
+   revealing the background, no long-press text selection on chrome, and no
+   double-tap zoom on controls. Text inside tables stays selectable — people
+   copy names and codes out of them. */
+@media (display-mode: standalone){
+  html, body{overscroll-behavior:none;}
+  #shell, #topbar, nav.rail, .ss-header{
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+  }
+  #content, .table-scroll, .modal{-webkit-user-select:text;user-select:text;}
+  button, .nav-toggle, .drp-trigger{touch-action:manipulation;}
+}

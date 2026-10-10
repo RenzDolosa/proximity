@@ -222,7 +222,20 @@ function paintStats() {
       ${statCard('Open remarks', stats.employees_with_open_remarks, { route: 'directory' })}
       ${statCard('Unassigned active cards', stats.unassigned_active_cards, { route: 'proximity' })}
     </div>
-    ${sum.byDepartment.length ? `<div class="emp-meta" style="margin-top:10px;">On site by department: ${sum.byDepartment.map((d) => `<button type="button" class="dept-chip" data-dept="${esc(d.department)}"><strong>${esc(d.department)}</strong> ${d.count}</button>`).join(' · ')}</div>` : ''}
+    ${sum.byDepartment.length ? `
+      <div class="dept-breakdown">
+        <div class="dept-breakdown-title">On site by department</div>
+        <!-- A wrapping run of "Name 12 · Name 7 · …" separated by dots read
+             as one dense paragraph once there were twenty departments and no
+             room to lay them out. Each is its own chip now, so the name and
+             its count stay together on a line of their own. -->
+        <div class="dept-chips">
+          ${sum.byDepartment.map((d) => `<button type="button" class="dept-chip" data-dept="${esc(d.department)}">
+            <span class="dept-chip-name">${esc(d.department)}</span>
+            <span class="dept-chip-count">${d.count}</span>
+          </button>`).join('')}
+        </div>
+      </div>` : ''}
   `;
   el.querySelectorAll('[data-goto]').forEach((card) => {
     const go = () => { appState.route = card.dataset.goto; import('../../Core/router.js').then((m) => m.render()); };
@@ -272,16 +285,16 @@ function paintTable() {
   }
   const slice = all.slice((page - 1) * pageSize, page * pageSize);
   wrap.innerHTML = `
-    <table>
+    <table class="table-as-cards">
       <thead><tr><th>Employee</th><th>Code</th><th>Department</th><th>IN at</th><th>Time on site</th><th>Scanner</th><th></th></tr></thead>
       <tbody>${slice.map((r) => `
         <tr>
           <td>${esc(r.full_name)}</td>
-          <td class="mono">${esc(r.employee_code)}</td>
-          <td>${esc(r.department || '—')}</td>
-          <td>${esc(fmtTime(r.last_in_at))}</td>
-          <td class="mono">${esc(fmtDuration(Number(r.seconds_on_site)))}</td>
-          <td>${esc(r.last_scanner_id || '—')}</td>
+          <td class="mono" data-label="Code">${esc(r.employee_code)}</td>
+          <td data-label="Department">${esc(r.department || '—')}</td>
+          <td data-label="IN at">${esc(fmtTime(r.last_in_at))}</td>
+          <td class="mono" data-label="Time on site">${esc(fmtDuration(Number(r.seconds_on_site)))}</td>
+          <td data-label="Scanner">${esc(r.last_scanner_id || '—')}</td>
           <td>${r.is_stale ? '<span class="badge unassigned_card">old IN</span>' : ''}${r.status && r.status !== 'active' ? ` <span class="badge ${esc(r.status)}">${esc(r.status)}</span>` : ''}</td>
         </tr>`).join('')}
       </tbody>

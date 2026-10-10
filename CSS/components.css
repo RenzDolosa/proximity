@@ -3,6 +3,36 @@
 .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
 .toolbar .search{max-width:260px;}
 
+/* Phone toolbars. Six controls sized for a 1280px row wrapped into a
+   three-line jumble at 390px, with the search box and the filter pill
+   overlapping. Here the search gets its own full-width line and the actions
+   become an evenly divided row, so each one has a predictable tap target and
+   the whole thing is two tidy lines instead of three ragged ones. */
+/* Classes, not inline styles: these were `style="display:flex"` on the
+   markup, and an inline declaration beats any stylesheet rule — the mobile
+   grid below silently lost to it. */
+.toolbar-start{display:flex;gap:8px;align-items:center;flex:1;min-width:0;}
+.toolbar-actions{display:flex;gap:8px;}
+
+@media (max-width: 640px){
+  .toolbar{flex-direction:column;align-items:stretch;gap:8px;}
+  .toolbar > div{width:100%;}
+  /* The search gets a line of its own; the filter pill goes under it rather
+     than squeezing both into one row. */
+  .toolbar-start{flex-wrap:wrap;}
+  .toolbar .search,
+  .toolbar .filter-row .search{max-width:none;width:100%;flex:1 1 100%;}
+  .filter-row{flex-wrap:wrap;gap:8px;}
+  .filter-row select{flex:1 1 140px;max-width:none;min-width:0;}
+  /* Actions in even columns rather than whatever order they happen to wrap
+     in, with the primary spanning the full width beneath them. */
+  .toolbar-actions{display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;}
+  .toolbar-actions > button{width:100%;padding:9px 6px;font-size:12.5px;}
+  .toolbar-actions > button.primary,
+  .toolbar-actions > .menu{grid-column:1 / -1;}
+  .toolbar-actions > .menu .menu-trigger{width:100%;justify-content:center;}
+}
+
 /* Search box + status/type dropdown, always side-by-side as one row.
    Children get explicit basis/width here instead of relying on the
    generic input,select{width:100%} — that rule is what was forcing the
@@ -171,6 +201,91 @@ td.row-actions{display:table-cell;}
 .drp-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;}
 .drp-actions button{font-size:12px;padding:6px 14px;}
 
+/* Tables become cards on a phone.
+ *
+ * A table is a grid of comparisons — you read DOWN a column. That falls apart
+ * at 375px: eight columns either scroll sideways (so you cannot see a row's
+ * name and its status at once) or squeeze until every cell wraps to one word
+ * per line. On a phone you are not comparing rows, you are reading one record
+ * at a time, which is a card.
+ *
+ * Done in CSS off a `data-label` on each cell rather than by rendering two
+ * different markups. One source of truth per page, no branch to keep in sync,
+ * and the labels double as the accessible names the hidden <thead> stops
+ * providing. Add `.table-as-cards` to a <table> and `data-label` to its cells
+ * and the page gets this for free.
+ *
+ * The first cell is the card's title (avatar, name — no label), and a cell
+ * carrying no data-label is treated as the action row.
+ */
+@media (max-width: 640px){
+  /* The wrapper exists to allow horizontal scroll; cards never need it, and
+     leaving it on traps vertical swipes at the edges. */
+  .table-scroll:has(.table-as-cards){overflow-x:visible;border:none;}
+  .table-as-cards{display:block;width:100%;}
+  /* Visually hidden, not display:none — the header text is still what a
+     screen reader announces for each cell. */
+  .table-as-cards thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
+  .table-as-cards tbody,
+  .table-as-cards td{display:block;width:auto;}
+  /* flex, not block, so a cell can be promoted to the card's title with
+     `order` — see .card-title. That keeps the desktop column order in the
+     markup where it belongs instead of reshuffling cells per breakpoint. */
+  .table-as-cards tr{
+    display:flex;flex-direction:column;
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:12px 14px;margin-bottom:10px;
+  }
+  .table-as-cards tr:hover{background:var(--surface);}
+  .table-as-cards tr.row-clickable:active{background:var(--surface-raised);}
+  .table-as-cards td{
+    border:none;padding:5px 0;display:flex;gap:12px;align-items:baseline;
+    white-space:normal;
+  }
+  .table-as-cards td::before{
+    content:attr(data-label);flex:0 0 36%;min-width:0;
+    color:var(--text-faint);font-size:10.5px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.5px;line-height:1.5;
+  }
+  /* col-shrink is a desktop width hint and means nothing once stacked. */
+  .table-as-cards td.col-shrink{width:auto;}
+
+  /* Card title: the first cell by default, or any cell marked .card-title
+     when the headline is not the first column (Audit Log's Event). */
+  .table-as-cards td:first-child,
+  .table-as-cards td.card-title{
+    display:flex;align-items:center;gap:10px;
+    font-size:15px;font-weight:600;
+    padding:0 0 10px;margin-bottom:8px;
+    border-bottom:1px solid var(--border-soft);
+  }
+  .table-as-cards td:first-child::before,
+  .table-as-cards td.card-title::before{content:none;}
+  .table-as-cards td:first-child .avatar{width:38px;height:38px;flex:0 0 38px;}
+  /* Promoted to the top of the card; the cell it displaced falls back to a
+     normal labelled row. */
+  .table-as-cards td.card-title{order:-1;}
+  .table-as-cards:has(td.card-title) td:first-child{
+    display:flex;font-size:inherit;font-weight:inherit;
+    padding:5px 0;margin-bottom:0;border-bottom:none;
+  }
+  .table-as-cards:has(td.card-title) td:first-child::before{content:attr(data-label);}
+
+  /* Actions: the one cell with no data-label. Full width, wrapping, with a
+     rule above it — the reference's button row. */
+  .table-as-cards td:not([data-label]):not(:first-child){
+    display:flex;flex-wrap:wrap;gap:6px;
+    margin-top:8px;padding-top:10px;
+    border-top:1px solid var(--border-soft);
+  }
+  .table-as-cards td:not([data-label]):not(:first-child)::before{content:none;}
+  .table-as-cards .row-actions{display:flex;flex-wrap:wrap;gap:6px;width:100%;}
+  .table-as-cards .row-actions button{flex:1 1 auto;min-width:88px;text-align:center;}
+
+  /* An empty cell would otherwise render as a lonely label. */
+  .table-as-cards td:empty{display:none;}
+}
+
 /* Toolbar overflow menu (Components/Menu.js). Same popover mechanics as the
    date picker, including measuring on open and flipping when it would run
    off the right edge. */
@@ -267,8 +382,46 @@ tr.row-clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2
    from the inline margins they carry when used standalone. */
 .settings-group-body > .panel{margin-top:0;max-width:none;}
 
+/* A panel's explanatory note: lead sentence, then "Details" (Components/
+   PanelNote.js). Deliberately quieter than the group summary above it --
+   that one is navigation and should invite a click; this one is a footnote
+   and should not compete with the panel's own controls for attention. */
+.panel-note{margin:0 0 10px;}
+.panel-note-lead{margin:0;}
+.panel-note-more > summary{
+  cursor:pointer;list-style:none;display:inline-flex;align-items:baseline;gap:5px;
+  color:var(--text-faint);font-size:11.5px;padding:3px 0;
+}
+.panel-note-more > summary::-webkit-details-marker{display:none;}
+.panel-note-more > summary::marker{content:'';}
+.panel-note-more > summary::before{
+  content:'▸';font-family:var(--mono);font-size:10px;
+  display:inline-block;transition:transform .15s ease;
+}
+.panel-note-more[open] > summary::before{transform:rotate(90deg);}
+.panel-note-more > summary:hover{color:var(--text-muted);}
+.panel-note-more > summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px;}
+/* Indented and ruled so a long detail reads as subordinate to its lead
+   rather than as a second paragraph of equal weight. */
+.panel-note-body{margin:4px 0 2px;padding-left:10px;border-left:2px solid var(--border-soft);}
+.panel-note-body > p{margin:0 0 7px;}
+.panel-note-body > p:last-child{margin-bottom:0;}
+
 @media (prefers-reduced-motion: reduce){
-  .settings-group > summary::before{transition:none;}
+  .settings-group > summary::before,
+  .panel-note-more > summary::before{transition:none;}
+}
+
+@media (max-width: 640px){
+  /* The summary is the whole tap target on a phone, and "▸ Details" is only
+     45px wide on its own. Padding grows the hit area in both directions; the
+     negative margin pulls the text back into line with the lead sentence
+     above it, so it reads as a footnote rather than gaining a button's
+     indent. */
+  .panel-note-more > summary{
+    min-height:40px;align-items:center;
+    padding:8px 12px;margin-left:-12px;
+  }
 }
 @media (max-width: 560px){
   .settings-group-hint{display:none;}
@@ -281,6 +434,13 @@ tr.row-clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2
 .overlay{position:fixed;inset:0;background:rgba(6,8,12,.6);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50;}
 .modal{width:100%;max-width:440px;background:var(--surface-raised);border:1px solid var(--border);border-radius:6px;padding:22px;}
 .modal h3{margin:0 0 16px;font-size:15px;font-weight:600;}
+/* What a confirm dialog is actually asking -- "this permanently deletes
+   3,382 records", "revoking CODE, assigned to NAME". These used .sub, which
+   was harmless only while .sub had no styling of its own; now that it reads
+   as muted secondary text, the sentence someone must read before pressing a
+   red button needs a class that says so. Full text colour, and no smaller
+   than the controls beneath it. */
+.modal .modal-message{margin:-4px 0 18px;font-size:13.5px;color:var(--text);}
 .modal .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;}
 
 .avatar{
@@ -378,14 +538,56 @@ tr.row-clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2
 .clickable-row{cursor:pointer;}
 .clickable-row:hover td,.clickable-row:focus-visible td{background:var(--surface-raised);}
 
+/* Phone: two cards per row, and an odd last one spans rather than sitting
+   half-width beside dead space. `auto-fit` already lands on two columns at
+   this width, but it left Attendance's fifth card ("Check times") alone
+   against a hole, which reads as a rendering fault rather than a short row.
+   nth-child counts elements, and a card that isn't shown is an empty string
+   rather than an element (Dashboard's alerts, Analytics' Unmatched), so the
+   parity follows what is actually on screen.
+
+   This block has to sit AFTER the .stat-grid/.stat-card rules above, not
+   with the other mobile rules earlier in the file: same specificity, so
+   source order is all that decides it. Written there first, the padding and
+   font-size were silently overridden and only the span -- which carries an
+   extra pseudo-class -- survived. Measured, not assumed. */
+@media (max-width: 640px){
+  .stat-grid{grid-template-columns:repeat(2,1fr);gap:8px;}
+  .stat-card{padding:10px 12px;}
+  /* 19px keeps a full month's "Total time on site" on one line: the hour
+     count there is six digits once a thousand-odd employees are summed over
+     31 days, and at 22px `318432h 00m` wrapped. */
+  .stat-card .stat-value{font-size:19px;}
+  .stat-card:last-child:nth-child(odd){grid-column:1 / -1;}
+}
+
 /* Dashboard's "On site by department" chips (Features/Dashboard/DashboardPage.js
    + Components/DepartmentRosterModal.js) — inline text-styled buttons so they
    sit naturally inside the .emp-meta summary line instead of looking like a
    row of pills. */
-.dept-chip{background:none;border:none;padding:0;margin:0;font:inherit;color:inherit;cursor:pointer;}
-.dept-chip:hover,.dept-chip:focus-visible{color:var(--accent);}
-.dept-chip strong{text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:2px;}
-.dept-chip:hover strong,.dept-chip:focus-visible strong{text-decoration-color:currentColor;}
+/* On-site-by-department. Twenty-odd departments as "Name 12 · Name 7 · …"
+   wrapped into a wall of text where the dots, the names and the numbers all
+   looked alike. Each is a chip now: the name and its count are one object
+   that cannot be split across a line break. */
+.dept-breakdown{margin-top:12px;}
+.dept-breakdown-title{
+  color:var(--text-faint);font-size:10.5px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;
+}
+.dept-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.dept-chip{
+  display:inline-flex;align-items:center;gap:7px;
+  background:var(--surface);border:1px solid var(--border-soft);
+  border-radius:999px;padding:4px 6px 4px 11px;
+  font-size:12px;color:var(--text-muted);cursor:pointer;
+}
+.dept-chip:hover,.dept-chip:focus-visible{color:var(--text);border-color:var(--accent-dim);}
+.dept-chip-name{white-space:nowrap;}
+.dept-chip-count{
+  background:var(--surface-raised);border-radius:999px;
+  padding:1px 7px;font-size:11px;font-weight:600;color:var(--text);
+}
+.dept-chip:hover .dept-chip-count{background:var(--accent-dim);color:var(--accent-text-on-dim);}
 
 /* Each .trend-col is one day. .trend-bar's own height (set inline, in px)
    is that day's total relative to the busiest day in the window;
