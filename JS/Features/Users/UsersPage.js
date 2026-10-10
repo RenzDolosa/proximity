@@ -51,7 +51,7 @@ function paintUsersTable() {
       <thead><tr><th>Name</th><th>Email</th><th class="col-shrink">Role</th><th class="col-shrink">Access</th><th class="col-shrink">Account</th><th class="col-shrink"></th></tr></thead>
       <tbody>
         ${rows.map((u) => `
-          <tr>
+          <tr class="row-clickable" data-user="${esc(u.id)}" tabindex="0" title="Edit ${esc(u.full_name)}">
             <td>${esc(u.full_name)}</td>
             <td class="mono">${esc(u.email)}</td>
             <td class="col-shrink"><span class="badge role-${u.role}">${esc(u.role)}</span></td>
@@ -75,6 +75,17 @@ function paintUsersTable() {
   $$('button[data-edit]', wrap).forEach((b) => b.addEventListener('click', () => {
     openUserModal(data.find((u) => u.id === b.dataset.edit), renderUsers);
   }));
+  // The whole row opens Edit. The action buttons live inside it, so each one
+  // has to stop the click reaching the row — otherwise Delete would also open
+  // the edit dialog behind the confirmation.
+  $$('tr.row-clickable', wrap).forEach((tr) => {
+    const open = () => openUserModal(data.find((u) => u.id === tr.dataset.user), renderUsers);
+    tr.addEventListener('click', (e) => { if (!e.target.closest('button, a, .copyable')) open(); });
+    tr.addEventListener('keydown', (e) => {
+      if (e.target !== tr) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+  });
   $$('button[data-pw]', wrap).forEach((b) => b.addEventListener('click', () => {
     openResetPasswordModal(data.find((u) => u.id === b.dataset.pw));
   }));

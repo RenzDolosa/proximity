@@ -70,7 +70,10 @@ export const avatarHTML = (name, photoUrl, cacheKey) => {
 export const offlineAvatarHTML = (name, thumbB64) => {
   const initialsHTML = `<span class="avatar-fallback" style="display:none">${esc(initials(name))}</span>`;
   if (!thumbB64) return `<span class="avatar-fallback">${esc(initials(name))}</span>`;
-  const realHTML = `<img src="${photoDataUri(thumbB64)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''" />`;
+  // .avatar-photo is what Utils/avatarPreview.js hovers on — the same
+  // enlarge-on-hover the Employee Manager grid has. Only containers that opt
+  // in get the behaviour, so tagging it here costs nothing elsewhere.
+  const realHTML = `<img class="avatar-photo" src="${photoDataUri(thumbB64)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''" />`;
   return realHTML + initialsHTML;
 };
 

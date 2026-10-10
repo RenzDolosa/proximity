@@ -17,6 +17,7 @@ let assignedByCard = new Map();
 let page = 1;
 let pageSize = 50;
 let loaded = false; // distinguishes "never fetched yet" from "fetched, zero rows"
+let unassignedOnly = false; // toolbar toggle — resets each fresh page load, same as `page`
 let visibleRows = []; // current search/status-filtered set (pre-pagination) — kept in sync by paintProximityTable(), read by the Export button
 
 export async function renderProximity() {
@@ -30,6 +31,7 @@ export async function renderProximity() {
           <option value="active">Active only</option>
           <option value="revoked">Revoked only</option>
         </select>
+        <button class="ghost${unassignedOnly ? ' active' : ''}" id="prox-unassigned-toggle" title="Show only cards not linked to an employee">Unassigned<span class="count-pill" id="prox-unassigned-count"></span></button>
       </div>
       <div style="display:flex;gap:8px;">
         <button class="ghost" id="prox-export">Export</button>
@@ -45,6 +47,12 @@ export async function renderProximity() {
   `;
   $('#prox-search').addEventListener('input', () => { page = 1; paintProximityTable(); });
   $('#prox-filter').addEventListener('change', () => { page = 1; paintProximityTable(); });
+  $('#prox-unassigned-toggle').addEventListener('click', (e) => {
+    unassignedOnly = !unassignedOnly;
+    e.currentTarget.classList.toggle('active', unassignedOnly);
+    page = 1;
+    paintProximityTable();
+  });
   $('#prox-export').addEventListener('click', () => {
     if (!visibleRows.length) { toast('Nothing to export for the current search/filter.', 'error'); return; }
     exportXlsx({
@@ -130,8 +138,16 @@ function paintProximityTable() {
   const wrap = $('#prox-table-wrap');
   const statusFilter = $('#prox-filter').value;
   const q = $('#prox-search').value.trim().toLowerCase();
+  // Unassigned cards are the ones waiting to be issued, so "which are free?"
+  // is a question asked often enough to deserve a toggle rather than a scan
+  // down the Assigned-to column. Same shape as Employee Manager's
+  // "Unresolved remarks", including the count pill.
+  const unassignedTotal = cardsCache.filter((c) => !assignedByCard.has(c.id)).length;
+  const countEl = $('#prox-unassigned-count');
+  if (countEl) countEl.textContent = unassignedTotal ? String(unassignedTotal) : '';
   const allRows = cardsCache.filter((c) => {
     if (statusFilter !== 'all' && (statusFilter === 'active') !== c.is_active) return false;
+    if (unassignedOnly && assignedByCard.has(c.id)) return false;
     if (!q) return true;
     const e = assignedByCard.get(c.id);
     return [c.proximity_code, e?.full_name, e?.employee_code].some((v) => (v || '').toLowerCase().includes(q));
