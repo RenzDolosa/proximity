@@ -171,6 +171,27 @@ td.row-actions{display:table-cell;}
 .drp-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;}
 .drp-actions button{font-size:12px;padding:6px 14px;}
 
+/* Toolbar overflow menu (Components/Menu.js). Same popover mechanics as the
+   date picker, including measuring on open and flipping when it would run
+   off the right edge. */
+.menu{position:relative;display:inline-block;}
+.menu-caret{margin-left:6px;color:var(--text-faint);font-size:10px;}
+.menu-pop{
+  position:absolute;top:calc(100% + 6px);left:0;z-index:20;min-width:230px;
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:5px;box-shadow:0 12px 32px rgba(0,0,0,.45);
+}
+.menu-pop[hidden]{display:none;}
+.menu-end .menu-pop{left:auto;right:0;}
+.menu-pop button{
+  display:block;width:100%;text-align:left;background:transparent;border:none;
+  border-radius:var(--radius);padding:8px 10px;color:var(--text);
+}
+.menu-pop button:hover{background:var(--surface-raised);}
+.menu-pop button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
+.menu-item-label{display:block;font-size:13px;}
+.menu-item-hint{display:block;font-size:11.5px;color:var(--text-faint);margin-top:2px;}
+
 /* A table row that opens something. Keyboard-reachable, so it needs a focus
    ring as well as a hover state. */
 tr.row-clickable{cursor:pointer;}

@@ -11,6 +11,7 @@ import { loadScanSounds, playScanSound, scanSoundsLoaded, initAudioUnlock } from
 import { OfflineScanModel, STALE_AFTER_MS } from '../../Models/OfflineScanModel.js';
 import { readRejection } from '../../Core/offlineScanning.js';
 import { registerBusyCheck } from '../../Utils/appUpdate.js';
+import { wireAvatarPreview } from '../../Utils/avatarPreview.js';
 import { connectionState, CONNECTION_LABEL, CONNECTION_BADGE } from '../../Utils/connectionState.js';
 
 // Whether the LAST attempt to reach the server actually failed. navigator
@@ -452,6 +453,10 @@ function renderStandaloneScanner() {
     if (!codeInput.value.trim()) return;
     autoSubmitTimer = setTimeout(doScan, AUTO_SUBMIT_DELAY_MS);
   });
+  // Hover a feed avatar to see the face full size, the same affordance the
+  // Employee Manager grid has. The thumbnails are already in the kiosk's
+  // local cache, so enlarging one costs nothing — no fetch, no Drive call.
+  wireAvatarPreview($('#ss-feed'), $('.ss-feed-panel'));
   loadScanFeed('ss-feed', 10, operatorName);
 }
 

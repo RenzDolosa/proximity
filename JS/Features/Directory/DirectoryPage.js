@@ -14,6 +14,7 @@ import { openImportModal } from '../../Components/ImportModal.js';
 import { openExportScanLogsModal } from '../../Components/ExportScanLogsModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
 import { copyableHTML } from '../../Components/Copyable.js';
+import { menuHTML, mountMenu } from '../../Components/Menu.js';
 import { openConfirmModal, openConfirmProgressModal } from '../../Components/ConfirmModal.js';
 import { wireAvatarPreview } from '../../Utils/avatarPreview.js';
 import { buildIdentityIndex, identityKey } from '../../Utils/employeeCode.js';
@@ -38,6 +39,7 @@ let pageSize = 50;
 let loaded = false; // distinguishes "never fetched yet" from "fetched, zero rows"
 let scanChannel = null; // created once, kept alive for the rest of the session — see below
 let unresolvedOnly = false; // toolbar toggle — resets to off each fresh page load, same as `page`
+let exportMenu = null;
 let visibleRows = []; // the current search/toggle-filtered set (pre-pagination) — kept in sync by paintDirectoryTable(), read by the Export button so it exports what's actually on screen, not just the current page
 
 export async function renderDirectory() {
@@ -49,9 +51,13 @@ export async function renderDirectory() {
         <button class="ghost${unresolvedOnly ? ' active' : ''}" id="dir-unresolved-toggle" title="Show only employees with unresolved remarks">Unresolved remarks<span class="count-pill" id="dir-unresolved-count"></span></button>
       </div>
       <div style="display:flex;gap:8px;">
-        <button class="ghost" id="dir-export">Export</button>
+        ${isAdminOrManager()
+          ? menuHTML('dir-export-menu', 'Export', [
+            { id: 'employees', label: 'Employee list', hint: 'What this table currently shows' },
+            { id: 'scans', label: 'All scan logs', hint: 'Every scan, optionally by date range' },
+          ])
+          : '<button class="ghost" id="dir-export">Export</button>'}
         ${isAdminOrManager() ? `
-          <button class="ghost" id="dir-export-scans">Export all scan logs</button>
           ${isAdmin() ? '<button class="ghost danger" id="dir-delete-all">Delete all</button>' : ''}
           <button class="ghost" id="dir-import">Import</button>
           <button class="primary" id="dir-add">+ Add employee</button>
@@ -70,7 +76,10 @@ export async function renderDirectory() {
     page = 1;
     paintDirectoryTable($('#dir-search')?.value || '');
   });
-  $('#dir-export').addEventListener('click', () => {
+  // Both exports are the same intent at different scope, so they live under
+  // one control with the scope as the choice. A viewer sees only the plain
+  // button (no scan-log access), so both paths route through this function.
+  const exportEmployees = () => {
     if (!visibleRows.length) { toast('Nothing to export for the current search/filter.', 'error'); return; }
     exportXlsx({
       filename: `employees-${todayStamp()}.xlsx`,
@@ -100,7 +109,15 @@ export async function renderDirectory() {
         total_scans: e.total_scans ?? 0,
       })),
     });
-  });
+  };
+  if (isAdminOrManager()) {
+    exportMenu?.destroy();
+    exportMenu = mountMenu($('#dir-export-menu'), {
+      onSelect: (id) => (id === 'scans' ? openExportScanLogsModal() : exportEmployees()),
+    });
+  } else {
+    $('#dir-export').addEventListener('click', exportEmployees);
+  }
   if (isAdmin()) {
     $('#dir-delete-all').addEventListener('click', async () => {
       const total = appState.employeesCache.length;
@@ -122,7 +139,6 @@ export async function renderDirectory() {
   }
   if (isAdminOrManager()) {
     $('#dir-add').addEventListener('click', () => openEmployeeModal(null, reloadDirectory));
-    $('#dir-export-scans').addEventListener('click', () => openExportScanLogsModal());
     $('#dir-import').addEventListener('click', () => openImportModal({
       title: 'Import employees',
       description: 'One row per employee. proximity_code is matched against an existing unassigned card, or issued as a brand-new card if it doesn\'t exist yet.',

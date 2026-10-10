@@ -5,6 +5,14 @@ import { openModal, closeModal, showModalError } from './Modal.js';
 import { ProfilesModel } from '../Models/ProfilesModel.js';
 import { scopeOptions, roleOptions } from '../Features/Users/userOptions.js';
 
+import { withHint } from './Hint.js';
+import { openResetPasswordModal } from './ResetPasswordModal.js';
+
+// One sentence per access level, shown on hover so it is not permanently
+// competing with the two dropdowns above it.
+const ACCESS_HINT = 'Access decides which sections this login can open: the whole app, '
+  + 'Employee Manager and Proximity Cards only, or the Scanner only. It also decides which '
+  + 'Settings panels appear. Admins always have full access whatever this says.';
 export function openUserModal(user, onSaved) {
   const isEdit = !!user;
   const overlay = openModal(`
@@ -18,18 +26,29 @@ export function openUserModal(user, onSaved) {
     ${!isEdit ? `<div class="field"><label>Password</label><input id="u-password" type="password" placeholder="min. 6 characters" /></div>` : ''}
     <div class="grid-2">
       <div class="field"><label>Role</label><select id="u-role">${roleOptions(user?.role || 'viewer')}</select></div>
-      <div class="field"><label>Access</label><select id="u-scope">${scopeOptions(user?.access_scope || 'all')}</select></div>
+      <div class="field"><label>Access</label>
+        ${withHint(`<select id="u-scope">${scopeOptions(user?.access_scope || 'all')}</select>`, ACCESS_HINT)}
+      </div>
     </div>
-    <p class="sub" style="margin-top:-6px;">Access controls which sections this login can open — the full app, Employee Manager + Proximity Cards only, or the Scanner only — and now also which Settings panels it can see (Employee photos vs. Scan sounds). Admins always get full access.</p>
     <div class="auth-error hidden" id="u-error"></div>
     <div class="progress hidden" id="u-progress" style="margin:10px 0 0;">
       <div class="progress-track"><div class="progress-fill indeterminate"></div></div>
     </div>
     <div class="actions">
+      ${isEdit ? '<button class="ghost" id="u-reset-pw" style="margin-right:auto;">Reset password</button>' : ''}
       <button class="ghost" id="u-cancel">Cancel</button>
       <button class="primary" id="u-save">${isEdit ? 'Save changes' : 'Create account'}</button>
     </div>
   `);
+
+  // Resetting a password is something you decide while already looking at the
+  // account, so it belongs here as well as in the row. Closes this modal
+  // first: two stacked dialogs sharing one overlay stack is how the "stale
+  // modal" guards in Modal.js got written in the first place.
+  $('#u-reset-pw', overlay)?.addEventListener('click', () => {
+    closeModal(overlay);
+    openResetPasswordModal(user);
+  });
 
   const progressEl = $('#u-progress', overlay);
   const saveBtn = $('#u-save', overlay);
