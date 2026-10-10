@@ -33,7 +33,7 @@ export async function renderProximity() {
         </select>
         <button class="ghost${unassignedOnly ? ' active' : ''}" id="prox-unassigned-toggle" title="Show only cards not linked to an employee">Unassigned<span class="count-pill" id="prox-unassigned-count"></span></button>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div class="toolbar-actions">
         <button class="ghost" id="prox-export">Export</button>
         ${isAdminOrManager() ? `
           ${isAdmin() ? '<button class="ghost danger" id="prox-delete-all">Delete all</button>' : ''}

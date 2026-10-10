@@ -46,11 +46,11 @@ export async function renderDirectory() {
   const content = $('#content');
   content.innerHTML = `
     <div class="toolbar">
-      <div style="display:flex;gap:8px;align-items:center;flex:1;min-width:0;">
+      <div class="toolbar-start">
         <input class="search" id="dir-search" placeholder="Search name, code, department…" />
         <button class="ghost${unresolvedOnly ? ' active' : ''}" id="dir-unresolved-toggle" title="Show only employees with unresolved remarks">Unresolved remarks<span class="count-pill" id="dir-unresolved-count"></span></button>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div class="toolbar-actions">
         ${isAdminOrManager()
           ? menuHTML('dir-export-menu', 'Export', [
             { id: 'employees', label: 'Employee list', hint: 'What this table currently shows' },

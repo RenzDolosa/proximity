@@ -4,7 +4,6 @@ import { toast } from '../../Utils/toast.js';
 import { isAdmin, appState } from '../../Core/state.js';
 import { ProfilesModel } from '../../Models/ProfilesModel.js';
 import { openUserModal } from '../../Components/UserModal.js';
-import { openResetPasswordModal } from '../../Components/ResetPasswordModal.js';
 import { openConfirmModal } from '../../Components/ConfirmModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
 import { scopeLabel } from './userOptions.js';
@@ -59,7 +58,6 @@ function paintUsersTable() {
             <td class="col-shrink" data-label="Account"><span class="badge ${u.is_active ? 'active' : 'inactive'}">${u.is_active ? 'active' : 'disabled'}</span></td>
             <td class="col-shrink"><div class="row-actions">
               <button class="ghost" data-edit="${u.id}">Edit</button>
-              <button class="ghost" data-pw="${u.id}">Reset password</button>
               <button class="ghost" data-toggle="${u.id}" ${u.id === appState.session.user.id ? 'disabled' : ''}>${u.is_active ? 'Disable' : 'Enable'}</button>
               <button class="ghost danger" data-delete="${u.id}" ${u.id === appState.session.user.id ? 'disabled' : ''}>Delete</button>
             </div></td>
@@ -86,9 +84,9 @@ function paintUsersTable() {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
     });
   });
-  $$('button[data-pw]', wrap).forEach((b) => b.addEventListener('click', () => {
-    openResetPasswordModal(data.find((u) => u.id === b.dataset.pw));
-  }));
+  // Reset password left the row on 2026-10-10 — it lives inside Edit user
+  // now, where you are already looking at the account. Four buttons per row
+  // was the single biggest cause of the mobile action rows wrapping.
   $$('button[data-toggle]', wrap).forEach((b) => b.addEventListener('click', async () => {
     const row = data.find((u) => u.id === b.dataset.toggle);
     const { error } = await ProfilesModel.toggleActive(row.id, !row.is_active);

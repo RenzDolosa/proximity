@@ -222,7 +222,20 @@ function paintStats() {
       ${statCard('Open remarks', stats.employees_with_open_remarks, { route: 'directory' })}
       ${statCard('Unassigned active cards', stats.unassigned_active_cards, { route: 'proximity' })}
     </div>
-    ${sum.byDepartment.length ? `<div class="emp-meta" style="margin-top:10px;">On site by department: ${sum.byDepartment.map((d) => `<button type="button" class="dept-chip" data-dept="${esc(d.department)}"><strong>${esc(d.department)}</strong> ${d.count}</button>`).join(' · ')}</div>` : ''}
+    ${sum.byDepartment.length ? `
+      <div class="dept-breakdown">
+        <div class="dept-breakdown-title">On site by department</div>
+        <!-- A wrapping run of "Name 12 · Name 7 · …" separated by dots read
+             as one dense paragraph once there were twenty departments and no
+             room to lay them out. Each is its own chip now, so the name and
+             its count stay together on a line of their own. -->
+        <div class="dept-chips">
+          ${sum.byDepartment.map((d) => `<button type="button" class="dept-chip" data-dept="${esc(d.department)}">
+            <span class="dept-chip-name">${esc(d.department)}</span>
+            <span class="dept-chip-count">${d.count}</span>
+          </button>`).join('')}
+        </div>
+      </div>` : ''}
   `;
   el.querySelectorAll('[data-goto]').forEach((card) => {
     const go = () => { appState.route = card.dataset.goto; import('../../Core/router.js').then((m) => m.render()); };

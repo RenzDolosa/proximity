@@ -239,7 +239,20 @@
 .ss-feed-dock{max-height:60dvh;overflow-y:auto;}
 
 @media (max-width: 860px){
-  .ss-feed-open{display:inline-flex;}
+  /* Bottom right, thumb-reachable, out of the way of the card target — the
+     header is for identity and sign-out, not for an action used mid-shift. */
+  .ss-feed-open{
+    display:inline-flex;align-items:center;justify-content:center;gap:7px;
+    position:fixed;z-index:30;
+    right:calc(14px + env(safe-area-inset-right));
+    bottom:calc(14px + env(safe-area-inset-bottom));
+    /* min-height, not padding: .ghost's own padding wins the cascade and
+       left this at 30px — under the 44px a thumb needs. */
+    min-height:44px;padding:0 18px;font-size:13px;
+    border-radius:999px;
+    background:var(--surface-raised);border:1px solid var(--border);
+    box-shadow:0 8px 24px rgba(0,0,0,.45);
+  }
   .ss-feed-col{display:none;}
   /* With the feed gone the hero owns the width; shrink it so the card input
      and the result card are not pushed off the bottom. */
