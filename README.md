@@ -632,6 +632,61 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-15 — the permission-denied flood: the revoke worked, and it broke the fallback**
+
+`permission denied for function get_scanner_offline_photos` /
+`get_scanner_offline_cache`, ~28 an hour in the Postgres log.
+
+**These errors are the 2026-10-08 fix working, not a regression.** Both
+functions were superseded (2026-09-19, then 2026-10-05) and had EXECUTE
+revoked on 2026-10-08 because one stale kiosk tab was calling them 577
+times a day at up to 5,823 kB a call. The tab is still running — that
+machine has two tabs open and only one was reloaded — so it is still
+calling them, and now gets a few hundred bytes of 403 instead of 5.8 MB.
+Egress from that tab: ~630 MB/day → well under 1 MB/day.
+
+**But a revoked function still costs a log line per call.** With the
+function present and EXECUTE revoked, PostgREST finds it in its schema
+cache, builds the statement and sends it; Postgres parses, binds, fails the
+permission check, and writes an ERROR carrying the whole `WITH pgrst_source
+AS (...)` query text. At ~670 calls/day and roughly 1.5–2 kB an event that
+is ~40 MB/month of log ingestion bought for nothing. Once the function is
+*absent*, PostgREST answers 404 `PGRST202` from its schema cache with no
+database round-trip and Postgres logs nothing. So
+`20261015120000_drop_superseded_offline_cache_rpcs.sql` drops them.
+
+The API Gateway still logs the request either way. **Only closing that
+second tab removes it** — a tab opened before `appUpdate.js` shipped has no
+mechanism to ever reload itself, so no amount of server-side work reaches
+it.
+
+**The revoke also broke the kiosks' full-resync fallback, which I missed.**
+`get_scanner_offline_cache_compact()` is `SECURITY INVOKER` and its body
+calls `get_scanner_offline_cache()`. EXECUTE on an inner call in a
+`SECURITY INVOKER` function is checked against the *calling* role —
+`authenticated` — which is exactly the grant that was revoked. So from
+2026-10-08 to 2026-10-15 that fallback raised `permission denied` for every
+browser caller. 20261008120000's own header asserts "the live replacements
+are untouched ... `get_scanner_offline_cache_compact()` — the delta's
+fallback"; that was wrong.
+
+It never fired in production: `refreshCache()` only reaches `_compact()`
+when `get_scanner_offline_cache_delta()` is *missing*, and the delta has
+been deployed throughout. But that path exists for a client deploy landing
+ahead of its migration — a recovery window, which is the worst possible
+time for a dead safety net. `_compact()` now delegates to
+`get_scanner_offline_cache_delta(NULL, NULL) -> 'rows'`, which also makes
+it structurally impossible for the two to disagree on row shape
+(`JS/Core/offlineScanning.js` reads `scan_count` for its IN/OUT parity).
+
+The general rule, worth keeping: **wrapping a `SECURITY DEFINER` function
+does not make the wrapper's own inner calls privileged.** Only the wrapped
+function's body runs as its owner. Revoking a grant is a schema change like
+any other — `grep` for the function name in SQL, not just in JS.
+
+**Egress:** unchanged by this migration; a 404 body is the same order of
+size as the 403 it replaces. This is a log-ingestion and correctness fix.
+
 **2026-10-10 — the phone layout: cards, toolbars, and prose that stops filling the screen**
 
 A pass over what the app looks like at 375px, measured against a real DOM at

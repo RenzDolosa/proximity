@@ -258,6 +258,9 @@ clean measurement of that projection.
    remain as a rollback path; drop them once a cycle confirms nothing legitimate
    calls them.
 
+3. **`20261015120000_drop_superseded_offline_cache_rpcs.sql`** — the drop, seven
+   days later, for a reason the revoke did not anticipate. See §2e.
+
 Belt and braces on purpose. (1) is the general fix for stale kiosks and would
 have prevented this; (2) guarantees *this particular* leak cannot recur even if a
 tab escapes (1).
@@ -268,6 +271,10 @@ A dead code path is not free if a long-lived client can still reach it. This
 project applies migrations by hand and deploys a buildless ES-module frontend, so
 client and schema drift independently and a kiosk is never reloaded by anyone.
 Deleting a caller is therefore **not** retiring an endpoint — revoking it is.
+
+**Refined 2026-10-15 (§2e):** revoking retires it for *egress*. It does not
+retire it for *log ingestion*, and it is not free of side effects on anything
+that called it from inside the schema.
 
 ## 2d. Full attribution, 2026-10-08
 
@@ -322,6 +329,67 @@ measurement splits that cleanly:
 a timer bills by the hour whether or not anyone is looking at it; a page that
 fetches on demand bills per visit. Everything expensive in this cycle was on a
 timer, and everything on a timer was expensive.
+
+## 2e. Measured, 2026-10-15 — the revoke moved the cost, it did not remove it
+
+Seven days after the revoke, the project dashboard showed, over 60 minutes:
+
+| Source | Requests | Errors |
+|---|---|---|
+| API Gateway | 654 | 0 |
+| **Postgres** | **68** | **28** |
+| Realtime / Auth / Storage | 27 | 0 |
+
+Every one of those 28 is `permission denied for function
+get_scanner_offline_photos` or `..._cache` — **the stale tab is still running**,
+a week after the kiosks were reloaded. That machine has two tabs open (§2c);
+reloading the kiosk fixed the one someone was looking at.
+
+### What the revoke did and did not achieve
+
+| | Before revoke | After revoke | After drop |
+|---|---|---|---|
+| Egress per call | 5,823 kB / 162 kB | ~0.5 kB (403 body) | ~0.5 kB (404 body) |
+| Egress per day, this tab | **~630 MB** | **~340 kB** | ~340 kB |
+| Postgres log events/day | 0 | **~670** | **0** |
+| API Gateway log events/day | ~670 | ~670 | ~670 |
+
+**Egress: solved, by three orders of magnitude.** The errors are the mechanism
+that removed it, not a new cost.
+
+**Log ingestion: created, then solved.** A revoked-but-present function is found
+in PostgREST's schema cache, so PostgREST builds the statement and sends it;
+Postgres parses, binds, fails the permission check and writes an ERROR carrying
+the full `WITH pgrst_source AS (...)` query text — roughly 1.5–2 kB an event,
+call it ~40 MB/month. An *absent* function is answered 404 `PGRST202` from the
+schema cache with no database round-trip, and Postgres logs nothing.
+`20261015120000` therefore drops both. (The Postgres-event size is estimated
+from the log detail pane, not measured in bytes ingested.)
+
+**API Gateway: not solvable server-side.** The request still arrives and is
+still logged, whatever the response is. Only closing the tab removes it — and a
+tab opened before `appUpdate.js` shipped has no mechanism to reload itself, so
+nothing deployed can reach it.
+
+### The second finding: the revoke broke the fallback
+
+`get_scanner_offline_cache_compact()` is `SECURITY INVOKER` and its body called
+`get_scanner_offline_cache()`. EXECUTE on an inner call in a `SECURITY INVOKER`
+function is checked against the **calling** role, `authenticated` — the grant
+the revoke removed. So the kiosks' whole-roster fallback raised `permission
+denied` from 2026-10-08 to 2026-10-15.
+
+It never fired: `refreshCache()` only falls back when
+`get_scanner_offline_cache_delta()` is missing, and it has been deployed
+throughout. But the fallback exists for a client deploy landing ahead of its
+migration — a recovery window, which is the worst time to find the net has a
+hole. It now delegates to `get_scanner_offline_cache_delta(NULL, NULL) ->
+'rows'`.
+
+**Wrapping a `SECURITY DEFINER` function does not make the wrapper's own inner
+calls privileged.** Only the wrapped function's body runs as its owner. A
+`REVOKE` is a schema change like any other: grep the function name in SQL, not
+only in JS.
 
 ## 3. What changed (2026-10-06)
 

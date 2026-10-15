@@ -142,3 +142,98 @@ test('the drift scan actually found the objects it is meant to be checking', () 
   assert.ok(definedFunctions.size >= 30, `expected to find functions in migrations, found ${definedFunctions.size}`);
   assert.ok(definedRelations.size >= 5, `expected to find tables/views in migrations, found ${definedRelations.size}`);
 });
+
+// ---------------------------------------------------------------------------
+// Revoking EXECUTE is a schema change, not a config tweak
+//
+// The bug this exists for, 2026-10-08 to 2026-10-15: EXECUTE on
+// get_scanner_offline_cache() was revoked from `authenticated` to stop a stale
+// kiosk tab calling it. get_scanner_offline_cache_compact() is SECURITY
+// INVOKER and its body called that function — and an inner call in a SECURITY
+// INVOKER function has its EXECUTE checked against the *calling* role. So the
+// revoke silently broke the kiosks' whole-roster fallback, and the migration's
+// own header asserted the opposite.
+//
+// It cost nothing in production only because the fallback is reached solely
+// when the delta RPC is missing. A guard is worth more than that luck: a
+// SECURITY DEFINER wrapper does not privilege the wrapper's own inner calls,
+// which is unintuitive enough to be worth a test rather than a comment.
+//
+// Final-state semantics, applied in filename order: a later GRANT undoes a
+// REVOKE, a DROP removes the function from both sets, and CREATE OR REPLACE
+// replaces a body. So fixing the problem — by re-granting, by dropping the
+// function, or by rewriting the caller — makes this pass, and nothing else
+// does.
+export function invokerCallsRevoked(filesInOrder) {
+  const bodies = new Map();        // name -> { body, definer }
+  const revoked = new Set();       // EXECUTE taken from authenticated/anon
+
+  const FUNCTION_RE =
+    /create\s+(?:or\s+replace\s+)?function\s+public\.([a-z0-9_]+)\s*\([\s\S]*?\)\s*(returns[\s\S]*?)\bas\s+(\$[a-z_]*\$)([\s\S]*?)\3/gi;
+  const REVOKE_RE = /revoke\s+[\s\S]*?\s+on\s+function\s+public\.([a-z0-9_]+)\s*\([^)]*\)\s*from\s+(authenticated|anon)\b/gi;
+  const GRANT_RE = /grant\s+execute\s+on\s+function\s+public\.([a-z0-9_]+)\s*\([^)]*\)\s*to\s+(authenticated|anon)\b/gi;
+  const DROP_RE = /drop\s+function\s+(?:if\s+exists\s+)?public\.([a-z0-9_]+)/gi;
+
+  for (const sql of filesInOrder) {
+    for (const [, name, header, , body] of sql.matchAll(FUNCTION_RE)) {
+      // No SECURITY clause means SECURITY INVOKER — Postgres' default, and
+      // the case most likely to be overlooked.
+      bodies.set(name.toLowerCase(), { body, definer: /security\s+definer/i.test(header) });
+    }
+    for (const [, name] of sql.matchAll(REVOKE_RE)) revoked.add(name.toLowerCase());
+    for (const [, name] of sql.matchAll(GRANT_RE)) revoked.delete(name.toLowerCase());
+    for (const [, name] of sql.matchAll(DROP_RE)) {
+      bodies.delete(name.toLowerCase());
+      revoked.delete(name.toLowerCase());
+    }
+  }
+
+  const findings = [];
+  for (const [caller, { body, definer }] of bodies) {
+    if (definer) continue;
+    for (const target of revoked) {
+      if (caller === target) continue;
+      if (new RegExp(`\\bpublic\\.${target}\\s*\\(`, 'i').test(body)) {
+        findings.push(`${caller}() is SECURITY INVOKER and calls public.${target}(), whose EXECUTE is revoked`);
+      }
+    }
+  }
+  return findings.sort();
+}
+
+test('the revoke check catches the shape of the 2026-10-08 bug', () => {
+  // Proves the checker works independently of what the repo happens to
+  // contain today — otherwise a parser that matched nothing would "pass".
+  const broken = [
+    `CREATE FUNCTION public.inner_fn() RETURNS jsonb LANGUAGE sql SECURITY DEFINER AS $function$ SELECT '[]'::jsonb; $function$;`,
+    `CREATE FUNCTION public.wrapper() RETURNS jsonb LANGUAGE sql AS $function$ SELECT public.inner_fn(); $function$;`,
+    `REVOKE ALL ON FUNCTION public.inner_fn() FROM authenticated;`,
+  ];
+  assert.deepEqual(invokerCallsRevoked(broken), [
+    'wrapper() is SECURITY INVOKER and calls public.inner_fn(), whose EXECUTE is revoked',
+  ]);
+
+  // A SECURITY DEFINER wrapper is fine: its body runs as the owner.
+  const definerWrapper = [...broken];
+  definerWrapper[1] = `CREATE FUNCTION public.wrapper() RETURNS jsonb LANGUAGE sql SECURITY DEFINER AS $function$ SELECT public.inner_fn(); $function$;`;
+  assert.deepEqual(invokerCallsRevoked(definerWrapper), []);
+
+  // And each of the three real ways out clears it.
+  assert.deepEqual(invokerCallsRevoked([...broken, 'GRANT EXECUTE ON FUNCTION public.inner_fn() TO authenticated;']), []);
+  assert.deepEqual(invokerCallsRevoked([...broken, 'DROP FUNCTION IF EXISTS public.inner_fn();']), []);
+  assert.deepEqual(
+    invokerCallsRevoked([...broken, `CREATE OR REPLACE FUNCTION public.wrapper() RETURNS jsonb LANGUAGE sql AS $function$ SELECT '[]'::jsonb; $function$;`]),
+    [],
+  );
+});
+
+test('no SECURITY INVOKER function calls one whose EXECUTE has been revoked', () => {
+  const sources = migrationFiles.map((f) => readFileSync(join(MIGRATIONS_DIR, f), 'utf8'));
+  assert.deepEqual(
+    invokerCallsRevoked(sources), [],
+    'A SECURITY INVOKER function calls a function whose EXECUTE was revoked from authenticated/anon. '
+      + "An inner call in a SECURITY INVOKER function is checked against the CALLER's role, so this "
+      + 'raises "permission denied" for every browser caller. Either make the caller SECURITY '
+      + 'DEFINER, re-grant, drop the revoked function, or rewrite the caller not to use it.',
+  );
+});

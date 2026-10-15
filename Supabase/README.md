@@ -183,25 +183,36 @@ an admin swaps it out.
   full RPC response averaged ~15.5 KB, the compact response with photo ~9.3
   KB, and without photo ~0.5 KB. Offline-queue replay also passes `false`
   since it discards the response.
-- **`get_scanner_offline_cache()`** — added 2026-09-16. Returns a trimmed
-  `proximity_cards` ⨝ `employees` projection (code, active flags,
-  employee id/name/code/department/position, and current `scan_count` for
-  direction parity) as a single `jsonb` array, for
-  `JS/Models/OfflineScanModel.js` to cache client-side in IndexedDB through
-  `get_scanner_offline_cache_compact()`. Same
-  permission gate as the real scan RPC — deliberately trimmed to only the
-  fields offline classification needs, not full employee rows, even
-  though the calling roles (scanner-scope, in particular) couldn't
-  otherwise `SELECT` `employees` directly at all. Did briefly also carry
-  `photo_thumb_b64` (2026-09-18–2026-09-19); see
-  `get_scanner_offline_photos()` immediately below for why that moved out.
-- **`get_scanner_offline_cache_compact()`** — added 2026-10-03 as a
-  security-invoker wrapper around the live lookup RPC. It preserves that
-  RPC's card/employee fields and access checks while returning only
-  unresolved remarks; the offline classifier never displays resolved ones.
-  Still live and still the fallback, but no longer what the kiosk calls on
-  its 5-minute timer — see `get_scanner_offline_cache_delta()` directly
-  below for why.
+- **`get_scanner_offline_cache()`** — added 2026-09-16, EXECUTE revoked
+  2026-10-08, **dropped 2026-10-15**. Returned a trimmed `proximity_cards` ⨝
+  `employees` projection as a single `jsonb` array. Superseded on 2026-09-19
+  by `get_scanner_offline_cache_compact()` and again on 2026-10-05 by
+  `get_scanner_offline_cache_delta()`. Kept (revoked, not dropped) for a week
+  as a rollback path; dropped once the only remaining callers were one
+  identified stale browser tab and `_compact()`'s internal call — see
+  `20261015120000_drop_superseded_offline_cache_rpcs.sql`, and the note under
+  `_compact()` below for the bug the revoke caused. The definition is still in
+  migration history if it is ever wanted back.
+- **`get_scanner_offline_cache_compact()`** — added 2026-10-03, rewritten
+  2026-10-15. The whole-roster fallback for `get_scanner_offline_cache_delta()`,
+  reached only when the delta function is not deployed yet (a client deploy
+  landing ahead of its migration). Returns the same eleven fields as the delta
+  with `remarks_log` filtered to unresolved entries; the offline classifier
+  never displays resolved ones.
+
+  It now *delegates* to `get_scanner_offline_cache_delta(NULL, NULL) -> 'rows'`
+  rather than building its own result. Two reasons. The shapes have to agree
+  field-for-field — `JS/Core/offlineScanning.js` reads `scan_count` for its
+  IN/OUT parity arithmetic — and one producer is the only way to guarantee
+  that. And it previously called `get_scanner_offline_cache()`: because this
+  function is `SECURITY INVOKER`, EXECUTE on that inner call was checked
+  against `authenticated`, which is precisely the grant revoked on 2026-10-08.
+  **From 2026-10-08 to 2026-10-15 this fallback raised `permission denied for
+  function get_scanner_offline_cache` for every browser caller.** It was never
+  hit in production — the delta has been deployed throughout — but a safety net
+  that fails exactly when it is needed is worth recording. `SECURITY DEFINER`
+  on a wrapped function does not make the wrapper's own inner calls privileged;
+  only the wrapped function's body runs as its owner.
 - **`get_database_usage()`** — added 2026-10-05. Backs the database half of
   Settings → Usage. Returns
   `{ database_bytes, database_limit_bytes, tables[], measured_at }`;
@@ -280,17 +291,18 @@ an admin swaps it out.
   `SECURITY DEFINER` with the same scanner gate as the RPC it replaces;
   `PUBLIC` and `anon` revoked, `authenticated`/`service_role` granted.
   Ships with `employees_updated_at_idx` for the incremental branch's filter.
-- **`get_scanner_offline_photos()`** — added 2026-09-19. Split out of
-  `get_scanner_offline_cache()` above: returns a **sparse**
-  `[{employee_id, photo_thumb_b64}]` array — only employees who actually
-  have a thumbnail on file, not the whole roster — so the lookup RPC
-  above can stay small and get refreshed every 5 minutes without a
-  growing photo payload riding along on every single one of those
-  refreshes. Same permission gate. This full-snapshot RPC remains for
-  compatibility; the standalone scanner now uses
-  `get_scanner_offline_photo_updates(p_known_photo_ids)` instead, so it
-  only downloads changed thumbnails and deleted-photo IDs on its 30-minute
-  refresh (`StandaloneScanner.js`).
+- **`get_scanner_offline_photos()`** — added 2026-09-19, EXECUTE revoked
+  2026-10-08, **dropped 2026-10-15**. Returned a sparse
+  `[{employee_id, photo_thumb_b64}]` array for the whole roster. Superseded
+  on 2026-10-03 by `get_scanner_offline_photo_updates(p_known_photo_ids)`,
+  which sends only changed thumbnails and deleted-photo IDs.
+
+  This is the RPC that produced the October egress bill: a stale kiosk tab
+  called it 95 times a day at 5,823 kB a call, ~553 MB/day against a cycle
+  running at ~910 MB/day. Nothing in the repository has called it since
+  2026-10-03. Dropped rather than left revoked because a revoked-but-present
+  function still costs a Postgres ERROR log line per call — see
+  `20261015120000_drop_superseded_offline_cache_rpcs.sql`.
 - **`get_scanner_offline_photo_updates(p_known_photo_ids)`** — added
   2026-10-03. Accepts the kiosk's small employee-id → `photo_file_id` map
   and returns changed photo thumbnails plus IDs whose photo was removed.
