@@ -526,11 +526,19 @@ three things worse.
   observability volume: Postgres log lines, API/edge logs, auth logs. Writing a
   `scan_events` row generates no log ingestion beyond the one request line for
   the call that wrote it. The driver actually under this app's control is
-  **`log_min_duration_statement = 200`** on `anon`/`authenticated`/`service_role`
-  (see Supabase/README.md → Query performance): every statement at or over 200 ms
-  is written to the Postgres log *with its full statement text*. Raising that
-  threshold, or resetting it once a performance investigation is finished, is the
-  direct lever. Moving table data to Drive does not touch it.
+  **`log_min_duration_statement`** on `anon`/`authenticated`/`service_role`
+  (see Supabase/README.md → Query performance): every statement at or over the
+  threshold is written to the Postgres log *with its full statement text*.
+  Raising that threshold, or resetting it once a performance investigation is
+  finished, is the direct lever. Moving table data to Drive does not touch it.
+
+  **Acted on 2026-10-17** (`20261017090000_raise_log_min_duration_statement.sql`):
+  raised 200 ms → 1000 ms. At 200 ms the project was writing ~40 statements an
+  hour to the log — a similar order of ingestion to the ~670 permission-denied
+  errors/day removed two days earlier (§2e), and unlike those it was healthy
+  traffic. 200 ms was a debugging threshold left switched on. Statements in the
+  200 ms – 1 s band are still counted in `pg_stat_statements`, so Settings →
+  Query performance is unaffected.
 - **`scan_logs` already costs almost no egress.** It is deliberately never sent
   to the client in bulk: excluded from `DIRECTORY_COLUMNS`, excluded from the
   scanner offline cache, and `get_onsite_roster_delta()` returns only the

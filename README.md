@@ -632,6 +632,38 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-17 — stop logging every 200 ms statement**
+
+`20261017090000_raise_log_min_duration_statement.sql`. Raises
+`log_min_duration_statement` from 200 ms to 1000 ms on `anon`,
+`authenticated` and `service_role`.
+
+With the permission-denied flood gone (2026-10-15), this was the largest
+remaining log-ingestion item under the app's own control: ~40 statements an
+hour written to the Postgres log **with their full statement text**, which
+is a similar order of volume to the ~670 errors/day just removed — except
+this was healthy kiosk traffic doing nothing wrong. 200 ms was a debugging
+threshold set during a performance investigation and left switched on.
+
+**What is given up:** statements between 200 ms and 1 s no longer appear in
+the Postgres log. They are still counted — calls, mean, total — in
+`pg_stat_statements`, which is what Settings → Query performance actually
+reads. That panel keeps its own 200 ms default on purpose: "what is slow"
+is worth knowing well before a statement is slow enough to justify writing
+its full text to a metered log. 1000 ms is also still under both
+`statement_timeout` values (`anon` 3 s, `authenticated` 8 s), so anything
+heading for a timeout is still logged in full.
+
+**This is the first `ALTER ROLE` in `Supabase/migrations/`.** Both
+`log_min_duration_statement` and `statement_timeout` were applied by hand
+with no file, which is the same class of drift `schema-drift.test.mjs`
+exists to stop for functions. The `postgres` role still carries a stray
+200 ms from an earlier session that set it on the wrong role; left alone
+deliberately — `postgres` is migrations, the SQL editor and MCP tooling, a
+handful of statements a day.
+
+**Egress:** unchanged. This is log ingestion only.
+
 **2026-10-15 — the permission-denied flood: the revoke worked, and it broke the fallback**
 
 `permission denied for function get_scanner_offline_photos` /
