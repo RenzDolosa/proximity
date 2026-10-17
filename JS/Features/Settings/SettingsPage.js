@@ -47,7 +47,13 @@ let photoLoaded = false;
 let queryStats = null; // array once loaded, else null
 let queryStatsError = null;
 let queryStatsLoaded = false;
-let queryThresholdMs = 200; // matches the server-side default in get_slow_query_stats() / the log_min_duration_statement set on anon/authenticated/service_role — see Supabase/README.md
+// Matches get_slow_query_stats()'s own p_threshold_ms default. It used to
+// match log_min_duration_statement too; that was raised to 1000 ms on
+// 2026-10-17 to cut log ingestion, and this deliberately stayed at 200.
+// The two answer different questions: this panel reads pg_stat_statements
+// and asks "what is slow", which is worth knowing well before a statement
+// is slow enough to be worth writing its full text to the log.
+let queryThresholdMs = 200;
 
 let archiveStatus = null; // { live_count, oldest_live_scanned_at, archive_count, last_archived_at, last_run } once loaded, else null
 let archiveStatusError = null;

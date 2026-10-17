@@ -845,11 +845,26 @@ everything else here.
 Two separate mechanisms, two separate jobs — both scoped to this app's
 own traffic, not raw instance-wide activity:
 
-**`log_min_duration_statement = 200` (ms), set on `anon`, `authenticated`,
-and `service_role`** — any statement run as one of those roles that takes
-200ms or longer gets written to the Postgres log itself, viewable in the
-Supabase Dashboard's Logs Explorer. This is a *role*-level setting
-(`ALTER ROLE <role> SET log_min_duration_statement = 200`), not a
+**`log_min_duration_statement` — `200` ms originally, raised to `1000` ms
+on 2026-10-17 (`20261017090000_raise_log_min_duration_statement.sql`) —
+set on `anon`, `authenticated`, and `service_role`** — any statement run
+as one of those roles that takes that long or longer gets written to the
+Postgres log itself, with its **full statement text**, viewable in the
+Supabase Dashboard's Logs Explorer.
+
+*Why it was raised:* 200 ms was a debugging threshold left switched on,
+and at that level the project was writing ~40 statements an hour to the
+log — a similar order of log ingestion to the permission-denied flood
+removed two days earlier (see the 2026-10-15 entry in the root
+`README.md`). Statements between 200 ms and 1 s are no longer logged;
+they are still counted in `pg_stat_statements`, so Settings → Query
+performance is unaffected and keeps its own 200 ms default. 1000 ms is
+still well under both `statement_timeout` values (`anon` 3 s,
+`authenticated` 8 s), so anything heading for a timeout is still logged
+with its text — the case the log is actually useful for.
+
+This is a *role*-level setting
+(`ALTER ROLE <role> SET log_min_duration_statement = …`), not a
 database- or session-level one, and that distinction matters here more
 than it usually would: PostgREST connects as `authenticator` and
 impersonates (`SET ROLE`) into `anon`/`authenticated` per request based
