@@ -391,6 +391,84 @@ calls privileged.** Only the wrapped function's body runs as its owner. A
 `REVOKE` is a schema change like any other: grep the function name in SQL, not
 only in JS.
 
+## 2f. Log Ingestion, 2026-10-21 — a different meter, a different lever
+
+Egress is now comfortable: **0.126 / 5 GB (3%)** ten days into the 11 Oct –
+11 Nov cycle. **Log Ingestion is the problem: 0.204 / 1 GB (20%)** over the same
+ten days.
+
+### Why none of the egress work helped
+
+| | Egress | Log Ingestion |
+|---|---|---|
+| Billed by | **bytes** | **events** |
+| A 5 MB response costs | 5 MB | 1 event |
+| A 40-byte response costs | 40 bytes | 1 event |
+| The lever | smaller payloads | **fewer requests** |
+
+Every HTTP request to PostgREST writes one API-gateway log line regardless of
+size. Deltas, compact projections and the dropped photo arrays cut bytes by
+three orders of magnitude and moved this meter **not at all** — the request
+count never changed.
+
+The 15 Oct and 17 Oct fixes were aimed at the Postgres log, which is the
+smaller half. The project's own 60-minute breakdown on 15 Oct:
+
+| Source | Events/hour | Share |
+|---|---|---|
+| **API Gateway** | **654** | **87%** |
+| Postgres | 68 | 9% |
+| Realtime / Auth / Storage | 27 | 4% |
+
+At 0.204 GB over 10 days ÷ (654 + 68 + 27) × 24 h, an event averages **~1.3 kB**.
+
+### Where the requests came from
+
+| Source | Cadence | Requests/hour |
+|---|---|---|
+| **Dashboard poll** (1 visible tab) | 30 s × **2 RPCs** | **240** |
+| **Alerts badge** (2 open admin tabs) | 60 s × 2 | **120** |
+| Kiosk lookup refresh (3 kiosks) | 5 min × 3 | 36 |
+| Kiosk photo refresh (3 kiosks) | 30 min × 3 | 6 |
+| Scans | ~3,359/day | ~140 |
+| **Polling subtotal** | | **402** |
+
+The Dashboard alone was 60% of the polling, because `load()` called
+`get_dashboard_pulse()` and `get_onsite_roster_delta()` back to back on every
+single tick.
+
+### Fixed
+
+1. **`20261021090000_dashboard_tick.sql`** — `get_dashboard_tick()` merges both
+   calls into one. Same payload byte-for-byte, half the events. Both wrapped
+   functions are `SECURITY INVOKER` and keep their own gates, so this grants
+   nothing new.
+2. **Dashboard 30 s → 60 s.** The largest producer, halved again.
+3. **Alerts badge 60 s → 3 min.** Nothing upstream is faster: scanner-silence
+   alerts come from a 15-minute cron, and the badge still catches up instantly
+   on `visibilitychange`.
+4. **Kiosk lookup 5 → 15 min, photos 30 → 60 min.** The lookup cache is only
+   consulted while a kiosk is *offline* — an online scan is decided by the RPC
+   against live data — and a reconnect refreshes immediately via the `online`
+   and `visibilitychange` handlers rather than waiting for the timer.
+
+| | Before | After |
+|---|---|---|
+| Polling requests/hour | 402 | **115** |
+| With scans + misc | ~569 | **~282** |
+| Projected per 31-day cycle | ~630 MB (63%) | **~310 MB (31%)** |
+
+Visibility-gating was *already* in place on both the Dashboard timer and the
+badge (`if (document.hidden) return`), so no saving was available there — a
+backgrounded tab already cost nothing.
+
+**The floor is scans**, ~140/hour, ~136 MB/cycle. That is real work and is not
+optimisable; it is why the target is ~31% and not lower.
+
+`test/log-ingestion.test.mjs` reads these four constants out of the real source
+and fails if any drops below its floor, so the cadences cannot quietly creep
+back.
+
 ## 3. What changed (2026-10-06)
 
 ### `get_onsite_roster_delta()` — the Dashboard roster, incrementally

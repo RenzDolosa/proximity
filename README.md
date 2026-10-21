@@ -632,6 +632,50 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-21 — Log Ingestion: a different meter needs the opposite optimisation**
+
+Egress is settled (0.126 / 5 GB, 3%). Log Ingestion is not: **0.204 / 1 GB
+(20%)** ten days into the cycle.
+
+**Why none of the egress work helped.** Egress bills **bytes**; Log Ingestion
+bills **events**. Every request to PostgREST writes one API-gateway log line
+whether it returns 40 bytes or 5 MB. The deltas and compact payloads cut
+bytes by three orders of magnitude and moved this meter *not at all*, because
+the request count never changed. The 15 and 17 Oct fixes targeted the
+Postgres log — which the project's own breakdown shows is 9% of events
+against the API Gateway's **87%**.
+
+**The Dashboard was 60% of all polling**, because `load()` called
+`get_dashboard_pulse()` and `get_onsite_roster_delta()` back to back on every
+tick — 240 requests an hour from one open tab.
+
+- **`20261021090000_dashboard_tick.sql`** — `get_dashboard_tick()` merges both
+  into one request. Byte-identical payload, half the events. Both wrapped
+  functions are `SECURITY INVOKER` and keep their own gates, so nothing new is
+  granted. The split path stays as the deploy-ordering fallback, latched after
+  one failure like `pulseUnavailable` before it.
+- **Dashboard 30 s → 60 s**, **alerts badge 60 s → 3 min**, **kiosk lookup
+  5 → 15 min**, **kiosk photos 30 → 60 min**.
+
+**Why those are safe.** The kiosk lookup cache is only consulted while a kiosk
+is *offline* — an online scan is decided by the RPC against live data — and a
+reconnect refreshes immediately through the `online`/`visibilitychange`
+handlers rather than waiting for the timer. Scanner-silence alerts come from a
+15-minute cron, so a 3-minute badge is not the slow part. Visibility-gating was
+already in place on both the Dashboard and the badge, so there was no saving
+left there.
+
+**Polling: 402 → 115 requests/hour. Projected ~630 MB/cycle → ~310 MB (31%).**
+The floor is scans at ~140/hour — real work, not overhead, and the reason the
+target isn't lower.
+
+`test/log-ingestion.test.mjs` reads the four interval constants out of the real
+source and fails if any drops below its floor, so this can't quietly creep back.
+
+**Egress:** slightly *down*. Same number of full roster syncs per hour
+(`ROSTER_FULL_RESYNC_MS` is unchanged at 10 minutes), with half as many delta
+requests between them.
+
 **2026-10-17 — stop logging every 200 ms statement**
 
 `20261017090000_raise_log_min_duration_statement.sql`. Raises
