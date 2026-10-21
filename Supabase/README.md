@@ -88,6 +88,31 @@ an admin swaps it out.
   regardless. `SECURITY INVOKER` — the wrapped function runs its own gate and
   the version subquery reads `employees` under the caller's RLS. `PUBLIC` and
   `anon` revoked.
+
+  **No longer on the poll path** as of 2026-10-21 — see
+  `get_dashboard_tick()` directly below. Kept as the fallback for a client
+  deployed ahead of that migration.
+- **`get_dashboard_tick(p_window_hours default 16, p_since default null,
+  p_stale_hours default 16)`** — added 2026-10-21. One Dashboard refresh in
+  one request: `get_dashboard_pulse(p_window_hours)` merged with
+  `get_onsite_roster_delta(p_since, p_stale_hours)` under a `roster` key, so
+  the result is `{ stats, roster_version, roster: { full, cursor, stale_hours,
+  rows } }`.
+
+  **Why it exists — and why it is not an egress change.** Egress bills bytes;
+  **Log Ingestion bills events**, one API-gateway log line per request
+  regardless of payload size. `DashboardPage.load()` called the pulse and the
+  roster delta back to back on every tick, so one open Dashboard tab produced
+  240 requests an hour and was 60% of all the project's polling. Merging them
+  halves that for a byte-identical payload. None of the earlier egress work
+  (deltas, compact projections) had touched this meter at all, because it never
+  changed the request *count*. See `docs/EGRESS_BUDGET.md` §2f.
+
+  Built by merging the pulse's own object rather than rebuilding the shape, so
+  the combined and split paths cannot drift. `SECURITY INVOKER`, like both
+  functions it wraps — each runs its own gate under the caller's role, so this
+  grants nothing a caller did not already have. `PUBLIC` and `anon` revoked.
+  Client: `Models/DashboardModel.js`'s `tick()`.
 - **`get_onsite_roster(p_stale_hours default 16)`** — every employee whose
   *last* `scan_logs` entry is an `in` (any status), oldest IN first, with
   `seconds_on_site` and `is_stale` (IN older than the window). Capped at

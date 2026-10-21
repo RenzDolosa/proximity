@@ -576,13 +576,26 @@ function initOfflineSupport(operatorName) {
   // and the feed don't wait on an IndexedDB read (see OfflineScanModel.getPhotoCache()).
   OfflineScanModel.getPhotoCache().catch(() => {});
 
-  const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+  // 15 minutes, raised from 5 on 2026-10-21 to cut API-gateway log events —
+  // three kiosks running 24/7 made this 36 requests an hour on its own.
+  //
+  // What the extra staleness can actually cost: this cache is only consulted
+  // when the kiosk cannot reach the server, because a scan online is decided by
+  // the RPC against live data. So the window where a 15-minute-old cache
+  // differs from a 5-minute-old one is "a card was revoked AND the network
+  // dropped within the next 15 minutes". The system already tolerates far more
+  // than that — OfflineScanModel.STALE_AFTER_MS only warns at 24 hours — and a
+  // reconnect refreshes immediately via the 'online' and 'visibilitychange'
+  // handlers rather than waiting for this timer.
+  const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
   // Photos only change when an admin re-uploads one, so this polls far less
-  // often than the lookup.
-  const PHOTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
+  // often than the lookup. An hour's delay on a newly uploaded face appearing
+  // on an offline kiosk is not worth a request every half hour, forever.
+  const PHOTO_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
   // Shorter than REFRESH_INTERVAL_MS on purpose: this is the safety net for an
   // `online` event that never fires (captive portals, Wi-Fi roaming), so it must
-  // catch up sooner than 5 minutes.
+  // catch up sooner than the lookup refresh. Costs no request when the queue is
+  // empty — it returns on a local IndexedDB count — so its frequency is free.
   const FLUSH_RETRY_INTERVAL_MS = 20 * 1000;
   // Floor between refreshes whatever triggered them. 'online',
   // 'visibilitychange' and the interval all route through flushAndRefresh(), so

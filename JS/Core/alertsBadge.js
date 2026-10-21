@@ -7,7 +7,14 @@ import { fmtBadgeCount } from '../Utils/dashboard.js';
 import { AlertsModel } from '../Models/AlertsModel.js';
 import { isAdminOrManager } from './state.js';
 
-const POLL_MS = 60000;
+// 3 minutes, raised from 60s on 2026-10-21. Every poll writes an API-gateway
+// log event, and this one runs on every open admin/manager tab on every page,
+// so it was the second-largest request producer after the Dashboard timer.
+// Nothing upstream is faster than this anyway: scanner-silence alerts are
+// raised by a cron running every 15 minutes, and the badge catches up
+// instantly on visibilitychange, so what this interval really governs is how
+// stale a count can get on a tab somebody is already staring at.
+const POLL_MS = 180000;
 let timer = null;
 let visibilityHandler = null;
 

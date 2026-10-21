@@ -16,7 +16,13 @@ import { summarizeRoster, filterRoster, mergeRosterDelta, deriveRoster } from '.
 import { DashboardModel } from '../../Models/DashboardModel.js';
 import { openDepartmentRosterModal } from '../../Components/DepartmentRosterModal.js';
 
-const REFRESH_MS = 30000;
+// 60s, not the original 30s. Log Ingestion bills one API-gateway event per
+// request regardless of payload size, and this timer is the largest single
+// producer of requests in the whole system — it runs all day on whatever
+// screen has the Dashboard up. Halving the cadence halves that directly.
+// 60s is still well inside what "who is on site right now" needs; the page
+// prints its own interval, so the subtitle follows this constant.
+const REFRESH_MS = 60000;
 // The delta's self-heal, not a correctness requirement: a cursor only sees rows
 // whose updated_at moved, so it cannot observe a hard-DELETEd employee or recover
 // from a laptop that slept through a stretch of changes. One full roster every
@@ -36,6 +42,12 @@ let loaded = false;
 // Note what latching the roster one costs: a full roster on every poll, i.e.
 // exactly the behaviour the delta exists to remove. If the Dashboard feels
 // expensive again, check that 20261006120000_onsite_roster_delta.sql was applied.
+// Latched on the first response that proves this deployment can't use the
+// combined call, so later refreshes go straight to the split path. No
+// MISSING_TICK sentinel to match pulse/roster below: this one is skipped
+// outright rather than fed a synthetic error, because nothing downstream
+// needs to tell "not deployed" from "not tried".
+let tickUnavailable = false;
 let pulseUnavailable = false;
 const MISSING_PULSE = { code: 'PGRST202', message: 'Could not find the function public.get_dashboard_pulse' };
 let rosterDeltaUnavailable = false;
@@ -133,6 +145,39 @@ async function load({ force = false } = {}) {
   lastLoadAt = Date.now();
   const btn = $('#dash-refresh');
   if (btn) { btn.disabled = true; btn.textContent = 'Refreshing…'; }
+
+  // `wantsFull` is decided before the request now, because the combined RPC
+  // needs the cursor up front — it fetches stats and roster in one go rather
+  // than letting the first result inform the second. Nothing here depended on
+  // that ordering: the old code computed the same expression from the same
+  // state after the pulse returned.
+  const wantsFull = force || !loaded || !rosterCursor
+    || Date.now() - rosterSyncedAt > ROSTER_FULL_RESYNC_MS;
+  const since = wantsFull ? null : rosterCursor;
+
+  // One request for both halves. Falls back to the two-call path, then to the
+  // pre-delta pair — each latched after one failure so a client deployed ahead
+  // of its migration stops paying for a round trip it knows will 404.
+  if (!tickUnavailable) {
+    // Stale-hours is left at the model default, exactly as the split path's
+    // rosterDelta() call always was. Echoing the server's own `stale_hours`
+    // back at it would be a new behaviour smuggled in under a plumbing change.
+    const t = await DashboardModel.tick(16, since);
+    if (seq !== requestSeq) return; // superseded; issue nothing further
+    const d = t.data?.roster;
+    if (!t.error && d && Array.isArray(d.rows)) {
+      finish(seq, null, t.data?.stats, mergeRosterDelta(roster, d), d);
+      return;
+    }
+    // A real error (permissions, network) is the caller's answer — only a
+    // missing function, or a response whose roster half isn't there, means
+    // "this deployment can't use the combined call" and earns a retry on the
+    // split path. Latched either way: the shape is server-controlled, so a
+    // malformed one means the migration is wrong, not that it was unlucky.
+    if (t.error && !isMissingFunctionError(t.error)) { finish(seq, t.error); return; }
+    tickUnavailable = true;
+  }
+
   const p = pulseUnavailable ? { error: MISSING_PULSE } : await DashboardModel.pulse();
   // A client deployed ahead of the migration keeps the old behaviour rather
   // than showing an empty dashboard — see DashboardModel.js.
@@ -151,12 +196,11 @@ async function load({ force = false } = {}) {
   // every poll and the old code re-downloaded all ~500 rows every 30 seconds per
   // tab — most of this project's egress bill (docs/EGRESS_BUDGET.md). A delta asks
   // only for what moved. Refresh and the periodic self-heal drop the cursor, which
-  // is what asks for the whole roster.
-  const wantsFull = force || !loaded || !rosterCursor
-    || Date.now() - rosterSyncedAt > ROSTER_FULL_RESYNC_MS;
+  // is what asks for the whole roster. (`since` is computed at the top of load()
+  // now — the combined RPC needs it before the request, not after the pulse.)
   const d = rosterDeltaUnavailable
     ? { error: MISSING_ROSTER_DELTA }
-    : await DashboardModel.rosterDelta(wantsFull ? null : rosterCursor);
+    : await DashboardModel.rosterDelta(since);
 
   if (d.error && isMissingFunctionError(d.error)) {
     rosterDeltaUnavailable = true;
