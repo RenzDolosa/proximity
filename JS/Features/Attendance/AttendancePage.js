@@ -230,7 +230,7 @@ function paintTable() {
         ${pageRows.map((r) => {
           const st = attendanceStatus(r);
           return `
-            <tr class="row-clickable" data-emp="${esc(r.employee_id || '')}" tabindex="0"
+            <tr class="row-clickable" data-emp="${esc(r.employee_id || '')}" data-date="${esc(r.work_date || '')}" tabindex="0"
                 title="Open ${esc(r.full_name)}'s scan log">
               <td class="col-shrink mono" data-label="Date">${esc(fmtWorkDate(r.work_date))}</td>
               <!-- The employee is the headline on a phone; the date is one of
@@ -250,10 +250,11 @@ function paintTable() {
 
   // A row raises the question "what actually happened that day?", and the
   // answer already exists as Employee Manager's scan-log dialog. It fetches
-  // only when opened, so this adds no cost to simply reading the report.
+  // only when opened; the row date initializes the dialog's local filter, so
+  // it adds no request or subscription beyond opening that dialog as before.
   const openLog = (tr) => {
     const id = tr?.dataset.emp;
-    if (id) openScanLogModal(id);
+    if (id) openScanLogModal(id, tr.dataset.date);
   };
   wrap.querySelectorAll('tr.row-clickable').forEach((tr) => {
     tr.addEventListener('click', () => openLog(tr));

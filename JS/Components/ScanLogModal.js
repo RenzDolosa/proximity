@@ -23,7 +23,7 @@ const localDateKey = (iso) => new Date(iso).toLocaleDateString('en-CA');
 // painted list is capped.
 const RENDER_CAP = 300;
 
-export async function openScanLogModal(employeeId) {
+export async function openScanLogModal(employeeId, initialDate = '') {
   const token = startModalOpen();
   const overlay = openModal(`
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;">
@@ -137,8 +137,8 @@ export async function openScanLogModal(employeeId) {
     }
 
     const scanners = [...new Set(logs.map((l) => l.scanner_id).filter(Boolean))].sort();
-    const prevFrom = $('#log-range .drp-from', overlay)?.value || '';
-    const prevTo = $('#log-range .drp-to', overlay)?.value || '';
+    const prevFrom = $('#log-range .drp-from', overlay)?.value ?? initialDate;
+    const prevTo = $('#log-range .drp-to', overlay)?.value ?? initialDate;
     const prevScanner = $('#log-scanner', overlay)?.value || 'all';
 
     bodyEl.className = '';
