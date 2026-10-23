@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   attachCachedPhoto, classifyCachedScan, codesAreNumeric, flushQueuedScans, groupQueuedScans,
-  looksLikeCardCode, maxCodeLength, mergeLookupDelta, mergePhotoUpdates, expectedCodeLength,
+  isDuplicateScanRequestError, looksLikeCardCode, maxCodeLength, mergeLookupDelta, mergePhotoUpdates, expectedCodeLength,
   photoNeedsRefresh, readRejection,
 } from '../JS/Core/offlineScanning.js';
 
@@ -226,6 +226,28 @@ test('queue replay stops after an RPC failure and keeps unsynced entries', async
   });
   assert.deepEqual(removed, ['a-1']);
   assert.deepEqual(result, { synced: 1, remaining: 1 });
+});
+
+test('queue replay treats only this request id unique violation as an already-synced scan', async () => {
+  assert.equal(isDuplicateScanRequestError({
+    code: '23505',
+    message: 'duplicate key value violates unique constraint "scan_events_request_id_key"',
+  }), true);
+  assert.equal(isDuplicateScanRequestError({ code: '23505', message: 'other unique constraint' }), false);
+  assert.equal(isDuplicateScanRequestError({ code: 'PGRST000', message: 'network error' }), false);
+
+  const entries = [{ id: 1, request_id: 'request-1', proximity_code: 'A', scanned_at: '2026-10-10T05:55:00Z' }];
+  const removed = [];
+  const result = await flushQueuedScans({
+    entries,
+    send: async () => isDuplicateScanRequestError({
+      code: '23505',
+      message: 'duplicate key value violates unique constraint "scan_events_request_id_key"',
+    }) ? null : new Error('unexpected'),
+    remove: async (id) => { removed.push(id); },
+  });
+  assert.deepEqual(removed, [1]);
+  assert.deepEqual(result, { synced: 1, remaining: 0 });
 });
 
 // scan_proximity_code_compact(p_include_photo => false) omits the thumbnail;

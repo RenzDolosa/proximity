@@ -13,11 +13,12 @@ export const ScanEventsModel = {
 
   // p_include_photo false: the result card's thumbnail comes from the local
   // photo cache (OfflineScanModel.withCachedPhoto()).
-  async scan(proximity_code, scanner_id) {
+  async scan(proximity_code, scanner_id, requestId) {
     return supabase.rpc('scan_proximity_code_compact', {
       p_proximity_code: proximity_code,
       p_scanner_id: scanner_id,
       p_include_photo: false,
+      p_request_id: requestId,
     });
   },
 

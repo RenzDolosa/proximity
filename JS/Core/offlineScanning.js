@@ -205,6 +205,10 @@ export function groupQueuedScans(entries) {
   return [...groups.values()];
 }
 
+export function isDuplicateScanRequestError(error) {
+  return error?.code === '23505' && /scan_events_request_id_key/.test(error.message || '');
+}
+
 // Replays each card's scans in order while allowing unrelated cards to make
 // bounded progress concurrently. `send` returns an error-like value on
 // failure; entries after the first failure are deliberately retained.
