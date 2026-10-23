@@ -73,6 +73,12 @@ test('the kiosk flush timer stays free of the network when idle', () => {
   );
 });
 
+test('a timed-out kiosk scan reuses its original request id when queued', () => {
+  assert.match(scanner, /const requestId = crypto\.randomUUID\(\);/);
+  assert.match(scanner, /ScanEventsModel\.scan\(proximity_code, operatorName, requestId\)/);
+  assert.match(scanner, /OfflineScanModel\.enqueue\(proximity_code, operatorName, requestId, scannedAt\)/);
+});
+
 test('one Dashboard refresh is one request', () => {
   // The whole point of get_dashboard_tick(): pulse() and rosterDelta() used to
   // be called back to back on every tick. They remain as the deploy-ordering

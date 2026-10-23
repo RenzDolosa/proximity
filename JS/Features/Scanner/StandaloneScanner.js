@@ -392,6 +392,8 @@ function renderStandaloneScanner() {
     // Lock the input before the round-trip: a card read landing mid-request would
     // otherwise append onto the field instead of counting as its own scan.
     codeInput.disabled = true;
+    const requestId = crypto.randomUUID();
+    const scannedAt = new Date().toISOString();
     let data, error;
     let offlineHandled = false;
     if (navigator.onLine) {
@@ -401,7 +403,7 @@ function renderStandaloneScanner() {
       // until the OS TCP/DNS timeout, tens of seconds, in front of the offline
       // fallback below. Racing a local timeout bounds that; a timeout is handled
       // exactly like any other network failure.
-      const scanPromise = ScanEventsModel.scan(proximity_code, operatorName);
+      const scanPromise = ScanEventsModel.scan(proximity_code, operatorName, requestId);
       const timeout = new Promise((resolve) => {
         setTimeout(() => resolve({ data: null, error: { message: 'timed out', timedOut: true } }), ONLINE_SCAN_TIMEOUT_MS);
       });
@@ -423,7 +425,7 @@ function renderStandaloneScanner() {
       data = OfflineScanModel.classify(proximity_code, meta.rows, bumps);
       error = null;
       offlineHandled = true;
-      await OfflineScanModel.enqueue(proximity_code, operatorName).catch(() => {});
+      await OfflineScanModel.enqueue(proximity_code, operatorName, requestId, scannedAt).catch(() => {});
       renderOfflineStatus();
     }
     // Online results arrive without photo_thumb_b64 (see ScanEventsModel.scan());

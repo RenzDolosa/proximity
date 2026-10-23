@@ -207,7 +207,12 @@ an admin swaps it out.
   one (`OfflineScanModel.withCachedPhoto()`). Measured on live data: the
   full RPC response averaged ~15.5 KB, the compact response with photo ~9.3
   KB, and without photo ~0.5 KB. Offline-queue replay also passes `false`
-  since it discards the response.
+  since it discards the response. `p_request_id` (optional UUID, added
+  2026-10-23) makes an online timeout followed by offline replay idempotent:
+  the first insert stores its request ID in `raw_payload`, and the unique
+  index rejects a retry before the scan-log trigger can append or flip
+  direction twice. The kiosk retries the same request ID and treats only that
+  specific unique violation as already synced. Older clients can omit it.
 - **`get_scanner_offline_cache()`** — added 2026-09-16, EXECUTE revoked
   2026-10-08, **dropped 2026-10-15**. Returned a trimmed `proximity_cards` ⨝
   `employees` projection as a single `jsonb` array. Superseded on 2026-09-19

@@ -16,7 +16,7 @@
 // synced. Accepted tradeoff for a kiosk that must work with no network.
 import { supabase } from '../Core/supabaseClient.js';
 import { idbGetCache, idbSetCache, idbEnqueue, idbGetQueue, idbRemoveFromQueue, idbCountQueue, idbGetPhotoCache, idbSetPhotoCache } from '../Utils/idb.js';
-import { attachCachedPhoto, classifyCachedScan, flushQueuedScans, mergeLookupDelta, mergePhotoUpdates, photoNeedsRefresh } from '../Core/offlineScanning.js';
+import { attachCachedPhoto, classifyCachedScan, flushQueuedScans, isDuplicateScanRequestError, mergeLookupDelta, mergePhotoUpdates, photoNeedsRefresh } from '../Core/offlineScanning.js';
 
 // Past this age, the cached lookup is old enough that a card revoked (or
 // an employee deactivated/reactivated) since the last refresh could still
@@ -263,8 +263,8 @@ export const OfflineScanModel = {
     return classifyCachedScan(proximityCode, rows, pendingBumps);
   },
 
-  async enqueue(proximity_code, scanner_id) {
-    return idbEnqueue({ proximity_code, scanner_id, scanned_at: new Date().toISOString() });
+  async enqueue(proximity_code, scanner_id, request_id, scanned_at) {
+    return idbEnqueue({ proximity_code, scanner_id, request_id, scanned_at });
   },
 
   async queueCount() {
@@ -291,15 +291,16 @@ export const OfflineScanModel = {
       onProgress,
       send: async (entry) => {
         const { error } = await supabase.rpc('scan_proximity_code_compact', {
-        p_proximity_code: entry.proximity_code,
-        p_scanner_id: entry.scanner_id,
-        p_scanned_at: entry.scanned_at,
-        p_offline: true,
-        // The replay ignores the response body, so never download thumbnails
-        // for a backlog of queued scans.
-        p_include_photo: false,
+          p_proximity_code: entry.proximity_code,
+          p_scanner_id: entry.scanner_id,
+          p_scanned_at: entry.scanned_at,
+          p_offline: true,
+          // The replay ignores the response body, so never download thumbnails
+          // for a backlog of queued scans.
+          p_include_photo: false,
+          p_request_id: entry.request_id || null,
         });
-        return error;
+        return isDuplicateScanRequestError(error) ? null : error;
       },
       remove: (id) => idbRemoveFromQueue(id).catch(() => {}),
     });
