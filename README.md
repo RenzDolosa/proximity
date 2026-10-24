@@ -632,6 +632,62 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-24 — IN/OUT was assigned by arrival order, not by time**
+
+A real scan log for 10 Oct: `05:55 IN, 08:32 OUT, 08:45 OUT, 08:47 IN,
+08:47 IN, 11:01 OUT, 11:46 OUT, …, 11:47 IN, 20:44 IN`. Two distinct faults
+are tangled together in it.
+
+**The repeats (`OUT, OUT` / `IN, IN`) are an ordering bug, and yes, the
+network causes them.** `trg_append_scan_log()` stamps
+`direction := scan_parity_count % 2` at the moment the `scan_events` row is
+**inserted**, while the Scan Logs dialog, `get_attendance_report()` and
+`get_onsite_roster_delta()` all read that stored direction while ordering by
+`scanned_at`. Those two orders agree only while scans arrive in the order
+they happened.
+
+On a slow link they don't. `doScan()` sends a live scan immediately and only
+*afterwards* notices a backlog and flushes the offline queue — so the 08:47
+scan is inserted first and takes the earlier parity, and the 08:45 scan
+replays second and takes the later one. Sorted by time: `OUT, OUT`.
+
+**This was corrupting hours, not just the log view.** `get_attendance_report()`
+pairs IN→OUT with `lead(direction) over (order by scanned_at)`, and the
+roster decides who is on site from `last_log ->> 'direction' = 'in'`.
+
+`20261024090000_order_scan_log_directions.sql` makes the trigger splice a
+backdated arrival into its place in time and re-derive every direction after
+it — inserting a scan mid-history flips the parity of everything that
+follows, which is exactly what re-deriving does. The first retained entry's
+direction is preserved as the anchor, because `trim_employee_scan_logs()`
+keeps only 180 days and the array alone can't say what parity the history
+started on. The fast path (this scan is the newest) is the same single
+UPDATE it always was. A one-time repair in the same file fixes histories
+already written out of order, scoped to employees whose logs are actually
+mis-ordered so as few rows as possible get their `updated_at` bumped.
+
+**The 11:46 burst is the other fault** — six rows in one minute, perfectly
+alternating, so parity advanced correctly for each. Those are duplicate
+*submissions*: a request that timed out client-side but had already
+committed, re-sent from the offline queue. That is what
+`20261023070023_idempotent_scanner_retries.sql` fixes, by reusing the
+`request_id` on the retry and rejecting it with a unique index before the
+AFTER trigger can touch parity. **Note the dates: this log is from 10 Oct and
+that migration is from 23 Oct, so these rows predate it.** The log cannot
+show whether it works; a fresh one can.
+
+**Considered and not done: draining the queue before sending a live scan.**
+It would remove the common case, but it puts a backlog flush in front of a
+person standing at the reader, and it cannot fix the cross-site case at all —
+74 employees scan at both Krus and Daungan, so a queued scan replaying from
+one kiosk will always be able to interleave with a live scan on another.
+Ordering has to be settled where the rows meet, which is the trigger.
+
+**Egress / Log Ingestion:** unchanged. No new requests, no new polling; the
+hot path is the same single UPDATE. The one-time repair bumps `updated_at`
+on the rows it fixes, costing one roster delta and one kiosk cache delta
+each — once.
+
 **2026-10-21 — Log Ingestion: a different meter needs the opposite optimisation**
 
 Egress is settled (0.126 / 5 GB, 3%). Log Ingestion is not: **0.204 / 1 GB
