@@ -632,6 +632,47 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-24 (later) — one missing reset made four pages' cards ragged**
+
+Reported separately on Employee Manager, Proximity Cards, Attendance and
+Users & Roles: "Status", "Scans", "First IN", "Last OUT", "Role", "Access"
+and "Account" sat indented from the labels above them. One cause.
+
+`tbody td.col-shrink{padding-left:20px}` (specificity 0,1,2) outranks the
+stacked-card rule `.table-as-cards td{padding:5px 0}` (0,1,1). The mobile
+block reset `width` for those cells but not `padding-left`, so every shrink
+column kept a 20px inset once stacked. Measured after the reset: all six
+label cells start at 46px and all six values at 160px.
+
+**Row hover lit up one cell, not the card.** `.clickable-row:hover td` is
+correct on a desktop table — the row *is* its cells there — but stacked, a
+`td` is a single line inside a card, so Scanner Analytics highlighted one
+label/value pair and left the rest dark. The `td` rule is cancelled on
+mobile and the `tr` takes the state.
+
+**Toolbar actions are flex, not a 3-column grid.** Three columns suited
+Proximity Cards (Export, Delete all, Import) and left Employee Manager with
+a hole, because its Export is a full-width menu and only two plain buttons
+remained. A pair-per-row basis self-balances at any count: two share a line,
+an odd last one grows to fill its own. Menu and primary always take a line.
+
+**The nested scrollers are gone on phones.** `.table-scroll` exists to give
+`thead th{position:sticky}` something to stick to — and in card mode the
+thead is hidden, so on a phone it bought nothing and cost plenty:
+`#dash-panel`'s 320px floor, minus its head, toolbar and pagination, left
+the row area on its 120px minimum. One card visible inside an 812px screen,
+with its own scrollbar. Scanner Analytics' 420px cap and Attendance's flex
+column did the same a level down. Unbounded at ≤640px; `#content` scrolls
+the page the way a phone expects. Desktop keeps the pinned header and fixed
+toolbar untouched.
+
+**Attendance's range picker** takes its own line on a phone — the trigger
+carries a full range ("18/10/2026 – 24/10/2026") and cannot share with two
+buttons at 375px without truncating. Measured: 347px wide, 40px tall, no
+truncation, Run report and Export 170px each beneath it.
+
+**Egress / Log Ingestion:** unchanged. This is entirely CSS.
+
 **2026-10-24 — status dots, and the filter row that was 47px wide**
 
 **The filter row was broken on every phone, and had been since the mobile
