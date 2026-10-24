@@ -240,6 +240,18 @@ function finish(seq, err, nextStats, nextRoster, delta = null) {
   paintTable();
 }
 
+// Six plus the toggle measures three rows and 92px at 375px, against 225px
+// for all twenty-one — and the six still cover every department with more
+// than a handful of people on site, which is the question this answers.
+const DEPT_CHIP_LIMIT = 6;
+
+function deptChip(d) {
+  return `<button type="button" class="dept-chip" data-dept="${esc(d.department)}">
+    <span class="dept-chip-name">${esc(d.department)}</span>
+    <span class="dept-chip-count">${d.count}</span>
+  </button>`;
+}
+
 function statCard(label, value, { tone = '', route = null } = {}) {
   const attrs = route ? ` data-goto="${route}" role="link" tabindex="0"` : '';
   return `<div class="stat-card${tone ? ` ${tone}` : ''}${route ? ' clickable' : ''}"${attrs}>
@@ -269,18 +281,33 @@ function paintStats() {
     ${sum.byDepartment.length ? `
       <div class="dept-breakdown">
         <div class="dept-breakdown-title">On site by department</div>
-        <!-- A wrapping run of "Name 12 · Name 7 · …" separated by dots read
-             as one dense paragraph once there were twenty departments and no
-             room to lay them out. Each is its own chip now, so the name and
-             its count stay together on a line of their own. -->
+        <!-- Chips rather than a dot-separated run: the name and its count stay
+             together instead of splitting across a line break.
+             Capped, because chips alone only fixed legibility, not volume —
+             twenty-odd departments wrapped into a block that owned most of a
+             phone screen before the roster below it. byDepartment is sorted by
+             headcount, so the first few ARE the answer to "where is everyone";
+             the tail is a long thin list of ones and twos. -->
         <div class="dept-chips">
-          ${sum.byDepartment.map((d) => `<button type="button" class="dept-chip" data-dept="${esc(d.department)}">
-            <span class="dept-chip-name">${esc(d.department)}</span>
-            <span class="dept-chip-count">${d.count}</span>
-          </button>`).join('')}
+          ${sum.byDepartment.slice(0, DEPT_CHIP_LIMIT).map(deptChip).join('')}
+          ${sum.byDepartment.length > DEPT_CHIP_LIMIT ? `
+            <div class="dept-chips-rest hidden">
+              ${sum.byDepartment.slice(DEPT_CHIP_LIMIT).map(deptChip).join('')}
+            </div>
+            <button type="button" class="dept-chip dept-chip-more" id="dept-more"
+                    aria-expanded="false">+${sum.byDepartment.length - DEPT_CHIP_LIMIT} more</button>` : ''}
         </div>
       </div>` : ''}
   `;
+  const more = $('#dept-more');
+  if (more) {
+    more.addEventListener('click', () => {
+      const rest = el.querySelector('.dept-chips-rest');
+      const open = rest.classList.toggle('hidden') === false;
+      more.setAttribute('aria-expanded', String(open));
+      more.textContent = open ? 'Show fewer' : `+${sum.byDepartment.length - DEPT_CHIP_LIMIT} more`;
+    });
+  }
   el.querySelectorAll('[data-goto]').forEach((card) => {
     const go = () => { appState.route = card.dataset.goto; import('../../Core/router.js').then((m) => m.render()); };
     card.addEventListener('click', go);

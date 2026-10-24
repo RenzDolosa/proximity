@@ -632,6 +632,67 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-24 — status dots, and the filter row that was 47px wide**
+
+**The filter row was broken on every phone, and had been since the mobile
+work shipped.** `.filter-row{flex-wrap:wrap}` sat in the mobile block at the
+*top* of `components.css`, before the base `.filter-row{flex-wrap:nowrap}`
+further down. Same specificity, so source order decided it and the mobile
+rule was simply dead. The search box still picked up `flex: 1 1 100%` from a
+higher-specificity selector, so `nowrap` then shrank it to **47px** at 375px
+while the two dropdowns kept theirs. That is the squeezed Dashboard and
+Employee Manager filter row. Measured: now 327px full-width with the
+dropdowns 160px each on the line below.
+
+This is the third time the same trap has bitten — the stat cards (10-21) and
+the safe-area padding (10-08). **A mobile override must come after the base
+rule it overrides when the specificity matches.** The relocated block says so
+in place.
+
+**`JS/Components/StatusDot.js`** — a leading column, blank header, one
+coloured dot, shared by Users & Roles and Scanner Analytics because both
+asked for it the same day.
+
+- **Scanner Analytics costs nothing**: `scanners.last_seen_at` is written in
+  exactly one place, `scan_proximity_code()`'s `on conflict do update`, so it
+  *is* the last scan time — which each row already carries as `last_scan_at`.
+  It reuses `scannerState()`, so the 10-minute rule stays shared with the
+  Dashboard and Settings. No registry fetch, no new request.
+- **Users & Roles had no presence signal at all.** `profiles` carries only
+  `is_active`. Real presence means a heartbeat — a recurring write per
+  signed-in user, which is exactly the log-ingestion cost of the last two
+  weeks' work. `20261024140000_profiles_last_sign_in.sql` mirrors
+  `auth.users.last_sign_in_at` onto `profiles` with a trigger instead: GoTrue
+  already maintains it, so this is zero requests, zero client writes, zero
+  polling. The column rides along on the `select *` that page already issues.
+
+  It answers "has this account been used recently", not "is this person
+  looking at the app". The dot's window is 12 hours; every dot carries the
+  real elapsed time in its `title` and `data-label`, so the words are precise
+  even though the colour is coarse.
+
+**The dot is never colour alone.** `data-label` carries the words, which is
+what `.table-as-cards` renders when a row stacks into a card on a phone. An
+earlier draft set that label from `attr(title)` in CSS and silently printed
+the literal "Status" — `attr()` reads the element it is applied to, and the
+title lives on the inner `<span>`. Caught by measuring the rendered
+`::before`, not by reading the rule.
+
+**On site by department** is capped at six chips with a "+N more" toggle.
+Chips alone (10-23) fixed legibility but not volume: twenty-one departments
+measured 225px of a 812px phone screen before the roster. Six plus the toggle
+is 92px. The cap is phone-only — a 1280px row absorbs all twenty-one in 60px,
+so hiding fifteen there would only cost a click. Same markup at both widths;
+only visibility differs, so nothing goes stale on resize.
+
+**The phone tab bar** gains an active indicator bar. Colour alone was
+carrying the whole "you are here" signal, which is the one thing in the shell
+that should never depend on telling two greys apart. Tap target 56px.
+
+**Egress / Log Ingestion:** unchanged. CSS, one pure component, one trigger
+that fires only on an actual sign-in, and a column on a query that already
+runs.
+
 **2026-10-24 — IN/OUT was assigned by arrival order, not by time**
 
 A real scan log for 10 Oct: `05:55 IN, 08:32 OUT, 08:45 OUT, 08:47 IN,

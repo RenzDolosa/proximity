@@ -20,10 +20,9 @@
   /* The search gets a line of its own; the filter pill goes under it rather
      than squeezing both into one row. */
   .toolbar-start{flex-wrap:wrap;}
-  .toolbar .search,
-  .toolbar .filter-row .search{max-width:none;width:100%;flex:1 1 100%;}
-  .filter-row{flex-wrap:wrap;gap:8px;}
-  .filter-row select{flex:1 1 140px;max-width:none;min-width:0;}
+  .toolbar .search{max-width:none;width:100%;flex:1 1 100%;}
+  /* .filter-row's own mobile rules are NOT here — see the block after its
+     base definition below for why they cannot be. */
   /* Actions in even columns rather than whatever order they happen to wrap
      in, with the primary spanning the full width beneath them. */
   .toolbar-actions{display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;}
@@ -41,6 +40,24 @@
 .filter-row .search{flex:1 1 160px;max-width:320px;width:auto;min-width:0;}
 .filter-row select{flex:0 0 auto;width:auto;min-width:130px;max-width:180px;}
 .filter-row input[type="date"]{flex:0 0 140px;width:auto;}
+
+/* Phone. This block MUST come after the four rules above, not up with the
+   other mobile toolbar rules earlier in the file: `.filter-row{flex-wrap}` is
+   the same specificity in both places, so source order is the only thing that
+   decides it. Written up there it lost to the `nowrap` above and was simply
+   dead — and because the search still carried `flex: 1 1 100%` from a
+   higher-specificity selector, `nowrap` then shrank it to **47px** at 375px
+   while the two dropdowns kept their widths. That is the squeezed filter row
+   on Dashboard and Employee Manager. Measured, not reasoned about: same trap
+   as the stat cards (2026-10-21) and the safe-area padding (2026-10-08). */
+@media (max-width: 640px){
+  .filter-row{flex-wrap:wrap;gap:8px;}
+  .filter-row .search{flex:1 1 100%;max-width:none;width:100%;}
+  /* Two dropdowns share the line under it; a third wraps rather than
+     shrinking all of them below a readable width. */
+  .filter-row select{flex:1 1 140px;max-width:none;min-width:0;}
+  .filter-row input[type="date"]{flex:1 1 140px;}
+}
 
 .pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;flex-wrap:wrap;font-size:12.5px;color:var(--text-muted);}
 .pagination-controls{display:flex;align-items:center;gap:10px;}
@@ -538,6 +555,34 @@ tr.row-clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2
 .clickable-row{cursor:pointer;}
 .clickable-row:hover td,.clickable-row:focus-visible td{background:var(--surface-raised);}
 
+/* Status dot column (Components/StatusDot.js) — Users & Roles and Scanner
+   Analytics. Blank header, one dot per row, pinned to the narrowest width a
+   28px target allows so it never competes with the name beside it. */
+.col-dot{width:28px;padding-right:0 !important;text-align:center;}
+.status-dot{
+  display:inline-block;width:9px;height:9px;border-radius:50%;
+  background:var(--text-faint);vertical-align:middle;
+}
+/* A ring rather than a bare dot: at 9px a colour alone is easy to miss, and
+   the halo reads as "live" at a glance across a room. */
+.status-dot-online{background:var(--good);box-shadow:0 0 0 3px var(--good-dim);}
+.status-dot-offline{background:var(--text-faint);}
+.status-dot-disabled{background:transparent;border:1.5px solid var(--text-faint);}
+.status-dot-unknown{background:transparent;border:1.5px dotted var(--text-faint);}
+
+@media (max-width: 640px){
+  /* Stacked into a card the dot has no column to sit in, so it joins the
+     title line instead of becoming a labelled row of its own. */
+  .table-as-cards td.col-dot{
+    width:auto;padding:0 !important;order:-2;
+    display:flex;align-items:center;gap:8px;
+  }
+  /* Content comes from the generic td::before rule (attr(data-label), which
+     statusDotHTML fills with the real words). Only the sizing is overridden:
+     the generic 36% label column would leave the dot stranded mid-row. */
+  .table-as-cards td.col-dot::before{flex:0 0 auto;}
+}
+
 /* Phone: two cards per row, and an odd last one spans rather than sitting
    half-width beside dead space. `auto-fit` already lands on two columns at
    this width, but it left Attendance's fifth card ("Check times") alone
@@ -588,6 +633,29 @@ tr.row-clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2
   padding:1px 7px;font-size:11px;font-weight:600;color:var(--text);
 }
 .dept-chip:hover .dept-chip-count{background:var(--accent-dim);color:var(--accent-text-on-dim);}
+/* display:contents so the hidden tail's chips lay out as direct children of
+   .dept-chips when revealed — a plain wrapper would put them on their own
+   line and break the flow mid-row. `.hidden`'s display:none still wins over
+   it, which is what collapses the whole subtree. */
+.dept-chips-rest{display:contents;}
+/* The toggle reads as an action, not as another department: no count bubble,
+   accent text, dashed edge. */
+.dept-chip-more{
+  padding:4px 11px;color:var(--accent);
+  border-style:dashed;border-color:var(--border);
+}
+.dept-chip-more:hover,.dept-chip-more:focus-visible{border-color:var(--accent);color:var(--accent);}
+/* The cap is a PHONE problem — twenty-one chips there is 225px of screen
+   before the roster. A 1280px row absorbs them in two lines, so hiding
+   fifteen departments behind a toggle would only cost a desktop reader a
+   click. The markup is identical at both widths (viewport-dependent markup
+   goes stale on resize); only visibility differs.
+   !important is required to beat .hidden's own !important, which is the
+   class the toggle flips. */
+@media (min-width: 641px){
+  .dept-chips-rest{display:contents !important;}
+  .dept-chip-more{display:none;}
+}
 
 /* Each .trend-col is one day. .trend-bar's own height (set inline, in px)
    is that day's total relative to the busiest day in the window;

@@ -6,6 +6,7 @@ import { ProfilesModel } from '../../Models/ProfilesModel.js';
 import { openUserModal } from '../../Components/UserModal.js';
 import { openConfirmModal } from '../../Components/ConfirmModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
+import { statusDotHTML, STATUS_DOT_HEADER, accountState, accountStateLabel } from '../../Components/StatusDot.js';
 import { scopeLabel } from './userOptions.js';
 
 let usersCache = [];
@@ -47,11 +48,14 @@ function paintUsersTable() {
   const rows = data.slice((page - 1) * pageSize, page * pageSize);
   wrap.innerHTML = `
     <table class="table-as-cards">
-      <thead><tr><th>Name</th><th>Email</th><th class="col-shrink">Role</th><th class="col-shrink">Access</th><th class="col-shrink">Account</th><th class="col-shrink"></th></tr></thead>
+      <thead><tr>${STATUS_DOT_HEADER}<th>Name</th><th>Email</th><th class="col-shrink">Role</th><th class="col-shrink">Access</th><th class="col-shrink">Account</th><th class="col-shrink"></th></tr></thead>
       <tbody>
         ${rows.map((u) => `
           <tr class="row-clickable" data-user="${esc(u.id)}" tabindex="0" title="Edit ${esc(u.full_name)}">
-            <td>${esc(u.full_name)}</td>
+            ${statusDotHTML(accountState(u), accountStateLabel(u))}
+            <!-- card-title, not first-child: the dot now holds that slot, and
+                 the stacked card's headline must still be the person's name. -->
+            <td class="card-title">${esc(u.full_name)}</td>
             <td class="mono" data-label="Email">${esc(u.email)}</td>
             <td class="col-shrink" data-label="Role"><span class="badge role-${u.role}">${esc(u.role)}</span></td>
             <td class="col-shrink" data-label="Access">${esc(scopeLabel[u.access_scope] || u.access_scope)}</td>
