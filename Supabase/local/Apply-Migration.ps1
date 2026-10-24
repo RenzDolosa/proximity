@@ -34,6 +34,14 @@
 .PARAMETER SkipTracking
   Apply the SQL but do not write the schema_migrations row.
 
+.PARAMETER RecordOnly
+  Write the schema_migrations row WITHOUT running the SQL. For a migration
+  already applied through the dashboard's SQL editor, which records nothing in
+  that table -- the gap that made five live migrations read as "MISSING" on
+  2026-10-24. Verify the migration really is applied first (see "How to tell
+  what is actually applied" in Supabase/README.md); this writes bookkeeping and
+  checks nothing.
+
 .PARAMETER WhatIfOnly
   Print what would run, connect to nothing.
 
@@ -46,6 +54,7 @@ param(
   [Parameter(Mandatory = $true)] [string] $File,
   [string] $ConnectionString = $env:SUPABASE_DB_URL,
   [switch] $SkipTracking,
+  [switch] $RecordOnly,
   [switch] $WhatIfOnly
 )
 
@@ -114,17 +123,21 @@ Use the DIRECT connection on port 5432, not the 6543 pooler.
 # PowerShell at all.
 $env:PGCLIENTENCODING = 'UTF8'
 
-# --single-transaction + ON_ERROR_STOP: all of it lands, or none of it does.
-& $psql $ConnectionString `
-  --single-transaction `
-  --set ON_ERROR_STOP=1 `
-  --quiet `
-  --no-psqlrc `
-  -f $resolved
-if ($LASTEXITCODE -ne 0) {
-  throw "psql exited $LASTEXITCODE - nothing was committed."
+if ($RecordOnly) {
+  Write-Host 'Recording only - the SQL is NOT run.' -ForegroundColor Yellow
+} else {
+  # --single-transaction + ON_ERROR_STOP: all of it lands, or none of it does.
+  & $psql $ConnectionString `
+    --single-transaction `
+    --set ON_ERROR_STOP=1 `
+    --quiet `
+    --no-psqlrc `
+    -f $resolved
+  if ($LASTEXITCODE -ne 0) {
+    throw "psql exited $LASTEXITCODE - nothing was committed."
+  }
+  Write-Host "`nApplied." -ForegroundColor Green
 }
-Write-Host "`nApplied." -ForegroundColor Green
 
 if ($SkipTracking) { Write-Host 'Tracking row skipped (-SkipTracking).'; return }
 
@@ -138,6 +151,8 @@ on conflict (version) do nothing;
 & $psql $ConnectionString --set ON_ERROR_STOP=1 --quiet --no-psqlrc -c $insert
 if ($LASTEXITCODE -eq 0) {
   Write-Host "Recorded in schema_migrations as $version." -ForegroundColor Green
+} elseif ($RecordOnly) {
+  Write-Warning "Could not write the schema_migrations row. Nothing else was attempted:`n$insert"
 } else {
   Write-Warning "The migration APPLIED, but the schema_migrations row could not be written. Add it by hand:`n$insert"
 }
