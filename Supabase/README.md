@@ -185,7 +185,8 @@ an admin swaps it out.
   `proximity-scan` Edge Function.
   `p_scanned_at` lets a scan captured offline and replayed later keep its
   true original timestamp (the `trg_append_scan_log` trigger reads
-  `NEW.scanned_at`, so `scan_logs` inherits the correct time too);
+  `NEW.scanned_at`, so `scan_logs` inherits the correct time too — and since
+  2026-10-24 it also *orders* by it, see the trigger's own entry below);
   `p_offline: true` tags the resulting row's `raw_payload` with
   `{"captured_offline": true}` purely for audit visibility — e.g. spotting
   that a since-revoked card was actually tapped while the kiosk was
@@ -750,6 +751,44 @@ the live project (`pg_policies`, `pg_proc` definitions, actual grants via
 Added 2026-09-16. Only the standalone kiosk Scanner
 (`JS/Features/Scanner/StandaloneScanner.js`) has this — Test Scan is
 unaffected (see its RPC entry above).
+
+### IN/OUT direction follows `scanned_at`, not arrival order (2026-10-24)
+
+`trg_append_scan_log()` stamps each `scan_logs` entry's `direction` from
+`employees.scan_parity_count` at **INSERT** time. Everything that reads that
+direction — the Scan Logs dialog, `get_attendance_report()`'s
+`lead(direction) over (order by scanned_at)` pairing, and
+`get_onsite_roster_delta()`'s `last_log ->> 'direction' = 'in'` — orders by
+`scanned_at`. The two agree only while scans arrive in the order they
+happened, which on an intermittent link they do not: a live scan is sent
+immediately while older queued scans are still waiting to replay, so the
+newer scan takes the earlier parity. Sorted by time the result reads
+`OUT, OUT` or `IN, IN`, and the Attendance pairing silently produces wrong
+hours.
+
+`20261024090000_order_scan_log_directions.sql` splices a backdated arrival
+into its position by `scanned_at` and re-derives every direction after it —
+inserting a scan mid-history flips the parity of everything that follows,
+which is what re-deriving does. Ties break on insertion order, the only
+evidence available for two scans in the same second.
+
+Two details worth knowing before editing it:
+
+- **The first retained entry's direction is the anchor**, not something
+  recomputed. `trim_employee_scan_logs()` keeps 180 days, so the array alone
+  cannot say what parity the history started on.
+- **`scan_parity_count` is re-phased after a splice**, so the next in-order
+  scan alternates from the real last entry rather than from a count the
+  re-derive has put out of phase. It still only ever increases.
+
+The fast path — this scan is the newest, which is almost all of them — is the
+same single UPDATE it always was, so this costs nothing per scan. The
+migration also carries a one-time repair for histories already written out of
+order, scoped to employees whose logs actually are mis-ordered.
+
+This is a *different* fault from duplicate submissions, which show up as a
+burst of correctly-alternating rows in the same minute and are handled by
+`20261023070023_idempotent_scanner_retries.sql`.
 
 **Two separate problems, two separate mechanisms:**
 1. *The app itself won't load with no network* — solved client-side only,
