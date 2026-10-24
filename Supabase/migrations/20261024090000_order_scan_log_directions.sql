@@ -140,7 +140,7 @@ WITH disordered AS (
          e.scan_logs
     FROM public.employees e
    WHERE jsonb_array_length(coalesce(e.scan_logs, '[]'::jsonb)) > 1
-     -- "some entry is older than the one stored before it" — one pass with
+     -- "some entry is older than the one stored before it": one pass with
      -- lag(), rather than a max() over every earlier entry per entry.
      AND EXISTS (
        SELECT 1
