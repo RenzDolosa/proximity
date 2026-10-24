@@ -188,6 +188,25 @@ nav.rail button.active .ic{color:var(--accent);}
 #dash-panel > *{flex:0 0 auto;}
 #dash-panel > .table-scroll{flex:1 1 auto;}
 
+/* PHONE: stop boxing the rows into their own little scroller.
+   The inner scroll area exists to give `thead th{position:sticky}` something
+   to stick to. In card mode the thead is visually hidden, so on a phone that
+   scroller buys nothing and costs plenty: #dash-panel's 320px floor minus its
+   head, toolbar and pagination left .table-scroll on its 120px minimum —
+   roughly one card visible, inside a 812px screen. Scanner Analytics' 420px
+   cap and Attendance's flex column did the same thing one level down, which
+   is the nested scrollbar visible in all three.
+   Unbound them and let #content scroll the page the way a phone expects.
+   Desktop keeps the pinned header and the fixed toolbar exactly as before. */
+@media (max-width: 640px){
+  .table-scroll{
+    flex:0 0 auto;min-height:0;max-height:none;overflow:visible;
+  }
+  #dash-panel,
+  #att-body{display:block;min-height:0;}
+  #analytics-body .table-scroll{max-height:none;}
+}
+
 /* Unread-alerts count on the sidebar's Alerts button (Core/alertsBadge.js). */
 nav.rail button .nav-badge{margin-left:auto;min-width:18px;padding:1px 6px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;font-weight:600;line-height:16px;text-align:center;}
 nav.rail button .nav-badge.hidden{display:none;}

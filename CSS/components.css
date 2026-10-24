@@ -23,13 +23,23 @@
   .toolbar .search{max-width:none;width:100%;flex:1 1 100%;}
   /* .filter-row's own mobile rules are NOT here — see the block after its
      base definition below for why they cannot be. */
-  /* Actions in even columns rather than whatever order they happen to wrap
-     in, with the primary spanning the full width beneath them. */
-  .toolbar-actions{display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;}
-  .toolbar-actions > button{width:100%;padding:9px 6px;font-size:12.5px;}
+  /* Flex, not a fixed-column grid. Three columns suited Proximity Cards
+     (Export, Delete all, Import) and left Employee Manager with a hole —
+     its Export is a full-width menu, so only two plain buttons remained and
+     the third column stayed empty. A pair-per-row basis self-balances for
+     any count: two share a line, and an odd last one grows to fill its own
+     rather than sitting half-width beside nothing.
+     Menu and primary always take a line of their own — one is a disclosure,
+     the other is the page's main action, and neither should read as one of
+     a pair. */
+  .toolbar-actions{display:flex;flex-wrap:wrap;gap:8px;}
+  .toolbar-actions > button{
+    flex:1 1 calc(50% - 4px);min-width:0;
+    padding:10px 6px;font-size:12.5px;min-height:40px;
+  }
   .toolbar-actions > button.primary,
-  .toolbar-actions > .menu{grid-column:1 / -1;}
-  .toolbar-actions > .menu .menu-trigger{width:100%;justify-content:center;}
+  .toolbar-actions > .menu{flex:1 1 100%;}
+  .toolbar-actions > .menu .menu-trigger{width:100%;justify-content:center;min-height:40px;}
 }
 
 /* Search box + status/type dropdown, always side-by-side as one row.
@@ -57,6 +67,13 @@
      shrinking all of them below a readable width. */
   .filter-row select{flex:1 1 140px;max-width:none;min-width:0;}
   .filter-row input[type="date"]{flex:1 1 140px;}
+  /* Attendance puts the range picker and its two buttons in a .filter-row of
+     their own. The trigger carries a whole date range ("18/10/2026 –
+     24/10/2026") and cannot share a line with two buttons at this width
+     without truncating, so it takes one and they pair up underneath. */
+  .filter-row > .drp{flex:1 1 100%;min-width:0;}
+  .filter-row > .drp .drp-trigger{width:100%;min-height:40px;}
+  .filter-row > button{flex:1 1 calc(50% - 4px);min-height:40px;}
 }
 
 .pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;flex-wrap:wrap;font-size:12.5px;color:var(--text-muted);}
@@ -253,8 +270,23 @@ td.row-actions{display:table-cell;}
     background:var(--surface);border:1px solid var(--border);border-radius:10px;
     padding:12px 14px;margin-bottom:10px;
   }
+  /* Hover belongs to the CARD, not its cells. `.clickable-row:hover td` is
+     right on a desktop table — the row IS its cells there — but once stacked,
+     a td is one line inside a card, so it lit up a single label/value pair and
+     left the rest of the card dark. Hence the half-highlighted scanner card.
+     The td rule is cancelled and the tr takes the state instead. */
   .table-as-cards tr:hover{background:var(--surface);}
-  .table-as-cards tr.row-clickable:active{background:var(--surface-raised);}
+  .table-as-cards .clickable-row:hover td,
+  .table-as-cards .clickable-row:focus-visible td,
+  .table-as-cards .row-clickable:hover td{background:transparent;}
+  .table-as-cards .clickable-row:hover,
+  .table-as-cards .row-clickable:hover,
+  .table-as-cards .clickable-row:focus-within,
+  .table-as-cards .row-clickable:focus-within{
+    background:var(--surface-raised);border-color:var(--accent-dim);
+  }
+  .table-as-cards tr.row-clickable:active,
+  .table-as-cards tr.clickable-row:active{background:var(--surface-raised);}
   .table-as-cards td{
     border:none;padding:5px 0;display:flex;gap:12px;align-items:baseline;
     white-space:normal;
@@ -264,8 +296,13 @@ td.row-actions{display:table-cell;}
     color:var(--text-faint);font-size:10.5px;font-weight:600;
     text-transform:uppercase;letter-spacing:.5px;line-height:1.5;
   }
-  /* col-shrink is a desktop width hint and means nothing once stacked. */
-  .table-as-cards td.col-shrink{width:auto;}
+  /* col-shrink is a desktop width hint and means nothing once stacked.
+     padding-left MUST be reset with it: `tbody td.col-shrink` (0,1,2) beats
+     `.table-as-cards td{padding:5px 0}` (0,1,1), so every shrink cell kept a
+     20px left inset once stacked — which is why Status, Scans, First IN, Last
+     OUT, Role, Access and Account all sat indented from the labels above
+     them. One missing reset, four pages' worth of ragged cards. */
+  .table-as-cards td.col-shrink{width:auto;padding-left:0;white-space:normal;}
 
   /* Card title: the first cell by default, or any cell marked .card-title
      when the headline is not the first column (Audit Log's Event). */
