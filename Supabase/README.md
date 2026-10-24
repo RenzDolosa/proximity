@@ -1073,9 +1073,40 @@ contracts each client-side caller relies on.
 future session — schema, Storage, and functions evolve independently of
 git commits here since nothing is deployed *from* this repo yet.*
 
+### How to tell what is actually applied
+
+**`supabase_migrations.schema_migrations` is not the answer here.** That table
+is written by the Supabase CLI. Migrations in this project are applied by hand
+through the dashboard's SQL editor, which records nothing in it — so a
+migration that is live and verified still reads as absent. On 2026-10-24 five
+migrations showed as "MISSING" there while all five were confirmed present in
+the schema, including one applied and verified the same day.
+
+Ask the schema instead. The pattern, one row per migration, each testing for an
+object that migration creates:
+
+```sql
+select '20261024090000 ordered directions' as migration,
+       exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                where n.nspname = 'public' and p.proname = 'trg_append_scan_log'
+                  and p.prosrc like '%v_next_parity%') as applied;
+```
+
+Useful probes: `pg_proc` for a function (and `prosrc like` for a *change* to an
+existing one), `pg_indexes` for an index, `pg_db_role_setting` for an
+`ALTER ROLE`, and `not exists` for a `DROP`.
+
+`Supabase/local/Apply-Migration.ps1` writes the tracking row itself, so
+anything applied through it is recorded properly. The dashboard editor never
+will — if you use it, insert the row by hand afterwards.
+
+**The "NOT applied — apply by hand" labels below are authoring notes, true on
+the day each entry was written and not maintained since.** Several of them are
+long applied. Probe before believing one.
+
 ### Change log (most recent first)
 
-**2026-10-08 — attendance totals and ordering (`20261008160000_attendance_summary_and_order.sql`, NOT applied — apply by hand)**
+**2026-10-08 — attendance totals and ordering (`20261008160000_attendance_summary_and_order.sql`, applied; confirmed 2026-10-24)**
 
 `20260928000000`'s header claimed the 31-day range cap kept the report inside
 its own `limit 25000`, "so the row cap can never silently truncate a legitimate
@@ -1105,7 +1136,7 @@ drift from either caller. **If one is edited, edit both.**
 Costs two scalar reads (~150 bytes each) against the ~180 KB of rows already
 being sent. No query returns more rows than before.
 
-**2026-10-08 — impossible card reads raise nothing (`20261008140000_drop_impossible_card_alerts.sql`, NOT applied — apply by hand)**
+**2026-10-08 — impossible card reads raise nothing (`20261008140000_drop_impossible_card_alerts.sql`, applied; confirmed 2026-10-24)**
 
 `scan_proximity_code()`'s `unmatched` branch gains a third outcome: raise
 nothing at all. A code raises no alert when it is empty, **longer than the
@@ -1143,7 +1174,7 @@ matching a card, suffixing one, or of a plausible shape is touched.
 The client-side half is `readRejection()` in `JS/Core/offlineScanning.js`, which
 discards these before any request is made.
 
-**2026-10-08 — revoke the superseded offline-cache RPCs (`20261008120000_revoke_superseded_offline_cache_rpcs.sql`, NOT applied — apply by hand)**
+**2026-10-08 — revoke the superseded offline-cache RPCs (`20261008120000_revoke_superseded_offline_cache_rpcs.sql`, applied 2026-10-08; superseded by `20261015120000`, which dropped both functions outright)**
 
 `get_scanner_offline_photos()` and `get_scanner_offline_cache()` have had no
 caller in this repository since 2026-09-19, when the payload was split, and again
@@ -1236,7 +1267,13 @@ correctly across a handover. The exposure is entirely in human-facing exports,
 which display the code as the identity; the Attendance export now carries
 `employee_id` alongside it.
 
-**2026-10-06 — `get_onsite_roster_delta()` (`20261006120000_onsite_roster_delta.sql`, NOT applied — apply by hand)**
+**2026-10-06 — `get_onsite_roster_delta()` (`20261006120000_onsite_roster_delta.sql`, applied; confirmed 2026-10-24)**
+
+*Confirmed indirectly, which is worth recording as a technique:
+`get_dashboard_tick()` is `LANGUAGE sql` and calls this function, so
+PostgreSQL validated the call at CREATE time. That it exists at all proves
+this one is applied.*
+
 
 `roster_version`, added below on 2026-10-05, could never skip the roster during
 working hours. It is `md5(count(*) || max(updated_at))`, and every matched scan
