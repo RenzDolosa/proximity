@@ -104,13 +104,27 @@ nav.rail button.active .ic{color:var(--accent);}
     padding-bottom:env(safe-area-inset-bottom);
   }
   .bottom-nav button{
+    position:relative;
     display:flex;flex-direction:column;align-items:center;gap:3px;
-    padding:9px 4px 7px;background:transparent;border:none;
-    color:var(--text-faint);font-size:10.5px;min-height:52px;
+    padding:11px 4px 7px;background:transparent;border:none;
+    color:var(--text-faint);font-size:10.5px;min-height:56px;
+    transition:color .12s ease;
   }
-  .bottom-nav button .ic{font-family:var(--mono);font-size:15px;line-height:1;}
-  .bottom-nav button.active{color:var(--accent);}
+  .bottom-nav button .ic{font-family:var(--mono);font-size:17px;line-height:1;}
+  .bottom-nav button.active{color:var(--accent);font-weight:600;}
+  /* A bar along the top edge of the active tab. Colour alone was carrying
+     the whole "you are here" signal, which is the one thing in the shell
+     that should never depend on distinguishing two similar greys. */
+  .bottom-nav button::before{
+    content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);
+    width:0;height:3px;border-radius:0 0 3px 3px;background:var(--accent);
+    transition:width .14s ease;
+  }
+  .bottom-nav button.active::before{width:26px;}
   .bottom-nav button:active{background:var(--surface-raised);}
+  /* Keyboard focus has to be visible without the outline being clipped by
+     the fixed bar's edge. */
+  .bottom-nav button:focus-visible{outline:2px solid var(--accent);outline-offset:-3px;}
   /* The drawer must sit above the bar it was opened from. */
   #sidebar{z-index:40;}
 }

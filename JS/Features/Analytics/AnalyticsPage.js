@@ -17,6 +17,8 @@ import { canViewScanner } from '../../Core/state.js';
 import { ScannerStatsModel } from '../../Models/ScannerStatsModel.js';
 import { openScanDetailsModal } from '../../Components/ScanDetailsModal.js';
 import { canDrillDown } from '../../Utils/scanDetails.js';
+import { statusDotHTML, STATUS_DOT_HEADER } from '../../Components/StatusDot.js';
+import { scannerState, SCANNER_STATE_LABEL } from '../../Utils/dashboard.js';
 
 const RANGE_OPTIONS = [7, 14, 30, 90];
 
@@ -181,15 +183,33 @@ function renderTrendChart(daily) {
   `;
 }
 
+// `scanners.last_seen_at` is written in exactly one place —
+// scan_proximity_code()'s `on conflict do update set last_seen_at = now()`
+// (see 20261002000000's header, which documents that there is no other path).
+// So it is the time of the last scan, which is precisely what this row already
+// carries as `last_scan_at`. Reusing scannerState() rather than re-deriving
+// keeps the same 10-minute rule the Dashboard and Settings use, and costs no
+// extra request: the scanners registry is not fetched here at all.
+//
+// The one thing this cannot see is `is_enabled`, which lives only in that
+// registry — a disabled scanner reads as offline here rather than as disabled.
+// Right for this page regardless: the question Analytics answers is whether a
+// scanner was producing scans.
+function scannerDot(row) {
+  const state = scannerState({ last_seen_at: row.last_scan_at });
+  return statusDotHTML(state, SCANNER_STATE_LABEL[state] || state);
+}
+
 function renderScannerTable(byScanner) {
   if (!byScanner.length) return `<div class="empty-state">No scanner activity in this window.</div>`;
   return `
     <table class="table-as-cards">
-      <thead><tr><th>Scanner</th><th class="col-shrink">Total</th><th class="col-shrink">Matched</th><th class="col-shrink">Match rate</th><th class="col-shrink">Last scan</th></tr></thead>
+      <thead><tr>${STATUS_DOT_HEADER}<th>Scanner</th><th class="col-shrink">Total</th><th class="col-shrink">Matched</th><th class="col-shrink">Match rate</th><th class="col-shrink">Last scan</th></tr></thead>
       <tbody>
         ${byScanner.map((r) => `
           <tr class="clickable-row" data-drill="all" data-scanner="${esc(r.scanner_id || '')}" tabindex="0" title="Show this scanner's scans">
-            <td class="mono">${esc(r.scanner_id || '—')}</td>
+            ${scannerDot(r)}
+            <td class="mono card-title">${esc(r.scanner_id || '—')}</td>
             <td class="col-shrink mono" data-label="Total">${r.total}</td>
             <td class="col-shrink mono" data-label="Matched">${r.matched}</td>
             <td class="col-shrink mono" data-label="Match rate">${r.match_rate_pct}%</td>
