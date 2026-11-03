@@ -36,8 +36,9 @@ let soundsCache = {}; // key -> { updated_at, size } | null, once loaded
 let loaded = false;
 
 // Every key is capped at MAX_FILE_SIZE_BYTES by the bucket itself, so
-// "all 5 at their individual max" is a real, meaningful ceiling here —
-// not an arbitrary number — for the capacity bar below.
+// "all 6 at their individual max" is a real, meaningful ceiling here —
+// not an arbitrary number — for the capacity bar below. Derived from
+// SOUND_KEYS rather than written out, so adding an outcome moves it.
 const TOTAL_CAPACITY = Object.keys(SOUND_KEYS).length * MAX_FILE_SIZE_BYTES;
 
 let photoQuota = null; // { usage, limit, usageInDrive } once loaded, else null
@@ -183,7 +184,15 @@ export async function renderSettings() {
           'Upload a short audio clip for each scan outcome.',
           `<p>They play on the live Scanner and Test Scan as soon as a result
            comes back. Uploading a new file replaces the previous one
-           immediately.</p>`,
+           immediately.</p>
+           <p>Every outcome already has a built-in tone, so a scanner is never
+           silent — uploading here replaces that tone rather than filling a
+           gap.</p>
+           <p><strong>Matched, but has an unresolved remark</strong> takes the
+           place of the IN and OUT sounds when the person who scanned has an
+           open remark against them. One scan plays one clip, and that is the
+           one worth looking up for; the direction is still shown on the
+           result card.</p>`,
         )
         : panelNote('Audio clips played on the live Scanner and Test Scan for each outcome. Your account can view these, not change them.')}
       <div class="progress" style="margin:0 0 16px;">
@@ -1086,7 +1095,13 @@ function paintRows() {
         <div class="sound-row-info">
           <div class="sound-row-label">${esc(SOUND_LABELS[key])}</div>
           <div class="emp-meta" data-status>
-            ${obj ? `Set, ${fmtBytes(obj.size)} — uploaded ${esc(fmtTime(obj.updated_at))}` : 'Not set — the scan stays silent for this outcome.'}
+            ${obj
+              ? `Set, ${fmtBytes(obj.size)} — uploaded ${esc(fmtTime(obj.updated_at))}`
+              // Not silence: every outcome has a bundled tone that ships with
+              // the app and is precached by the Service Worker, so a kiosk is
+              // audible from its first boot whether or not anything is
+              // uploaded here. The old wording promised silence and was wrong.
+              : 'Not set — the built-in tone plays for this outcome.'}
           </div>
         </div>
         <div class="sound-row-controls">

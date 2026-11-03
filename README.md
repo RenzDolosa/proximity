@@ -632,6 +632,50 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-25 — a scan sound for an employee who has an unresolved remark**
+
+Settings → Scan sounds gains a sixth outcome, **"Matched, but has an
+unresolved remark"**, uploadable like the others.
+
+**It replaces the IN/OUT sound rather than adding to it.** One scan plays
+one clip, and between "which direction" and "this person has an open remark
+against them", the second is the one worth making someone look up. The
+direction is still on the result card and in the feed. The panel says so, so
+nobody has to deduce it from behaviour.
+
+**No migration.** The `scan-sounds` Storage RLS keys on `bucket_id` and
+`can_manage_scan_sounds()`, never on object name, so a new key needs no
+policy change. `loadScanSounds()` was already one `list()` call for the
+whole bucket, so this adds no request either — the clip is fetched only when
+that outcome actually occurs.
+
+`remarks_log` needed no server change: both producers already strip resolved
+entries before the scanner sees them — the compact RPC server-side, and the
+offline cache via the delta — so a non-empty array *is* the signal.
+`hasUnresolvedRemarks()` pins that contract rather than re-filtering.
+
+**`JS/Utils/scanSoundKeys.js`** is a new pure module holding the catalogue
+and the outcome→sound rule. `Utils/scanSounds.js` and
+`Models/ScanSoundsModel.js` both import the Supabase client, so neither can
+be loaded by the Node tests; same split as `Utils/scanTone.js`, for the same
+reason. The model re-exports `SOUND_KEYS`/`SOUND_LABELS` so no caller changed.
+
+A bundled `matched-remarks.wav` ships with it — generated to match the other
+five exactly (44100Hz, 16-bit, mono PCM, 0.33s): a confirming tone then two
+higher blips, deliberately neither a failure buzz nor mistakable for
+matched-in's single tone. `test/scan-sounds.test.mjs` fails the build if
+`SOUND_KEYS`, `FALLBACK_SOUND_PATHS`, `sw.js`'s precache list and the files
+on disk ever disagree — three lists that have to stay in step, and the
+symptom of drift is a kiosk silent for one outcome, offline, in front of a
+queue.
+
+**Fixed in passing:** the panel told you an unset sound meant *"the scan
+stays silent for this outcome"*. It never did — every outcome has a bundled
+tone, precached at install, so a kiosk is audible from its first boot.
+
+**Egress / Log Ingestion:** unchanged. No new requests; uploading is
+something an admin does by hand.
+
 **2026-10-24 (later) — one missing reset made four pages' cards ragged**
 
 Reported separately on Employee Manager, Proximity Cards, Attendance and

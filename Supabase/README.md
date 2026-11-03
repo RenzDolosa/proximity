@@ -34,7 +34,7 @@ Relationship direction: `employees.proximity_card_id → proximity_cards.id`.
 
 | Bucket | Purpose |
 | --- | --- |
-| `scan-sounds` | Public bucket, 5 fixed **extension-less** object keys: `matched-in`, `matched-out`, `card-revoked`, `unmatched`, `unassigned-card`. Uploaded/replaced from the **Settings** page (`JS/Features/Settings/SettingsPage.js` → `JS/Models/ScanSoundsModel.js`) by admins and by managers whose `access_scope` covers Scanner (see Permission model below); played back from `JS/Features/Scanner/StandaloneScanner.js` and `TestScanPage.js` via `JS/Utils/scanSounds.js`. |
+| `scan-sounds` | Public bucket, 6 fixed **extension-less** object keys: `matched-in`, `matched-out`, `matched-remarks` (added 2026-10-24), `card-revoked`, `unmatched`, `unassigned-card`. Uploaded/replaced from the **Settings** page (`JS/Features/Settings/SettingsPage.js` → `JS/Models/ScanSoundsModel.js`) by admins and by managers whose `access_scope` covers Scanner (see Permission model below); played back from `JS/Features/Scanner/StandaloneScanner.js` and `TestScanPage.js` via `JS/Utils/scanSounds.js`. **Adding a key needs no migration** — the four RLS policies key on `bucket_id` and `can_manage_scan_sounds()`, never on object name. |
 
 Fixed keys + `upsert: true` on upload mean "replace" always overwrites the
 same object — no orphaned old file across a format change (mp3 → wav
