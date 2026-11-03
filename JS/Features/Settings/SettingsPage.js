@@ -1154,10 +1154,24 @@ async function handleUpload(key, file, inputEl) {
 
   // Shrink before sending. A sound-library clip is routinely 48kHz stereo and
   // hundreds of KB per second; mono at 22050 is inaudibly different through a
-  // kiosk speaker and uploads several times faster on this site's link. Never
-  // fails the upload — an undecodable file comes straight back unchanged.
+  // kiosk speaker and uploads several times faster on this site's link.
+  //
+  // shrinkSoundFile is time-boxed and never throws, but this belt-and-braces
+  // catch is the difference between "the shrink did not work" and "the row
+  // sits on Preparing… forever and nothing uploads", which is what was
+  // reported. The optimisation must never be able to gate the upload.
   statusEl.textContent = 'Preparing…';
-  const prepared = await shrinkSoundFile(file);
+  let prepared;
+  try {
+    prepared = await shrinkSoundFile(file);
+  } catch (err) {
+    prepared = { file, before: file.size, after: file.size, saved: 0, changed: false, trimmed: false, reason: String(err) };
+  }
+  // Says why on the console when the clip went up as-is. Without this, "it did
+  // not get smaller" and "it timed out" look identical from the outside.
+  if (!prepared.changed && prepared.reason) {
+    console.warn(`Scan sound "${key}" uploaded without shrinking: ${prepared.reason}`);
+  }
 
   // Say the size as well as the percentage: "47%" of an unknown total tells
   // you nothing about how long is left on a slow link.
