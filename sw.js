@@ -54,10 +54,12 @@ const SOUND_CACHE = 'proximity-sounds-v1';
 // not just after "was online with this app once already". Keep this list,
 // Utils/scanSounds.js's FALLBACK_SOUND_PATHS, and the actual files under
 // Public/Assets/Sounds/ in sync — three places that all need to agree on
-// the same 5 filenames.
+// the same 6 filenames. (test/scan-sounds.test.mjs fails the build if they
+// drift, which is cheaper than finding out from a silent kiosk.)
 const FALLBACK_SOUND_URLS = [
   '/Public/Assets/Sounds/matched-in.wav',
   '/Public/Assets/Sounds/matched-out.wav',
+  '/Public/Assets/Sounds/matched-remarks.wav',
   '/Public/Assets/Sounds/card-revoked.wav',
   '/Public/Assets/Sounds/unmatched.wav',
   '/Public/Assets/Sounds/unassigned-card.wav',

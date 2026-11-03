@@ -4,7 +4,8 @@
 // loadScanSounds() is called once per screen mount, not per scan — sounds only
 // change when an admin visits Settings, so re-listing the bucket on every scan
 // would add a round trip to the hot path for nothing.
-import { ScanSoundsModel, SOUND_KEYS } from '../Models/ScanSoundsModel.js';
+import { ScanSoundsModel } from '../Models/ScanSoundsModel.js';
+import { SOUND_KEYS, keyForResult } from './scanSoundKeys.js';
 
 // Bundled static tones, so the scanner always has something to play even on a
 // device that has never been online — an admin-uploaded sound only becomes
@@ -13,6 +14,7 @@ import { ScanSoundsModel, SOUND_KEYS } from '../Models/ScanSoundsModel.js';
 const FALLBACK_SOUND_PATHS = {
   matched_in: '/Public/Assets/Sounds/matched-in.wav',
   matched_out: '/Public/Assets/Sounds/matched-out.wav',
+  matched_remarks: '/Public/Assets/Sounds/matched-remarks.wav',
   card_revoked: '/Public/Assets/Sounds/card-revoked.wav',
   unmatched: '/Public/Assets/Sounds/unmatched.wav',
   unassigned_card: '/Public/Assets/Sounds/unassigned-card.wav',
@@ -73,15 +75,8 @@ export async function loadScanSounds() {
   loaded = true;
 }
 
-function keyForResult(data) {
-  if (data?.result === 'matched') return data.direction === 'out' ? 'matched_out' : 'matched_in';
-  if (data?.result === 'inactive_card') return 'card_revoked';
-  if (data?.result === 'unmatched') return 'unmatched';
-  if (data?.result === 'unassigned_card') return 'unassigned_card';
-  // inactive_employee stays silent rather than borrowing an unrelated clip that
-  // would misrepresent the result.
-  return null;
-}
+// keyForResult() lives in Utils/scanSoundKeys.js, imported above — pure, so
+// it can be unit-tested without this module's Supabase import.
 
 // Safe before loadScanSounds() resolves or after it fails — the bundled fallback
 // means this never goes fully silent.

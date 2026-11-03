@@ -1,4 +1,4 @@
-// The 5 admin-uploaded scan feedback sounds, stored in the public
+// The 6 admin-uploaded scan feedback sounds, stored in the public
 // `scan-sounds` Storage bucket under fixed, extension-less object keys.
 // Fixed keys mean "replace" is a plain upsert onto the same path — no
 // old-file cleanup needed across format changes, unlike the Drive photo
@@ -16,21 +16,11 @@ const BUCKET = 'scan-sounds';
 // "X of Y used" without hard-coding the number a second time.
 export const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 
-export const SOUND_KEYS = {
-  matched_in: 'matched-in',
-  matched_out: 'matched-out',
-  card_revoked: 'card-revoked',
-  unmatched: 'unmatched',
-  unassigned_card: 'unassigned-card',
-};
-
-export const SOUND_LABELS = {
-  matched_in: 'Matched / Success — IN scan',
-  matched_out: 'Matched / Success — OUT scan',
-  card_revoked: 'Card revoked scan',
-  unmatched: 'Unknown proximity ID scan',
-  unassigned_card: 'Unassigned card scan',
-};
+// The catalogue itself lives in Utils/scanSoundKeys.js — pure, so the Node
+// tests can import it without this file dragging in the Supabase client (and
+// with it `window`). Re-exported here because every existing caller imports
+// these two from the model.
+export { SOUND_KEYS, SOUND_LABELS } from '../Utils/scanSoundKeys.js';
 
 export const ScanSoundsModel = {
   // Lists whatever's currently in the bucket (name + updated_at per
