@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  encodeWav, downmixToMono, pickSmallerSound, trimSamples,
+  encodeWav, downmixToMono, pickSmallerSound, trimSamples, fadeTail,
   SOUND_TARGET, MIN_SAVING_RATIO, MAX_SOUND_SECONDS,
 } from '../JS/Utils/audio.js';
 
@@ -124,4 +124,29 @@ test('a degenerate cap still yields a playable clip rather than nothing', () => 
   const r = trimSamples(new Float32Array(1000), 22050, 0);
   assert.ok(r.samples.length >= 1, 'never produces a zero-length file');
   assert.equal(r.trimmed, true);
+});
+
+test('the fade is shared by both routes that can end a clip early', () => {
+  // A capped render cuts the clip without trimSamples ever seeing it, so the
+  // fade has to be callable on its own. One implementation, or the two cut
+  // paths drift and one of them starts clicking.
+  const rate = 22050;
+  const flat = new Float32Array(rate);
+  flat.fill(1);
+  const faded = fadeTail(flat, rate);
+  assert.equal(faded.length, flat.length, 'fading does not change length');
+  assert.equal(faded[faded.length - 1], 0, 'reaches silence on the last sample');
+  assert.equal(faded[0], 1, 'the start is untouched');
+  assert.equal(flat[flat.length - 1], 1, 'the input is not mutated');
+  // And trimSamples routes through it rather than repeating it.
+  const long = new Float32Array(rate * 10);
+  long.fill(1);
+  assert.equal(trimSamples(long, rate).samples[rate * MAX_SOUND_SECONDS - 1], 0);
+});
+
+test('fading a clip shorter than the fade does not run off the start', () => {
+  const tiny = Float32Array.from([1, 1, 1]);
+  const faded = fadeTail(tiny, 22050);
+  assert.equal(faded.length, 3);
+  assert.ok(faded.every((v) => v >= 0 && v <= 1), 'no negative or amplified samples');
 });

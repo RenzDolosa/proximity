@@ -70,21 +70,29 @@ export function pickSmallerSound(originalBytes, candidateBytes) {
 // Cut to at most `maxSeconds`, fading the last moments so the cut is not a
 // click. Returns the input untouched when it already fits, so a short clip
 // never pays for this.
+// Ramps the final moments down to silence, in place on a copy. Shared by both
+// routes that can end a clip early — an explicit trim, and a render that was
+// capped to the keep-length — so there is one fade implementation, not two
+// that can drift.
+export function fadeTail(samples, sampleRate, fadeSeconds = TRIM_FADE_SECONDS) {
+  const out = Float32Array.from(samples || new Float32Array(0));
+  const rate = Number(sampleRate) || SOUND_TARGET.sampleRate;
+  const fade = Math.min(Math.floor(fadeSeconds * rate), out.length);
+  for (let i = 0; i < fade; i++) {
+    // Linear ramp over the final `fade` samples, reaching exactly 0 on the
+    // LAST one. (i / fade) stops 1/fade short of zero and leaves a small step
+    // at the very end — which is the click this fade exists to remove.
+    out[out.length - fade + i] *= 1 - ((i + 1) / fade);
+  }
+  return out;
+}
+
 export function trimSamples(samples, sampleRate, maxSeconds = MAX_SOUND_SECONDS) {
   const data = samples || new Float32Array(0);
   const rate = Number(sampleRate) || SOUND_TARGET.sampleRate;
   const limit = Math.max(1, Math.floor(maxSeconds * rate));
   if (data.length <= limit) return { samples: data, trimmed: false };
-
-  const out = Float32Array.from(data.subarray(0, limit));
-  const fade = Math.min(Math.floor(TRIM_FADE_SECONDS * rate), out.length);
-  for (let i = 0; i < fade; i++) {
-    // Linear ramp over the final `fade` samples, reaching exactly 0 on the
-    // LAST one. (i / fade) stops at 1/fade short of zero and leaves a small
-    // step at the very end — which is the click this fade exists to remove.
-    out[out.length - fade + i] *= 1 - ((i + 1) / fade);
-  }
-  return { samples: out, trimmed: true };
+  return { samples: fadeTail(data.subarray(0, limit), rate), trimmed: true };
 }
 
 // Average the channels rather than dropping all but the first: a stereo clip
@@ -138,32 +146,66 @@ export function encodeWav(samples, sampleRate) {
   return bytes;
 }
 
-// Browser-only (AudioContext). Returns the file to upload plus what it cost,
-// and NEVER throws: a codec the browser cannot decode, or a re-encode that
-// came out no smaller, both fall back to the original file. Failing to shrink
-// a sound must not stop an admin uploading it.
-export async function shrinkSoundFile(file) {
-  const before = file?.size || 0;
-  const unchanged = { file, before, after: before, saved: 0, changed: false, trimmed: false };
-  const Ctx = globalThis.OfflineAudioContext || globalThis.webkitOfflineAudioContext;
-  const DecodeCtx = globalThis.AudioContext || globalThis.webkitAudioContext;
-  if (!file || !Ctx || !DecodeCtx) return unchanged;
+// Shrinking is an OPTIMISATION. It must never be able to stop an upload, so
+// it is time-boxed: past this, the original file goes as-is. Racing does not
+// cancel the underlying decode, it just stops the UI waiting on it.
+//
+// Reported 2026-11-03: the row sat on "Preparing…" forever and nothing
+// uploaded. Not reproducible here across eight sequential calls, eight
+// concurrent ones, and every malformed input tried — which is the point. A
+// step that can hang has no business sitting in front of the thing the admin
+// actually asked for, reproducible or not.
+export const SHRINK_TIMEOUT_MS = 8000;
 
+// Browser-only. Returns the file to upload plus what it cost, and NEVER
+// throws or hangs: an undecodable codec, a re-encode that came out no
+// smaller, and a decode that stalls all fall back to the original file.
+export async function shrinkSoundFile(file, timeoutMs = SHRINK_TIMEOUT_MS) {
+  const before = file?.size || 0;
+  const unchanged = (reason) => ({
+    file, before, after: before, saved: 0, changed: false, trimmed: false, reason,
+  });
+  const Ctx = globalThis.OfflineAudioContext || globalThis.webkitOfflineAudioContext;
+  if (!file || !Ctx) return unchanged('no OfflineAudioContext');
+
+  let timer;
+  const expired = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(unchanged(`timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
   try {
-    const decodeCtx = new DecodeCtx();
-    let decoded;
-    try {
-      decoded = await decodeCtx.decodeAudioData(await file.arrayBuffer());
-    } finally {
-      decodeCtx.close?.();
-    }
-    if (!decoded?.length) return unchanged;
+    return await Promise.race([shrink(file, before, unchanged, Ctx), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function shrink(file, before, unchanged, Ctx) {
+  try {
+    // Decode on an OFFLINE context, never a realtime AudioContext. A realtime
+    // one opens an actual output device, is created suspended under the
+    // autoplay policy, and counts against Chrome's cap on concurrent
+    // contexts — three ways to stall on a machine whose audio device is busy
+    // or absent, none of which have anything to do with decoding bytes.
+    // OfflineAudioContext inherits decodeAudioData from BaseAudioContext and
+    // touches no hardware at all.
+    const decodeCtx = new Ctx(1, 1, SOUND_TARGET.sampleRate);
+    const decoded = await decodeCtx.decodeAudioData(await file.arrayBuffer());
+    if (!decoded?.length) return unchanged('decoded to nothing');
 
     // Resample by rendering through an OfflineAudioContext at the target rate
     // — the platform's own resampler, rather than a hand-rolled one that would
-    // alias. Length scales with the rate change so the clip keeps its duration.
+    // alias.
+    //
+    // Render ONLY the frames that survive the trim. Rendering the whole clip
+    // and then throwing most of it away meant a ten-minute upload allocated
+    // ~53 MB and resampled 13 million frames to keep 66 thousand — slow
+    // enough to look exactly like a hang, and for no benefit whatsoever.
     const rate = Math.min(SOUND_TARGET.sampleRate, decoded.sampleRate);
-    const frames = Math.max(1, Math.ceil(decoded.duration * rate));
+    const fullFrames = Math.ceil(decoded.duration * rate);
+    const capFrames = Math.ceil(MAX_SOUND_SECONDS * rate);
+    const frames = Math.max(1, Math.min(fullFrames, capFrames));
+    const cutByRender = fullFrames > capFrames;
+
     const offline = new Ctx(1, frames, rate);
     const src = offline.createBufferSource();
     src.buffer = decoded;
@@ -172,12 +214,18 @@ export async function shrinkSoundFile(file) {
     const rendered = await offline.startRendering();
 
     const mono = downmixToMono([rendered.getChannelData(0)]);
-    const cut = trimSamples(mono, rate);
+    // The render already did the cutting when it was capped, so all that is
+    // left is the fade that stops the cut being a click. Otherwise trim
+    // normally — which, at this point, is a no-op.
+    const cut = cutByRender
+      ? { samples: fadeTail(mono, rate), trimmed: true }
+      : trimSamples(mono, rate);
+
     const wav = encodeWav(cut.samples, rate);
     const pick = pickSmallerSound(before, wav.byteLength);
     // Still bigger than the source even after trimming — a short, heavily
     // compressed original. Send that instead; uncompressed is not always a win.
-    if (!pick.useCandidate) return unchanged;
+    if (!pick.useCandidate) return unchanged('no saving available');
 
     const name = (file.name || 'sound').replace(/\.[^.]+$/, '') + '.wav';
     return {
@@ -185,8 +233,10 @@ export async function shrinkSoundFile(file) {
       before, after: wav.byteLength, saved: pick.saved, changed: true,
       trimmed: cut.trimmed, seconds: cut.samples.length / rate,
     };
-  } catch {
-    // Unsupported codec, a decode failure, or no AudioContext allowance.
-    return unchanged;
+  } catch (err) {
+    // An undecodable codec, a decode failure, or an allocation the browser
+    // refused. The reason is carried back so a recurrence is diagnosable
+    // rather than silent.
+    return unchanged(String(err?.message || err));
   }
 }
