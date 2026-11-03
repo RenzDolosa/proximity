@@ -95,19 +95,23 @@
    badges elsewhere — a plain accent-colored bar at 90% full doesn't read
    as "pay attention" the way the rest of the app signals that. */
 .progress-fill.warn{background:var(--warn);}
-/* Shown once client-side upload bytes hit 100% but the server hasn't
-   responded yet (e.g. upload-employee-photo still talking to Google
-   Drive) — a shimmer instead of a bar frozen at "100%" with nothing
-   happening, which is what actually reads as "stuck". */
+/* For a wait whose length genuinely cannot be known — the server has all the
+   bytes and has not answered yet (upload-employee-photo talking to Drive), or
+   a save with nothing to measure (UserModal).
+   A TRAVELLING SEGMENT, not a full-width shimmer. The previous version was
+   `width: 100%` with the colour animating across it, which in any still frame
+   — a screenshot, a glance, a paused eye — is indistinguishable from a
+   finished bar. That was reported as "the bar is full but the upload is not
+   done", and it was a fair reading of what was on screen. A third-width block
+   sliding across an empty track cannot be read as complete at any instant. */
 .progress-fill.indeterminate{
-  width:100% !important;
-  background:linear-gradient(90deg, var(--accent-dim) 0%, var(--accent) 50%, var(--accent-dim) 100%);
-  background-size:200% 100%;
-  animation:progress-shimmer 1.1s ease-in-out infinite;
+  width:34% !important;
+  background:var(--accent);
+  animation:progress-slide 1.15s ease-in-out infinite;
 }
-@keyframes progress-shimmer{
-  0%{background-position:200% 0;}
-  100%{background-position:-200% 0;}
+@keyframes progress-slide{
+  0%{transform:translateX(-105%);}
+  100%{transform:translateX(305%);}
 }
 
 .badge{
