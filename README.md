@@ -632,6 +632,54 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-10-25 (later) — scan sounds are shrunk in the browser before upload**
+
+Reported: uploading a scan sound takes too long.
+
+**The page sent whatever file was picked, byte for byte.** A clip from a
+sound library is routinely 48 kHz stereo — about 192 KB per second at 16-bit,
+288 KB at 24-bit — so three seconds is 0.5–0.9 MB, over a link that is slow
+and intermittent, behind a bar that cannot show progress. The five sounds
+already uploaded are 26–79 KB, so the size was never what the feature needed;
+it was just what the file happened to be.
+
+**`JS/Utils/audio.js`** now downmixes to mono and resamples to 22050 Hz in
+the browser first, mirroring what `image.js` already does for photos.
+Measured end-to-end in a real browser on a 3-second 48 kHz 16-bit stereo
+clip: **576 KB → 132 KB, 4.35× smaller**, duration unchanged at 3.000s. A
+24-bit source is ~6.5×.
+
+Three things it deliberately does *not* do:
+
+- **Nothing is trimmed.** The clip plays to its end however long it is; only
+  channel count and sample rate change.
+- **It never makes a file bigger.** An already-compressed upload (a small mp3
+  or ogg) decodes to PCM several times its own size, so the re-encode is
+  discarded unless it saves at least 10% — the same rule, and the same
+  reason, as `pickSmallerThumb()`.
+- **It never fails an upload.** A codec the browser cannot decode, or no
+  AudioContext allowance, falls straight back to the original file.
+
+The resampling goes through an `OfflineAudioContext` at the target rate —
+the platform's own resampler — rather than a hand-rolled one that would
+alias. The WAV encoder is written by hand because there isn't one:
+`AudioContext` decodes every format the browser knows and encodes none.
+
+The stereo downmix **averages** the channels rather than keeping the first.
+A clip with its tone panned hard to one side would otherwise upload as
+silence, which is how some library files ship. Verified against exactly that
+case: a hard-right 0.5 tone comes back at 0.25 peak, not 0.
+
+The row now says how much is being sent, and what the shrink saved. The bar
+still can't show true progress — supabase-js's storage upload exposes none —
+so naming the size is the honest alternative to a 30-second wait that looks
+identical to a stall.
+
+**Egress / Log Ingestion:** both go *down*, neither up. The request count is
+unchanged; an upload is ingress, which isn't billed as egress, and the saving
+lands on the download side — every kiosk fetches each clip, so a 4× smaller
+file is 4× less egress every time one does.
+
 **2026-10-25 — a scan sound for an employee who has an unresolved remark**
 
 Settings → Scan sounds gains a sixth outcome, **"Matched, but has an
