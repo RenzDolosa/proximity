@@ -632,6 +632,59 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-03 — the sound upload actually gets smaller, and the bar tells the truth**
+
+Follow-up to the entry below, which did not go far enough.
+
+**Why the first attempt did nothing for the reported file.** Downmixing and
+resampling only shrink an *uncompressed* source. A 339 KB mp3 decodes to raw
+PCM several times its own size, so the re-encode came back **larger**, the
+"only if smaller" rule correctly discarded it, and the original 339 KB went
+up unchanged. The guard worked exactly as designed; the strategy was wrong
+for that input.
+
+**Duration is the only lever that works there**, because the output is
+uncompressed and its size is therefore seconds × 44.1 KB and nothing else.
+`MAX_SOUND_SECONDS = 3`: anything longer is cut, with a 40 ms fade so the cut
+is not an audible click. Measured in a browser on a 21-second stereo source:
+**3618 KB → 129 KB**, out at exactly 3.000s, final sample 0, mid-clip peak
+untouched at 0.6. A 0.3s clip is **not** trimmed and still halves on mono +
+resample alone.
+
+Three seconds is generous for what this is: the five sounds in use are
+0.22–0.40s, the result card clears after 10s, and at a kiosk the next person
+scans within a few seconds — so a 21-second clip is still playing over the
+next three scans. It is the wrong clip for the job, not a short clip that
+happens to be big. **Trimming is destructive, so it is never silent:** the
+toast says it happened and the panel says it will before a file is picked.
+
+**The progress bar was lying, and that was a fair complaint.**
+`.progress-fill.indeterminate` was `width: 100%` with the colour animating
+across it. In any still frame — a screenshot, a glance — that is
+indistinguishable from a finished upload. It is now a third-width block
+sliding across an empty track, which cannot read as complete at any instant.
+
+**Real byte progress where it exists.** `supabase-js`'s storage upload goes
+through `fetch()`, which exposes no upload progress at all — that is *why*
+the bar was indeterminate. `JS/Utils/xhrUpload.js` talks to the same Storage
+REST endpoint with the same headers over `XMLHttpRequest`, which still has
+`upload.onprogress`. Same single request, same bytes; only the reporting
+differs. The row now reads `Uploading 129 KB (was 3.5 MB) — 47%`, and falls
+back to the indeterminate style for the genuinely unknown gap between "all
+bytes sent" and "server answered".
+
+**The other two indeterminate bars are honest and stay.** `UserModal`'s save
+and `EmployeeModal`'s Drive phase have nothing measurable behind them — they
+just look right now that the style no longer resembles 100%.
+
+`Number(null)` is `0`, not `NaN`, so a missing `loaded` would have painted a
+0% bar that never moves — the stuck-looking state the function exists to
+prevent. `progressPercent()` rejects null and `''` before coercing.
+
+**Egress / Log Ingestion:** unchanged in request count, lower in bytes. An
+upload is ingress, which is not billed as egress; the saving lands on the
+download side, where every kiosk fetches each clip.
+
 **2026-10-25 (later) — scan sounds are shrunk in the browser before upload**
 
 Reported: uploading a scan sound takes too long.

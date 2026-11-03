@@ -29,6 +29,28 @@ export const SOUND_TARGET = Object.freeze({
   bitsPerSample: 16,
 });
 
+// The cap that mono+resample alone could not reach.
+//
+// Downmixing and resampling only help an UNCOMPRESSED source. A 339 KB mp3
+// decodes to raw PCM several times its own size, so the re-encode came back
+// bigger, the "only if smaller" rule correctly rejected it, and the original
+// 339 KB went up unchanged — which is exactly what was reported. Duration is
+// the only lever left, because the output is uncompressed and its size is
+// therefore seconds x 44.1 KB and nothing else.
+//
+// 3 seconds is already generous for what this is. The five sounds in use are
+// 0.22-0.40s; the scan result card clears after 10s; and at a kiosk the next
+// person scans within a few seconds, so a longer clip is still playing over
+// the next three scans. A 21-second alert tone is not a short clip that
+// happens to be large, it is the wrong clip for the job.
+//
+// Trimming is destructive, so it is never silent: the row and the toast both
+// say it happened, and the panel says it will before a file is picked.
+export const MAX_SOUND_SECONDS = 3;
+// Without a fade the cut lands mid-waveform, which is an audible click — the
+// one artefact that would make a trimmed clip sound broken rather than short.
+const TRIM_FADE_SECONDS = 0.04;
+
 // Same rule and the same reason as pickSmallerThumb() in image.js: a re-encode
 // that saves only a sliver is not worth a generation of quality loss, and one
 // that came back LARGER must never be used. An already-compressed upload (a
@@ -43,6 +65,26 @@ export function pickSmallerSound(originalBytes, candidateBytes) {
   const saved = before - after;
   const useCandidate = saved > 0 && saved / before >= MIN_SAVING_RATIO;
   return { useCandidate, before, after, saved: useCandidate ? saved : 0 };
+}
+
+// Cut to at most `maxSeconds`, fading the last moments so the cut is not a
+// click. Returns the input untouched when it already fits, so a short clip
+// never pays for this.
+export function trimSamples(samples, sampleRate, maxSeconds = MAX_SOUND_SECONDS) {
+  const data = samples || new Float32Array(0);
+  const rate = Number(sampleRate) || SOUND_TARGET.sampleRate;
+  const limit = Math.max(1, Math.floor(maxSeconds * rate));
+  if (data.length <= limit) return { samples: data, trimmed: false };
+
+  const out = Float32Array.from(data.subarray(0, limit));
+  const fade = Math.min(Math.floor(TRIM_FADE_SECONDS * rate), out.length);
+  for (let i = 0; i < fade; i++) {
+    // Linear ramp over the final `fade` samples, reaching exactly 0 on the
+    // LAST one. (i / fade) stops at 1/fade short of zero and leaves a small
+    // step at the very end — which is the click this fade exists to remove.
+    out[out.length - fade + i] *= 1 - ((i + 1) / fade);
+  }
+  return { samples: out, trimmed: true };
 }
 
 // Average the channels rather than dropping all but the first: a stereo clip
@@ -102,7 +144,7 @@ export function encodeWav(samples, sampleRate) {
 // a sound must not stop an admin uploading it.
 export async function shrinkSoundFile(file) {
   const before = file?.size || 0;
-  const unchanged = { file, before, after: before, saved: 0, changed: false };
+  const unchanged = { file, before, after: before, saved: 0, changed: false, trimmed: false };
   const Ctx = globalThis.OfflineAudioContext || globalThis.webkitOfflineAudioContext;
   const DecodeCtx = globalThis.AudioContext || globalThis.webkitAudioContext;
   if (!file || !Ctx || !DecodeCtx) return unchanged;
@@ -130,14 +172,18 @@ export async function shrinkSoundFile(file) {
     const rendered = await offline.startRendering();
 
     const mono = downmixToMono([rendered.getChannelData(0)]);
-    const wav = encodeWav(mono, rate);
+    const cut = trimSamples(mono, rate);
+    const wav = encodeWav(cut.samples, rate);
     const pick = pickSmallerSound(before, wav.byteLength);
+    // Still bigger than the source even after trimming — a short, heavily
+    // compressed original. Send that instead; uncompressed is not always a win.
     if (!pick.useCandidate) return unchanged;
 
     const name = (file.name || 'sound').replace(/\.[^.]+$/, '') + '.wav';
     return {
       file: new File([wav], name, { type: 'audio/wav' }),
       before, after: wav.byteLength, saved: pick.saved, changed: true,
+      trimmed: cut.trimmed, seconds: cut.samples.length / rate,
     };
   } catch {
     // Unsupported codec, a decode failure, or no AudioContext allowance.

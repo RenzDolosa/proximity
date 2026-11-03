@@ -4,6 +4,7 @@
 // old-file cleanup needed across format changes, unlike the Drive photo
 // flow (see Supabase/README.md for why that one needs it).
 import { supabase } from '../Core/supabaseClient.js';
+import { uploadToStorage } from '../Utils/xhrUpload.js';
 
 const BUCKET = 'scan-sounds';
 
@@ -43,12 +44,21 @@ export const ScanSoundsModel = {
   // Admin-only (enforced by storage RLS, not just hidden in the UI).
   // upsert:true means picking a new file for a key that already has one
   // just overwrites it in place — same path, no orphaned old file.
-  async upload(key, file) {
-    return supabase.storage.from(BUCKET).upload(SOUND_KEYS[key], file, {
-      upsert: true,
-      contentType: file.type || 'audio/mpeg',
-      cacheControl: '3600',
-    });
+  //
+  // Goes through XMLHttpRequest rather than storage-js when a progress
+  // callback is given: fetch(), which storage-js uses, reports no upload
+  // progress at all. Same endpoint, same headers, same single request — see
+  // Utils/xhrUpload.js. Without a callback it stays on storage-js, so nothing
+  // that does not need a bar changes path.
+  async upload(key, file, onProgress) {
+    if (!onProgress) {
+      return supabase.storage.from(BUCKET).upload(SOUND_KEYS[key], file, {
+        upsert: true,
+        contentType: file.type || 'audio/mpeg',
+        cacheControl: '3600',
+      });
+    }
+    return uploadToStorage(BUCKET, SOUND_KEYS[key], file, { onProgress });
   },
 
   async remove(key) {

@@ -27,7 +27,7 @@ import { ScannerSilenceModel } from '../../Models/ScannerSilenceModel.js';
 import { UsageModel } from '../../Models/UsageModel.js';
 import { fmtUsageBytes, fmtPercent } from '../../Utils/usage.js';
 import { OFFLINE_THUMB_TARGET, recompressThumbBase64 } from '../../Utils/image.js';
-import { shrinkSoundFile, SOUND_TARGET } from '../../Utils/audio.js';
+import { shrinkSoundFile, SOUND_TARGET, MAX_SOUND_SECONDS } from '../../Utils/audio.js';
 import { openConfirmModal } from '../../Components/ConfirmModal.js';
 import { panelNote } from '../../Components/PanelNote.js';
 import { showModalError } from '../../Components/Modal.js';
@@ -190,10 +190,12 @@ export async function renderSettings() {
            silent — uploading here replaces that tone rather than filling a
            gap.</p>
            <p>Clips are converted to mono at ${SOUND_TARGET.sampleRate / 1000} kHz
-           in your browser before they are sent, which is usually several times
-           smaller than the original and is why the upload is quick. Nothing is
-           cut — the clip still plays to its end — and a file that would not
-           get smaller is sent as it is.</p>
+           in your browser before they are sent, and <strong>anything longer
+           than ${MAX_SOUND_SECONDS} seconds is cut to the first
+           ${MAX_SOUND_SECONDS}</strong>. That is what keeps uploads quick, and
+           a scan sound longer than that is still playing over the next few
+           people's scans anyway. You are told when a clip was cut. A file that
+           would not get smaller is sent exactly as it is.</p>
            <p><strong>Matched, but has an unresolved remark</strong> takes the
            place of the IN and OUT sounds when the person who scanned has an
            open remark against them. One scan plays one clip, and that is the
@@ -1157,15 +1159,29 @@ async function handleUpload(key, file, inputEl) {
   statusEl.textContent = 'Preparing…';
   const prepared = await shrinkSoundFile(file);
 
-  // Say the size. The bar cannot show real progress (supabase-js's storage
-  // upload exposes none), so the honest thing is to say how much is going, and
-  // how much the shrink saved — otherwise a 30-second wait looks identical to
-  // a stall.
-  statusEl.textContent = prepared.changed
-    ? `Uploading ${fmtBytes(prepared.after)} (was ${fmtBytes(prepared.before)})…`
-    : `Uploading ${fmtBytes(prepared.before)}…`;
+  // Say the size as well as the percentage: "47%" of an unknown total tells
+  // you nothing about how long is left on a slow link.
+  const sizeNote = prepared.changed
+    ? `${fmtBytes(prepared.after)} (was ${fmtBytes(prepared.before)})`
+    : fmtBytes(prepared.before);
 
-  const { error } = await ScanSoundsModel.upload(key, prepared.file);
+  // Real bytes, not a shimmer. onProgress gets null once the bytes are all
+  // sent and the server has yet to answer — that is a genuinely unknown wait,
+  // so the bar switches to the indeterminate style for it rather than sitting
+  // at 100% looking finished.
+  const fillEl = $('.progress-fill', progressEl);
+  fillEl.classList.remove('indeterminate');
+  fillEl.style.width = '0%';
+  const { error } = await ScanSoundsModel.upload(key, prepared.file, (pct) => {
+    if (pct === null) {
+      fillEl.classList.add('indeterminate');
+      statusEl.textContent = `Saving ${sizeNote}…`;
+      return;
+    }
+    fillEl.classList.remove('indeterminate');
+    fillEl.style.width = `${pct}%`;
+    statusEl.textContent = `Uploading ${sizeNote} — ${pct}%`;
+  });
 
   progressEl.classList.add('hidden');
   inputEl.value = '';
@@ -1177,9 +1193,13 @@ async function handleUpload(key, file, inputEl) {
     return;
   }
   soundsCache[key] = { updated_at: new Date().toISOString(), size: prepared.file.size };
-  toast(prepared.changed
-    ? `${SOUND_LABELS[key]} sound updated — compressed to ${fmtBytes(prepared.after)}`
-    : `${SOUND_LABELS[key]} sound updated`);
+  // Trimming is destructive, so it is never silent — this is the one message
+  // the admin must not miss.
+  toast(prepared.trimmed
+    ? `${SOUND_LABELS[key]} sound updated — trimmed to the first ${MAX_SOUND_SECONDS}s and compressed to ${fmtBytes(prepared.after)}`
+    : prepared.changed
+      ? `${SOUND_LABELS[key]} sound updated — compressed to ${fmtBytes(prepared.after)}`
+      : `${SOUND_LABELS[key]} sound updated`);
   paintRows();
   paintStorageSummary();
 }

@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { encodeWav, downmixToMono, pickSmallerSound, SOUND_TARGET, MIN_SAVING_RATIO } from '../JS/Utils/audio.js';
+import {
+  encodeWav, downmixToMono, pickSmallerSound, trimSamples,
+  SOUND_TARGET, MIN_SAVING_RATIO, MAX_SOUND_SECONDS,
+} from '../JS/Utils/audio.js';
 
 // shrinkSoundFile() itself needs AudioContext and so cannot run here — same
 // split as image.js, whose fileToWebp() is likewise browser-only while its
@@ -77,4 +80,48 @@ test('missing or nonsense sizes never claim a saving', () => {
     assert.equal(r.useCandidate, false);
     assert.equal(r.saved, 0);
   }
+});
+
+test('a clip already short enough is returned untouched', () => {
+  // The common case — the five sounds in use are 0.22-0.40s. A short clip
+  // must not pay a copy, and must not get a fade it did not need.
+  const rate = 22050;
+  const short = new Float32Array(rate); // 1 second
+  short.fill(0.5);
+  const r = trimSamples(short, rate, MAX_SOUND_SECONDS);
+  assert.equal(r.trimmed, false);
+  assert.equal(r.samples, short, 'should be the same array, not a copy');
+  assert.equal(r.samples[r.samples.length - 1], 0.5, 'no fade applied');
+});
+
+test('a long clip is cut to the cap and faded, not hard-stopped', () => {
+  // Trimming is what finally shrinks an already-compressed source: a 339 KB
+  // mp3 decodes to PCM far bigger than itself, so mono+resample alone came
+  // back larger and was correctly discarded, uploading the original unchanged.
+  const rate = 22050;
+  const long = new Float32Array(rate * 10); // 10 seconds
+  long.fill(1);
+  const r = trimSamples(long, rate, MAX_SOUND_SECONDS);
+  assert.equal(r.trimmed, true);
+  assert.equal(r.samples.length, rate * MAX_SOUND_SECONDS);
+  // The very last sample is fully faded; a hard cut mid-waveform is a click,
+  // which would make a trimmed clip sound broken rather than short.
+  assert.equal(r.samples[r.samples.length - 1], 0);
+  // ...and the fade is short, so the clip is not noticeably quieter overall.
+  assert.equal(r.samples[Math.floor(rate * MAX_SOUND_SECONDS * 0.5)], 1);
+  assert.ok(r.samples[r.samples.length - 2] > 0, 'the ramp is gradual, not a mute');
+});
+
+test('trimming makes the uncompressed result beat a long compressed source', () => {
+  // The arithmetic the whole fix rests on: output size is seconds x rate x 2.
+  const bytes = 44 + MAX_SOUND_SECONDS * SOUND_TARGET.sampleRate * 2;
+  assert.ok(bytes < 339 * 1024, `${bytes} must beat the reported 339 KB mp3`);
+  // And the decision rule then accepts it.
+  assert.equal(pickSmallerSound(339 * 1024, bytes).useCandidate, true);
+});
+
+test('a degenerate cap still yields a playable clip rather than nothing', () => {
+  const r = trimSamples(new Float32Array(1000), 22050, 0);
+  assert.ok(r.samples.length >= 1, 'never produces a zero-length file');
+  assert.equal(r.trimmed, true);
 });
