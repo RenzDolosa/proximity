@@ -19,9 +19,18 @@ export const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 
 // The catalogue itself lives in Utils/scanSoundKeys.js — pure, so the Node
 // tests can import it without this file dragging in the Supabase client (and
-// with it `window`). Re-exported here because every existing caller imports
-// these two from the model.
-export { SOUND_KEYS, SOUND_LABELS } from '../Utils/scanSoundKeys.js';
+// with it `window`). Re-exported because every existing caller imports these
+// two from the model.
+//
+// IMPORT THEN EXPORT, not `export { X } from '…'`. That form is a pure
+// re-export: it forwards the name to importers and creates NO local binding,
+// so every use of SOUND_KEYS below threw ReferenceError at call time —
+// breaking preview, upload and remove on 2026-11-03 while `node --check`
+// and the unit tests both stayed green, because the tests import the
+// catalogue from its own module and never load this one.
+import { SOUND_KEYS, SOUND_LABELS } from '../Utils/scanSoundKeys.js';
+
+export { SOUND_KEYS, SOUND_LABELS };
 
 export const ScanSoundsModel = {
   // Lists whatever's currently in the bucket (name + updated_at per
