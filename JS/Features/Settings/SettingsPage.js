@@ -27,7 +27,6 @@ import { ScannerSilenceModel } from '../../Models/ScannerSilenceModel.js';
 import { UsageModel } from '../../Models/UsageModel.js';
 import { fmtUsageBytes, fmtPercent } from '../../Utils/usage.js';
 import { OFFLINE_THUMB_TARGET, recompressThumbBase64 } from '../../Utils/image.js';
-import { shrinkSoundFile, SOUND_TARGET } from '../../Utils/audio.js';
 import { openConfirmModal } from '../../Components/ConfirmModal.js';
 import { panelNote } from '../../Components/PanelNote.js';
 import { showModalError } from '../../Components/Modal.js';
@@ -189,11 +188,6 @@ export async function renderSettings() {
            <p>Every outcome already has a built-in tone, so a scanner is never
            silent — uploading here replaces that tone rather than filling a
            gap.</p>
-           <p>Clips are converted to mono at ${SOUND_TARGET.sampleRate / 1000} kHz
-           in your browser before they are sent, which is usually several times
-           smaller than the original and is why the upload is quick. Nothing is
-           cut — the clip still plays to its end — and a file that would not
-           get smaller is sent as it is.</p>
            <p><strong>Matched, but has an unresolved remark</strong> takes the
            place of the IN and OUT sounds when the person who scanned has an
            open remark against them. One scan plays one clip, and that is the
@@ -1148,24 +1142,10 @@ async function handleUpload(key, file, inputEl) {
   const progressEl = $('[data-progress]', row);
   const statusEl = $('[data-status]', row);
   progressEl.classList.remove('hidden');
+  statusEl.textContent = 'Uploading…';
   $$('button', row).forEach((b) => (b.disabled = true));
 
-  // Shrink before sending. A sound-library clip is routinely 48kHz stereo and
-  // hundreds of KB per second; mono at 22050 is inaudibly different through a
-  // kiosk speaker and uploads several times faster on this site's link. Never
-  // fails the upload — an undecodable file comes straight back unchanged.
-  statusEl.textContent = 'Preparing…';
-  const prepared = await shrinkSoundFile(file);
-
-  // Say the size. The bar cannot show real progress (supabase-js's storage
-  // upload exposes none), so the honest thing is to say how much is going, and
-  // how much the shrink saved — otherwise a 30-second wait looks identical to
-  // a stall.
-  statusEl.textContent = prepared.changed
-    ? `Uploading ${fmtBytes(prepared.after)} (was ${fmtBytes(prepared.before)})…`
-    : `Uploading ${fmtBytes(prepared.before)}…`;
-
-  const { error } = await ScanSoundsModel.upload(key, prepared.file);
+  const { error } = await ScanSoundsModel.upload(key, file);
 
   progressEl.classList.add('hidden');
   inputEl.value = '';
@@ -1176,10 +1156,8 @@ async function handleUpload(key, file, inputEl) {
     paintRows();
     return;
   }
-  soundsCache[key] = { updated_at: new Date().toISOString(), size: prepared.file.size };
-  toast(prepared.changed
-    ? `${SOUND_LABELS[key]} sound updated — compressed to ${fmtBytes(prepared.after)}`
-    : `${SOUND_LABELS[key]} sound updated`);
+  soundsCache[key] = { updated_at: new Date().toISOString(), size: file.size };
+  toast(`${SOUND_LABELS[key]} sound updated`);
   paintRows();
   paintStorageSummary();
 }
