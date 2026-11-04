@@ -632,6 +632,104 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-03 (later) — a muster list that survives the thing it exists for**
+
+Three sites and no way to know who is inside when the alarm goes.
+
+**The whole design follows from one observation:** a fire, a power cut or a
+severed line is often *why* a building is being evacuated, so a roster that
+needs the server is a roster that is absent exactly when it is needed. The
+Muster page therefore renders from a snapshot held **on the device** and
+never waits on the network. It attempts a refresh, but paints first.
+
+The snapshot costs nothing. `DashboardPage.load()` already downloads the
+on-site roster; it now also writes it to `localStorage` — measured at
+**64 KB for 361 people**, against a ~5 MB budget. No request, no egress, no
+log event. `localStorage` rather than IndexedDB because this is one small
+object read synchronously by someone opening the page while walking.
+
+**Nobody is dropped for being uncertain.** A stale IN means *unknown*, not
+gone; an inactive or suspended employee standing in the building is still a
+body to find. Both stay on the list, flagged. The only person not listed is
+one with no IN at all. A name on the sheet that walks up and says "I'm here"
+costs five seconds — a name missing from it costs a search nobody starts.
+
+Grouped by site, then department, sites largest first (that is the sheet
+somebody needs handed over first), people alphabetically so two printouts of
+the same roster match. Ticking a name off is local only: a drill is not a
+record to sync, and a write that needed the server would fail in the same
+outage the page is built to survive.
+
+The status line always states the snapshot's age, and an age that cannot be
+read reports as stale rather than fresh. Showing an old list during an
+evacuation is right; showing one without saying how old it is, is not.
+
+Measured at 375px: every row exactly 44px, none wrapping, 20px checkboxes,
+no horizontal overflow. A print stylesheet drops the chrome and breaks one
+site per page.
+
+`clearSnapshot()` runs on sign-out — the snapshot survives a reload on
+purpose, but must not survive the account that cached it.
+
+**Egress / Log Ingestion:** unchanged. The page adds no fetch of its own; it
+reuses the Dashboard's roster and one optional refresh on the existing RPC.
+
+**2026-11-03 — close the days nobody tapped out of**
+
+Measured on the live project: **382 of 3,345 employee-days** in a one-week
+window carry `open_punch`. Those days have no computable hours.
+
+**It is worse than 382 bad rows.** Direction is parity over an employee's
+whole history (`employees.scan_parity_count`). A missing OUT leaves that
+person's parity one step out for *every scan after it*, so the next
+morning's arrival is stored as an OUT — and `get_attendance_report()` builds
+its days with `where s.dir = 'in'`, so a day whose first scan is mislabelled
+is **dropped from the report entirely**, not merely under-counted. One
+missed tap-out can hide every subsequent day for that person. Closing the
+gap re-derives the rest, because 20261024090000 made the trigger re-sort and
+re-label by time — which is why that fix had to come first.
+
+**The rule, chosen by the operator: close at the last scan recorded at the
+same scanner that day.** Evidence from the site rather than an assumption
+about shifts; it can never land in the future, and it is explainable to the
+person whose hours it changes.
+
+`20261103120000_close_open_punches.sql` adds a preview RPC and a write RPC.
+Reachable by clicking the "No OUT yet" figure on Attendance — the number
+that describes the problem is the way into fixing it.
+
+Things worth knowing about the design:
+
+- **The write takes no timestamp.** Only `(employee_id, work_date)`; the RPC
+  recomputes the closing time itself. A client-supplied time would be a route
+  to writing arbitrary hours into payroll through a UI that looks reviewed.
+- **Today is never closed.** The person may still be on site.
+- **Idempotent for free.** The synthetic OUT carries a deterministic
+  `request_id` of `md5(employee_id:work_date)`, so re-running collides with
+  `scan_events_request_id_key` (20261023070023) rather than writing a second
+  OUT.
+- **Blocked rows stay on screen with their reason**, and every skip is
+  counted and named in the result. "Closed 41" with six silently doing
+  nothing is how a tool loses trust.
+- **Implausible proposals are flagged, not blocked.** A scanner whose last
+  scan is hours after someone went home is this rule's failure mode; over 12
+  hours gets a marker and a human's eye. Genuine long days exist.
+- Every close is written to the audit log.
+
+**Egress / Log Ingestion:** one read when the queue is opened, one write for
+a whole batch. Nothing polls.
+
+**Worth checking on your data.** If parity skew is real, some employees will
+have *fewer* attendance rows than days they actually worked. This counts
+scan-log entries whose stored direction disagrees with strict alternation:
+
+```sql
+select count(*) from public.employees e
+ cross join lateral jsonb_array_elements(e.scan_logs) with ordinality as l(elem, ord)
+ where (l.ord % 2 = 1) <> (l.elem->>'direction' = 'in');
+```
+
+
 **2026-11-03 — the sound upload actually gets smaller, and the bar tells the truth**
 
 Follow-up to the entry below, which did not go far enough.

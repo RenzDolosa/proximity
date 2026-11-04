@@ -62,7 +62,7 @@ test('a group whose every route is hidden disappears', () => {
 test('a partly visible group stays, carrying only what is visible', () => {
   const canSee = (route) => route !== 'alerts';
   const monitor = visibleGroups(canSee).find((g) => g.id === 'monitor');
-  assert.deepEqual(monitor.routes, ['dashboard']);
+  assert.deepEqual(monitor.routes, ['dashboard', 'muster']);
   assert.deepEqual(hiddenGroupIds(canSee), []);
 });
 
@@ -80,7 +80,7 @@ test('an account that can see nothing hides every group', () => {
 
 test('visibleGroups does not mutate the shared group model', () => {
   visibleGroups((route) => route === 'dashboard');
-  assert.deepEqual(NAV_GROUPS.find((g) => g.id === 'monitor').routes, ['dashboard', 'alerts']);
+  assert.deepEqual(NAV_GROUPS.find((g) => g.id === 'monitor').routes, ['dashboard', 'muster', 'alerts']);
 });
 
 // The phone tab bar. It must never offer a route the account cannot open,

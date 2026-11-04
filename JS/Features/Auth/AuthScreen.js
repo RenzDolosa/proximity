@@ -1,5 +1,6 @@
 import { $ } from '../../Utils/dom.js';
 import { supabase } from '../../Core/supabaseClient.js';
+import { clearSnapshot } from '../../Utils/musterCache.js';
 
 // Sign-in only — self-service account creation was removed deliberately
 // (2026-09-19): new accounts are created by an admin under Users & Roles
@@ -32,5 +33,11 @@ export function initAuthScreen() {
   emailInput.addEventListener('keydown', onEnter);
   passwordInput.addEventListener('keydown', onEnter);
 
-  $('#btn-signout').addEventListener('click', async () => { await supabase.auth.signOut(); });
+  // The muster snapshot holds employee names and departments on the device.
+  // It survives a reload on purpose — that is what makes it available during
+  // an outage — but it must not survive the account that cached it.
+  $('#btn-signout').addEventListener('click', async () => {
+    clearSnapshot();
+    await supabase.auth.signOut();
+  });
 }

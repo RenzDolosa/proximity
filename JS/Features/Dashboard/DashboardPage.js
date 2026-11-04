@@ -15,6 +15,7 @@ import { fmtDuration } from '../../Utils/attendance.js';
 import { summarizeRoster, filterRoster, mergeRosterDelta, deriveRoster } from '../../Utils/dashboard.js';
 import { DashboardModel } from '../../Models/DashboardModel.js';
 import { openDepartmentRosterModal } from '../../Components/DepartmentRosterModal.js';
+import { saveSnapshot } from '../../Utils/musterCache.js';
 
 // 60s, not the original 30s. Log Ingestion bills one API-gateway event per
 // request regardless of payload size, and this timer is the largest single
@@ -235,6 +236,10 @@ function finish(seq, err, nextStats, nextRoster, delta = null) {
     if (Number.isFinite(delta.stale_hours)) rosterStaleHours = delta.stale_hours;
   }
   loaded = true;
+  // Keep a copy on the device for the muster list. Free: this is the roster
+  // just downloaded, and the one scenario the muster sheet exists for — fire,
+  // power cut, severed line — is the one where fetching it is not an option.
+  saveSnapshot(roster);
   if (filters.department && !roster.some((x) => (x.department || '') === filters.department)) filters.department = '';
   paintStats();
   paintTable();

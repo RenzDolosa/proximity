@@ -13,7 +13,9 @@
 // Administration stays last, which keeps Settings and Audit Log roughly where
 // muscle memory expects them without needing the old pinned-bottom rail.
 export const NAV_GROUPS = Object.freeze([
-  { id: 'monitor', label: 'Monitor', routes: ['dashboard', 'alerts'] },
+  // Muster sits beside Dashboard because it reads the same roster — and
+  // because in an evacuation nobody hunts through a menu for it.
+  { id: 'monitor', label: 'Monitor', routes: ['dashboard', 'muster', 'alerts'] },
   { id: 'manage', label: 'Manage', routes: ['directory', 'proximity', 'scanner'] },
   { id: 'reports', label: 'Reports', routes: ['attendance', 'analytics'] },
   { id: 'admin', label: 'Administration', routes: ['users', 'settings', 'audit'] },
@@ -45,6 +47,7 @@ export const BOTTOM_NAV_PREFERRED = Object.freeze(['dashboard', 'directory', 'at
 // is not going to fit in it.
 export const BOTTOM_NAV_LABEL = Object.freeze({
   dashboard: 'Home',
+  muster: 'Muster',
   alerts: 'Alerts',
   directory: 'People',
   proximity: 'Cards',
