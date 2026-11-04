@@ -115,6 +115,17 @@ JS/
                                    get_attendance_report(); passes the
                                    browser's time zone so "which day" matches
                                    the reader's calendar
+    ShiftRulesModel.js              added 2026-11-04; shift start times per
+                                   department ('*' = the default), read by
+                                   manager+, written by admin. Only called when
+                                   an admin opens or saves the Settings editor;
+                                   the punctuality figures themselves ride on
+                                   the summary Attendance already fetches
+    SiteRulesModel.js               added 2026-11-04; which site each scanner
+                                   stands at, and travel times between sites.
+                                   Configuration only — the card-sharing
+                                   detection it feeds runs in a database
+                                   trigger and makes no request at all
     DashboardModel.js               added 2026-09-28; wrappers over
                                    get_dashboard_stats() / get_onsite_roster()
     AlertsModel.js                  added 2026-09-28; get_alerts(),
@@ -319,6 +330,15 @@ JS/
                                    times), duration formatting, 31-day range
                                    validation, filtering, summary — unit-tested
                                    in test/attendance.test.mjs
+    punctuality.js                added 2026-11-04; formats and aggregates the
+                                   punctuality figures, and decides which of
+                                   three things the panel says (unconfigured /
+                                   no data / ready). Deliberately does NOT
+                                   decide lateness — that happens in SQL,
+                                   because the grace period never reaches the
+                                   browser and the shift times must have one
+                                   source of truth. Unit-tested in
+                                   test/punctuality.test.mjs
     avatarPreview.js              added 2026-09-29; Employee Manager's
                                    hover-to-100px-preview for row photos —
                                    DOM/layout only, no pure logic to unit-test
@@ -631,6 +651,98 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-11-04 — who arrives late, and one card at two sites**
+
+Two features picked for costing nothing to run. Neither adds a recurring
+request.
+
+**Punctuality.** Every attendance figure here was descriptive — "this person
+was here 8h 14m" — and none was normative, because nothing recorded what time
+they were *supposed* to arrive. So the report could show a short day but not a
+late start, and those are different conversations. `shift_rules` supplies the
+missing fact; the comparison happens in SQL and arrives as two extra columns
+on `get_attendance_report()` and five on `get_attendance_summary()`, both of
+which Attendance already calls. **Zero new requests**, about 1 KB on a 50-row
+page.
+
+**No invented baseline, and this is the main design decision.** `starts_at`
+has no default. The intention was to derive a sensible one from the last 45
+days of real arrivals; that read was refused ("You do not have permission to
+perform this action", consistent with the compromised PAT having been
+revoked). Guessing 07:00 would have labelled hundreds of people late against
+a time nobody chose, and a wrong punctuality figure is worse than none
+because it looks authoritative. So "unconfigured" is a first-class state: the
+panel says shift times aren't set and shows no figure at all. **Set them under
+Settings → Attendance rules before the panel means anything.**
+
+Three states, not two — `rules_configured` comes back from the server because
+zero classified days also happens when the range is empty, and "nobody set a
+shift time" is the only one of those a reader can act on. `unclassified` is
+shown next to the percentage rather than folded into it: a rate whose
+denominator quietly dropped a third of the range is how a wrong number gets
+quoted in a meeting.
+
+**Lateness is never derived in the browser.** `JS/Utils/punctuality.js`
+formats and aggregates; the `late` flag comes from SQL. The grace period
+never reaches the client, so `first_in_offset_minutes > 0` would call a
+3-minute arrival late under a 5-minute grace.
+
+**Card sharing between sites.** A colleague tapping your badge at your own
+site is indistinguishable from you tapping it, and this does not pretend to
+catch it. One card at two *sites* closer together than the journey takes is
+unambiguous — handed over, or cloned — and now raises a critical alert.
+
+**It is a trigger on `scan_events`, not a branch in `scan_proximity_code()`,
+and that changed mid-build.** `Supabase/README.md`'s 2026-10-05 entry records
+that the committed copy of that function has been *behind live*, and that nine
+client-called RPCs exist live with no migration file. A `CREATE OR REPLACE`
+built from this branch could therefore silently revert whatever is running —
+in the function that decides whether a door opens. A trigger replaces nothing,
+and covers the Edge Function and offline replays as well. The same reasoning
+produced `set_scanner_site()` instead of a fourth argument on
+`update_scanner()`: that function is live-only too, so extending it would mean
+recreating an audit-logged write path from a prose description. Where this repo
+cannot see the live definition, both migrations add rather than replace.
+
+**The detection body is wrapped in `exception when others then null`.** It
+runs inside the scan's transaction, so an uncaught fault in fraud detection
+would refuse a badge at a door. A missed alert is an inconvenience; a dead
+turnstile is an outage. A test asserts the guard exists and does not re-raise.
+
+**Both scanners must have a site or nothing fires.** An unset site means "no
+claim", not "a place of its own" — otherwise two readers at one entrance would
+alert on anyone walking past both.
+
+One signal from the original sketch was cut: "two arrivals with no departure
+between them" is already `open_punch`, which fired 382 times in a week. That
+would bury a bell currently carrying a handful.
+
+**Tests:** 24 added, suite at 249. Several assert SQL properties no JS test can
+reach — the 12-hour cross-midnight guard in both functions, the exception
+guard, the predecessor being found by time rather than `-> -2`, and that
+neither migration defines the three functions named above. The
+comment-stripping helper in that file exists because its first run failed
+against the trigger's own comment explaining why `-> -2` is wrong, which is
+the same trap the re-export guard hit on 2026-11-03.
+
+`test/row-cap.test.mjs`'s two `toSummary()` assertions were updated, not
+loosened — their intent was right. The NaN check now excludes
+`avgFirstInSeconds` and `rulesConfigured`, both deliberately nullable: 0 is a
+real clock time (00:00) and `false` would claim "no shift times configured"
+when the truth is "nothing loaded".
+
+**Layout verified at 375px and 1280px:** the punctuality strip takes its
+mobile override at the narrow width and the base rule at the wide one, with no
+horizontal overflow at either. It is one reflowing line rather than three more
+`.stat-card`s because that grid is already five cards and lands 2+2+1 on a
+phone. The check matters because a mobile block placed *before* the rules it
+overrides has now silently killed three overrides in this project — stat
+cards, `.filter-row` and safe-area padding — since same specificity resolves
+by source order.
+
+**Needs both migrations applied.** Until then Attendance renders exactly as
+before (the new columns are simply absent) and no card-sharing alert can fire.
 
 **2026-11-03 (later) — a muster list that survives the thing it exists for**
 

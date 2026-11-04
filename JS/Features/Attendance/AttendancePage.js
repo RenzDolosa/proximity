@@ -26,6 +26,10 @@ import {
   attendanceStatus, STATUS_LABEL, fmtDuration, toDecimalHours,
   validateRange, defaultRange, toSummary,
 } from '../../Utils/attendance.js';
+import {
+  punctualityState, PUNCTUALITY_STATE, onTimeRate, classifiedDays,
+  fmtClock, fmtOffset, isLate,
+} from '../../Utils/punctuality.js';
 
 const STATUS_BADGE = { complete: 'matched', open: 'unassigned_card', anomaly: 'inactive_card' };
 
@@ -196,6 +200,7 @@ function paintBody() {
 
   body.innerHTML = `
     ${statsHTML}
+    ${punctualityHTML()}
     <div class="table-scroll"><div id="att-table-wrap"></div></div>
     <div id="att-pagination"></div>
   `;
@@ -213,6 +218,46 @@ function paintBody() {
   }
 
   paintTable();
+}
+
+// Punctuality, as one line rather than three more stat cards: the grid above
+// is already five cards and wraps to 2+2+1 on a 375px phone, so adding to it
+// makes the worst layout worse. A strip reflows to two lines at most.
+//
+// Everything here comes from the summary request the page already made. There
+// is no second fetch, and no polling.
+function punctualityHTML() {
+  if (!totals) return '';
+
+  switch (punctualityState(totals)) {
+    case PUNCTUALITY_STATE.UNCONFIGURED:
+      // No numbers at all in this state. A guessed shift start would label
+      // hundreds of people against a time nobody chose, and "0% on time"
+      // would read as a finding rather than a missing setting.
+      return `<div class="punct-strip punct-unset">
+          Shift times aren't set, so punctuality can't be measured.
+          <span class="sub">An admin can set them under Settings → Shift times.</span>
+        </div>`;
+
+    case PUNCTUALITY_STATE.NO_DATA:
+      return '';
+
+    default: {
+      const rate = onTimeRate(totals);
+      const avg = fmtClock(totals.avgFirstInSeconds);
+      const judged = classifiedDays(totals);
+      return `<div class="punct-strip">
+          <span><strong class="${rate >= 90 ? 'punct-good' : 'punct-warn'}">${rate}%</strong> on time</span>
+          <span><strong>${totals.lateDays.toLocaleString()}</strong> late</span>
+          ${avg ? `<span>average arrival <strong>${esc(avg)}</strong></span>` : ''}
+          ${/* Stated, not hidden: a percentage whose denominator quietly
+                excluded a chunk of the range is how a wrong figure gets
+                quoted in a meeting. */''}
+          <span class="sub">over ${judged.toLocaleString()} judged day${judged === 1 ? '' : 's'}${
+            totals.unclassified ? `, ${totals.unclassified.toLocaleString()} not judged` : ''}</span>
+        </div>`;
+    }
+  }
 }
 
 // Local calendar date from the RPC's 'YYYY-MM-DD' — built from parts, since
@@ -253,7 +298,15 @@ function paintTable() {
                    several details. Desktop column order is untouched. -->
               <td class="card-title">${esc(r.full_name)}<div class="sub mono" style="margin:0;">${esc(r.employee_code)}</div></td>
               <td data-label="Department">${esc(r.department || '—')}</td>
-              <td class="col-shrink mono" data-label="First IN">${esc(fmtTime(r.first_in))}</td>
+              <!-- The offset sits on First IN rather than in the Status
+                   column, because it describes that timestamp. Status stays
+                   complete/open/anomaly: a day can be both late and an
+                   anomaly, so folding lateness in would make two independent
+                   facts look mutually exclusive. -->
+              <td class="col-shrink mono" data-label="First IN">${esc(fmtTime(r.first_in))}${
+                fmtOffset(r.first_in_offset_minutes) && isLate(r)
+                  ? `<div class="sub" style="margin:0;color:var(--warn);">${esc(fmtOffset(r.first_in_offset_minutes))}</div>`
+                  : ''}</td>
               <td class="col-shrink mono" data-label="Last OUT">${r.last_out ? esc(fmtTime(r.last_out)) : '—'}</td>
               <td class="col-shrink mono" data-label="Time on site">${esc(fmtDuration(Number(r.worked_seconds)))}</td>
               <td class="col-shrink mono" data-label="INs">${r.in_count}</td>

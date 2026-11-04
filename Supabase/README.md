@@ -27,6 +27,8 @@ supabase functions download upload-employee-photo --project-ref kjwttqmbcjvkivgm
 | `employee_directory` (view)  | Employee joined to required card + scan totals, for the Employee Manager grid. Runs `SECURITY DEFINER` so scanner-only / restricted roles still see joined rows under RLS. Read by `JS/Models/EmployeesModel.js#listDirectory`. |
 | `scan_feed` (view / function) | `get_scan_feed()` — `SECURITY DEFINER` function (originally a plain view, which silently dropped employee joins for scanner-only accounts under invoker RLS; replaced for that reason). Read by `JS/Models/ScanEventsModel.js#recentFeed`, which since 2026-10-03 calls `get_scan_feed_compact()` (no thumbnails, no proximity codes) instead. |
 | `audit_log`                   | Append-only — RLS enabled with exactly one policy (`audit_log_select_admin`, `SELECT` only, `is_admin()`); no INSERT/UPDATE/DELETE policy exists at all, so nothing can write to it directly via PostgREST regardless of role. One row per destructive or permission-changing action: `actor_id`/`actor_name`, `action`, `entity_type`/`entity_id`, `detail` jsonb. Written only via `log_audit_event()` (`SECURITY DEFINER`, bypasses the table's own RLS the way every writer function here does), never a direct insert. See "Audit log" below. |
+| `shift_rules`                 | Added 2026-11-04 (`20261104090000_punctuality.sql`). What time a shift starts, so the Attendance report can tell a late arrival from an early one. `department` (pk) — the sentinel `'*'` is the fallback for any department without its own row, which keeps the primary key doing the deduplication rather than a partial unique index. `starts_at time NOT NULL` with **no default**, deliberately: a default would switch punctuality on for everyone against a time nobody chose. `grace_minutes` (0–240, CHECK) — kept separate from `starts_at` because "the shift starts at 07:00 and we don't quibble under five minutes" is two facts, and folding them into 06:55 would misreport the shift start everywhere it is displayed. RLS enabled with **no policies at all**: every read and write goes through a `SECURITY DEFINER` function that checks its own permission, so no client holds a direct grant. Employees whose `department` is null or empty always resolve to the `'*'` default — `set_shift_rule()` maps a blank input to `'*'`, so no rule can be created for "no department". |
+| `site_travel_rules`           | Added 2026-11-04 (`20261104093000_card_sharing_signals.sql`). How many minutes it takes to travel between two sites; a scan pair faster than this is physically impossible for one person. `(from_site, to_site)` pk, with `('*','*')` as the fallback governing every pair, so a three-site operation needs exactly one number and never enumerates pairs. Treated as **symmetric** — a rule for A→B also governs B→A, which halves what an admin maintains; the pk already supports storing both directions separately if a one-way rule is ever needed, and only `site_travel_minutes()` would change. `min_minutes` CHECK 1–1440. Same RLS posture as `shift_rules`: enabled, no policies, reached only through `SECURITY DEFINER` functions. |
 
 Relationship direction: `employees.proximity_card_id → proximity_cards.id`.
 
@@ -480,6 +482,181 @@ an admin swaps it out.
     ones. The report surfaces both as `open_punch`/`anomaly` rather than
     hiding them. Expanding `scan_logs` also grows with an employee's total
     history — the scheduled archival job on the roadmap keeps that bounded.
+- **`get_open_punch_closures(p_from date, p_to date, p_tz text default 'Asia/Manila', p_limit integer default 500, p_offset integer default 0)`**
+  — added 2026-11-03 (`20261103120000_close_open_punches.sql`), backs the
+  review queue reached by clicking Attendance's "No OUT yet" figure
+  (`JS/Components/OpenPunchModal.js` → `JS/Models/AttendanceModel.js#openClosures`).
+  One row per IN with no following OUT: `employee_id`, `employee_code`,
+  `full_name`, `department`, `work_date`, `open_in_at`, `scanner_id`,
+  `proposed_out_at`, `blocked_reason`. Read-only.
+  - **The open test is `next_dir is distinct from 'out'`** — the same test
+    `get_attendance_report()` uses for `open_punch`, deliberately, so the
+    queue and the report can never disagree about which days are open.
+  - **`proposed_out_at` is the site's own last scan that day**, strictly after
+    the open IN, read from `scan_events` rather than `scan_logs`: `scan_logs`
+    holds only this employee's scans, and the point of the rule is to use the
+    **site** as evidence. It therefore cannot land in the future, and it is
+    explainable to the person whose hours it changes.
+  - **`blocked_reason` is returned rather than the row being filtered out**
+    (`'still today'`, `'no later scan at this scanner'`). A day that cannot be
+    closed is more useful visible with its reason than absent — absent reads
+    as "already dealt with".
+  - Same bounds and gate as the report: 31-day cap, `p_tz` must exist in
+    `pg_timezone_names`, `is_admin_or_manager()`. `p_limit` clamped to
+    1..1000.
+- **`close_open_punches(p_closures jsonb, p_tz text default 'Asia/Manila')`**
+  — the write half, admin-or-manager, audit-logged per day as
+  `attendance_day_closed`. Returns one row per submitted pair:
+  `employee_id`, `work_date`, `closed_at`, `outcome`.
+  - **It takes only `(employee_id, work_date)` pairs and recomputes the
+    closing time server-side.** A client-supplied timestamp would be a route
+    to writing arbitrary hours into payroll through a UI that looks reviewed.
+  - **Idempotent for free, from machinery already here.** The synthetic OUT
+    carries `request_id = md5(employee_id || ':' || work_date)::uuid`, so a
+    re-run collides with `scan_events_request_id_key` (`20261023070023`) and
+    is reported as `'skipped: already closed'` rather than writing a second
+    OUT. The `unique_violation` is caught per row, so one collision does not
+    abort the batch.
+  - **Every skip is named, never silent**: `'skipped: still today'` (the
+    person may still be on site), `'skipped: no longer open'`,
+    `'skipped: no later scan at this scanner'`, `'skipped: already closed'`.
+    "Closed 41" with six rows quietly doing nothing is how a tool loses
+    trust — or worse, how someone comes to believe those days are fixed.
+  - **Openness is re-checked at write time, not taken on trust from the
+    preview**: the queue may have sat open in a browser tab while someone else
+    fixed the same day.
+  - The written row is a real `scan_events` insert (`result = 'matched'`), so
+    `trg_append_scan_log` appends it to `scan_logs` and
+    `20261024090000`'s re-sort fixes the parity skew described in the change
+    log entry below. Marked `auto_closed: true` and
+    `close_rule: 'site_last_scan'` in `raw_payload`, with `closed_by =
+    auth.uid()`. Batch capped at 500 pairs per call.
+- **Punctuality columns on the two attendance RPCs** — added 2026-11-04
+  (`20261104090000_punctuality.sql`). Both functions were dropped and
+  recreated, because adding a column to a `RETURNS TABLE` needs DROP then
+  CREATE; the argument signatures are byte-identical, so no client changed and
+  there is no stale-overload problem of the kind `20261009000000` had to clean
+  up. New columns go at the **end**, and PostgREST keys responses by name, so
+  nothing reading the existing columns is affected by position.
+  - `get_attendance_report()` gains **`late boolean`** and
+    **`first_in_offset_minutes integer`**. Both are null when no shift rule
+    covers that department. ~20 bytes of JSON per row, so ~1 KB on a 50-row
+    page.
+  - `get_attendance_summary()` gains **`on_time`**, **`late_days`**,
+    **`unclassified`**, **`avg_first_in_seconds`** (seconds past local
+    midnight, null when there are no days) and **`rules_configured`** — ~45
+    bytes on the one-row response. `rules_configured` cannot be derived from
+    the counts: zero classified days also happens when the range is empty, and
+    the panel has to tell "nothing configured" apart from "nothing to show".
+    `unclassified` is surfaced rather than folded into `on_time`, because a
+    percentage whose denominator quietly excluded a third of the range is the
+    kind of number that gets quoted in a meeting.
+  - **Why classification is server-side:** the shift times are the single
+    source of truth for a figure that reaches HR, and the grace period never
+    reaches the browser at all. `JS/Utils/punctuality.js` formats and
+    aggregates; it never decides lateness. Deriving `late` client-side from
+    `first_in_offset_minutes > 0` would silently ignore grace.
+  - **Cross-midnight guard:** a clock-time subtraction cannot know it crossed
+    midnight, so a 22:00 shift arrived for at 01:00 reads as +180 minutes late
+    when it is three hours early for the next one. Anything more than 12 hours
+    from the shift start is reported as **unclassified** rather than answered
+    wrongly. For a day operation this never fires.
+  - **Cost: zero new requests.** AttendancePage already calls both RPCs on
+    every load.
+- **`shift_rule_for(p_department)`** — resolves the rule that applies: the
+  department's own row, else the `'*'` default, else nothing.
+  `ORDER BY (r.department = '*')` sorts false before true, so the specific row
+  wins without a CASE. `EXECUTE` revoked from `anon` **and**
+  `authenticated` — it is only ever called from the `SECURITY DEFINER`
+  attendance functions, which run as the owner. (This is the same shape as the
+  2026-10-08 bug recorded below, but inverted correctly: the callers are
+  DEFINER, not INVOKER. `test/schema-drift.test.mjs`'s `invokerCallsRevoked()`
+  checks it.)
+- **`get_shift_rules()`** (`is_admin_or_manager()`) /
+  **`set_shift_rule(p_department, p_starts_at, p_grace_minutes)`** /
+  **`delete_shift_rule(p_department)`** (both `is_admin()`, both audit-logged
+  as `shift_rule_updated` / `shift_rule_deleted`). Reading is manager-level
+  because a manager looking at a punctuality figure needs to know which shift
+  start produced it — hiding the baseline would make the number unauditable.
+  Writing is admin-level because it changes what every punctuality figure in
+  the system means. Client: `JS/Models/ShiftRulesModel.js`, Settings →
+  "Attendance rules".
+- **`trg_detect_card_sharing()`** / trigger
+  `trg_scan_events_detect_card_sharing` (AFTER INSERT on `scan_events`) —
+  added 2026-11-04 (`20261104093000_card_sharing_signals.sql`). Raises a
+  **critical `card_shared_between_sites`** alert when one card is used at two
+  different sites closer together than `site_travel_minutes()` says the
+  journey takes. Either the card was handed over or it was cloned; a colleague
+  tapping your badge at *your own* site is not detectable and this does not
+  pretend to catch it.
+  - **Cost: zero new requests, zero egress.** It runs in the transaction a
+    scan already performs, and hits land in `alerts`, which the bell already
+    polls. Added work per matched scan is one scan of that employee's own
+    `scan_logs` (capped by the trim job — 137 entries for the busiest
+    employee as measured in `20261001041500`) plus one pk lookup on
+    `scanners`.
+  - **Why a trigger rather than a branch in `scan_proximity_code()`:** that
+    was the first design and it is the wrong one. This file's 2026-10-05 entry
+    records that the committed `scan_proximity_code()` has been *behind live*
+    before, and that nine client-called RPCs exist live with no migration at
+    all. A `CREATE OR REPLACE` built from the newest copy in `migrations/`
+    would silently revert anything changed live after 2026-10-08, in the
+    function that decides whether a door opens. A trigger is additive, so
+    there is nothing to revert — and it covers every path that writes a scan,
+    including the `proximity-scan` Edge Function and offline replays, rather
+    than one RPC.
+  - **The body is wrapped in `exception when others then null`**, and that is
+    the most important line in the migration. The trigger runs in the scan's
+    own transaction, so an uncaught fault in fraud *detection* would refuse a
+    badge at a door. A missed alert is an inconvenience; a turnstile that
+    stops working because of a bug in an analytics rule is an outage.
+    Detection fails silently, by design, and
+    `test/punctuality.test.mjs` asserts the guard is present and does not
+    re-raise.
+  - **The predecessor scan is found by time, not array position.** `scan_logs`
+    stopped being append-only in `20261024090000` — a backdated replay is
+    spliced in by `scanned_at`, so `scan_logs -> -2` is "the second newest
+    entry", which for a replay is not this scan's predecessor. The query asks
+    for the latest entry at or before this scan's own time, excluding this
+    scan, which is correct whether the entry was appended or spliced and does
+    not depend on whether `trg_append_scan_log` has run yet.
+  - **Both scanners must have a site**, or nothing is raised. An unset site
+    means "no claim", not "a place of its own" — otherwise every
+    unconfigured reader would alert on normal movement, and two readers
+    standing at the same place could not be left blank.
+  - Deduped per employee per site **pair**, with `least`/`greatest` ordering
+    the pair so A→B and B→A share one key: pacing between two readers is one
+    investigation, not an alert each way. 60-minute window.
+  - **A second signal was considered and dropped.** "Two arrivals with no
+    departure between them" is already `open_punch` in
+    `get_attendance_report()`, and occurred 382 times in one week. Alerting on
+    it would put 382 rows a week into a bell that carries a handful.
+- **`site_travel_minutes(p_a, p_b)`** — symmetric resolver with the same
+  `'*'`-last ordering trick as `shift_rule_for()`, and the same revoke posture
+  (called only from the `SECURITY DEFINER` trigger function).
+- **`set_scanner_site(p_scanner_id, p_site)`** / **`get_scanner_sites()`** —
+  narrow functions for the `scanners.site` column rather than new arguments on
+  `update_scanner()` / `get_scanners()`. **Why:** those two have no migration
+  in this repo — they are live-only and are two of the nine entries in
+  `test/schema-drift.test.mjs`'s `KNOWN_MISSING_FUNCTIONS`. Extending
+  `update_scanner()` would mean DROP plus CREATE with a body reconstructed
+  from this file's prose, and that body is the audit-logged admin write path
+  including the `is_enabled` rule `scan_proximity_code()` enforces. The cost of
+  avoiding that is one extra RPC on the admin-only registry page. **Paste the
+  live definitions of `update_scanner()` and `get_scanners()` and both of these
+  can be deleted**, folding `site` in and removing the extra request.
+  `set_scanner_site()` is `is_admin()` and audit-logged as
+  `scanner_site_updated`; empty clears the site, which switches detection off
+  for that scanner rather than leaving it half-configured.
+- **`get_site_travel_rules()`** (`is_admin_or_manager()`) /
+  **`set_site_travel_rule(p_from_site, p_to_site, p_min_minutes)`** /
+  **`delete_site_travel_rule(p_from_site, p_to_site)`** (both `is_admin()`,
+  audit-logged as `site_travel_rule_updated` / `site_travel_rule_deleted`).
+  A rule from a site to itself is rejected rather than stored: the resolver
+  only ever compares *different* sites, so such a row is unreachable, and
+  rejecting it is clearer than storing something inert. Client:
+  `JS/Models/SiteRulesModel.js`, Settings → "Scanning & kiosks" → "Sites and
+  travel times".
 - **`archive_old_scan_events(p_older_than_days integer default 180)`** —
   added 2026-09-30 (`Supabase/migrations/20260930000000_scan_events_archival.sql`),
   backs the Settings → "Scan data archival" panel and a daily `pg_cron`
@@ -1105,6 +1282,122 @@ the day each entry was written and not maintained since.** Several of them are
 long applied. Probe before believing one.
 
 ### Change log (most recent first)
+
+**2026-11-04 — punctuality, and card sharing between sites (`20261104090000_punctuality.sql` + `20261104093000_card_sharing_signals.sql`, NOT applied)**
+
+Two features, chosen for costing nothing to run. Both add **zero recurring
+requests**: punctuality rides on the two RPCs the Attendance page already
+calls, and card-sharing detection runs inside the transaction a scan already
+performs, writing to the `alerts` table the bell already polls. The only new
+requests in either feature happen when an admin opens or saves the Settings
+editors.
+
+- **Every attendance figure in this system was descriptive** — "this person
+  was here for 8h 14m" — and none was normative, because nothing anywhere
+  recorded what time they were *supposed* to arrive. `shift_rules` is that
+  missing fact. `starts_at` has **no default on purpose**: a guessed shift
+  start would label hundreds of people late against a time nobody chose, and
+  a wrong punctuality figure is worse than no punctuality figure because it
+  looks authoritative. With no rule set, the panel says so and shows nothing.
+- **The attempt to derive a sensible default from live data failed, and that
+  is why there is no default.** A read-only aggregate over the last 45 days of
+  arrivals was the intended way to pick one; the MCP connector refused with
+  "You do not have permission to perform this action", consistent with the
+  compromised PAT having been revoked. Rather than invent times, the feature
+  ships with the unconfigured state as a first-class state.
+- **Card-sharing detection was moved out of `scan_proximity_code()` before it
+  was ever written into it.** The 2026-10-05 entry below records that the
+  committed copy of that function has been behind live, and that nine RPCs are
+  live-only — so a `CREATE OR REPLACE` from this branch could silently revert
+  whatever is actually running, in the function that decides whether a door
+  opens. A trigger on `scan_events` replaces nothing, and covers the Edge
+  Function and offline replays too. **This is the same class of hazard as the
+  `update_scanner()` decision in the same migration:** where this repo cannot
+  see the live definition, these migrations add rather than replace.
+- The trigger body is wrapped in `exception when others then null`. It runs in
+  the scan's transaction, so a fault in fraud detection would refuse a badge
+  at a door. A missed alert is an inconvenience; a dead turnstile is an
+  outage.
+- `20261008140000` is named "drop_impossible_card_alerts", which reads as if
+  this feature was tried and removed. It was not — that migration stopped
+  alerting on impossible card *reads* (stuck reader keys emitting 40–71
+  characters of one digit). Impossible card *travel* had never been checked.
+- One signal from the original sketch was dropped: "two arrivals with no
+  departure between them" is already `open_punch`, and fired 382 times in a
+  week. 382 rows a week would bury a bell that carries a handful.
+- 24 tests added (`test/punctuality.test.mjs`), suite at 249. Several assert
+  properties of the SQL that no JS test can reach: the 12-hour cross-midnight
+  guard exists in both functions, the exception guard is present and does not
+  re-raise, the predecessor is found by time rather than `-> -2`, and neither
+  migration defines `scan_proximity_code`, `update_scanner` or `get_scanners`.
+  The comment-stripping helper in that file exists because the first run
+  failed against the trigger's own comment explaining why `-> -2` is wrong —
+  the same trap the re-export guard hit.
+- `test/row-cap.test.mjs`'s two `toSummary()` shape assertions were updated
+  rather than loosened: their intent (the full mapped shape, and no NaN in the
+  counts) is right. `avgFirstInSeconds` and `rulesConfigured` are excluded
+  from the NaN check on purpose — both are deliberately nullable, because 0 is
+  a real clock time and `false` would claim "no shift times configured" when
+  the truth is "nothing loaded".
+- Verified in a browser at 375px and 1280px: the punctuality strip picks up
+  its mobile override at the narrow width and the base rule at the wide one,
+  with no horizontal overflow at either. That check exists because placing a
+  mobile block *before* the rules it overrides has silently killed three
+  previous overrides in this project (stat cards, `.filter-row`, safe-area
+  padding) — same specificity resolves by source order.
+
+**2026-11-03 — close the days nobody tapped out of (`20261103120000_close_open_punches.sql`, not applied as of 2026-11-04)**
+
+*Written up 2026-11-04, after the fact: PR #52 shipped this migration without
+a change-log entry here, and the gap was noticed while documenting
+`20261104090000`. The migration itself is unchanged by this entry. The applied
+state above is what was true when this was written and was not re-verified —
+see "How to tell what is actually applied" above; merged to `main` is not the
+same as applied to the database.*
+
+Measured on the live project 2026-11-03: **382 of 3,345 employee-days** in a
+one-week window carry `open_punch`. Those days have no computable hours, so HR
+either guesses them or chases them by hand.
+
+- **The finding that matters more than 382 bad rows.** Direction is parity over
+  an employee's *whole history* (`employees.scan_parity_count`,
+  `20261001040000`). A missing OUT leaves that employee one step out for
+  **every scan after it**, so the next morning's arrival is stored as an `out`.
+  `get_attendance_report()` builds its days with `where s.dir = 'in'` — so a
+  day whose first scan is mislabelled is **dropped from the report entirely**,
+  not merely under-counted. One missed tap-out can hide every subsequent day
+  for that person.
+- Closing the gap re-derives the rest, because `20261024090000` made the
+  trigger re-sort and re-label by `scanned_at`. **That migration was the
+  prerequisite for this one**, and it is why this is a repair rather than a
+  cosmetic tidy-up.
+- Worth running against production to see how far the skew has spread:
+
+  ```sql
+  select count(*) from public.employees e
+   cross join lateral jsonb_array_elements(e.scan_logs) with ordinality as l(elem, ord)
+   where (l.ord % 2 = 1) <> (l.elem->>'direction' = 'in');
+  ```
+
+- **The closing rule, chosen by the operator:** close at the last scan recorded
+  at the **same scanner on the same day**. Evidence from the site rather than
+  an assumption about shifts.
+- See `get_open_punch_closures()` / `close_open_punches()` in the RPC section
+  above for the write path's design — the server-side recompute, the
+  deterministic `request_id` that makes a re-run collide instead of
+  double-inserting, and why every skip is named rather than silent.
+- **Cost:** one read when the queue is opened, one write for a whole batch.
+  Nothing polls. Egress and log ingestion unchanged in steady state.
+- Also shipped in PR #52 but needing no migration: the evacuation muster list
+  (`JS/Features/Muster/MusterPage.js`), which renders from a `localStorage`
+  snapshot of the roster `DashboardPage.load()` already downloads — measured
+  64 KB for 361 people. It makes no request of its own, which is the entire
+  point: a fire or a power cut is often *why* a building is being evacuated.
+- This migration **does** carry `NOTIFY pgrst, 'reload schema'`, and reading it
+  for this write-up is what revealed that `20261104090000`/`20261104093000`
+  did not. `20261023070023` and `20261024090000` also skipped it, both already
+  applied. From 2026-11-04 the rule is enforced by
+  `test/migration-conventions.test.mjs`.
 
 **2026-10-08 — attendance totals and ordering (`20261008160000_attendance_summary_and_order.sql`, applied; confirmed 2026-10-24)**
 

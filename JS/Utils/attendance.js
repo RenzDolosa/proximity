@@ -84,6 +84,18 @@ export function toSummary(row) {
     workedSeconds: Number(r?.worked_seconds) || 0,
     open: Number(r?.open_punches) || 0,
     anomalies: Number(r?.anomalies) || 0,
+    // Punctuality (20261104090000). These ride on the same one-row response
+    // rather than a second request.
+    onTime: Number(r?.on_time) || 0,
+    lateDays: Number(r?.late_days) || 0,
+    unclassified: Number(r?.unclassified) || 0,
+    // NOT coerced with `|| 0`, unlike the counts above: a null average means
+    // "no days to average" and must stay null, where 0 would render as the
+    // real clock time 0:00. Same reason rules_configured keeps its null
+    // instead of becoming false — Utils/punctuality.js tells the three states
+    // apart and needs the difference preserved.
+    avgFirstInSeconds: r?.avg_first_in_seconds ?? null,
+    rulesConfigured: r?.rules_configured ?? null,
   };
 }
 

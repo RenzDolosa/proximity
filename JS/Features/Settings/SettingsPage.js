@@ -32,9 +32,22 @@ import { openConfirmModal } from '../../Components/ConfirmModal.js';
 import { panelNote } from '../../Components/PanelNote.js';
 import { showModalError } from '../../Components/Modal.js';
 import { reportError } from '../../Utils/userError.js';
+import { ShiftRulesModel, DEFAULT_DEPARTMENT } from '../../Models/ShiftRulesModel.js';
+import { SiteRulesModel, DEFAULT_SITE_PAIR } from '../../Models/SiteRulesModel.js';
 
 let soundsCache = {}; // key -> { updated_at, size } | null, once loaded
 let loaded = false;
+
+// Shift times (20261104090000) and site travel times (20261104093000). Both
+// are small lists an admin edits rarely, so they load when their group is
+// opened and are held for the life of the page.
+let shiftRules = null;
+let shiftRulesError = null;
+let shiftRulesSaving = false;
+let travelRules = null;
+let scannerSites = null;
+let siteRulesError = null;
+let siteRulesSaving = false;
 
 // Every key is capped at MAX_FILE_SIZE_BYTES by the bucket itself, so
 // "all 6 at their individual max" is a real, meaningful ceiling here —
@@ -325,6 +338,42 @@ export async function renderSettings() {
       )}
       <div id="ss-body">${silenceStatusLoaded ? '' : 'Loading…'}</div>
     </div>`,
+
+    shifts: !isAdmin() ? '' : `
+    <div class="panel" style="padding:20px;">
+      <h3 style="margin:0 0 4px;">Shift times</h3>
+      ${panelNote(
+        'What time a shift starts, so Attendance can tell a late arrival from an early one.',
+        `<p>Until a time is set here, the Attendance page says punctuality
+         can't be measured and shows no figure. That is deliberate — a
+         guessed shift start would label people late against a time nobody
+         chose.</p>
+         <p>The default applies to every department without its own row.
+         <strong>Grace</strong> is how many minutes past the start still
+         count as on time.</p>
+         <p>Changing a time re-reads every day in the report the next time it
+         loads; it rewrites no scans and no hours.</p>`,
+      )}
+      <div id="shift-body">${shiftRules ? '' : 'Loading…'}</div>
+    </div>`,
+
+    travel: !isAdmin() ? '' : `
+    <div class="panel" style="padding:20px;">
+      <h3 style="margin:0 0 4px;">Sites and travel times</h3>
+      ${panelNote(
+        'Group scanners into sites, and say how long it takes to get between them.',
+        `<p>One card used at two different sites closer together than the
+         journey takes is either shared or cloned, and raises a critical
+         alert.</p>
+         <p>This only works for scanners that have a site set. A scanner with
+         no site raises nothing — so two readers standing at the same place
+         are safe to leave blank, and will never alert on someone walking
+         past both.</p>
+         <p>Travel times are symmetric: a rule between two sites governs
+         both directions.</p>`,
+      )}
+      <div id="travel-body">${travelRules ? '' : 'Loading…'}</div>
+    </div>`,
   };
 
   // Grouped by what you came to Settings to do. "Your account" is open by
@@ -334,7 +383,12 @@ export async function renderSettings() {
     { id: 'account', label: 'Your account', hint: 'How this browser looks, and your own sign-in', open: true,
       html: panels.appearance + panels.password },
     { id: 'scanning', label: 'Scanning & kiosks', hint: 'The scanners themselves, and what they play and show',
-      html: panels.scanners + panels.sounds + panels.thumbs + panels.silence },
+      html: panels.scanners + panels.sounds + panels.thumbs + panels.silence + panels.travel },
+    // Its own group rather than a fourth panel under Scanning: a shift start
+    // is a fact about the working day, not about a kiosk, and it is the
+    // Attendance report it changes.
+    { id: 'rules', label: 'Attendance rules', hint: 'Shift times, and what counts as late',
+      html: panels.shifts },
     { id: 'data', label: 'Data & maintenance', hint: 'Storage, retention jobs, and query health',
       html: panels.usage + panels.photos + panels.archival + panels.trimming + panels.queryPerf },
   ].filter((group) => group.html.trim());
@@ -499,6 +553,10 @@ export async function renderSettings() {
       showSounds ? loadSounds() : null,
       showPhotos && isAdmin() ? loadThumbStats() : null,
       isAdmin() ? loadSilenceStatus() : null,
+      isAdmin() ? loadSiteRules() : null,
+    ],
+    rules: () => [
+      isAdmin() ? loadShiftRules() : null,
     ],
     data: () => [
       isAdmin() ? loadUsage() : null,
@@ -1038,6 +1096,235 @@ function paintSilenceStatus() {
       </p>
     ` : `<p class="emp-meta" style="margin-top:4px;">The scheduled job hasn't run yet since this status was last checked (it runs every 15 minutes).</p>`}
   `;
+}
+
+// ---- shift times (punctuality) ----
+
+async function loadShiftRules() {
+  const { data, error } = await ShiftRulesModel.list();
+  shiftRulesError = error ? reportError(error, 'settings.shifts', "Couldn't load shift times.") : null;
+  shiftRules = error ? null : (data || []);
+  paintShiftRules();
+}
+
+function paintShiftRules() {
+  const body = $('#shift-body');
+  if (!body) return;
+  if (shiftRulesError) { body.innerHTML = `<div class="empty-state">${esc(shiftRulesError)}</div>`; return; }
+  if (!shiftRules) { body.innerHTML = 'Loading…'; return; }
+
+  const rows = shiftRules.map((r) => {
+    const isDefault = r.department === DEFAULT_DEPARTMENT;
+    return `
+      <tr>
+        <td data-label="Applies to">${isDefault
+          ? '<strong>Every department</strong><div class="sub" style="margin:0;">unless it has its own row below</div>'
+          : esc(r.department)}</td>
+        <td class="col-shrink mono" data-label="Starts">${esc(String(r.starts_at).slice(0, 5))}</td>
+        <td class="col-shrink mono" data-label="Grace">${r.grace_minutes}m</td>
+        <td class="col-shrink">
+          <button type="button" class="ghost" data-shift-del="${esc(r.department)}"
+                  ${shiftRulesSaving ? 'disabled' : ''}>Remove</button>
+        </td>
+      </tr>`;
+  }).join('');
+
+  body.innerHTML = `
+    ${shiftRules.length ? `
+      <table class="table-as-cards">
+        <thead><tr><th>Applies to</th><th class="col-shrink">Starts</th><th class="col-shrink">Grace</th><th class="col-shrink"></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`
+      : `<div class="empty-state" style="text-align:left;">No shift times set, so Attendance shows no punctuality figure. Add a default below to turn it on.</div>`}
+    <div class="filter-row" style="margin-top:12px;flex-wrap:wrap;">
+      <input type="text" id="shift-dept" class="search" placeholder="Department (blank = default)" autocomplete="off" />
+      <input type="time" id="shift-start" aria-label="Shift start time" />
+      <input type="number" id="shift-grace" min="0" max="240" step="1" value="0" style="width:92px;" aria-label="Grace minutes" />
+      <button type="button" class="primary" id="shift-save" ${shiftRulesSaving ? 'disabled' : ''}>${shiftRulesSaving ? 'Saving…' : 'Save'}</button>
+    </div>
+    <p class="emp-meta" style="margin-top:6px;">Saving a department that already has a row replaces it.</p>
+  `;
+
+  $('#shift-save').addEventListener('click', handleSaveShiftRule);
+  $$('button[data-shift-del]', body).forEach((btn) => {
+    btn.addEventListener('click', () => handleDeleteShiftRule(btn.dataset.shiftDel));
+  });
+}
+
+async function handleSaveShiftRule() {
+  const startsAt = $('#shift-start')?.value;
+  if (!startsAt) { toast('Pick a shift start time.', 'error'); return; }
+
+  shiftRulesSaving = true;
+  paintShiftRules();
+  const { error } = await ShiftRulesModel.set(
+    $('#shift-dept')?.value, startsAt, $('#shift-grace')?.value,
+  );
+  shiftRulesSaving = false;
+  if (error) { toast(reportError(error, 'settings.shifts'), 'error'); paintShiftRules(); return; }
+  toast('Shift time saved.');
+  await loadShiftRules();
+}
+
+async function handleDeleteShiftRule(department) {
+  const isDefault = department === DEFAULT_DEPARTMENT;
+  const confirmed = await openConfirmModal({
+    title: isDefault ? 'Remove the default shift time?' : `Remove the ${department} shift time?`,
+    // Removing the default is the one destructive-feeling action here: it
+    // silently switches the whole punctuality panel off rather than changing
+    // a number, so say so plainly instead of letting it look like an edit.
+    message: isDefault
+      ? 'Departments without their own time will stop being judged, and Attendance will show no punctuality figure for them.'
+      : `${department} will fall back to the default shift time.`,
+    confirmLabel: 'Remove',
+  });
+  if (!confirmed) return;
+
+  shiftRulesSaving = true;
+  paintShiftRules();
+  const { error } = await ShiftRulesModel.remove(department);
+  shiftRulesSaving = false;
+  if (error) { toast(reportError(error, 'settings.shifts'), 'error'); paintShiftRules(); return; }
+  toast('Shift time removed.');
+  await loadShiftRules();
+}
+
+// ---- sites and travel times (card sharing) ----
+
+async function loadSiteRules() {
+  const [sitesRes, rulesRes] = await Promise.all([
+    SiteRulesModel.scannerSites(),
+    SiteRulesModel.travelRules(),
+  ]);
+  const error = sitesRes.error || rulesRes.error;
+  siteRulesError = error ? reportError(error, 'settings.sites', "Couldn't load site rules.") : null;
+  scannerSites = error ? null : (sitesRes.data || []);
+  travelRules = error ? null : (rulesRes.data || []);
+  paintSiteRules();
+}
+
+function paintSiteRules() {
+  const body = $('#travel-body');
+  if (!body) return;
+  if (siteRulesError) { body.innerHTML = `<div class="empty-state">${esc(siteRulesError)}</div>`; return; }
+  if (!travelRules || !scannerSites) { body.innerHTML = 'Loading…'; return; }
+
+  const configured = scannerSites.filter((s) => s.site);
+  const distinctSites = [...new Set(configured.map((s) => s.site))];
+
+  const scannerRows = scannerSites.map((s) => `
+    <tr>
+      <td class="mono" data-label="Scanner">${esc(s.scanner_id)}</td>
+      <td data-label="Site">
+        <input type="text" class="search" data-site-for="${esc(s.scanner_id)}"
+               value="${esc(s.site || '')}" placeholder="No site — not checked"
+               autocomplete="off" ${siteRulesSaving ? 'disabled' : ''} />
+      </td>
+      <td class="col-shrink">
+        <button type="button" class="ghost" data-site-save="${esc(s.scanner_id)}"
+                ${siteRulesSaving ? 'disabled' : ''}>Save</button>
+      </td>
+    </tr>`).join('');
+
+  const ruleRows = travelRules.map((r) => {
+    const isDefault = r.from_site === DEFAULT_SITE_PAIR && r.to_site === DEFAULT_SITE_PAIR;
+    return `
+      <tr>
+        <td data-label="Between">${isDefault
+          ? '<strong>Any two sites</strong><div class="sub" style="margin:0;">unless a specific pair is listed</div>'
+          : `${esc(r.from_site)} ↔ ${esc(r.to_site)}`}</td>
+        <td class="col-shrink mono" data-label="Takes">${r.min_minutes}m</td>
+        <td class="col-shrink">
+          <button type="button" class="ghost" data-travel-del="${esc(r.from_site)}|${esc(r.to_site)}"
+                  ${siteRulesSaving ? 'disabled' : ''}>Remove</button>
+        </td>
+      </tr>`;
+  }).join('');
+
+  body.innerHTML = `
+    <table class="table-as-cards">
+      <thead><tr><th class="col-shrink">Scanner</th><th>Site</th><th class="col-shrink"></th></tr></thead>
+      <tbody>${scannerRows || '<tr><td colspan="3">No scanners have reported yet.</td></tr>'}</tbody>
+    </table>
+
+    ${distinctSites.length < 2 ? `
+      <div class="empty-state" style="text-align:left;margin-top:12px;">
+        ${configured.length === 0
+          ? 'No scanner has a site yet, so nothing is being checked.'
+          : 'Only one site is configured, so there is no journey to check yet.'}
+        Card sharing is only detectable between two different sites.
+      </div>` : ''}
+
+    <h4 style="margin:16px 0 6px;">Travel times</h4>
+    ${travelRules.length ? `
+      <table class="table-as-cards">
+        <thead><tr><th>Between</th><th class="col-shrink">Takes</th><th class="col-shrink"></th></tr></thead>
+        <tbody>${ruleRows}</tbody>
+      </table>`
+      : `<div class="empty-state" style="text-align:left;">No travel times set, so no card-sharing check runs. Add a default below.</div>`}
+    <div class="filter-row" style="margin-top:12px;flex-wrap:wrap;">
+      <input type="text" id="travel-from" class="search" placeholder="From site (blank = any)" autocomplete="off" />
+      <input type="text" id="travel-to" class="search" placeholder="To site (blank = any)" autocomplete="off" />
+      <input type="number" id="travel-mins" min="1" max="1440" step="1" placeholder="Minutes" style="width:96px;" aria-label="Minutes" />
+      <button type="button" class="primary" id="travel-save" ${siteRulesSaving ? 'disabled' : ''}>${siteRulesSaving ? 'Saving…' : 'Save'}</button>
+    </div>
+  `;
+
+  $('#travel-save').addEventListener('click', handleSaveTravelRule);
+  $$('button[data-site-save]', body).forEach((btn) => {
+    btn.addEventListener('click', () => handleSaveScannerSite(btn.dataset.siteSave));
+  });
+  $$('button[data-travel-del]', body).forEach((btn) => {
+    const [from, to] = btn.dataset.travelDel.split('|');
+    btn.addEventListener('click', () => handleDeleteTravelRule(from, to));
+  });
+}
+
+async function handleSaveScannerSite(scannerId) {
+  const input = $(`input[data-site-for="${scannerId}"]`);
+  if (!input) return;
+  siteRulesSaving = true;
+  paintSiteRules();
+  const { error } = await SiteRulesModel.setScannerSite(scannerId, input.value);
+  siteRulesSaving = false;
+  if (error) { toast(reportError(error, 'settings.sites'), 'error'); paintSiteRules(); return; }
+  toast('Site saved.');
+  await loadSiteRules();
+}
+
+async function handleSaveTravelRule() {
+  const mins = Number($('#travel-mins')?.value);
+  if (!Number.isFinite(mins) || mins < 1) { toast('Enter a travel time of at least one minute.', 'error'); return; }
+
+  siteRulesSaving = true;
+  paintSiteRules();
+  const { error } = await SiteRulesModel.setTravelRule(
+    $('#travel-from')?.value, $('#travel-to')?.value, mins,
+  );
+  siteRulesSaving = false;
+  if (error) { toast(reportError(error, 'settings.sites'), 'error'); paintSiteRules(); return; }
+  toast('Travel time saved.');
+  await loadSiteRules();
+}
+
+async function handleDeleteTravelRule(fromSite, toSite) {
+  const isDefault = fromSite === DEFAULT_SITE_PAIR && toSite === DEFAULT_SITE_PAIR;
+  const confirmed = await openConfirmModal({
+    title: 'Remove this travel time?',
+    message: isDefault
+      ? 'Site pairs without a specific rule will stop being checked, so card sharing between them will no longer raise an alert.'
+      : `${fromSite} ↔ ${toSite} will fall back to the default travel time, if one is set.`,
+    confirmLabel: 'Remove',
+  });
+  if (!confirmed) return;
+
+  siteRulesSaving = true;
+  paintSiteRules();
+  const { error } = await SiteRulesModel.removeTravelRule(fromSite, toSite);
+  siteRulesSaving = false;
+  if (error) { toast(reportError(error, 'settings.sites'), 'error'); paintSiteRules(); return; }
+  toast('Travel time removed.');
+  await loadSiteRules();
 }
 
 // Client-side validation mirrors ResetPasswordModal.js's (min. 6 chars) —
