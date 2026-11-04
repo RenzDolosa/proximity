@@ -80,6 +80,9 @@ export function showShell() {
   $('#nav-settings').classList.toggle('hidden', !canViewSettings());
   $('#nav-audit').classList.toggle('hidden', !isAdmin());
   $('button[data-route="dashboard"]').classList.toggle('hidden', !canViewDashboard());
+  // Same gate and same data as the Dashboard — whoever can see who is on site
+  // can see who to account for.
+  $('button[data-route="muster"]').classList.toggle('hidden', !canViewDashboard());
   $('button[data-route="alerts"]').classList.toggle('hidden', !canViewAlerts());
   $('button[data-route="directory"]').classList.toggle('hidden', !canViewEmployeeManager());
   $('button[data-route="proximity"]').classList.toggle('hidden', !canViewEmployeeManager());
@@ -88,7 +91,7 @@ export function showShell() {
   $('button[data-route="attendance"]').classList.toggle('hidden', !canViewAttendance());
   paintNavGroups();
   // land on the first route this account is actually allowed to see
-  if ((appState.route === 'dashboard' && !canViewDashboard()) || (appState.route === 'alerts' && !canViewAlerts())) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users')));
+  if ((appState.route === 'dashboard' && !canViewDashboard()) || (appState.route === 'muster' && !canViewDashboard()) || (appState.route === 'alerts' && !canViewAlerts())) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users')));
   if (appState.route === 'directory' && !canViewEmployeeManager()) appState.route = canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users'));
   if (appState.route === 'scanner' && !canViewScanner()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users'));
   if (appState.route === 'analytics' && !canViewScanner()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users'));

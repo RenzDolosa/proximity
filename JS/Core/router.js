@@ -10,9 +10,11 @@ import { renderAttendance } from '../Features/Attendance/AttendancePage.js';
 import { renderUsers } from '../Features/Users/UsersPage.js';
 import { renderSettings } from '../Features/Settings/SettingsPage.js';
 import { renderAuditLog } from '../Features/Audit/AuditLogPage.js';
+import { renderMuster } from '../Features/Muster/MusterPage.js';
 
 const titles = {
   dashboard: ['Dashboard', 'Who is on site right now, plus scanner and card health'],
+  muster: ['Muster', 'Who to account for at the assembly point — works without a network'],
   alerts: ['Alerts', 'Server-raised warnings — acknowledge them once handled'],
   directory: ['Employee Manager', 'View and edit the employee directory'],
   proximity: ['Proximity Cards', 'Issue and revoke proximity IDs, linked to employees'],
@@ -37,6 +39,7 @@ export function render() {
   $('#page-title').textContent = title;
   $('#page-sub').textContent = sub;
   if (appState.route === 'dashboard') renderDashboard();
+  if (appState.route === 'muster') renderMuster();
   if (appState.route === 'alerts') renderAlerts();
   if (appState.route === 'directory') renderDirectory();
   if (appState.route === 'proximity') renderProximity();

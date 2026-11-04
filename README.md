@@ -632,6 +632,48 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-03 (later) — a muster list that survives the thing it exists for**
+
+Three sites and no way to know who is inside when the alarm goes.
+
+**The whole design follows from one observation:** a fire, a power cut or a
+severed line is often *why* a building is being evacuated, so a roster that
+needs the server is a roster that is absent exactly when it is needed. The
+Muster page therefore renders from a snapshot held **on the device** and
+never waits on the network. It attempts a refresh, but paints first.
+
+The snapshot costs nothing. `DashboardPage.load()` already downloads the
+on-site roster; it now also writes it to `localStorage` — measured at
+**64 KB for 361 people**, against a ~5 MB budget. No request, no egress, no
+log event. `localStorage` rather than IndexedDB because this is one small
+object read synchronously by someone opening the page while walking.
+
+**Nobody is dropped for being uncertain.** A stale IN means *unknown*, not
+gone; an inactive or suspended employee standing in the building is still a
+body to find. Both stay on the list, flagged. The only person not listed is
+one with no IN at all. A name on the sheet that walks up and says "I'm here"
+costs five seconds — a name missing from it costs a search nobody starts.
+
+Grouped by site, then department, sites largest first (that is the sheet
+somebody needs handed over first), people alphabetically so two printouts of
+the same roster match. Ticking a name off is local only: a drill is not a
+record to sync, and a write that needed the server would fail in the same
+outage the page is built to survive.
+
+The status line always states the snapshot's age, and an age that cannot be
+read reports as stale rather than fresh. Showing an old list during an
+evacuation is right; showing one without saying how old it is, is not.
+
+Measured at 375px: every row exactly 44px, none wrapping, 20px checkboxes,
+no horizontal overflow. A print stylesheet drops the chrome and breaks one
+site per page.
+
+`clearSnapshot()` runs on sign-out — the snapshot survives a reload on
+purpose, but must not survive the account that cached it.
+
+**Egress / Log Ingestion:** unchanged. The page adds no fetch of its own; it
+reuses the Dashboard's roster and one optional refresh on the existing RPC.
+
 **2026-11-03 — close the days nobody tapped out of**
 
 Measured on the live project: **382 of 3,345 employee-days** in a one-week
