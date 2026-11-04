@@ -550,3 +550,9 @@ GRANT EXECUTE ON FUNCTION public.set_shift_rule(text, time, integer) TO authenti
 REVOKE ALL ON FUNCTION public.delete_shift_rule(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.delete_shift_rule(text) FROM anon;
 GRANT EXECUTE ON FUNCTION public.delete_shift_rule(text) TO authenticated;
+-- PostgREST answers an unknown function from its in-memory schema cache
+-- without touching the database, so every RPC added above would return
+-- PGRST202 until that cache happened to refresh. Convention here since
+-- 20261015120000; 20261023070023 and 20261024090000 both missed it, which is
+-- what test/migration-conventions.test.mjs now guards.
+NOTIFY pgrst, 'reload schema';
