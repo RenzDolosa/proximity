@@ -58,9 +58,13 @@ test('no notice when nothing is missing, whatever the wording', () => {
 
 
 test('the summary row maps onto the stat cards', () => {
-  const row = { row_count: 3385, employees: 594, worked_seconds: 43315680, open_punches: 11, anomalies: 87 };
+  const row = {
+    row_count: 3385, employees: 594, worked_seconds: 43315680, open_punches: 11, anomalies: 87,
+    on_time: 2800, late_days: 497, unclassified: 88, avg_first_in_seconds: 25920, rules_configured: true,
+  };
   assert.deepEqual(toSummary(row), {
     days: 3385, employees: 594, workedSeconds: 43315680, open: 11, anomalies: 87,
+    onTime: 2800, lateDays: 497, unclassified: 88, avgFirstInSeconds: 25920, rulesConfigured: true,
   });
   // PostgREST hands a SETOF back as an array.
   assert.deepEqual(toSummary([row]), toSummary(row));
@@ -69,8 +73,22 @@ test('the summary row maps onto the stat cards', () => {
 test('a missing or empty summary reads as zeroes, not NaN', () => {
   for (const empty of [null, undefined, [], {}]) {
     const s = toSummary(empty);
-    assert.deepEqual(s, { days: 0, employees: 0, workedSeconds: 0, open: 0, anomalies: 0 });
-    assert.ok(Object.values(s).every(Number.isFinite), String(empty));
+    assert.deepEqual(s, {
+      days: 0, employees: 0, workedSeconds: 0, open: 0, anomalies: 0,
+      onTime: 0, lateDays: 0, unclassified: 0,
+      avgFirstInSeconds: null, rulesConfigured: null,
+    });
+    // The COUNTS must never be NaN — that was this assertion's original
+    // point. avgFirstInSeconds and rulesConfigured are excluded on purpose:
+    // both are deliberately nullable, because 0 is a real clock time (00:00)
+    // and `false` would claim "no shift times are configured" when the truth
+    // is that nothing was loaded. Utils/punctuality.js depends on that
+    // difference to tell its three states apart.
+    const counts = [s.days, s.employees, s.workedSeconds, s.open, s.anomalies,
+                    s.onTime, s.lateDays, s.unclassified];
+    assert.ok(counts.every(Number.isFinite), String(empty));
+    assert.equal(s.avgFirstInSeconds, null, String(empty));
+    assert.equal(s.rulesConfigured, null, String(empty));
   }
 });
 

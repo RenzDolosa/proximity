@@ -32,9 +32,16 @@ import { openConfirmModal } from '../../Components/ConfirmModal.js';
 import { panelNote } from '../../Components/PanelNote.js';
 import { showModalError } from '../../Components/Modal.js';
 import { reportError } from '../../Utils/userError.js';
+import { ShiftRulesModel, DEFAULT_DEPARTMENT } from '../../Models/ShiftRulesModel.js';
 
 let soundsCache = {}; // key -> { updated_at, size } | null, once loaded
 let loaded = false;
+
+// Shift times (20261104090000). A small list an admin edits rarely, so it
+// loads when its group is opened and is held for the life of the page.
+let shiftRules = null;
+let shiftRulesError = null;
+let shiftRulesSaving = false;
 
 // Every key is capped at MAX_FILE_SIZE_BYTES by the bucket itself, so
 // "all 6 at their individual max" is a real, meaningful ceiling here —
@@ -325,6 +332,24 @@ export async function renderSettings() {
       )}
       <div id="ss-body">${silenceStatusLoaded ? '' : 'Loading…'}</div>
     </div>`,
+
+    shifts: !isAdmin() ? '' : `
+    <div class="panel" style="padding:20px;">
+      <h3 style="margin:0 0 4px;">Shift times</h3>
+      ${panelNote(
+        'What time a shift starts, so Attendance can tell a late arrival from an early one.',
+        `<p>Until a time is set here, the Attendance page says punctuality
+         can't be measured and shows no figure. That is deliberate — a
+         guessed shift start would label people late against a time nobody
+         chose.</p>
+         <p>The default applies to every department without its own row.
+         <strong>Grace</strong> is how many minutes past the start still
+         count as on time.</p>
+         <p>Changing a time re-reads every day in the report the next time it
+         loads; it rewrites no scans and no hours.</p>`,
+      )}
+      <div id="shift-body">${shiftRules ? '' : 'Loading…'}</div>
+    </div>`,
   };
 
   // Grouped by what you came to Settings to do. "Your account" is open by
@@ -335,6 +360,11 @@ export async function renderSettings() {
       html: panels.appearance + panels.password },
     { id: 'scanning', label: 'Scanning & kiosks', hint: 'The scanners themselves, and what they play and show',
       html: panels.scanners + panels.sounds + panels.thumbs + panels.silence },
+    // Its own group rather than a fourth panel under Scanning: a shift start
+    // is a fact about the working day, not about a kiosk, and it is the
+    // Attendance report it changes.
+    { id: 'rules', label: 'Attendance rules', hint: 'Shift times, and what counts as late',
+      html: panels.shifts },
     { id: 'data', label: 'Data & maintenance', hint: 'Storage, retention jobs, and query health',
       html: panels.usage + panels.photos + panels.archival + panels.trimming + panels.queryPerf },
   ].filter((group) => group.html.trim());
@@ -499,6 +529,9 @@ export async function renderSettings() {
       showSounds ? loadSounds() : null,
       showPhotos && isAdmin() ? loadThumbStats() : null,
       isAdmin() ? loadSilenceStatus() : null,
+    ],
+    rules: () => [
+      isAdmin() ? loadShiftRules() : null,
     ],
     data: () => [
       isAdmin() ? loadUsage() : null,
@@ -1038,6 +1071,97 @@ function paintSilenceStatus() {
       </p>
     ` : `<p class="emp-meta" style="margin-top:4px;">The scheduled job hasn't run yet since this status was last checked (it runs every 15 minutes).</p>`}
   `;
+}
+
+// ---- shift times (punctuality) ----
+
+async function loadShiftRules() {
+  const { data, error } = await ShiftRulesModel.list();
+  shiftRulesError = error ? reportError(error, 'settings.shifts', "Couldn't load shift times.") : null;
+  shiftRules = error ? null : (data || []);
+  paintShiftRules();
+}
+
+function paintShiftRules() {
+  const body = $('#shift-body');
+  if (!body) return;
+  if (shiftRulesError) { body.innerHTML = `<div class="empty-state">${esc(shiftRulesError)}</div>`; return; }
+  if (!shiftRules) { body.innerHTML = 'Loading…'; return; }
+
+  const rows = shiftRules.map((r) => {
+    const isDefault = r.department === DEFAULT_DEPARTMENT;
+    return `
+      <tr>
+        <td data-label="Applies to">${isDefault
+          ? '<strong>Every department</strong><div class="sub" style="margin:0;">unless it has its own row below</div>'
+          : esc(r.department)}</td>
+        <td class="col-shrink mono" data-label="Starts">${esc(String(r.starts_at).slice(0, 5))}</td>
+        <td class="col-shrink mono" data-label="Grace">${r.grace_minutes}m</td>
+        <td class="col-shrink">
+          <button type="button" class="ghost" data-shift-del="${esc(r.department)}"
+                  ${shiftRulesSaving ? 'disabled' : ''}>Remove</button>
+        </td>
+      </tr>`;
+  }).join('');
+
+  body.innerHTML = `
+    ${shiftRules.length ? `
+      <table class="table-as-cards">
+        <thead><tr><th>Applies to</th><th class="col-shrink">Starts</th><th class="col-shrink">Grace</th><th class="col-shrink"></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`
+      : `<div class="empty-state" style="text-align:left;">No shift times set, so Attendance shows no punctuality figure. Add a default below to turn it on.</div>`}
+    <div class="filter-row" style="margin-top:12px;flex-wrap:wrap;">
+      <input type="text" id="shift-dept" class="search" placeholder="Department (blank = default)" autocomplete="off" />
+      <input type="time" id="shift-start" aria-label="Shift start time" />
+      <input type="number" id="shift-grace" min="0" max="240" step="1" value="0" style="width:92px;" aria-label="Grace minutes" />
+      <button type="button" class="primary" id="shift-save" ${shiftRulesSaving ? 'disabled' : ''}>${shiftRulesSaving ? 'Saving…' : 'Save'}</button>
+    </div>
+    <p class="emp-meta" style="margin-top:6px;">Saving a department that already has a row replaces it.</p>
+  `;
+
+  $('#shift-save').addEventListener('click', handleSaveShiftRule);
+  $$('button[data-shift-del]', body).forEach((btn) => {
+    btn.addEventListener('click', () => handleDeleteShiftRule(btn.dataset.shiftDel));
+  });
+}
+
+async function handleSaveShiftRule() {
+  const startsAt = $('#shift-start')?.value;
+  if (!startsAt) { toast('Pick a shift start time.', 'error'); return; }
+
+  shiftRulesSaving = true;
+  paintShiftRules();
+  const { error } = await ShiftRulesModel.set(
+    $('#shift-dept')?.value, startsAt, $('#shift-grace')?.value,
+  );
+  shiftRulesSaving = false;
+  if (error) { toast(reportError(error, 'settings.shifts'), 'error'); paintShiftRules(); return; }
+  toast('Shift time saved.');
+  await loadShiftRules();
+}
+
+async function handleDeleteShiftRule(department) {
+  const isDefault = department === DEFAULT_DEPARTMENT;
+  const confirmed = await openConfirmModal({
+    title: isDefault ? 'Remove the default shift time?' : `Remove the ${department} shift time?`,
+    // Removing the default is the one destructive-feeling action here: it
+    // silently switches the whole punctuality panel off rather than changing
+    // a number, so say so plainly instead of letting it look like an edit.
+    message: isDefault
+      ? 'Departments without their own time will stop being judged, and Attendance will show no punctuality figure for them.'
+      : `${department} will fall back to the default shift time.`,
+    confirmLabel: 'Remove',
+  });
+  if (!confirmed) return;
+
+  shiftRulesSaving = true;
+  paintShiftRules();
+  const { error } = await ShiftRulesModel.remove(department);
+  shiftRulesSaving = false;
+  if (error) { toast(reportError(error, 'settings.shifts'), 'error'); paintShiftRules(); return; }
+  toast('Shift time removed.');
+  await loadShiftRules();
 }
 
 // Client-side validation mirrors ResetPasswordModal.js's (min. 6 chars) —
