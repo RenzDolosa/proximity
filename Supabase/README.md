@@ -482,6 +482,55 @@ an admin swaps it out.
     ones. The report surfaces both as `open_punch`/`anomaly` rather than
     hiding them. Expanding `scan_logs` also grows with an employee's total
     history — the scheduled archival job on the roadmap keeps that bounded.
+- **`get_open_punch_closures(p_from date, p_to date, p_tz text default 'Asia/Manila', p_limit integer default 500, p_offset integer default 0)`**
+  — added 2026-11-03 (`20261103120000_close_open_punches.sql`), backs the
+  review queue reached by clicking Attendance's "No OUT yet" figure
+  (`JS/Components/OpenPunchModal.js` → `JS/Models/AttendanceModel.js#openClosures`).
+  One row per IN with no following OUT: `employee_id`, `employee_code`,
+  `full_name`, `department`, `work_date`, `open_in_at`, `scanner_id`,
+  `proposed_out_at`, `blocked_reason`. Read-only.
+  - **The open test is `next_dir is distinct from 'out'`** — the same test
+    `get_attendance_report()` uses for `open_punch`, deliberately, so the
+    queue and the report can never disagree about which days are open.
+  - **`proposed_out_at` is the site's own last scan that day**, strictly after
+    the open IN, read from `scan_events` rather than `scan_logs`: `scan_logs`
+    holds only this employee's scans, and the point of the rule is to use the
+    **site** as evidence. It therefore cannot land in the future, and it is
+    explainable to the person whose hours it changes.
+  - **`blocked_reason` is returned rather than the row being filtered out**
+    (`'still today'`, `'no later scan at this scanner'`). A day that cannot be
+    closed is more useful visible with its reason than absent — absent reads
+    as "already dealt with".
+  - Same bounds and gate as the report: 31-day cap, `p_tz` must exist in
+    `pg_timezone_names`, `is_admin_or_manager()`. `p_limit` clamped to
+    1..1000.
+- **`close_open_punches(p_closures jsonb, p_tz text default 'Asia/Manila')`**
+  — the write half, admin-or-manager, audit-logged per day as
+  `attendance_day_closed`. Returns one row per submitted pair:
+  `employee_id`, `work_date`, `closed_at`, `outcome`.
+  - **It takes only `(employee_id, work_date)` pairs and recomputes the
+    closing time server-side.** A client-supplied timestamp would be a route
+    to writing arbitrary hours into payroll through a UI that looks reviewed.
+  - **Idempotent for free, from machinery already here.** The synthetic OUT
+    carries `request_id = md5(employee_id || ':' || work_date)::uuid`, so a
+    re-run collides with `scan_events_request_id_key` (`20261023070023`) and
+    is reported as `'skipped: already closed'` rather than writing a second
+    OUT. The `unique_violation` is caught per row, so one collision does not
+    abort the batch.
+  - **Every skip is named, never silent**: `'skipped: still today'` (the
+    person may still be on site), `'skipped: no longer open'`,
+    `'skipped: no later scan at this scanner'`, `'skipped: already closed'`.
+    "Closed 41" with six rows quietly doing nothing is how a tool loses
+    trust — or worse, how someone comes to believe those days are fixed.
+  - **Openness is re-checked at write time, not taken on trust from the
+    preview**: the queue may have sat open in a browser tab while someone else
+    fixed the same day.
+  - The written row is a real `scan_events` insert (`result = 'matched'`), so
+    `trg_append_scan_log` appends it to `scan_logs` and
+    `20261024090000`'s re-sort fixes the parity skew described in the change
+    log entry below. Marked `auto_closed: true` and
+    `close_rule: 'site_last_scan'` in `raw_payload`, with `closed_by =
+    auth.uid()`. Batch capped at 500 pairs per call.
 - **Punctuality columns on the two attendance RPCs** — added 2026-11-04
   (`20261104090000_punctuality.sql`). Both functions were dropped and
   recreated, because adding a column to a `RETURNS TABLE` needs DROP then
@@ -1296,6 +1345,59 @@ editors.
   mobile block *before* the rules it overrides has silently killed three
   previous overrides in this project (stat cards, `.filter-row`, safe-area
   padding) — same specificity resolves by source order.
+
+**2026-11-03 — close the days nobody tapped out of (`20261103120000_close_open_punches.sql`, not applied as of 2026-11-04)**
+
+*Written up 2026-11-04, after the fact: PR #52 shipped this migration without
+a change-log entry here, and the gap was noticed while documenting
+`20261104090000`. The migration itself is unchanged by this entry. The applied
+state above is what was true when this was written and was not re-verified —
+see "How to tell what is actually applied" above; merged to `main` is not the
+same as applied to the database.*
+
+Measured on the live project 2026-11-03: **382 of 3,345 employee-days** in a
+one-week window carry `open_punch`. Those days have no computable hours, so HR
+either guesses them or chases them by hand.
+
+- **The finding that matters more than 382 bad rows.** Direction is parity over
+  an employee's *whole history* (`employees.scan_parity_count`,
+  `20261001040000`). A missing OUT leaves that employee one step out for
+  **every scan after it**, so the next morning's arrival is stored as an `out`.
+  `get_attendance_report()` builds its days with `where s.dir = 'in'` — so a
+  day whose first scan is mislabelled is **dropped from the report entirely**,
+  not merely under-counted. One missed tap-out can hide every subsequent day
+  for that person.
+- Closing the gap re-derives the rest, because `20261024090000` made the
+  trigger re-sort and re-label by `scanned_at`. **That migration was the
+  prerequisite for this one**, and it is why this is a repair rather than a
+  cosmetic tidy-up.
+- Worth running against production to see how far the skew has spread:
+
+  ```sql
+  select count(*) from public.employees e
+   cross join lateral jsonb_array_elements(e.scan_logs) with ordinality as l(elem, ord)
+   where (l.ord % 2 = 1) <> (l.elem->>'direction' = 'in');
+  ```
+
+- **The closing rule, chosen by the operator:** close at the last scan recorded
+  at the **same scanner on the same day**. Evidence from the site rather than
+  an assumption about shifts.
+- See `get_open_punch_closures()` / `close_open_punches()` in the RPC section
+  above for the write path's design — the server-side recompute, the
+  deterministic `request_id` that makes a re-run collide instead of
+  double-inserting, and why every skip is named rather than silent.
+- **Cost:** one read when the queue is opened, one write for a whole batch.
+  Nothing polls. Egress and log ingestion unchanged in steady state.
+- Also shipped in PR #52 but needing no migration: the evacuation muster list
+  (`JS/Features/Muster/MusterPage.js`), which renders from a `localStorage`
+  snapshot of the roster `DashboardPage.load()` already downloads — measured
+  64 KB for 361 people. It makes no request of its own, which is the entire
+  point: a fire or a power cut is often *why* a building is being evacuated.
+- This migration **does** carry `NOTIFY pgrst, 'reload schema'`, and reading it
+  for this write-up is what revealed that `20261104090000`/`20261104093000`
+  did not. `20261023070023` and `20261024090000` also skipped it, both already
+  applied. From 2026-11-04 the rule is enforced by
+  `test/migration-conventions.test.mjs`.
 
 **2026-10-08 — attendance totals and ordering (`20261008160000_attendance_summary_and_order.sql`, applied; confirmed 2026-10-24)**
 
