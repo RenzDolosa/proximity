@@ -14,7 +14,8 @@
 import { $ } from '../../Utils/dom.js';
 import { esc, fmtTime } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
-import { canViewAttendance } from '../../Core/state.js';
+import { canViewAttendance, isAdminOrManager } from '../../Core/state.js';
+import { openOpenPunchModal } from '../../Components/OpenPunchModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
 import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
 import { AttendanceModel } from '../../Models/AttendanceModel.js';
@@ -180,12 +181,15 @@ function paintBody() {
   // they move with the filters and always match the pager's count. If the
   // totals request failed, say so rather than printing zeroes that look like
   // real figures — a wrong number here is worse than a missing one.
+  // Mirrors close_open_punches()'s own is_admin_or_manager() gate. The RPC is
+  // the boundary; this only decides whether to offer the card as a way in.
+  const canEdit = isAdminOrManager();
   const statsHTML = totals ? `
     <div class="stat-grid" style="margin-bottom:14px;">
       <div class="stat-card accent" title="Distinct employees matching the current filters."><div class="stat-value">${totals.employees.toLocaleString()}</div><div class="stat-label">Employees</div></div>
       <div class="stat-card" title="One row per employee per day, so someone working several days contributes several rows."><div class="stat-value">${totals.days.toLocaleString()}</div><div class="stat-label">Employee-days</div></div>
       <div class="stat-card good" title="Sum of every IN&#8594;OUT gap. Breaks scanned out and back in are excluded, and a day with no OUT yet contributes 0 until it's closed."><div class="stat-value">${esc(fmtDuration(totals.workedSeconds))}</div><div class="stat-label">Total time on site</div></div>
-      <div class="stat-card warn" title="Days with an IN and no following OUT. Normal for someone still on shift; otherwise usually a missed OUT scan."><div class="stat-value">${totals.open.toLocaleString()}</div><div class="stat-label">No OUT yet</div></div>
+      <div class="stat-card warn${totals.open && canEdit ? ' clickable' : ''}"${totals.open && canEdit ? ' id="att-open-review" role="button" tabindex="0"' : ''} title="Days with an IN and no following OUT. Normal for someone still on shift; otherwise usually a missed OUT scan.${totals.open && canEdit ? ' Click to review and close them.' : ''}"><div class="stat-value">${totals.open.toLocaleString()}</div><div class="stat-label">No OUT yet</div></div>
       <div class="stat-card bad" title="Days where an OUT is timestamped before its IN — almost always a backdated offline sync landing out of order."><div class="stat-value">${totals.anomalies.toLocaleString()}</div><div class="stat-label">Check times</div></div>
     </div>`
     : `<div class="empty-state" style="margin:0 0 12px;text-align:left;">Totals are unavailable right now. The rows below are still correct.</div>`;
@@ -195,6 +199,18 @@ function paintBody() {
     <div class="table-scroll"><div id="att-table-wrap"></div></div>
     <div id="att-pagination"></div>
   `;
+
+  // The queue is reachable from the number that describes it, rather than
+  // from a toolbar button competing with Run report and Export. Only opened
+  // on demand, so it costs one request when someone actually looks.
+  const reviewCard = $('#att-open-review');
+  if (reviewCard) {
+    const open = () => openOpenPunchModal({ from: range.from, to: range.to }, () => load({ force: true }));
+    reviewCard.addEventListener('click', open);
+    reviewCard.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+  }
 
   paintTable();
 }

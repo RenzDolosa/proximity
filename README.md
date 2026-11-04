@@ -632,6 +632,62 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-03 — close the days nobody tapped out of**
+
+Measured on the live project: **382 of 3,345 employee-days** in a one-week
+window carry `open_punch`. Those days have no computable hours.
+
+**It is worse than 382 bad rows.** Direction is parity over an employee's
+whole history (`employees.scan_parity_count`). A missing OUT leaves that
+person's parity one step out for *every scan after it*, so the next
+morning's arrival is stored as an OUT — and `get_attendance_report()` builds
+its days with `where s.dir = 'in'`, so a day whose first scan is mislabelled
+is **dropped from the report entirely**, not merely under-counted. One
+missed tap-out can hide every subsequent day for that person. Closing the
+gap re-derives the rest, because 20261024090000 made the trigger re-sort and
+re-label by time — which is why that fix had to come first.
+
+**The rule, chosen by the operator: close at the last scan recorded at the
+same scanner that day.** Evidence from the site rather than an assumption
+about shifts; it can never land in the future, and it is explainable to the
+person whose hours it changes.
+
+`20261103120000_close_open_punches.sql` adds a preview RPC and a write RPC.
+Reachable by clicking the "No OUT yet" figure on Attendance — the number
+that describes the problem is the way into fixing it.
+
+Things worth knowing about the design:
+
+- **The write takes no timestamp.** Only `(employee_id, work_date)`; the RPC
+  recomputes the closing time itself. A client-supplied time would be a route
+  to writing arbitrary hours into payroll through a UI that looks reviewed.
+- **Today is never closed.** The person may still be on site.
+- **Idempotent for free.** The synthetic OUT carries a deterministic
+  `request_id` of `md5(employee_id:work_date)`, so re-running collides with
+  `scan_events_request_id_key` (20261023070023) rather than writing a second
+  OUT.
+- **Blocked rows stay on screen with their reason**, and every skip is
+  counted and named in the result. "Closed 41" with six silently doing
+  nothing is how a tool loses trust.
+- **Implausible proposals are flagged, not blocked.** A scanner whose last
+  scan is hours after someone went home is this rule's failure mode; over 12
+  hours gets a marker and a human's eye. Genuine long days exist.
+- Every close is written to the audit log.
+
+**Egress / Log Ingestion:** one read when the queue is opened, one write for
+a whole batch. Nothing polls.
+
+**Worth checking on your data.** If parity skew is real, some employees will
+have *fewer* attendance rows than days they actually worked. This counts
+scan-log entries whose stored direction disagrees with strict alternation:
+
+```sql
+select count(*) from public.employees e
+ cross join lateral jsonb_array_elements(e.scan_logs) with ordinality as l(elem, ord)
+ where (l.ord % 2 = 1) <> (l.elem->>'direction' = 'in');
+```
+
+
 **2026-11-03 — the sound upload actually gets smaller, and the bar tells the truth**
 
 Follow-up to the entry below, which did not go far enough.

@@ -41,6 +41,28 @@ export const AttendanceModel = {
   async departments({ from, to }) {
     return supabase.rpc('get_attendance_departments', rangeArgs(from, to));
   },
+
+  // The open-day review queue: every IN with no OUT in the range, each with
+  // the time it would be closed at and why it cannot be. One request, opened
+  // on demand — nothing polls this.
+  async openClosures({ from, to, limit = 500, offset = 0 }) {
+    return supabase.rpc('get_open_punch_closures', {
+      ...rangeArgs(from, to),
+      p_limit: limit,
+      p_offset: offset,
+    });
+  },
+
+  // Writes the missing OUT scans. Sends only (employee_id, work_date): the
+  // RPC recomputes the closing time itself, because a client-supplied
+  // timestamp would be a route to writing arbitrary hours into payroll
+  // through a UI that looks reviewed.
+  async closeOpenPunches(closures) {
+    const args = { p_closures: closures };
+    const tz = browserTimeZone();
+    if (tz) args.p_tz = tz;
+    return supabase.rpc('close_open_punches', args);
+  },
 };
 
 function rangeArgs(from, to) {
