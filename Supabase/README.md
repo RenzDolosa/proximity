@@ -1277,13 +1277,64 @@ existing one), `pg_indexes` for an index, `pg_db_role_setting` for an
 anything applied through it is recorded properly. The dashboard editor never
 will — if you use it, insert the row by hand afterwards.
 
+### How to connect for a manual apply (2026-11-05)
+
+**`db.kjwttqmbcjvkivgmwuev.supabase.co` does not work from an IPv4-only
+network, and never will.** Supabase removed dedicated IPv4 from direct
+connections, so that name has an AAAA record and no A record; the dashboard's
+own Connect panel says "Direct connections use IPv6 by default" and offers a
+*paid* IPv4 add-on. psql fails with `could not translate host name ... Name or
+service not known`, which reads as a typo or a deleted project and is neither.
+`Apply-Migration.ps1` now detects this before connecting.
+
+Use the **session-mode pooler**, which has IPv4 and costs nothing:
+
+```powershell
+$env:SUPABASE_DB_URL = ''   # takes precedence if set — clear it first
+$env:PGHOST     = 'aws-0-ap-northeast-1.pooler.supabase.com'
+$env:PGPORT     = '5432'
+$env:PGUSER     = 'postgres.kjwttqmbcjvkivgmwuev'
+$env:PGDATABASE = 'postgres'
+$env:PGPASSWORD = '<password>'   # literal; the PG* route needs no percent-encoding
+```
+
+Three things differ from the direct connection, and all three are required:
+a different **host**, the username **`postgres.<ref>`** rather than
+`postgres`, and port **5432 not 6543** — 6543 on that same host is transaction
+mode, which hands back a different backend per transaction and is not safe for
+`--single-transaction` DDL.
+
+The region is **ap-northeast-1**, which is not guessable and was not in the
+Connect panel the first few times it was looked for. It was established by
+resolving the direct host's AAAA record (`2406:da14:…`) and matching it
+against AWS's published `ip-ranges.json`, then confirmed by connecting to the
+pooler with a deliberately wrong password: `aws-0-ap-northeast-1` rejected the
+password (tenant exists), `aws-1-ap-northeast-1` answered
+`ENOTFOUND tenant/user` (tenant is elsewhere). Neither the host nor the
+username is a secret — the project ref is already public in
+`JS/Core/supabaseClient.js`.
+
+Smoke-test the route without applying anything:
+
+```powershell
+& "C:\Program Files\PostgreSQL\17\bin\psql.exe" -w -c "select current_user, inet_server_addr()"
+```
+
+A row means the route works. `password authentication failed` means the route
+works and the credential is wrong — a different problem, and the reason this
+is worth testing separately.
+
+**The "NOT applied — apply by hand" labels below are authoring notes, true on
+the day each entry was written and not maintained since.** Several of them are
+long applied. Probe before believing one.
+
 **The "NOT applied — apply by hand" labels below are authoring notes, true on
 the day each entry was written and not maintained since.** Several of them are
 long applied. Probe before believing one.
 
 ### Change log (most recent first)
 
-**2026-11-04 — punctuality, and card sharing between sites (`20261104090000_punctuality.sql` + `20261104093000_card_sharing_signals.sql`, NOT applied)**
+**2026-11-04 — punctuality, and card sharing between sites (`20261104090000_punctuality.sql` + `20261104093000_card_sharing_signals.sql`, applied 2026-11-05; verified)**
 
 Two features, chosen for costing nothing to run. Both add **zero recurring
 requests**: punctuality rides on the two RPCs the Attendance page already
@@ -1345,6 +1396,28 @@ editors.
   mobile block *before* the rules it overrides has silently killed three
   previous overrides in this project (stat cards, `.filter-row`, safe-area
   padding) — same specificity resolves by source order.
+
+**Applied 2026-11-05, through the dashboard SQL Editor rather than
+`Apply-Migration.ps1`.** `db.<ref>.supabase.co` is IPv6-only since Supabase
+removed dedicated IPv4 from direct connections, and the applying machine has
+no global IPv6 address, so psql could not resolve it at all — see the
+2026-11-04 script entry above, which now detects exactly that and points at
+the session-mode pooler. Each file was wrapped in `BEGIN`/`COMMIT` by hand to
+reproduce the script's `--single-transaction` guarantee, and the
+`schema_migrations` rows were inserted afterwards because **the SQL Editor
+writes none** — the same gap that made five migrations read as "MISSING" on
+2026-10-24.
+
+Re-running either file afterwards raises `42P07 relation "shift_rules"
+already exists` / `42701 column "site" ... already exists`. Those are what an
+already-applied migration says on a second run, not a failure of the first:
+neither file is idempotent, and the `BEGIN`/`COMMIT` wrapper meant the failed
+re-runs committed nothing.
+
+Verified against the live project: both tables, all eleven functions,
+`scanners.site`, `late` and `first_in_offset_minutes` on
+`get_attendance_report()`, the `trg_scan_events_detect_card_sharing` trigger,
+and both tracking rows.
 
 **2026-11-03 — close the days nobody tapped out of (`20261103120000_close_open_punches.sql`, not applied as of 2026-11-04)**
 
