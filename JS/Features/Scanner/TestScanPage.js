@@ -12,11 +12,13 @@
 //    what it actually transmitted. The keystrokes are already arriving in this
 //    browser; Utils/readerDiagnostics.js just reads them. No request.
 //
-// 2. COMMISSIONING MODE. Every test scan is otherwise its own
-//    test_scan_proximity_code_compact request, so checking a stack of 50 cards
-//    costs 50 requests and 50 log events. Resolving from the offline cache
-//    instead costs one sync and then nothing — and it is the only way to
-//    rehearse the offline path before trusting it at a door.
+// 2. COMMISSIONING MODE, on by default since 2026-11-06. Every test scan is
+//    otherwise its own test_scan_proximity_code_compact request, so checking a
+//    stack of 50 cards costs 50 requests and 50 log events. Resolving from the
+//    offline cache instead costs one sync and then nothing — and it is the
+//    only way to rehearse the offline path before trusting it at a door.
+//    Default-on because almost every card tried here is already in that cache:
+//    the old default paid, per card, to re-fetch what the browser already had.
 import { $, $$ } from '../../Utils/dom.js';
 import { esc } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
@@ -45,13 +47,39 @@ const AUTO_SUBMIT_DELAY_MS = 200;
 // than once a second.
 const CACHE_SCAN_COOLDOWN_MS = 250;
 
-let commissioning = false;
+// ON BY DEFAULT since 2026-11-06. The server path costs one
+// test_scan_proximity_code_compact request and one log event PER SCAN, and
+// almost every card tried here is already sitting in the offline cache — so
+// the default was paying, per card, to re-fetch something this browser
+// already had. Opting IN to the cheap path meant the expensive one ran
+// whenever nobody remembered to tick a box.
+//
+// Flipping it costs nothing to open the page: the mount reads the existing
+// cache without a request, and a sync only happens on the first scan, only
+// when nothing is cached at all. The server path is still one tick away and
+// the note under the toggle says which source answered.
+let commissioning = true;
 let cacheRows = [];
 let cacheMeta = null;
 let batch = [];
 
+// Per page visit. Without it, a browser that genuinely cannot sync would
+// retry the roster on every scan — making the cheap mode cost more than the
+// server path it replaces, which is the one thing it must never do.
+let cacheSyncAttempted = false;
+
+// Whether the no-request IndexedDB read has come back yet. Only matters
+// because commissioning is now the mode you land in: the note would
+// otherwise render 'No cached cards yet' for the few milliseconds before the
+// read resolves, which is a confident claim made while nothing is known --
+// the same mistake as fmtAge(null) reading 'just synced'.
+let cacheRead = false;
+
 export async function renderTestScan() {
   const content = $('#content');
+  // A fresh visit is a fair retry: if the last one failed to sync, the
+  // network may since have come back.
+  cacheSyncAttempted = false;
   content.innerHTML = `
     <div class="test-scan-wrap">
       <div class="panel test-scan-panel">
@@ -63,7 +91,12 @@ export async function renderTestScan() {
         </div>
         <div class="ts-mode">
           <label class="ts-mode-toggle">
-            <input type="checkbox" id="ts-commission" />
+            <!-- Bound to the variable, not hardcoded: it lives at module
+                 scope and survives navigating away and back, so a hardcoded
+                 attribute would show the wrong state the moment anyone
+                 toggled it and left the page. (No backticks in here — this
+                 comment is inside a template literal.) -->
+            <input type="checkbox" id="ts-commission" ${commissioning ? 'checked' : ''} />
             <span>Commissioning mode</span>
           </label>
           <span class="emp-meta" id="ts-mode-note"></span>
@@ -93,9 +126,9 @@ export async function renderTestScan() {
     .then((meta) => {
       cacheRows = meta?.rows || [];
       cacheMeta = meta || null;
-      paintModeNote();
     })
-    .catch(() => {});
+    .catch(() => {})
+    .finally(() => { cacheRead = true; paintModeNote(); });
 
   paintModeNote();
   paintBatch();
@@ -199,6 +232,43 @@ async function scanOnServer(proximityCode) {
 async function scanFromCache(proximityCode, diag) {
   const resultWrap = $('#ts-result');
 
+  // THE HAZARD OF MAKING THIS THE DEFAULT. classifyCachedScan() against an
+  // empty roster returns "unmatched" — it cannot distinguish "this card does
+  // not exist" from "this browser has not synced". Before the flip you only
+  // reached here by ticking a box, which implied you knew what the cache was;
+  // now the page can be opened on a browser that has never synced, and a good
+  // card would be reported as a bad one. A false negative at a reader sends
+  // someone to replace a working card, so it is worth more than the one
+  // request a sync costs.
+  if (!cacheRows.length && !cacheSyncAttempted) {
+    cacheSyncAttempted = true;
+    await ensureCache();
+  }
+  // Still nothing: the sync failed, or the roster really is empty. Say so
+  // rather than inventing a verdict. No automatic fall back to the server —
+  // the point of the default is that requests are opted into, so the one
+  // request available here is a button.
+  if (!cacheRows.length) {
+    if (resultWrap) {
+      resultWrap.innerHTML = `<div class="result-card unmatched">
+        <strong style="color:var(--warn)">No cached cards — can't resolve offline</strong>
+        <div class="emp-meta">Commissioning answers from the offline cache and this browser has none, so nothing can be said about this code. Untick the mode to use the server for every scan, or check just this one:</div>
+        <button type="button" class="ghost" id="ts-cache-fallback">Check <span class="mono">${esc(proximityCode)}</span> on the server</button>
+      </div>`;
+      const btn = $('#ts-cache-fallback');
+      if (btn) {
+        btn.addEventListener('click', async () => {
+          await scanOnServer(proximityCode);
+          // scanOnServer replaces #ts-result, so this button is now detached
+          // and focus is on a dead node. Hand it back to the reader — same
+          // reason the health panel refuses to take focus at all.
+          $('#ts-code')?.focus();
+        });
+      }
+    }
+    return;
+  }
+
   // A read the kiosk would never send is a READER fault, not a card result,
   // and it is recorded as such — otherwise one loose cable marks a whole
   // stack of good cards bad.
@@ -242,6 +312,7 @@ async function ensureCache() {
   const note = $('#ts-mode-note');
   if (note) note.textContent = 'Loading cached cards…';
   const meta = await OfflineScanModel.getCacheMeta().catch(() => null);
+  cacheRead = true;
   if (meta?.rows?.length) {
     cacheRows = meta.rows;
     cacheMeta = meta;
@@ -269,16 +340,23 @@ function paintModeNote() {
   const note = $('#ts-mode-note');
   if (!note) return;
   if (!commissioning) {
-    note.textContent = 'Each scan is one request, checked against the server.';
+    // Spelled out, because this is now the opted-INTO path rather than the
+    // one you land on. Log events are named alongside requests because they
+    // bill separately and per event, so a stack of cards is expensive in two
+    // ways, not one.
+    note.textContent = 'Each scan is one request and one log event, checked against the server.';
     return;
   }
+  if (!cacheRead) { note.textContent = 'Reading cached cards…'; return; }
   // The age is stated, not just the count. A cache answers from the roster as
   // it was at the last sync, so how old it is IS the caveat — a reader of
   // "727 cached cards" with no age would reasonably assume it was current.
   const age = cacheMeta?.syncedAt ? fmtCacheAge(cacheMeta.ageMs) : null;
   note.innerHTML = cacheRows.length
     ? `Resolved from ${cacheRows.length.toLocaleString()} cached cards${age ? `, synced ${esc(age)}` : ''} — no requests. <strong>Cached data can be stale</strong>; use Verify on anything surprising.`
-    : 'No cached cards yet.';
+    // Says what will happen, since the mode is now on without anyone asking
+    // for it: one sync, on the first scan, and not before.
+    : 'No cached cards yet — the first scan will sync them once, then cost nothing.';
 }
 
 // Phrased as a point in time ("synced 2h ago") where Utils/scannerHealth.js's

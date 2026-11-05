@@ -485,3 +485,81 @@ test('the cached path uses the same classifier the live kiosk uses offline', () 
   assert.ok(page.includes('classifyCachedScan('),
     'rehearsing the offline path means using its own classifier, not a lookalike');
 });
+
+// ---- commissioning is the default (2026-11-06) ----
+//
+// Reported from testing: the mode had to be ticked by hand, so the expensive
+// path ran whenever nobody remembered. The server path is one request AND one
+// log event per scan, and almost every card tried here is already cached, so
+// the old default paid per card to re-fetch what the browser already had.
+
+test('commissioning mode is on without anyone ticking it', () => {
+  const page = src('Features/Scanner/TestScanPage.js');
+  assert.ok(/^let commissioning = true;$/m.test(page),
+    'the cheap path must be the one you land on, not the one you opt into');
+});
+
+test('the toggle shows the state it is actually in', () => {
+  const page = src('Features/Scanner/TestScanPage.js');
+  const input = page.match(/<input type="checkbox" id="ts-commission"[^>]*>/)[0];
+  assert.ok(/\$\{commissioning \? 'checked' : ''\}/.test(input),
+    'a hardcoded attribute desyncs from the module-scope variable, which '
+    + 'survives navigating away and back');
+});
+
+// The hazard the default introduces, and the reason this is the longest guard
+// in the file. classifyCachedScan() against an empty roster returns
+// "unmatched" — indistinguishable from "this browser never synced". Before
+// the flip you only got here by ticking a box; now a good card could be
+// reported bad on a browser that has no cache.
+test('an empty roster is never classified as a card result', () => {
+  const page = src('Features/Scanner/TestScanPage.js');
+  const fn = page.slice(page.indexOf('async function scanFromCache'),
+    page.indexOf('async function verifyOnServer'));
+  const guard = fn.indexOf('if (!cacheRows.length)');
+  // The CALL, not a mention: the guard's own comment explains itself by
+  // naming classifyCachedScan(), and matching the bare name finds the comment
+  // first and passes for the wrong reason. Same false positive the
+  // migration-convention tests hit on 2026-11-06.
+  const classify = fn.indexOf('const data = classifyCachedScan(');
+  assert.ok(guard !== -1, 'the cached path must check it has a roster at all');
+  assert.ok(guard < classify,
+    'the empty-roster guard must come BEFORE the classifier, or a good card '
+    + 'reads as unmatched on a browser that has simply never synced');
+});
+
+test('a browser that cannot sync is told so, not fed a verdict', () => {
+  const page = src('Features/Scanner/TestScanPage.js');
+  const fn = page.slice(page.indexOf('async function scanFromCache'),
+    page.indexOf('async function verifyOnServer'));
+  assert.ok(/No cached cards/.test(fn), 'the dead end must be named on screen');
+  assert.ok(fn.indexOf('ts-cache-fallback') < fn.indexOf('const data = classifyCachedScan('),
+    'and must offer the single server check as a button — opted into, not '
+    + 'spent automatically');
+});
+
+// The flag, not just the call. Retrying the roster on every scan would make
+// the default cost MORE than the server path it replaces, which is the one
+// thing it must never do.
+test('a failed sync is attempted once per visit, not once per scan', () => {
+  const page = src('Features/Scanner/TestScanPage.js');
+  assert.ok(/let cacheSyncAttempted = false;/.test(page), 'the guard must exist');
+  const fn = page.slice(page.indexOf('async function scanFromCache'),
+    page.indexOf('async function verifyOnServer'));
+  assert.ok(/if \(!cacheRows\.length && !cacheSyncAttempted\)/.test(fn),
+    'the sync must be gated on the flag as well as on the roster being empty');
+  assert.ok(fn.indexOf('cacheSyncAttempted = true;') < fn.indexOf('await ensureCache()'),
+    'set before awaiting, or two scans in flight both trigger a sync');
+  assert.ok(/cacheSyncAttempted = false;/.test(page.slice(page.indexOf('export async function renderTestScan'))),
+    'a fresh visit is a fair retry — the network may have come back');
+});
+
+test('the page no longer promises a live lookup it does not do by default', () => {
+  const router = readFileSync(
+    fileURLToPath(new URL('../JS/Core/router.js', import.meta.url)), 'utf8',
+  );
+  const line = router.split('\n').find((l) => l.trim().startsWith('scanner:'));
+  assert.ok(!/live directory/.test(line),
+    'the default answer comes from the offline cache, so the subtitle must '
+    + 'not claim the live directory');
+});

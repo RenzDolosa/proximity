@@ -693,13 +693,39 @@ The decision rules are **not duplicated**. `readRejection()` in
 is usable; this module explains a read and adds the timing nothing needed to
 look at before.
 
-**Commissioning mode (Test Scan).** Every test scan was otherwise its own
-`test_scan_proximity_code_compact` request, so checking a stack of 50 cards
-cost 50 requests and 50 log events. This resolves from the offline cache
-instead — one sync when nothing is cached, then nothing — using
-`classifyCachedScan()`, the same classifier the live kiosk uses offline, so it
-rehearses the real offline path rather than a lookalike. That path could not
-be rehearsed at all before.
+**Commissioning mode (Test Scan), on by default.** Every test scan was
+otherwise its own `test_scan_proximity_code_compact` request, so checking a
+stack of 50 cards cost 50 requests and 50 log events. This resolves from the
+offline cache instead — one sync when nothing is cached, then nothing —
+using `classifyCachedScan()`, the same classifier the live kiosk uses offline,
+so it rehearses the real offline path rather than a lookalike. That path could
+not be rehearsed at all before.
+
+**It defaults to on**, because almost every card tried here is already in that
+cache: opting *in* to the cheap path meant the expensive one ran whenever
+nobody remembered to tick a box, paying per card to re-fetch what the browser
+already had. Opening the page still costs nothing — the mount reads
+IndexedDB, never syncs — and a sync happens only on the first scan, and only
+when nothing is cached at all. The server path is one tick away, and the note
+under the toggle now names its price: *one request and one log event per
+scan*.
+
+**The hazard the default introduces, and the guard for it.**
+`classifyCachedScan()` against an empty roster returns `unmatched`, which is
+indistinguishable from "this browser has never synced". While the mode was
+opt-in you only reached that path by ticking a box, so you knew what the cache
+was; as a default, a good card could be reported bad on a fresh browser — and
+a false negative at a reader sends someone to replace a working card. So the
+cached path refuses to classify without a roster: it says so, and offers a
+button to check that one code against the server. Nothing falls back to the
+server automatically, because the point of the default is that requests are
+opted into. The sync is attempted **once per visit**, not once per scan, or a
+browser that cannot reach Supabase would make the cheap mode cost more than
+the path it replaces.
+
+The page subtitle no longer claims "against the live directory" — by default
+it is not live. The mode note states the source and the cache’s age for the
+scan actually in front of you, which a page subtitle cannot.
 
 **The trade is stated in the UI, not buried:** a cache answers from the roster
 as it was at the last sync, so a card revoked five minutes ago still reads as
@@ -737,7 +763,7 @@ was fresh, at exactly the moment nothing was known about it. Third appearance
 of that coercion trap in this project, after the 0% progress bar and the 00:00
 average arrival; both copies now check for null *before* coercing.
 
-**Tests:** 37 added, suite at **332**. Includes source assertions that none of
+**Tests:** 52 added, suite at **347**. Includes source assertions that none of
 the three new modules can reach the network, and that commissioning syncs at
 most once. Verified in a browser at 375px: no horizontal overflow, and the
 mobile overrides apply — checked by computed style, not by eye, because a
