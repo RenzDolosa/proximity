@@ -1277,6 +1277,57 @@ existing one), `pg_indexes` for an index, `pg_db_role_setting` for an
 anything applied through it is recorded properly. The dashboard editor never
 will — if you use it, insert the row by hand afterwards.
 
+### How to connect for a manual apply (2026-11-05)
+
+**`db.kjwttqmbcjvkivgmwuev.supabase.co` does not work from an IPv4-only
+network, and never will.** Supabase removed dedicated IPv4 from direct
+connections, so that name has an AAAA record and no A record; the dashboard's
+own Connect panel says "Direct connections use IPv6 by default" and offers a
+*paid* IPv4 add-on. psql fails with `could not translate host name ... Name or
+service not known`, which reads as a typo or a deleted project and is neither.
+`Apply-Migration.ps1` now detects this before connecting.
+
+Use the **session-mode pooler**, which has IPv4 and costs nothing:
+
+```powershell
+$env:SUPABASE_DB_URL = ''   # takes precedence if set — clear it first
+$env:PGHOST     = 'aws-0-ap-northeast-1.pooler.supabase.com'
+$env:PGPORT     = '5432'
+$env:PGUSER     = 'postgres.kjwttqmbcjvkivgmwuev'
+$env:PGDATABASE = 'postgres'
+$env:PGPASSWORD = '<password>'   # literal; the PG* route needs no percent-encoding
+```
+
+Three things differ from the direct connection, and all three are required:
+a different **host**, the username **`postgres.<ref>`** rather than
+`postgres`, and port **5432 not 6543** — 6543 on that same host is transaction
+mode, which hands back a different backend per transaction and is not safe for
+`--single-transaction` DDL.
+
+The region is **ap-northeast-1**, which is not guessable and was not in the
+Connect panel the first few times it was looked for. It was established by
+resolving the direct host's AAAA record (`2406:da14:…`) and matching it
+against AWS's published `ip-ranges.json`, then confirmed by connecting to the
+pooler with a deliberately wrong password: `aws-0-ap-northeast-1` rejected the
+password (tenant exists), `aws-1-ap-northeast-1` answered
+`ENOTFOUND tenant/user` (tenant is elsewhere). Neither the host nor the
+username is a secret — the project ref is already public in
+`JS/Core/supabaseClient.js`.
+
+Smoke-test the route without applying anything:
+
+```powershell
+& "C:\Program Files\PostgreSQL\17\bin\psql.exe" -w -c "select current_user, inet_server_addr()"
+```
+
+A row means the route works. `password authentication failed` means the route
+works and the credential is wrong — a different problem, and the reason this
+is worth testing separately.
+
+**The "NOT applied — apply by hand" labels below are authoring notes, true on
+the day each entry was written and not maintained since.** Several of them are
+long applied. Probe before believing one.
+
 **The "NOT applied — apply by hand" labels below are authoring notes, true on
 the day each entry was written and not maintained since.** Several of them are
 long applied. Probe before believing one.
