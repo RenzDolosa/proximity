@@ -355,6 +355,48 @@ test('commissioning mode syncs the cache at most once', () => {
     'an existing cache must short-circuit before any sync');
 });
 
+// THE REGRESSION THIS EXISTS FOR. The first version of the health panel
+// toggled on click, and clicking a button focuses it — which is exactly what
+// canReclaimFocus() refuses to recover from, since activeElement was then
+// neither the input nor the body. The focus watchdog correctly reported
+// "Scanner not listening" and the reader stopped working until the operator
+// clicked the box again. A diagnostic must not break what it diagnoses.
+test('opening the health panel cannot steal focus from the scan input', () => {
+  const scanner = src('Features/Scanner/StandaloneScanner.js');
+  const fn = scanner.slice(scanner.indexOf('function wireHealthPanel'));
+  const body = fn.slice(0, fn.indexOf('\nfunction '));
+
+  assert.ok(/addEventListener\('pointerdown'/.test(body),
+    'the button must intercept pointerdown');
+  assert.ok(/pointerdown[\s\S]{0,120}preventDefault\(\)/.test(body),
+    'pointerdown must preventDefault, or the browser focuses the button');
+  assert.ok(/reclaimFocus\(/.test(body),
+    'the scan input must be handed back after any interaction');
+});
+
+test('the health panel opens on hover, not only on click', () => {
+  const scanner = src('Features/Scanner/StandaloneScanner.js');
+  const fn = scanner.slice(scanner.indexOf('function wireHealthPanel'));
+  const body = fn.slice(0, fn.indexOf('\nfunction '));
+  assert.ok(/addEventListener\('mouseenter'/.test(body), 'needs hover-to-open');
+  assert.ok(/addEventListener\('mouseleave'/.test(body), 'needs hover-to-close');
+  // A phone has no hover at all, so click must remain a way in.
+  assert.ok(/addEventListener\('click'/.test(body), 'touch devices need click as well');
+});
+
+// Opening a panel that reflows the page moves the scan box under the
+// operator's hands. It is anchored to its button instead.
+test('the health panel is anchored, not placed in the header flow', () => {
+  const css = readFileSync(
+    fileURLToPath(new URL('../CSS/scanner.css', import.meta.url)), 'utf8',
+  );
+  const block = css.slice(css.indexOf('.ss-health-wrap'));
+  assert.ok(/\.ss-health-wrap\{[^}]*position:relative/.test(block),
+    'the wrapper must establish a positioning context');
+  assert.ok(/\.ss-health\{[^}]*position:absolute/.test(block),
+    'the panel must be out of flow so opening it shifts nothing');
+});
+
 test('the cached path uses the same classifier the live kiosk uses offline', () => {
   const page = src('Features/Scanner/TestScanPage.js');
   assert.ok(page.includes('classifyCachedScan('),

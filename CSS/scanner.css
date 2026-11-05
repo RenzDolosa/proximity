@@ -318,9 +318,17 @@ span.ss-health-dot.ss-health-warn{background:var(--warn);}
 span.ss-health-dot.ss-health-bad{background:var(--bad);}
 span.ss-health-dot.ss-health-unknown{background:var(--text-faint);}
 
+/* Anchored to the button, NOT in the header's flow. The first version was a
+   full-width block below the header, so opening it pushed the hero and the
+   scan box down the page — a diagnostic that rearranges the thing being
+   diagnosed. */
+.ss-health-wrap{position:relative;display:inline-flex;}
 .ss-health{
-  margin:0 16px 12px;padding:12px 14px;
+  position:absolute;top:100%;right:0;margin-top:6px;z-index:40;
+  min-width:280px;max-width:min(360px,calc(100vw - 24px));
+  padding:12px 14px;text-align:left;
   background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.35);
 }
 .ss-health[hidden]{display:none;}
 .ss-health-rows{display:flex;flex-direction:column;gap:2px;}
@@ -331,6 +339,15 @@ span.ss-health-dot.ss-health-unknown{background:var(--text-faint);}
 .ss-health-row > span:last-child{text-align:right;}
 
 @media (max-width: 640px){
-  .ss-health{margin:0 10px 10px;padding:10px 12px;}
+  /* A phone has no hover, so this only ever opens by tap — and anchoring it
+     to the button does not fit. Measured at 375px: the wrapper's right edge
+     sits 73px from the screen edge because Sign out follows it, so a 280px
+     panel hung off `right:0` started 18px off the LEFT of the screen.
+     Dropping the wrapper out of the positioning chain makes .ss-header the
+     containing block instead, so the panel spans the header's width rather
+     than the button's position. */
+  .ss-header{position:relative;}
+  .ss-health-wrap{position:static;}
+  .ss-health{left:10px;right:10px;width:auto;min-width:0;max-width:none;padding:10px 12px;}
   .ss-health-row{font-size:12.5px;}
 }

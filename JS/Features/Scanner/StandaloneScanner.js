@@ -258,16 +258,21 @@ function renderStandaloneScanner() {
              renderOfflineStatus(), which reads the cache meta and queue depth
              on mount, after every scan and on every connectivity change. The
              dot on the handle is the whole point: a kiosk nobody is looking
-             at can still say it is unwell. -->
-        <button class="ghost" id="ss-health-open" aria-expanded="false">
-          <span class="ss-health-dot" id="ss-health-dot" aria-hidden="true"></span>Health
-        </button>
+             at can still say it is unwell.
+             OPENS ON HOVER, and the button refuses focus on pointer
+             interaction — see wireHealthPanel(). An absolutely positioned
+             dropdown rather than a block in the header's flow, so showing it
+             cannot shift the hero and the scan box underneath. -->
+        <div class="ss-health-wrap" id="ss-health-wrap">
+          <button class="ghost" id="ss-health-open" aria-expanded="false" aria-controls="ss-health">
+            <span class="ss-health-dot" id="ss-health-dot" aria-hidden="true"></span>Health
+          </button>
+          <div class="ss-health" id="ss-health" role="region" aria-label="Scanner health" hidden>
+            <div class="ss-health-rows" id="ss-health-rows"></div>
+          </div>
+        </div>
         <button class="ghost" id="ss-signout">Sign out</button>
       </div>
-    </div>
-    <div class="ss-health" id="ss-health" hidden>
-      <div class="ss-health-rows" id="ss-health-rows"></div>
-      <div class="actions"><button class="ghost" id="ss-health-close">Close</button></div>
     </div>
     <div class="ss-layout">
       <div class="ss-result-wrap" id="ss-result"></div>
@@ -301,21 +306,7 @@ function renderStandaloneScanner() {
   // prependScanEvent(), prependPendingRow() — finds it by id, so one node in
   // two possible parents keeps all of those working untouched, and a scan
   // that lands while the dialog is open still appears in it.
-  // A plain inline panel, not openModal(): a modal steals focus, and this is
-  // a kiosk whose whole job is keeping the scan input focused. The focus
-  // watchdog would fight it. Toggling a hidden sibling leaves the reader
-  // listening the entire time, so an operator can scan a card WHILE reading
-  // the diagnostics — which is exactly when you want to.
-  const healthPanel = $('#ss-health');
-  const healthBtn = $('#ss-health-open');
-  const setHealthOpen = (open) => {
-    if (!healthPanel || !healthBtn) return;
-    healthPanel.hidden = !open;
-    healthBtn.setAttribute('aria-expanded', String(open));
-    if (open) renderOfflineStatus();
-  };
-  healthBtn?.addEventListener('click', () => setHealthOpen(healthPanel?.hidden !== false));
-  $('#ss-health-close')?.addEventListener('click', () => setHealthOpen(false));
+  wireHealthPanel();
 
   $('#ss-feed-open').addEventListener('click', () => {
     const feed = $('#ss-feed');
@@ -600,6 +591,79 @@ async function renderOfflineStatus() {
   // scan and on every connectivity change. The health drawer is those same
   // values arranged differently, so it costs nothing to keep current.
   paintHealth(meta, pending);
+}
+
+// The health panel, wired so it cannot interrupt a scan.
+//
+// THE BUG THIS FIXES. The first version toggled on click, and clicking a
+// button focuses it — which is precisely what canReclaimFocus() refuses to
+// recover from, because activeElement was then neither the input nor the
+// body. The focus watchdog correctly reported "Scanner not listening", and
+// the operator had to click the box again before the reader worked. Opening
+// a diagnostic panel must not break the thing being diagnosed.
+//
+// So: hover opens it, and pointer interaction never moves focus at all.
+// Keyboard focus is deliberately left working — tabbing to the button IS a
+// request to leave the input, and the warning is honest in that case.
+function wireHealthPanel() {
+  const wrap = $('#ss-health-wrap');
+  const panel = $('#ss-health');
+  const btn = $('#ss-health-open');
+  if (!wrap || !panel || !btn) return;
+
+  // Pinned by an explicit click (or Enter), so touch devices — which have no
+  // hover at all — still have a way in, and so a pointer user can move the
+  // mouse away while reading.
+  let pinned = false;
+  let closeTimer = null;
+
+  const setOpen = (open) => {
+    panel.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+    // Repaint on open so the figures are current rather than whatever they
+    // were when the last scan happened.
+    if (open) renderOfflineStatus();
+  };
+
+  const open = () => { clearTimeout(closeTimer); setOpen(true); };
+  const scheduleClose = () => {
+    clearTimeout(closeTimer);
+    // A grace period so moving the pointer from the button down into the
+    // panel — which crosses a gap — does not close it underneath the cursor.
+    closeTimer = setTimeout(() => { if (!pinned) setOpen(false); }, 180);
+  };
+
+  // THE LINE THAT KEEPS THE SCANNER LISTENING. Preventing the default on
+  // pointerdown stops the browser focusing the button, so activeElement stays
+  // on the scan input through the entire interaction and the watchdog never
+  // sees focus leave. The click still fires.
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    const input = $('#ss-code');
+    if (input) reclaimFocus(input);
+  });
+
+  btn.addEventListener('click', () => {
+    pinned = !pinned;
+    setOpen(pinned || !panel.hidden);
+    if (!pinned) scheduleClose();
+    const input = $('#ss-code');
+    if (input) reclaimFocus(input);
+  });
+
+  // Hover on the whole wrapper, so the button and the panel it anchors are
+  // one hover target.
+  wrap.addEventListener('mouseenter', open);
+  wrap.addEventListener('mouseleave', scheduleClose);
+
+  // Escape unpins and closes, then hands the reader back.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || panel.hidden) return;
+    pinned = false;
+    setOpen(false);
+    const input = $('#ss-code');
+    if (input) reclaimFocus(input);
+  });
 }
 
 function paintHealth(meta, pending) {
