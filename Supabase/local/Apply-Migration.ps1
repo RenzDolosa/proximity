@@ -5,8 +5,8 @@
 
 .DESCRIPTION
   Migrations here are applied by hand (see Supabase/README.md). That has gone
-  wrong in four distinct ways before, and this script exists to close all
-  four:
+  wrong in five distinct ways before, and this script exists to close all
+  five:
 
     1. psql is installed but not on PATH, so `psql ...` fails outright.
     2. PowerShell is not bash: `psql "$DATABASE_URL"` passes an EMPTY string,
@@ -21,6 +21,14 @@
        translate host name", which reads like DNS and is not -- and it prints
        part of the password to the terminal on the way out. Prefer the PG*
        environment variables, which need no encoding at all.
+    5. db.<ref>.supabase.co is IPv6-ONLY. Supabase removed dedicated IPv4
+       from direct connections, so that name has an AAAA record and no A
+       record; on a network without IPv6 psql fails with "could not translate
+       host name ... Name or service not known", which reads as a mistyped
+       hostname or a deleted project and is neither. The session-mode pooler
+       (port 5432 on aws-N-<region>.pooler.supabase.com, user
+       postgres.<ref>) has IPv4 and is the fix. Checked before connecting,
+       because the answer is not guessable from the error.
 
   Everything runs inside one transaction with ON_ERROR_STOP, so a migration
   that fails halfway leaves the database exactly as it was. That matters most
@@ -30,9 +38,22 @@
   Path to the .sql file, e.g. Supabase/migrations/20261024090000_order_scan_log_directions.sql
 
 .PARAMETER ConnectionString
-  Supabase DIRECT connection string (port 5432, NOT the 6543 pooler):
-    postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres
-  Project Settings > Database > Connection string > URI.
+  A connection string that can run DDL in one transaction. Two work; one does
+  not:
+
+    SESSION-MODE POOLER (port 5432) -- has IPv4, and is the only option on a
+    network without IPv6. Note the user is postgres.<ref>, not postgres:
+      postgresql://postgres.<ref>:<password>@aws-N-<region>.pooler.supabase.com:5432/postgres
+      Project Settings > Database > Connection string > Session pooler.
+
+    DIRECT (port 5432) -- db.<ref>.supabase.co is IPv6-ONLY, so this only
+    works from a network with IPv6:
+      postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres
+
+    TRANSACTION-MODE POOLER (port 6543) -- NOT for migrations. It hands back
+    a different backend per transaction, so --single-transaction and
+    session-level state are not safe. 5432 on the same pooler host is session
+    mode and is fine.
 
   Every one of @ : / ? # % in the password must be percent-encoded here ('@'
   becomes '%40'). If the password contains any of them, prefer the PG*
@@ -168,7 +189,14 @@ must be percent-encoded -- '@' becomes '%40'):
 
   $env:SUPABASE_DB_URL = 'postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres'
 
-Use the DIRECT connection on port 5432, not the 6543 pooler.
+Get the host and user from Project Settings > Database > Connection string >
+"Session pooler" -- note the user is postgres.<ref>, not plain postgres. Use
+port 5432 on that host, NOT 6543: 6543 is transaction mode, which hands back a
+different backend per transaction and is not safe for --single-transaction
+DDL.
+
+Do not use db.<ref>.supabase.co unless this machine has IPv6 -- that hostname
+is IPv6-only now and fails with "could not translate host name".
 '@
 } else {
   # Caught here rather than by DNS, so the message names the real cause and
@@ -200,6 +228,71 @@ Reset database password.
 
 # Empty array = no connection argument, so libpq falls back to the PG* vars.
 $target = if ($useEnvVars) { @() } else { @($ConnectionString) }
+
+# FIFTH WAY THIS HAS GONE WRONG (2026-11-04, same session as the fourth).
+# db.<ref>.supabase.co is IPv6-ONLY: Supabase removed dedicated IPv4 from
+# direct connections, so that name has an AAAA record and no A record. On a
+# network without IPv6 psql fails with
+#   could not translate host name "db.<ref>.supabase.co" to address:
+#   Name or service not known
+# which reads as a mistyped hostname, or as the project having been deleted.
+# It is neither -- the name is correct and the project is fine, that address
+# family just is not reachable from here.
+#
+# Checked before connecting, because the answer ("use the session-mode
+# pooler, with a different username") is not guessable from the error text.
+function Test-HostReachable([string] $HostName) {
+  if ([string]::IsNullOrWhiteSpace($HostName)) { return }
+
+  $hasA = $false
+  $hasAAAA = $false
+  try { $hasA = [bool](Resolve-DnsName $HostName -Type A -ErrorAction Stop | Where-Object { $_.Type -eq 'A' }) } catch {}
+  try { $hasAAAA = [bool](Resolve-DnsName $HostName -Type AAAA -ErrorAction Stop | Where-Object { $_.Type -eq 'AAAA' }) } catch {}
+
+  if ($hasA) { return }  # An IPv4 path exists; nothing to warn about.
+
+  # Warn rather than throw: this may be transient DNS, and psql's own error is
+  # more informative than a guess would be.
+  if (-not $hasAAAA) {
+    Write-Warning "$HostName does not resolve at all. Check the hostname and this machine's DNS."
+    return
+  }
+
+  $globalV6 = Get-NetIPAddress -AddressFamily IPv6 -ErrorAction SilentlyContinue |
+    Where-Object { $_.PrefixOrigin -ne 'WellKnown' -and $_.IPAddress -notlike 'fe80*' -and $_.IPAddress -ne '::1' }
+  if ($globalV6) { return }
+
+  throw @"
+$HostName resolves to IPv6 only, and this machine has no global IPv6 address.
+
+psql would fail with "could not translate host name ... Name or service not
+known", which looks like a typo and is not: the hostname is correct and the
+project is fine, but db.<ref>.supabase.co lost its IPv4 address when Supabase
+removed dedicated IPv4 from direct connections.
+
+Use the SESSION-MODE POOLER instead, which has IPv4. Note the username:
+
+  `$env:PGHOST     = 'aws-N-<region>.pooler.supabase.com'   # N + region from the dashboard
+  `$env:PGPORT     = '5432'                                 # 5432, NOT 6543
+  `$env:PGUSER     = 'postgres.<project-ref>'               # NOT plain 'postgres'
+  `$env:PGDATABASE = 'postgres'
+  `$env:PGPASSWORD = '<password>'
+
+Project Settings > Database > Connection string > "Session pooler" has the
+exact host and user. Port 6543 on that same host is TRANSACTION mode and is
+not safe for --single-transaction DDL; 5432 is session mode and is.
+"@
+}
+
+# Skipped for -WhatIfOnly, which connects to nothing by contract.
+$checkHost = if ($useEnvVars) { $env:PGHOST } else {
+  # Pull the host out of the URI without touching the password: everything
+  # after the LAST '@' is the hostspec, then strip port and path.
+  $authority = ($ConnectionString -replace '^[a-z]+://', '')
+  $hostspec = $authority.Substring($authority.LastIndexOf('@') + 1)
+  ($hostspec -split '[:/?]')[0]
+}
+Test-HostReachable $checkHost
 
 # The migration files are UTF-8 (em-dashes and arrows in comments, in nearly
 # all of them). psql otherwise takes client_encoding from the Windows console
