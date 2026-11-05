@@ -397,6 +397,40 @@ test('the health panel is anchored, not placed in the header flow', () => {
     'the panel must be out of flow so opening it shifts nothing');
 });
 
+// A z-index on the dropdown itself cannot fix this, which is what made it
+// confusing: the panel lives INSIDE .ss-header's stacking context, so its 40
+// only ever competed with the header's own children. .ss-header and
+// .ss-layout were both at 1, and .ss-layout comes later in the DOM, so the
+// Recent activity panel painted over the health values.
+test('the header outranks the layout, so its dropdown can be seen', () => {
+  const css = readFileSync(
+    fileURLToPath(new URL('../CSS/scanner.css', import.meta.url)), 'utf8',
+  );
+  const zOf = (selector) => {
+    const m = css.match(new RegExp(`\\${selector}\\{[^}]*z-index:(\\d+)`));
+    return m ? Number(m[1]) : null;
+  };
+  const header = zOf('.ss-header');
+  const layout = zOf('.ss-layout');
+  assert.ok(header !== null && layout !== null, 'both need an explicit z-index');
+  assert.ok(header > layout,
+    `.ss-header (${header}) must stack above .ss-layout (${layout}), or anything `
+    + 'hanging off the header is painted over by the feed panel');
+});
+
+test('the health panel keeps an opaque fallback behind its translucent one', () => {
+  const css = readFileSync(
+    fileURLToPath(new URL('../CSS/scanner.css', import.meta.url)), 'utf8',
+  );
+  const block = css.slice(css.indexOf('.ss-health{'), css.indexOf('.ss-health[hidden]'));
+  assert.ok(/background:var\(--surface\);/.test(block),
+    'an opaque declaration must come first as the floor');
+  assert.ok(/background:color-mix\(/.test(block),
+    'the translucent declaration must follow it');
+  assert.ok(block.indexOf('background:var(--surface);') < block.indexOf('background:color-mix('),
+    'the fallback must come BEFORE the enhancement or it overrides it');
+});
+
 test('the cached path uses the same classifier the live kiosk uses offline', () => {
   const page = src('Features/Scanner/TestScanPage.js');
   assert.ok(page.includes('classifyCachedScan('),
