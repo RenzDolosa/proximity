@@ -652,6 +652,63 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-06 — the other half of a shift: overtime, breaks, and after-hours scans**
+
+`shift_rules` knew when a shift *began* and nothing about when it *ended*, so
+the system could tell you someone arrived late but not that they stayed four
+hours past their hours. Three new columns close that, and two features fall
+out of them. Neither adds a recurring request.
+
+**Expected hours are not calculated from the start and end times**, and that
+is the decision worth arguing with. A 07:00–16:00 shift is nine hours elapsed
+but usually eight paid, because an unpaid break sits inside it. Deriving one
+from the other would overstate everyone's expected hours by exactly the break
+and so understate overtime for every person, every day. So it is a separate
+field, entered in hours and stored in minutes.
+
+**No overtime is reported for a day flagged for review.** An open day has an
+IN and no OUT, so its hours under-count by the whole afternoon and would read
+as a seven-hour short day; an anomaly day's reversed gap is excluded from
+`worked_seconds` by design. Both report null instead. Close the day in the
+review queue and it gets a figure on the next load. This is the same
+discipline as the unconfigured state: a confident wrong number about hours is
+worse than no number, because hours reach payroll.
+
+**After-hours alerting is a second switch, not a consequence of the first.**
+Setting an end time turns on overtime *reporting*. Alerts additionally need a
+margin, which is null by default and refused without an end time. Configuring
+hours for a report should not silently start generating security alerts — and
+if your hours are genuinely irregular those alerts would bury the
+card-sharing ones, which are unambiguous. The window wraps midnight correctly
+for night shifts, where "inside" is the union of two spans rather than the gap
+between them.
+
+**Break time costs literally nothing** — no column, no payload change, no
+migration. `first_in`, `last_out` and `worked_seconds` are already on every
+row you download, so time on site minus time worked is arithmetic the browser
+does on bytes it already has. A long unexplained gap is often the real story
+behind a short day, and it was invisible despite being on screen. Shown above
+30 minutes only, and never subtracted from anyone's hours — the worked figure
+already excludes it.
+
+Detection is a **separate trigger** from the card-sharing one rather than a
+branch inside it: they compare different things, and separate means this
+migration adds rather than replaces. Same exception guard, same reasoning — a
+bug in an analytics rule must not refuse a badge at a door.
+
+One signal from the proposal was dropped: "scan on a non-working day" needs a
+record of which days each department works, which nothing has. Guessing
+weekends would be wrong for a three-site operation that may run them.
+
+**Tests:** 24 added, suite at **295**. Two `toSummary()` shape assertions
+updated rather than loosened again, with the NaN check still excluding the
+deliberately-nullable fields. Measured at 375px: the second strip takes the
+chrome above the table to 353px of an 812px viewport, leaving 443px — and
+only once both features are configured. No horizontal overflow.
+
+**Needs `20261106090000_overtime_and_after_hours.sql` applied.** Until then
+Attendance renders exactly as it does now.
+
 **2026-11-04 — who arrives late, and one card at two sites**
 
 Two features picked for costing nothing to run. Neither adds a recurring

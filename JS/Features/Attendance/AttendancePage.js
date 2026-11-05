@@ -30,6 +30,10 @@ import {
   punctualityState, PUNCTUALITY_STATE, onTimeRate, classifiedDays,
   fmtClock, fmtOffset, isLate,
 } from '../../Utils/punctuality.js';
+import {
+  overtimeState, OVERTIME_STATE, measuredDays, breakSeconds,
+  fmtOvertime, fmtHoursTotal, isOver, isShort, BREAK_NOTICE_SECONDS,
+} from '../../Utils/overtime.js';
 
 const STATUS_BADGE = { complete: 'matched', open: 'unassigned_card', anomaly: 'inactive_card' };
 
@@ -201,6 +205,7 @@ function paintBody() {
   body.innerHTML = `
     ${statsHTML}
     ${punctualityHTML()}
+    ${overtimeHTML()}
     <div class="table-scroll"><div id="att-table-wrap"></div></div>
     <div id="att-pagination"></div>
   `;
@@ -260,6 +265,34 @@ function punctualityHTML() {
   }
 }
 
+// A second strip rather than more figures on the punctuality one. The two
+// halves of a shift are configured independently — a rule can have a start
+// time and no expected hours — so they can be in different states at the same
+// time, and one line that was sometimes half-populated would be harder to
+// read than two that each say one thing.
+//
+// Silent when unconfigured, unlike punctuality's explicit "not set" note:
+// punctuality is the headline feature of that panel and its absence needs
+// explaining, whereas a second nudge about a second setting on the same page
+// is nagging. Settings says what it enables.
+function overtimeHTML() {
+  if (!totals) return '';
+  if (overtimeState(totals) !== OVERTIME_STATE.READY) return '';
+
+  const measured = measuredDays(totals);
+  const net = totals.overtimeMinutes - totals.shortMinutes;
+  return `<div class="punct-strip">
+      <span><strong class="${totals.overtimeMinutes > 0 ? 'punct-warn' : ''}">${esc(fmtHoursTotal(totals.overtimeMinutes))}</strong> overtime</span>
+      <span><strong>${totals.overDays.toLocaleString()}</strong> long day${totals.overDays === 1 ? '' : 's'}</span>
+      <span><strong>${esc(fmtHoursTotal(totals.shortMinutes))}</strong> short, over ${totals.shortDays.toLocaleString()} day${totals.shortDays === 1 ? '' : 's'}</span>
+      ${/* Net is the number a payroll conversation actually starts from, and
+            it is not derivable from the two totals without knowing they are
+            both positive magnitudes. */''}
+      <span class="sub">net ${net >= 0 ? '+' : '−'}${esc(fmtHoursTotal(Math.abs(net)))} over ${measured.toLocaleString()} measured day${measured === 1 ? '' : 's'}${
+        totals.unmeasuredDays ? `, ${totals.unmeasuredDays.toLocaleString()} not measured` : ''}</span>
+    </div>`;
+}
+
 // Local calendar date from the RPC's 'YYYY-MM-DD' — built from parts, since
 // new Date('YYYY-MM-DD') parses as UTC and can show the previous day west of UTC.
 function fmtWorkDate(ymd) {
@@ -308,7 +341,20 @@ function paintTable() {
                   ? `<div class="sub" style="margin:0;color:var(--warn);">${esc(fmtOffset(r.first_in_offset_minutes))}</div>`
                   : ''}</td>
               <td class="col-shrink mono" data-label="Last OUT">${r.last_out ? esc(fmtTime(r.last_out)) : '—'}</td>
-              <td class="col-shrink mono" data-label="Time on site">${esc(fmtDuration(Number(r.worked_seconds)))}</td>
+              <!-- Overtime hangs off Time on site because it qualifies that
+                   number. Break time sits here too, and costs nothing: it is
+                   (last OUT − first IN) − time on site, all three of which
+                   are already in this row. No column, no request. A long
+                   unexplained gap is often the real story behind a short
+                   day, and until now it was invisible despite being on
+                   screen. Only shown when it is worth noticing. -->
+              <td class="col-shrink mono" data-label="Time on site">${esc(fmtDuration(Number(r.worked_seconds)))}${
+                fmtOvertime(r.overtime_minutes) && (isOver(r) || isShort(r))
+                  ? `<div class="sub" style="margin:0;color:var(--${isOver(r) ? 'warn' : 'text-muted'});">${esc(fmtOvertime(r.overtime_minutes))}</div>`
+                  : ''}${
+                breakSeconds(r) >= BREAK_NOTICE_SECONDS
+                  ? `<div class="sub" style="margin:0;">${esc(fmtDuration(breakSeconds(r)))} off site</div>`
+                  : ''}</td>
               <td class="col-shrink mono" data-label="INs">${r.in_count}</td>
               <td class="col-shrink" data-label="Status"><span class="badge ${STATUS_BADGE[st]}">${esc(STATUS_LABEL[st])}</span></td>
             </tr>`;

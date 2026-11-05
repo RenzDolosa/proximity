@@ -96,6 +96,16 @@ export function toSummary(row) {
     // apart and needs the difference preserved.
     avgFirstInSeconds: r?.avg_first_in_seconds ?? null,
     rulesConfigured: r?.rules_configured ?? null,
+    // Overtime (20261106090000). Rides on the same one-row response again.
+    overtimeMinutes: Number(r?.overtime_minutes) || 0,
+    shortMinutes: Number(r?.short_minutes) || 0,
+    overDays: Number(r?.over_days) || 0,
+    shortDays: Number(r?.short_days) || 0,
+    unmeasuredDays: Number(r?.unmeasured_days) || 0,
+    // Nullable for the same reason rulesConfigured is: `false` would claim
+    // "no expected hours are configured" when the truth may be "nothing
+    // loaded", and Utils/overtime.js needs to tell those apart.
+    expectedConfigured: r?.expected_configured ?? null,
   };
 }
 
