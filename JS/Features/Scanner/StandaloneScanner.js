@@ -682,7 +682,13 @@ function paintHealth(meta, pending) {
     // getCacheMeta() has already merged the photo cache into the rows, so
     // this is a count of what is actually displayable offline rather than a
     // second cache read.
-    photosCached: (meta.rows || []).filter((r) => r.photo_thumb_b64 !== undefined).length,
+    //
+    // Truthy, not `!== undefined`: the merge sets photo_thumb_b64 to whatever
+    // the photo cache holds for that employee, and that can legitimately be
+    // null — the server's photo updates carry an explicit null to say "this
+    // employee has no photo", which is how a removed photo propagates.
+    // Counting null as cached would report thumbnails this kiosk cannot draw.
+    photosCached: (meta.rows || []).filter((r) => Boolean(r.photo_thumb_b64)).length,
     audioUnlocked: audioIsUnlocked(),
     soundsLoaded: scanSoundsLoaded(),
     scannerId: currentOperatorName,

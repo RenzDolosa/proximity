@@ -238,6 +238,55 @@ test('a healthy kiosk reports good across the board', () => {
   assert.equal(overallHealth(rows), HEALTH.GOOD);
 });
 
+// THE BUG THIS EXISTS FOR. The row read "776 of 835" and implied 59 failed
+// downloads. 835 is the CARD count; the offline cache row carries no photo
+// field at all, so the kiosk cannot know how many photos should exist — an
+// employee with no photo on file looks identical to one whose photo has not
+// downloaded. Settings reported exactly 776 thumbnails in existence, so the
+// cache was complete while the drawer sent someone hunting for nothing.
+test('cached photos are reported without an invented denominator', () => {
+  const rows = healthRows({
+    online: true, queued: 0, cacheRows: 835, cacheSyncedAt: 'x', cacheAgeMs: 0,
+    photosCached: 776, audioUnlocked: true, soundsLoaded: true, scannerId: 'k',
+  });
+  const photos = rows.find((r) => r.key === 'photos');
+  assert.equal(photos.value, '776');
+  assert.doesNotMatch(photos.value, /835|of /, 'must not compare against the card count');
+  assert.equal(photos.state, HEALTH.GOOD, 'fewer photos than cards is not a fault');
+});
+
+// Zero is the one thing that IS knowable here: nothing downloaded means every
+// offline scan falls back to initials.
+test('no cached photos at all is still worth flagging', () => {
+  const rows = healthRows({
+    online: true, queued: 0, cacheRows: 835, cacheSyncedAt: 'x', cacheAgeMs: 0,
+    photosCached: 0, audioUnlocked: true, soundsLoaded: true, scannerId: 'k',
+  });
+  assert.equal(rows.find((r) => r.key === 'photos').state, HEALTH.WARN);
+});
+
+test('an unknown photo count says so rather than showing zero', () => {
+  const rows = healthRows({ online: true, queued: 0, cacheRows: 835, cacheSyncedAt: 'x', cacheAgeMs: 0 });
+  const photos = rows.find((r) => r.key === 'photos');
+  assert.equal(photos.value, 'unknown');
+  assert.equal(photos.state, HEALTH.UNKNOWN);
+});
+
+// The merge sets photo_thumb_b64 from the photo cache, and that can be an
+// explicit null meaning "this employee has no photo" — how a removed photo
+// propagates. `!== undefined` counted those as cached and reported
+// thumbnails the kiosk cannot draw.
+test('the kiosk counts real thumbnails, not explicit nulls', () => {
+  const scanner = readFileSync(
+    fileURLToPath(new URL('../JS/Features/Scanner/StandaloneScanner.js', import.meta.url)), 'utf8',
+  );
+  const line = scanner.match(/photosCached:[^\n]*/)?.[0] || '';
+  assert.ok(/Boolean\(r\.photo_thumb_b64\)/.test(line),
+    'must count truthy thumbnails');
+  assert.ok(!/!==\s*undefined/.test(line),
+    'an explicit null is "no photo", not "cached"');
+});
+
 // The failure that looks like nothing is wrong.
 test('audio that was never unlocked is a warning, never good', () => {
   const rows = healthRows({

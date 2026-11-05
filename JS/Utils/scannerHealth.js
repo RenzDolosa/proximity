@@ -70,18 +70,36 @@ export function healthRows(state = {}) {
       : (Number.isFinite(age) && age > CACHE_STALE_AFTER_MS ? HEALTH.WARN : HEALTH.GOOD),
   });
 
+  // NO DENOMINATOR, deliberately — this read "776 of 835" and meant nothing.
+  //
+  // 835 is the number of CARDS. The offline cache row (see
+  // 20261005000000) carries proximity_code, card_active, employee_id,
+  // full_name, employee_code, department, position, updated_at,
+  // employee_status, scan_count and remarks_log — and no photo field at all.
+  // Thumbnails arrive through a separate cache and are merged in afterwards.
+  // So the kiosk knows how many photos it HAS and has no way to know how many
+  // it SHOULD have: an employee with no photo on file is indistinguishable
+  // from one whose photo has not downloaded.
+  //
+  // Against total cards the figure was guaranteed to look short. Unassigned
+  // cards can never have a photo, and neither can an employee who simply has
+  // none — Settings reported exactly 776 thumbnails in existence, so the
+  // cache was COMPLETE while this row implied 59 failed downloads. A
+  // diagnostic that invents a shortfall sends someone to fix nothing.
+  //
+  // Same rule as the site row below: state what was measured, not what was
+  // inferred from a number that happened to be nearby.
   const photos = Number(photosCached);
   rows.push({
     key: 'photos',
     label: 'Cached photos',
-    value: Number.isFinite(photos) && Number.isFinite(rowCount)
-      ? `${photos.toLocaleString()} of ${rowCount.toLocaleString()}`
-      : (Number.isFinite(photos) ? photos.toLocaleString() : 'unknown'),
-    // Missing photos degrade the offline display and nothing more, so this is
-    // never worse than a warning however many are absent.
+    value: !Number.isFinite(photos) ? 'unknown' : photos.toLocaleString(),
+    // Zero IS knowable and worth flagging: nothing downloaded means every
+    // offline scan falls back to initials. Any non-zero count is reported
+    // without judgement, because there is nothing to judge it against.
     state: !Number.isFinite(photos)
       ? HEALTH.UNKNOWN
-      : (Number.isFinite(rowCount) && rowCount > 0 && photos < rowCount ? HEALTH.WARN : HEALTH.GOOD),
+      : (photos === 0 && rowCount > 0 ? HEALTH.WARN : HEALTH.GOOD),
   });
 
   rows.push({
