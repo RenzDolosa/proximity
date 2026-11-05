@@ -300,3 +300,37 @@
    Chrome DevTools-based offline-testing instructions elsewhere in this
    repo), not silently broken masking. */
 .masked-code-input{-webkit-text-security:disc;}
+/* ---- Scanner health drawer (2026-11-06) ----
+   Every value behind this is already in the kiosk's memory; see
+   renderOfflineStatus(). An inline panel rather than a modal on purpose:
+   a modal steals focus from the scan input, and the focus watchdog would
+   fight it. This way the reader keeps listening while the panel is open. */
+.ss-health-dot{
+  display:inline-block;width:8px;height:8px;border-radius:50%;
+  margin-right:6px;background:var(--text-faint);vertical-align:1px;
+}
+.ss-health-good{color:var(--good);}
+.ss-health-warn{color:var(--warn);}
+.ss-health-bad{color:var(--bad);}
+.ss-health-unknown{color:var(--text-muted);}
+span.ss-health-dot.ss-health-good{background:var(--good);}
+span.ss-health-dot.ss-health-warn{background:var(--warn);}
+span.ss-health-dot.ss-health-bad{background:var(--bad);}
+span.ss-health-dot.ss-health-unknown{background:var(--text-faint);}
+
+.ss-health{
+  margin:0 16px 12px;padding:12px 14px;
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;
+}
+.ss-health[hidden]{display:none;}
+.ss-health-rows{display:flex;flex-direction:column;gap:2px;}
+.ss-health-row{
+  display:flex;justify-content:space-between;gap:12px;
+  padding:4px 0;font-size:13px;color:var(--text-muted);
+}
+.ss-health-row > span:last-child{text-align:right;}
+
+@media (max-width: 640px){
+  .ss-health{margin:0 10px 10px;padding:10px 12px;}
+  .ss-health-row{font-size:12.5px;}
+}

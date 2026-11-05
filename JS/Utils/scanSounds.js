@@ -44,6 +44,13 @@ export function scanSoundsLoaded() {
 const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
 let audioUnlocked = false;
 
+// Read by the scanner's health drawer. This is the failure that looks like
+// nothing is wrong: a kiosk opened and then left alone has never had a
+// gesture, so every scan plays silently while the UI reports success.
+export function audioIsUnlocked() {
+  return audioUnlocked;
+}
+
 export function initAudioUnlock() {
   if (audioUnlocked) return;
   const unlock = () => {

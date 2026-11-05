@@ -7,7 +7,8 @@ import { renderScanResult } from '../../Components/ScanResultCard.js';
 import { loadScanFeed, prependPendingRow, prependScanEvent } from '../../Components/ScanFeed.js';
 import { PROXIMITY_LOGO_SVG } from '../../Components/ProximityLogo.js';
 import { photoDataUri } from '../../Utils/image.js';
-import { loadScanSounds, playScanSound, scanSoundsLoaded, initAudioUnlock } from '../../Utils/scanSounds.js';
+import { loadScanSounds, playScanSound, scanSoundsLoaded, initAudioUnlock, audioIsUnlocked } from '../../Utils/scanSounds.js';
+import { healthRows, overallHealth } from '../../Utils/scannerHealth.js';
 import { OfflineScanModel, STALE_AFTER_MS } from '../../Models/OfflineScanModel.js';
 import { readRejection } from '../../Core/offlineScanning.js';
 import { registerBusyCheck } from '../../Utils/appUpdate.js';
@@ -19,6 +20,12 @@ import { connectionState, CONNECTION_LABEL, CONNECTION_BADGE } from '../../Utils
 // .onLine cannot tell us this, and it is the difference between "this device
 // has Wi-Fi" and "this kiosk can record a scan".
 let lastRequestFailed = false;
+
+// The operator's name doubles as this kiosk's scanner_id — see the call to
+// ScanEventsModel.scan() below, and ScanEventsModel's own comment. Held at
+// module scope so renderOfflineStatus(), which runs long after render, can
+// name the scanner in the health drawer without threading it through.
+let currentOperatorName = null;
 
 export function markRequestOutcome(failed) {
   lastRequestFailed = failed;
@@ -236,6 +243,7 @@ export function showStandaloneScanner() {
 function renderStandaloneScanner() {
   const wrap = $('#standalone-scanner');
   const operatorName = appState.profile?.full_name || appState.session.user.email;
+  currentOperatorName = operatorName;
   wrap.innerHTML = `
     <div class="ss-bg-logo" aria-hidden="true"><div class="ss-ring">${PROXIMITY_LOGO_SVG}</div></div>
     <div class="ss-focus-note" id="ss-focus-note" role="status" hidden>⚠ Scanner not listening — click anywhere on this screen, then scan again</div>
@@ -246,8 +254,20 @@ function renderStandaloneScanner() {
         <!-- Mobile only (see scanner.css): the feed column has nowhere to sit
              beside the hero on a phone, so it becomes a dialog instead. -->
         <button class="ghost ss-feed-open" id="ss-feed-open">Recent activity</button>
+        <!-- Health. Every value behind this is already in memory — see
+             renderOfflineStatus(), which reads the cache meta and queue depth
+             on mount, after every scan and on every connectivity change. The
+             dot on the handle is the whole point: a kiosk nobody is looking
+             at can still say it is unwell. -->
+        <button class="ghost" id="ss-health-open" aria-expanded="false">
+          <span class="ss-health-dot" id="ss-health-dot" aria-hidden="true"></span>Health
+        </button>
         <button class="ghost" id="ss-signout">Sign out</button>
       </div>
+    </div>
+    <div class="ss-health" id="ss-health" hidden>
+      <div class="ss-health-rows" id="ss-health-rows"></div>
+      <div class="actions"><button class="ghost" id="ss-health-close">Close</button></div>
     </div>
     <div class="ss-layout">
       <div class="ss-result-wrap" id="ss-result"></div>
@@ -281,6 +301,22 @@ function renderStandaloneScanner() {
   // prependScanEvent(), prependPendingRow() — finds it by id, so one node in
   // two possible parents keeps all of those working untouched, and a scan
   // that lands while the dialog is open still appears in it.
+  // A plain inline panel, not openModal(): a modal steals focus, and this is
+  // a kiosk whose whole job is keeping the scan input focused. The focus
+  // watchdog would fight it. Toggling a hidden sibling leaves the reader
+  // listening the entire time, so an operator can scan a card WHILE reading
+  // the diagnostics — which is exactly when you want to.
+  const healthPanel = $('#ss-health');
+  const healthBtn = $('#ss-health-open');
+  const setHealthOpen = (open) => {
+    if (!healthPanel || !healthBtn) return;
+    healthPanel.hidden = !open;
+    healthBtn.setAttribute('aria-expanded', String(open));
+    if (open) renderOfflineStatus();
+  };
+  healthBtn?.addEventListener('click', () => setHealthOpen(healthPanel?.hidden !== false));
+  $('#ss-health-close')?.addEventListener('click', () => setHealthOpen(false));
+
   $('#ss-feed-open').addEventListener('click', () => {
     const feed = $('#ss-feed');
     const home = $('.ss-feed-panel');
@@ -557,6 +593,48 @@ async function renderOfflineStatus() {
     } else {
       syncEl.innerHTML = '';
     }
+  }
+
+  // Free ride, like cachedLookupRows above: this function already has the
+  // queue depth and the cache meta, and already runs on mount, after every
+  // scan and on every connectivity change. The health drawer is those same
+  // values arranged differently, so it costs nothing to keep current.
+  paintHealth(meta, pending);
+}
+
+function paintHealth(meta, pending) {
+  const rowsEl = $('#ss-health-rows');
+  const dot = $('#ss-health-dot');
+  if (!rowsEl && !dot) return;
+
+  const cacheRowCount = meta.rows?.length || 0;
+  const rows = healthRows({
+    online: navigator.onLine,
+    lastRequestFailed,
+    queued: pending,
+    cacheRows: cacheRowCount,
+    cacheSyncedAt: meta.syncedAt,
+    cacheAgeMs: meta.ageMs,
+    // getCacheMeta() has already merged the photo cache into the rows, so
+    // this is a count of what is actually displayable offline rather than a
+    // second cache read.
+    photosCached: (meta.rows || []).filter((r) => r.photo_thumb_b64 !== undefined).length,
+    audioUnlocked: audioIsUnlocked(),
+    soundsLoaded: scanSoundsLoaded(),
+    scannerId: currentOperatorName,
+    // Deliberately omitted: see healthRows(). Looking the site up is a
+    // request, and this drawer costs none.
+  });
+
+  if (dot) {
+    dot.className = `ss-health-dot ss-health-${overallHealth(rows)}`;
+  }
+  if (rowsEl) {
+    rowsEl.innerHTML = rows.map((r) => `
+      <div class="ss-health-row">
+        <span>${esc(r.label)}</span>
+        <span class="mono ss-health-${r.state}">${esc(r.value)}</span>
+      </div>`).join('');
   }
 }
 
