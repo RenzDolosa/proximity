@@ -1283,7 +1283,7 @@ long applied. Probe before believing one.
 
 ### Change log (most recent first)
 
-**2026-11-04 — punctuality, and card sharing between sites (`20261104090000_punctuality.sql` + `20261104093000_card_sharing_signals.sql`, NOT applied)**
+**2026-11-04 — punctuality, and card sharing between sites (`20261104090000_punctuality.sql` + `20261104093000_card_sharing_signals.sql`, applied 2026-11-05; verified)**
 
 Two features, chosen for costing nothing to run. Both add **zero recurring
 requests**: punctuality rides on the two RPCs the Attendance page already
@@ -1345,6 +1345,28 @@ editors.
   mobile block *before* the rules it overrides has silently killed three
   previous overrides in this project (stat cards, `.filter-row`, safe-area
   padding) — same specificity resolves by source order.
+
+**Applied 2026-11-05, through the dashboard SQL Editor rather than
+`Apply-Migration.ps1`.** `db.<ref>.supabase.co` is IPv6-only since Supabase
+removed dedicated IPv4 from direct connections, and the applying machine has
+no global IPv6 address, so psql could not resolve it at all — see the
+2026-11-04 script entry above, which now detects exactly that and points at
+the session-mode pooler. Each file was wrapped in `BEGIN`/`COMMIT` by hand to
+reproduce the script's `--single-transaction` guarantee, and the
+`schema_migrations` rows were inserted afterwards because **the SQL Editor
+writes none** — the same gap that made five migrations read as "MISSING" on
+2026-10-24.
+
+Re-running either file afterwards raises `42P07 relation "shift_rules"
+already exists` / `42701 column "site" ... already exists`. Those are what an
+already-applied migration says on a second run, not a failure of the first:
+neither file is idempotent, and the `BEGIN`/`COMMIT` wrapper meant the failed
+re-runs committed nothing.
+
+Verified against the live project: both tables, all eleven functions,
+`scanners.site`, `late` and `first_in_offset_minutes` on
+`get_attendance_report()`, the `trg_scan_events_detect_card_sharing` trigger,
+and both tracking rows.
 
 **2026-11-03 — close the days nobody tapped out of (`20261103120000_close_open_punches.sql`, not applied as of 2026-11-04)**
 

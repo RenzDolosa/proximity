@@ -741,8 +741,19 @@ overrides has now silently killed three overrides in this project — stat
 cards, `.filter-row` and safe-area padding — since same specificity resolves
 by source order.
 
-**Needs both migrations applied.** Until then Attendance renders exactly as
-before (the new columns are simply absent) and no card-sharing alert can fire.
+**Both migrations applied 2026-11-05**, through the dashboard SQL Editor
+rather than `Apply-Migration.ps1` — the direct connection
+`db.<ref>.supabase.co` is IPv6-only and this network has no IPv6, which is
+the failure mode that script now diagnoses up front. The
+`schema_migrations` rows were inserted by hand afterwards, because the SQL
+Editor writes none.
+
+Verified against the live project: both tables present, all eleven functions,
+`scanners.site`, `late` and `first_in_offset_minutes` on the report, and the
+`trg_scan_events_detect_card_sharing` trigger.
+
+**Neither feature does anything until it is configured**, which is by design
+in both cases — see "Before this does anything" in the entry above.
 
 **2026-11-03 (later) — a muster list that survives the thing it exists for**
 
