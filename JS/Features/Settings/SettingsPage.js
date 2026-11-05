@@ -1122,6 +1122,10 @@ function paintShiftRules() {
           : esc(r.department)}</td>
         <td class="col-shrink mono" data-label="Starts">${esc(String(r.starts_at).slice(0, 5))}</td>
         <td class="col-shrink mono" data-label="Grace">${r.grace_minutes}m</td>
+        <td class="col-shrink mono" data-label="Ends">${r.ends_at ? esc(String(r.ends_at).slice(0, 5)) : '—'}</td>
+        <td class="col-shrink mono" data-label="Expected">${r.expected_minutes ? esc(fmtExpected(r.expected_minutes)) : '—'}</td>
+        <td class="col-shrink mono" data-label="Alerts outside">${
+          r.after_hours_margin_minutes ? `±${r.after_hours_margin_minutes}m` : '<span class="sub">off</span>'}</td>
         <td class="col-shrink">
           <button type="button" class="ghost" data-shift-del="${esc(r.department)}"
                   ${shiftRulesSaving ? 'disabled' : ''}>Remove</button>
@@ -1132,17 +1136,40 @@ function paintShiftRules() {
   body.innerHTML = `
     ${shiftRules.length ? `
       <table class="table-as-cards">
-        <thead><tr><th>Applies to</th><th class="col-shrink">Starts</th><th class="col-shrink">Grace</th><th class="col-shrink"></th></tr></thead>
+        <thead><tr><th>Applies to</th><th class="col-shrink">Starts</th><th class="col-shrink">Grace</th>
+          <th class="col-shrink">Ends</th><th class="col-shrink">Expected</th>
+          <th class="col-shrink">Alerts outside</th><th class="col-shrink"></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>`
       : `<div class="empty-state" style="text-align:left;">No shift times set, so Attendance shows no punctuality figure. Add a default below to turn it on.</div>`}
     <div class="filter-row" style="margin-top:12px;flex-wrap:wrap;">
       <input type="text" id="shift-dept" class="search" placeholder="Department (blank = default)" autocomplete="off" />
-      <input type="time" id="shift-start" aria-label="Shift start time" />
-      <input type="number" id="shift-grace" min="0" max="240" step="1" value="0" style="width:92px;" aria-label="Grace minutes" />
+      <input type="time" id="shift-start" aria-label="Shift start time" title="Shift start" />
+      <input type="number" id="shift-grace" min="0" max="240" step="1" value="0" style="width:88px;" aria-label="Grace minutes" title="Grace minutes" />
+      <input type="time" id="shift-end" aria-label="Shift end time" title="Shift end (optional)" />
+      <input type="number" id="shift-expected" min="0.5" max="24" step="0.25" style="width:96px;" placeholder="Hours" aria-label="Expected hours" title="Expected paid hours (optional)" />
+      <input type="number" id="shift-margin" min="15" max="720" step="15" style="width:104px;" placeholder="Alert ±m" aria-label="After-hours margin" title="Alert on scans this many minutes outside the shift (optional)" />
       <button type="button" class="primary" id="shift-save" ${shiftRulesSaving ? 'disabled' : ''}>${shiftRulesSaving ? 'Saving…' : 'Save'}</button>
     </div>
-    <p class="emp-meta" style="margin-top:6px;">Saving a department that already has a row replaces it.</p>
+    ${panelNote(
+      'Start and grace drive punctuality. The other three are optional and do different jobs.',
+      `<p><strong>Ends</strong> on its own does nothing — it exists so the
+       other two have a window to work from.</p>
+       <p><strong>Expected</strong> is paid hours per day, and it is
+       deliberately not calculated from start and end: an 07:00–16:00 shift
+       is nine hours elapsed but usually eight paid, because an unpaid break
+       sits inside it. Deriving one from the other would overstate everyone's
+       expected hours by exactly the break. Setting this turns on the
+       overtime figures on Attendance.</p>
+       <p><strong>Alerts outside</strong> is the only one that creates
+       alerts, and it needs an end time. A scan more than this many minutes
+       outside the shift raises a warning in Alerts. Leave it blank unless
+       your hours are genuinely regular — on an irregular operation it
+       produces noise that buries the card-sharing alerts, which are
+       unambiguous. Start generous: hours, not minutes.</p>
+       <p>Saving a department that already has a row replaces it, including
+       clearing any of these three you leave blank.</p>`,
+    )}
   `;
 
   $('#shift-save').addEventListener('click', handleSaveShiftRule);
@@ -1151,14 +1178,43 @@ function paintShiftRules() {
   });
 }
 
+// Minutes -> "8h" / "7h 30m", for the table. The column stores minutes
+// because that is what the overtime arithmetic needs; the inputs are hours
+// because that is how anyone states a shift.
+function fmtExpected(minutes) {
+  const mins = Number(minutes);
+  if (!Number.isFinite(mins) || mins <= 0) return '—';
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  if (!h) return `${m}m`;
+  return m ? `${h}h ${String(m).padStart(2, '0')}m` : `${h}h`;
+}
+
 async function handleSaveShiftRule() {
   const startsAt = $('#shift-start')?.value;
   if (!startsAt) { toast('Pick a shift start time.', 'error'); return; }
+
+  const endsAt = $('#shift-end')?.value || null;
+  const marginRaw = $('#shift-margin')?.value;
+  // Mirrors the RPC's own check so the operator finds out before a round
+  // trip. The server still refuses it — that is the real boundary.
+  if (marginRaw && !endsAt) {
+    toast('An after-hours margin needs a shift end time.', 'error');
+    return;
+  }
+
+  // Hours in the input, minutes in the column. Blank stays blank: Number('')
+  // is 0, and 0 expected hours would mean every minute worked is overtime.
+  const hoursRaw = $('#shift-expected')?.value;
+  const expectedMinutes = String(hoursRaw ?? '').trim() === ''
+    ? null
+    : Math.round(Number(hoursRaw) * 60);
 
   shiftRulesSaving = true;
   paintShiftRules();
   const { error } = await ShiftRulesModel.set(
     $('#shift-dept')?.value, startsAt, $('#shift-grace')?.value,
+    { endsAt, expectedMinutes, afterHoursMarginMinutes: marginRaw },
   );
   shiftRulesSaving = false;
   if (error) { toast(reportError(error, 'settings.shifts'), 'error'); paintShiftRules(); return; }

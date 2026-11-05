@@ -61,10 +61,14 @@ test('the summary row maps onto the stat cards', () => {
   const row = {
     row_count: 3385, employees: 594, worked_seconds: 43315680, open_punches: 11, anomalies: 87,
     on_time: 2800, late_days: 497, unclassified: 88, avg_first_in_seconds: 25920, rules_configured: true,
+    overtime_minutes: 12840, short_minutes: 3720, over_days: 214, short_days: 62,
+    unmeasured_days: 98, expected_configured: true,
   };
   assert.deepEqual(toSummary(row), {
     days: 3385, employees: 594, workedSeconds: 43315680, open: 11, anomalies: 87,
     onTime: 2800, lateDays: 497, unclassified: 88, avgFirstInSeconds: 25920, rulesConfigured: true,
+    overtimeMinutes: 12840, shortMinutes: 3720, overDays: 214, shortDays: 62,
+    unmeasuredDays: 98, expectedConfigured: true,
   });
   // PostgREST hands a SETOF back as an array.
   assert.deepEqual(toSummary([row]), toSummary(row));
@@ -77,18 +81,23 @@ test('a missing or empty summary reads as zeroes, not NaN', () => {
       days: 0, employees: 0, workedSeconds: 0, open: 0, anomalies: 0,
       onTime: 0, lateDays: 0, unclassified: 0,
       avgFirstInSeconds: null, rulesConfigured: null,
+      overtimeMinutes: 0, shortMinutes: 0, overDays: 0, shortDays: 0,
+      unmeasuredDays: 0, expectedConfigured: null,
     });
     // The COUNTS must never be NaN — that was this assertion's original
-    // point. avgFirstInSeconds and rulesConfigured are excluded on purpose:
-    // both are deliberately nullable, because 0 is a real clock time (00:00)
-    // and `false` would claim "no shift times are configured" when the truth
-    // is that nothing was loaded. Utils/punctuality.js depends on that
-    // difference to tell its three states apart.
+    // point. The three nullable fields are excluded on purpose: 0 is a real
+    // clock time (00:00), and `false` on either *_configured flag would claim
+    // "nothing is configured" when the truth may be "nothing was loaded".
+    // Utils/punctuality.js and Utils/overtime.js both depend on that
+    // difference to tell their three states apart.
     const counts = [s.days, s.employees, s.workedSeconds, s.open, s.anomalies,
-                    s.onTime, s.lateDays, s.unclassified];
+                    s.onTime, s.lateDays, s.unclassified,
+                    s.overtimeMinutes, s.shortMinutes, s.overDays, s.shortDays,
+                    s.unmeasuredDays];
     assert.ok(counts.every(Number.isFinite), String(empty));
     assert.equal(s.avgFirstInSeconds, null, String(empty));
     assert.equal(s.rulesConfigured, null, String(empty));
+    assert.equal(s.expectedConfigured, null, String(empty));
   }
 });
 

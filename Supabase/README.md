@@ -27,7 +27,7 @@ supabase functions download upload-employee-photo --project-ref kjwttqmbcjvkivgm
 | `employee_directory` (view)  | Employee joined to required card + scan totals, for the Employee Manager grid. Runs `SECURITY DEFINER` so scanner-only / restricted roles still see joined rows under RLS. Read by `JS/Models/EmployeesModel.js#listDirectory`. |
 | `scan_feed` (view / function) | `get_scan_feed()` — `SECURITY DEFINER` function (originally a plain view, which silently dropped employee joins for scanner-only accounts under invoker RLS; replaced for that reason). Read by `JS/Models/ScanEventsModel.js#recentFeed`, which since 2026-10-03 calls `get_scan_feed_compact()` (no thumbnails, no proximity codes) instead. |
 | `audit_log`                   | Append-only — RLS enabled with exactly one policy (`audit_log_select_admin`, `SELECT` only, `is_admin()`); no INSERT/UPDATE/DELETE policy exists at all, so nothing can write to it directly via PostgREST regardless of role. One row per destructive or permission-changing action: `actor_id`/`actor_name`, `action`, `entity_type`/`entity_id`, `detail` jsonb. Written only via `log_audit_event()` (`SECURITY DEFINER`, bypasses the table's own RLS the way every writer function here does), never a direct insert. See "Audit log" below. |
-| `shift_rules`                 | Added 2026-11-04 (`20261104090000_punctuality.sql`). What time a shift starts, so the Attendance report can tell a late arrival from an early one. `department` (pk) — the sentinel `'*'` is the fallback for any department without its own row, which keeps the primary key doing the deduplication rather than a partial unique index. `starts_at time NOT NULL` with **no default**, deliberately: a default would switch punctuality on for everyone against a time nobody chose. `grace_minutes` (0–240, CHECK) — kept separate from `starts_at` because "the shift starts at 07:00 and we don't quibble under five minutes" is two facts, and folding them into 06:55 would misreport the shift start everywhere it is displayed. RLS enabled with **no policies at all**: every read and write goes through a `SECURITY DEFINER` function that checks its own permission, so no client holds a direct grant. Employees whose `department` is null or empty always resolve to the `'*'` default — `set_shift_rule()` maps a blank input to `'*'`, so no rule can be created for "no department". |
+| `shift_rules`                 | Extended 2026-11-06 (`20261106090000_overtime_and_after_hours.sql`) with `ends_at`, `expected_minutes` and `after_hours_margin_minutes` — all **nullable with no default**, for the same reason `starts_at` has none. `expected_minutes` is deliberately NOT derived from `ends_at - starts_at`: a 07:00–16:00 shift is nine hours elapsed but usually eight paid, because an unpaid break sits inside it, and deriving one from the other would overstate everyone's expected hours by exactly the break. The three are independent switches — `expected_minutes` enables the overtime figures, `after_hours_margin_minutes` enables the alerts and is refused without an `ends_at`, and `ends_at` alone enables nothing. Added 2026-11-04 (`20261104090000_punctuality.sql`). What time a shift starts, so the Attendance report can tell a late arrival from an early one. `department` (pk) — the sentinel `'*'` is the fallback for any department without its own row, which keeps the primary key doing the deduplication rather than a partial unique index. `starts_at time NOT NULL` with **no default**, deliberately: a default would switch punctuality on for everyone against a time nobody chose. `grace_minutes` (0–240, CHECK) — kept separate from `starts_at` because "the shift starts at 07:00 and we don't quibble under five minutes" is two facts, and folding them into 06:55 would misreport the shift start everywhere it is displayed. RLS enabled with **no policies at all**: every read and write goes through a `SECURITY DEFINER` function that checks its own permission, so no client holds a direct grant. Employees whose `department` is null or empty always resolve to the `'*'` default — `set_shift_rule()` maps a blank input to `'*'`, so no rule can be created for "no department". |
 | `site_travel_rules`           | Added 2026-11-04 (`20261104093000_card_sharing_signals.sql`). How many minutes it takes to travel between two sites; a scan pair faster than this is physically impossible for one person. `(from_site, to_site)` pk, with `('*','*')` as the fallback governing every pair, so a three-site operation needs exactly one number and never enumerates pairs. Treated as **symmetric** — a rule for A→B also governs B→A, which halves what an admin maintains; the pk already supports storing both directions separately if a one-way rule is ever needed, and only `site_travel_minutes()` would change. `min_minutes` CHECK 1–1440. Same RLS posture as `shift_rules`: enabled, no policies, reached only through `SECURITY DEFINER` functions. |
 
 Relationship direction: `employees.proximity_card_id → proximity_cards.id`.
@@ -1333,6 +1333,59 @@ the day each entry was written and not maintained since.** Several of them are
 long applied. Probe before believing one.
 
 ### Change log (most recent first)
+
+**2026-11-06 — overtime, and scans outside a shift (`20261106090000_overtime_and_after_hours.sql`, NOT applied)**
+
+`20261104090000` left `shift_rules` as half a shift: `starts_at` and
+`grace_minutes`, so the system could answer "did they arrive on time" but not
+"did they stay their hours" — and the second is the one payroll asks. Three
+columns close that, and two features fall out of them.
+
+- **Zero new requests for both.** Overtime rides on the two RPCs
+  AttendancePage already calls, the same mechanism punctuality uses.
+  After-hours detection is a trigger inside the transaction a scan already
+  performs, writing to `alerts`, which the bell already polls.
+- **`expected_minutes` is not `ends_at - starts_at`,** and that is the main
+  modelling decision here. Nine hours elapsed is usually eight hours paid;
+  deriving one from the other would overstate expected hours by exactly the
+  unpaid break, and so understate overtime for every person every day.
+- **No overtime figure is produced for a day flagged for review.** An
+  `open_punch` day's `worked_seconds` under-counts by the whole afternoon and
+  would read as a massive short day; an `anomaly` day's negative gap is
+  excluded from `worked_seconds` by design. Closing the day in the review
+  queue (`20261103120000`) gives it a figure on the next load. Asserted by
+  `test/overtime.test.mjs` in both functions.
+- **After-hours alerting is a second, separate opt-in.** Setting `ends_at`
+  turns on reporting; alerting additionally needs
+  `after_hours_margin_minutes`, which is null by default and is refused
+  without an end time. Someone configuring hours for a report must not
+  silently start generating security alerts — and on an operation with
+  genuinely irregular hours those alerts would bury the card-sharing ones,
+  which are unambiguous.
+- **The allowed window wraps midnight** when the shift is a night shift, or
+  when the margin pushes it past the boundary. Inside is then the union of
+  two spans rather than the gap between them. `(x - margin) % 1440` stays
+  negative in Postgres, so the `+ 1440` before the modulo is load-bearing.
+- **A separate trigger from `trg_detect_card_sharing`,** not a branch inside
+  it: the two compare different things (this scan against a clock, versus
+  this scan against the previous one), and keeping them apart means this
+  migration adds rather than replaces. Same exception guard, for the same
+  reason — a fault in an analytics rule must not refuse a badge at a door.
+- **Break time costs nothing at all** — no column, no payload change, no
+  migration. `first_in`, `last_out` and `worked_seconds` are already on every
+  report row, so time on site minus time worked is arithmetic the browser
+  does on bytes it already has (`JS/Utils/overtime.js#breakSeconds`). Shown
+  only above 30 minutes, and never subtracted from anyone's hours —
+  `worked_seconds` already excludes it.
+- **A signal from the proposal was dropped.** "Scan on a non-working day"
+  needs a record of which days each department works, which nothing here has.
+  That is the absence feature's territory; guessing weekends would be wrong
+  for a three-site operation that may run them.
+- The 3-argument `set_shift_rule` is dropped rather than overloaded, so a
+  stale client cannot keep saving rules that silently discard the end time.
+  24 tests added, suite at 295. Measured at 375px: the second strip brings
+  the chrome above the table to 353px of an 812px viewport, leaving 443px —
+  and only once both features are configured.
 
 **2026-11-04 — punctuality, and card sharing between sites (`20261104090000_punctuality.sql` + `20261104093000_card_sharing_signals.sql`, applied 2026-11-05; verified)**
 
