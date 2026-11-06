@@ -26,7 +26,14 @@
 -- because storing files would mean Storage, and every download from Storage
 -- is billed egress.
 
-CREATE TABLE public.export_tasks (
+-- IF NOT EXISTS / DROP ... IF EXISTS throughout, so this file can be re-run.
+-- These migrations are applied by hand in the SQL Editor, where a statement
+-- failing halfway through leaves the earlier ones committed; re-running then
+-- died on 42P07 "already exists" and had to be edited by hand to continue.
+-- That happened on 20261104090000 and again on 20261104093000. The functions
+-- below were already CREATE OR REPLACE; the table, indexes and policy are
+-- the three statements that were not.
+CREATE TABLE IF NOT EXISTS public.export_tasks (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   -- No foreign key, and a denormalised name, deliberately -- same shape and
   -- same reason as audit_log.actor_id/actor_name. A ledger of who exported
@@ -53,8 +60,8 @@ CREATE TABLE public.export_tasks (
 -- indexes rather than one because the non-admin query filters on user_id
 -- first, and a plain started_at index would make it scan everyone's rows to
 -- find its own.
-CREATE INDEX idx_export_tasks_started_at ON public.export_tasks (started_at DESC);
-CREATE INDEX idx_export_tasks_user ON public.export_tasks (user_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_export_tasks_started_at ON public.export_tasks (started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_export_tasks_user ON public.export_tasks (user_id, started_at DESC);
 
 COMMENT ON TABLE public.export_tasks IS
   'Ledger of data exports: who, what, when, how many rows. Written only by start_export_task()/finish_export_task(). Holds no exported data and no files; the .xlsx is built in the browser and saved to the operator''s own disk.';
@@ -69,6 +76,7 @@ ALTER TABLE public.export_tasks ENABLE ROW LEVEL SECURITY;
 -- PostgREST directly -- and `user_id = auth.uid()` is the kind of rule that
 -- must be true in the database, not merely true in the function everyone
 -- currently happens to call.
+DROP POLICY IF EXISTS export_tasks_select_scope ON public.export_tasks;
 CREATE POLICY export_tasks_select_scope ON public.export_tasks
   FOR SELECT TO authenticated
   USING (public.is_admin() OR user_id = auth.uid());

@@ -171,6 +171,14 @@ const sql = MIGRATION.split('\n').map((l) => {
   return at === -1 ? l : l.slice(0, at);
 }).join('\n');
 
+// The CREATE TABLE body. A helper rather than two copies of indexOf('CREATE
+// TABLE public.export_tasks'): adding IF NOT EXISTS moved that string, and
+// sql.slice(-1, n) quietly returns the wrong text instead of throwing.
+const tableBody = () => {
+  const at = sql.search(/CREATE TABLE (IF NOT EXISTS )?public\.export_tasks/i);
+  assert.notEqual(at, -1, 'the export_tasks table must be created');
+  return sql.slice(at, sql.indexOf(');', at));
+};
 // THE RULE THAT WAS ASKED FOR, and the reason it is a policy rather than
 // only a filter inside the function everyone currently happens to call.
 test('an admin sees every task, everyone else sees only their own', () => {
@@ -179,6 +187,33 @@ test('an admin sees every task, everyone else sees only their own', () => {
   const fn = sql.slice(sql.indexOf('FUNCTION public.get_export_tasks'));
   assert.ok(/v_admin or t\.user_id = auth\.uid\(\)/i.test(fn),
     'and the listing RPC must apply the same scope');
+});
+
+// These migrations are applied by hand in the SQL Editor, where a statement
+// failing halfway leaves the earlier ones committed. Re-running then died on
+// 42P07 "already exists" and had to be hand-edited to continue — twice, on
+// 20261104090000 and 20261104093000. Every creating statement here must be
+// safe to run a second time.
+test('the migration can be run again after a partial apply', () => {
+  const creates = sql.match(/^CREATE (TABLE|INDEX|POLICY)[^\n]*/gim) || [];
+  assert.ok(creates.length >= 4, `expected the table, two indexes and a policy, found ${creates.length}`);
+  for (const stmt of creates) {
+    if (/^CREATE POLICY/i.test(stmt)) {
+      // A policy has no IF NOT EXISTS, so it needs an explicit drop first.
+      const name = stmt.match(/CREATE POLICY (\w+)/i)[1];
+      assert.ok(new RegExp(`DROP POLICY IF EXISTS ${name}`, 'i').test(sql),
+        `${name} must be dropped if present before being created`);
+      continue;
+    }
+    assert.ok(/IF NOT EXISTS/i.test(stmt),
+      `not re-runnable, will fail with 42P07 on a retry: ${stmt.slice(0, 60)}`);
+  }
+  // The four functions are the other half of the same property.
+  const fns = sql.match(/^CREATE (OR REPLACE )?FUNCTION[^\n]*/gim) || [];
+  assert.equal(fns.length, 4, 'expected four functions');
+  for (const fn of fns) {
+    assert.ok(/OR REPLACE/i.test(fn), `${fn.slice(0, 50)} would fail with 42723 on a retry`);
+  }
 });
 
 // A client that could UPDATE its own rows could rewrite the ledger, which
@@ -194,7 +229,7 @@ test('the ledger cannot be rewritten from the client', () => {
 // that did it; a cascading FK would erase exactly the rows an investigation
 // wants. Same shape as audit_log.actor_id/actor_name.
 test('deleting a user does not erase their export history', () => {
-  const table = sql.slice(sql.indexOf('CREATE TABLE public.export_tasks'), sql.indexOf('CREATE INDEX'));
+  const table = tableBody();
   assert.ok(/user_id uuid/i.test(table) && /operator_name text/i.test(table),
     'the operator name must be snapshotted alongside the id');
   assert.ok(!/REFERENCES/i.test(table),
@@ -255,7 +290,7 @@ test('the ledger stores no exported data and no files', () => {
   assert.ok(!/storage\./i.test(sql) && !/create bucket/i.test(sql),
     'storing files would mean Storage, and every download from Storage is '
     + 'billed egress');
-  const table = sql.slice(sql.indexOf('CREATE TABLE public.export_tasks'), sql.indexOf('CREATE INDEX'));
+  const table = tableBody();
   assert.ok(!/bytea|file_path|storage_path|content/i.test(table),
     'the table records that an export happened, not what was in it');
 });
