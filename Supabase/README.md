@@ -1334,7 +1334,154 @@ long applied. Probe before believing one.
 
 ### Change log (most recent first)
 
-**2026-11-06 — overtime, and scans outside a shift (`20261106090000_overtime_and_after_hours.sql`, NOT applied)**
+**2026-11-06 — export manager: a ledger, and paged exports (`20261106150000_export_tasks.sql`, applied 2026-11-06)**
+
+`20261106140000` made the export *finish*. This removes the other way it can
+fail — one statement returning the whole history — and adds the record of
+who ran it.
+
+- **The scoping rule, as asked:** an admin sees every task; everyone below
+  admin sees only their own. It is an **RLS policy** on `export_tasks`
+  (`USING (is_admin() OR user_id = auth.uid())`) as well as a filter inside
+  `get_export_tasks()`, because that rule must be true in the database, not
+  merely true in the function everyone currently happens to call.
+- **It also fixes a silent truncation, and that turned out to be the urgent
+  half.** `get_all_scan_events()` capped at 100,000 rows and said nothing.
+  Production was measured at **150,504** rows on 2026-11-06, so a completed
+  "export all" was handing over the newest 100,000 and omitting **50,504** —
+  a third of the history — in a file that looked complete.
+  `get_scan_events_page()` stops when a page comes back short, so "all" means
+  all. At that size the export is **16 requests**, and the 500,000 ceiling
+  **reports** rather than truncates.
+- **Keyset, never `OFFSET`.** An `OFFSET` page re-walks and discards every
+  row before it, so page 500 costs 500 times page 1 and the end of a large
+  export reaches the same statement timeout from the other direction. The
+  cursor is a row-wise `(scanned_at, id) < (p_after_scanned_at, p_after_id)`
+  comparison, which the planner can use as a starting position. `id` is in
+  the output precisely so the client can build that cursor, which is why
+  this is a **new** function rather than a changed one — adding a column to
+  a `RETURNS TABLE` needs `DROP` then `CREATE`, and dropping the function
+  the export depends on in the same migration that introduces its
+  replacement trades a working fallback for tidiness.
+- **`id` also breaks the ordering tie.** Two scans sharing a timestamp could
+  otherwise straddle a page boundary in an unstable order and be silently
+  dropped or duplicated between pages.
+- **The archival race is handled in the client.** `archive_old_scan_events()`
+  runs at 03:00 UTC and moves rows between `scan_events` and
+  `scan_events_archive`. Reading both tables is what stops archival from
+  making rows *vanish* from an in-flight export — the row keeps its `id` and
+  `scanned_at`, so the cursor never steps over it — but it does mean a row
+  moved mid-export can be read twice. `Utils/exportChunking.js` dedupes by
+  `id`; a duplicate in a payroll export is worse than a slow one.
+- **Recorded at the start, not only on success.** A browser that dies
+  mid-export leaves a row on `running` forever, and that is the honest
+  outcome: the rows really did leave the database and nothing knows whether
+  they reached a disk. A ledger that only records successes is a receipt.
+- **No files are stored, so there is no download link.** The `.xlsx` is built
+  in the browser and saved to the operator’s own disk, exactly as before.
+  Storing files would mean Storage, and **every download from Storage is
+  billed egress**. The page offers "Re-run" instead, which repeats the export
+  from its recorded parameters at the same cost the first one had.
+- **The ledger cannot be rewritten from the client.** No `INSERT`/`UPDATE`/
+  `DELETE` policy exists at all; the two `SECURITY DEFINER` writers are the
+  only way in, and `finish_export_task()` is scoped to the caller’s own
+  still-`running` task — not `is_admin_or_manager()`, because an admin has no
+  business closing someone else’s export.
+- **`user_id` has no foreign key,** and `operator_name` is snapshotted
+  beside it. Same shape and same reason as `audit_log.actor_id/actor_name`: a
+  record of who exported personal attendance data must outlive the account
+  that did it, and a cascading FK would erase exactly the rows an
+  investigation wants.
+- **Cost.** Egress unchanged — the same rows cross the wire whether they
+  arrive in one response or eleven. Log ingestion: one event per page plus
+  two for the ledger, so roughly **10–13 events (~20–26 KB) per export**
+  against a 1 GB monthly allowance. For scale, every door scan is one event
+  too, and there are thousands of those a day. The listing carries its total
+  via `count(*) over ()` rather than a second count RPC.
+
+**A real bug, caught in a browser rather than by reading.** The listing RPC
+originally clamped `p_limit` to 200 while `Components/Pagination.js` offers
+500 rows per page: the client asked for 500, got 200, then computed the next
+page’s offset as 500 and **stepped over the 300 in between** — silently, in a
+table whose whole job is to be a complete record. The clamp is now 500 and
+`test/export-manager.test.mjs` ties the migration, the model and
+`PAGE_SIZES` together so they cannot drift.
+
+**Verified before apply, with stubs and no requests:** 25,000 rows walked in
+**3 requests** rather than 25,000, newest-first order preserved, an injected
+archival duplicate dropped, admin seeing an Operator column and three rows
+where a manager sees two and no Operator column, a viewer refused, and the
+empty and error states both replacing "Loading…".
+
+**Applied 2026-11-06 and reported successful**, which is the first real
+confirmation the SQL is valid — it was written with no database to run it
+against. Unlike `20261106140000`, this one needs the client change too: the
+four new RPCs answer `PGRST202` to the deployed app until the branch ships.
+**2026-11-06 — the scan log export was quadratic (`20261106140000_scan_log_export_performance.sql`, applied 2026-11-06)**
+
+"Export all scan logs" returned `canceling statement due to statement
+timeout`. Not because the result set is large — because `get_all_scan_events()`
+resolved each row's IN/OUT direction with a correlated subquery that
+re-expanded that employee's **entire** `scan_logs` array, once per exported
+row:
+
+```sql
+(select elem->>'direction'
+ from jsonb_array_elements(e.scan_logs) as elem
+ where elem->>'scan_id' = se.id::text
+ limit 1)
+```
+
+- **The work grows with the square of how much each person scans.** An
+  employee with 267 scans costs 267 × 267 = 71,289 element comparisons on
+  their own account, and there are 835 cards. This was fine when
+  `20261001041500` could note "most of 729 employees average 17 entries
+  total". It is not fine now, and it gets worse every day the system runs.
+- **Measured on production after this was written:** 150,504 rows in
+  `scan_events` and a largest `scan_logs` array of **1,325** entries. The
+  heaviest employee alone costs on the order of 1,325 × 1,325 — about **1.8
+  million** element comparisons — and every other employee adds their own
+  square on top.
+- **A guess that turned out not to apply.** This entry originally argued that
+  "All dates" fails specifically because `trim_employee_scan_logs()` deletes
+  `scan_logs` entries past 180 days while `scan_events_archive` keeps the scan
+  rows forever, so archived rows scan a full array for an entry that was
+  deliberately deleted. The mechanism is real, but `scan_events_archive` held
+  **zero rows** when measured — nothing is old enough to have been archived.
+  The quadratic term was sufficient by itself. The archive effect should start
+  contributing once the data passes 180 days.
+- **Three changes, no signature change.** The date filter moves inside each
+  `UNION ALL` branch so both `scanned_at DESC` indexes can be used; the
+  100,000-row cap is applied **before** directions are looked up rather than
+  after; and `scan_logs` is expanded **once** into a hash-joinable set. The
+  third removes the quadratic term, the other two make it cheap rather than
+  merely finite. Argument types and the `RETURNS TABLE` list are
+  byte-identical, so this is a true `CREATE OR REPLACE` — no `DROP`, no stale
+  overload of the kind `20261009000000` had to clean up, and no client change.
+- **Identical results, not merely similar.** The direction lookup was a
+  scalar subquery, so it never added or removed rows — moving it after the
+  `LIMIT` cannot change which rows come back. The replacement is keyed on
+  **(employee_id, scan_id)**, not `scan_id` alone, because the old subquery
+  read that row's own employee's array; keying globally would let another
+  employee's entry win and flip an IN to an OUT. Archived rows still return a
+  null direction, exactly as before, because their entries really are gone.
+- **`MATERIALIZED` is explicit, not incidental.** The capped set is
+  referenced twice. Inlined into both, the top-N over the union would run
+  again to feed the direction lookup, quietly restoring most of the cost.
+  Guarded by `test/scan-log-export.test.mjs`.
+- **Costs nothing in egress or log ingestion.** Same single request, same
+  rows, same bytes on the wire. Today it delivers zero bytes and burns a full
+  statement timeout, so this is strictly cheaper than the status quo.
+
+**Applied 2026-11-06 and reported successful.** It was written without a
+database to run it against — there is no local Postgres or Docker on this
+machine — so the pre-apply checks were source assertions only. The applied
+result is the first real confirmation that the SQL is valid.
+
+Because the signature is unchanged, this took effect on the **deployed**
+app immediately, with no release: the browser was already calling
+`get_all_scan_events()`, and only the function body changed.
+**2026-11-06 — overtime, and scans outside a shift (`20261106090000_overtime_and_after_hours.sql`, applied 2026-11-06)**
 
 `20261104090000` left `shift_rules` as half a shift: `starts_at` and
 `grace_minutes`, so the system could answer "did they arrive on time" but not

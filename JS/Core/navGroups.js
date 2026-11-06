@@ -18,7 +18,11 @@ export const NAV_GROUPS = Object.freeze([
   { id: 'monitor', label: 'Monitor', routes: ['dashboard', 'muster', 'alerts'] },
   { id: 'manage', label: 'Manage', routes: ['directory', 'proximity', 'scanner'] },
   { id: 'reports', label: 'Reports', routes: ['attendance', 'analytics'] },
-  { id: 'admin', label: 'Administration', routes: ['users', 'settings', 'audit'] },
+  // Exports sits under Administration beside Audit Log, not under Reports.
+  // It is a record of who took data out, which is the same question the
+  // audit log answers — not a report you read to learn something about
+  // attendance.
+  { id: 'admin', label: 'Administration', routes: ['users', 'settings', 'exports', 'audit'] },
 ].map((g) => Object.freeze({ ...g, routes: Object.freeze(g.routes) })));
 
 // Every route in the sidebar, in display order. Used by the tests to assert
@@ -56,6 +60,7 @@ export const BOTTOM_NAV_LABEL = Object.freeze({
   analytics: 'Scanners',
   users: 'Users',
   settings: 'Settings',
+  exports: 'Exports',
   audit: 'Audit',
 });
 
