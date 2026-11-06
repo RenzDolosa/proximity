@@ -780,3 +780,44 @@ tr.row-clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2
      item per line, so tighten the row gap and let each figure own a line. */
   .punct-strip{gap:2px 14px;font-size:12.5px;padding:8px 10px;}
 }
+
+/* ---- Test Scan: reader diagnostics + commissioning (2026-11-06) ---- */
+.ts-mode{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0 0;}
+.ts-mode-toggle{display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;}
+.ts-mode-toggle input{width:16px;height:16px;margin:0;}
+
+.ts-diag{margin-top:14px;border:1px solid var(--border);border-radius:6px;background:var(--surface);}
+.ts-diag > summary{
+  display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+  padding:9px 12px;cursor:pointer;font-size:13px;list-style:none;
+}
+.ts-diag > summary::-webkit-details-marker{display:none;}
+.ts-diag > summary::marker{content:'';}
+.ts-diag > summary::before{content:'>';display:inline-block;transition:transform .12s;color:var(--text-faint);}
+.ts-diag[open] > summary::before{transform:rotate(90deg);}
+.ts-diag-body{padding:4px 12px 12px;}
+.ts-diag-row{display:flex;justify-content:space-between;gap:12px;padding:3px 0;font-size:12.5px;color:var(--text-muted);}
+.ts-diag-row > span:last-child{color:var(--text);text-align:right;}
+/* A finding is the one line someone acts on, so it does not look like a row. */
+.ts-diag-finding{
+  margin-top:8px;padding:8px 10px;border-radius:6px;line-height:1.5;font-size:12.5px;
+  background:var(--warn-dim);color:var(--warn);
+}
+
+.ts-batch{margin-top:14px;border:1px solid var(--border);border-radius:6px;background:var(--surface);padding:10px 12px;}
+.ts-batch-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px;}
+.ts-batch-list{list-style:none;margin:0;padding:0;max-height:280px;overflow-y:auto;}
+.ts-batch-list li{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:5px 0;border-bottom:1px solid var(--border-soft);font-size:12.5px;
+}
+.ts-batch-list li:last-child{border-bottom:none;}
+.ts-batch-list .ts-verify{margin-left:auto;padding:2px 8px;font-size:11.5px;}
+
+/* MUST stay after the base rules above - same specificity resolves by source
+   order, which has silently killed three overrides in this project. */
+@media (max-width: 640px){
+  .ts-diag-row{font-size:12px;}
+  .ts-batch-list{max-height:220px;}
+  .ts-batch-list .ts-verify{margin-left:0;}
+}

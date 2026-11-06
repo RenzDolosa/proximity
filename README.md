@@ -330,6 +330,26 @@ JS/
                                    times), duration formatting, 31-day range
                                    validation, filtering, summary — unit-tested
                                    in test/attendance.test.mjs
+    readerDiagnostics.js          added 2026-11-06; what the badge reader
+                                   actually sent — length vs the real card
+                                   length, character set, keystroke timing,
+                                   terminator, and whether the read is the
+                                   tail of a known card. Reads the browser's
+                                   own key events, so it makes no request.
+                                   Does NOT re-implement readRejection() —
+                                   Core/offlineScanning.js stays the single
+                                   source of truth for usable-or-not
+    commissioning.js              added 2026-11-06; the Test Scan batch list —
+                                   pass / fail / reader-fault outcomes, totals,
+                                   and the cards that read inconsistently
+                                   between scans (the actual finding of a
+                                   commissioning run)
+    scannerHealth.js              added 2026-11-06; the live scanner's health
+                                   rows, built from state the kiosk already
+                                   holds. Treats an unchecked site as unknown
+                                   rather than unset, because looking it up
+                                   would cost the request this drawer exists
+                                   to avoid
     punctuality.js                added 2026-11-04; formats and aggregates the
                                    punctuality figures, and decides which of
                                    three things the panel says (unconfigured /
@@ -651,6 +671,104 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-11-06 (later) — the scanner can finally be diagnosed**
+
+Three additions, all client-side. **No migration, no new RPC, and the one
+that touches the network makes fewer requests than what it replaces.**
+
+**Reader diagnostics (Test Scan).** Two migrations here are about readers
+sending the wrong thing — `20261008000000` found 58 of 59 unknown-card codes
+were *suffixes* of real cards, and `20261008140000` found stuck keys emitting
+40-to-71 characters of one repeated digit — and both ship alerts. Neither told
+the person standing at the reader what it actually transmitted. The keystrokes
+are already arriving in the browser, so `Utils/readerDiagnostics.js` just
+reads them: length against the real card length, character set, inter-keystroke
+timing, whether a terminator was sent, and whether the string is the tail of a
+known card. When it is, it names that card and says how many leading
+characters were dropped. No request at all.
+
+The decision rules are **not duplicated**. `readRejection()` in
+`Core/offlineScanning.js` stays the single source of truth for whether a read
+is usable; this module explains a read and adds the timing nothing needed to
+look at before.
+
+**Commissioning mode (Test Scan), on by default.** Every test scan was
+otherwise its own `test_scan_proximity_code_compact` request, so checking a
+stack of 50 cards cost 50 requests and 50 log events. This resolves from the
+offline cache instead — one sync when nothing is cached, then nothing —
+using `classifyCachedScan()`, the same classifier the live kiosk uses offline,
+so it rehearses the real offline path rather than a lookalike. That path could
+not be rehearsed at all before.
+
+**It defaults to on**, because almost every card tried here is already in that
+cache: opting *in* to the cheap path meant the expensive one ran whenever
+nobody remembered to tick a box, paying per card to re-fetch what the browser
+already had. Opening the page still costs nothing — the mount reads
+IndexedDB, never syncs — and a sync happens only on the first scan, and only
+when nothing is cached at all. The server path is one tick away, and the note
+under the toggle now names its price: *one request and one log event per
+scan*.
+
+**The hazard the default introduces, and the guard for it.**
+`classifyCachedScan()` against an empty roster returns `unmatched`, which is
+indistinguishable from "this browser has never synced". While the mode was
+opt-in you only reached that path by ticking a box, so you knew what the cache
+was; as a default, a good card could be reported bad on a fresh browser — and
+a false negative at a reader sends someone to replace a working card. So the
+cached path refuses to classify without a roster: it says so, and offers a
+button to check that one code against the server. Nothing falls back to the
+server automatically, because the point of the default is that requests are
+opted into. The sync is attempted **once per visit**, not once per scan, or a
+browser that cannot reach Supabase would make the cheap mode cost more than
+the path it replaces.
+
+The page subtitle no longer claims "against the live directory" — by default
+it is not live. The mode note states the source and the cache’s age for the
+scan actually in front of you, which a page subtitle cannot.
+
+**The trade is stated in the UI, not buried:** a cache answers from the roster
+as it was at the last sync, so a card revoked five minutes ago still reads as
+valid. The mode shows the cache's age, and every row has a one-tap Verify that
+checks that card against the server.
+
+A card scanned twice keeps **both** rows, and any card whose outcome differed
+between scans is called out by name. That is the real output of a
+commissioning run — a card that passes four times in five is a failing reader,
+and deduplicating the list would erase exactly that. The pass count would
+still look fine.
+
+**Scanner health drawer (live scanner).** Every value is already in memory:
+`renderOfflineStatus()` reads the cache meta and queue depth on mount, after
+every scan and on every connectivity change, so the drawer is those same
+numbers arranged differently. The row that earns it is **"Scan sounds:
+waiting for a tap"** — browsers refuse audio until a user gesture, so a kiosk
+opened and left alone plays silent scans and looks perfectly healthy. Nothing
+else said so.
+
+It is an inline panel rather than a modal **because a modal steals focus**,
+and this is a kiosk whose whole job is keeping the scan input focused; the
+focus watchdog would fight it. This way a card can be scanned while the panel
+is open, which is exactly when you want to.
+
+It deliberately does **not** show the scanner's site: looking that up is a
+request, and the drawer costs none. So it says nothing rather than "no site
+set", which would be a claim it has not earned and would send someone to fix a
+setting that may already be correct.
+
+**A real bug was caught by its own test.** `fmtAge(null)` rendered as "just
+synced" — `Number(null)` is `0` and `Number.isFinite(0)` is `true`, so a
+missing age sailed past the guard and became a confident claim that the cache
+was fresh, at exactly the moment nothing was known about it. Third appearance
+of that coercion trap in this project, after the 0% progress bar and the 00:00
+average arrival; both copies now check for null *before* coercing.
+
+**Tests:** 52 added, suite at **347**. Includes source assertions that none of
+the three new modules can reach the network, and that commissioning syncs at
+most once. Verified in a browser at 375px: no horizontal overflow, and the
+mobile overrides apply — checked by computed style, not by eye, because a
+mobile block placed before the rules it overrides has silently killed three
+overrides in this project.
 
 **2026-11-06 — the other half of a shift: overtime, breaks, and after-hours scans**
 

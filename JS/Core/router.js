@@ -18,7 +18,11 @@ const titles = {
   alerts: ['Alerts', 'Server-raised warnings — acknowledge them once handled'],
   directory: ['Employee Manager', 'View and edit the employee directory'],
   proximity: ['Proximity Cards', 'Issue and revoke proximity IDs, linked to employees'],
-  scanner: ['Test Scan', 'Try a proximity ID against the live directory — results here are not logged'],
+  // Not "against the live directory" any more: commissioning mode is on by
+  // default, so the default answer comes from the offline cache. The note
+  // under the toggle names the source and its age for the scan in front of
+  // you, which a page subtitle cannot.
+  scanner: ['Test Scan', 'Try a proximity ID — results here are not logged'],
   analytics: ['Scanner Analytics', 'Scan activity, match rates, and per-scanner health over time'],
   attendance: ['Attendance', 'Daily first IN, last OUT, and time on site per employee'],
   users: ['Users & Roles', 'Manage login accounts and permission tiers'],
