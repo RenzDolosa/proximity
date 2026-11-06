@@ -1333,7 +1333,7 @@ the day each entry was written and not maintained since.** Several of them are
 long applied. Probe before believing one.
 
 ### Change log (most recent first)
-**2026-11-06 — Employee Manager was de-TOASTing every scan log to count them (`20261106180000_directory_scan_count_without_detoast.sql`, NOT applied)**
+**2026-11-06 — Employee Manager was de-TOASTing every scan log to count them (`20261106180000_directory_scan_count_without_detoast.sql`, applied 2026-11-06)**
 
 Found while investigating why scans exceed the kiosk’s 4-second timeout. The
 Postgres log carries `duration: 1859.992 ms` for a PostgREST query against
@@ -1392,8 +1392,17 @@ discards. That is real waste, but at 42 scans/minute it does not on its own
 explain a 4-second scan, and fixing it needs the live function body — this
 repo’s copy is known to be behind.
 
-**Not verified against a database** — still no local Postgres here. Six source
-assertions, including that the guard fails when the array read is restored.
+**Applied 2026-11-06 by `Apply-Migration.ps1`** — the first migration in this
+project to go through the script rather than the dashboard SQL Editor. See the
+script entry below: the session-mode pooler host
+(`aws-0-<region>.pooler.supabase.com`) has IPv4, where `db.<ref>.supabase.co`
+is IPv6-only. The only output was
+`NOTICE: trigger "trg_employees_sync_scan_logs_count" ... does not exist,
+skipping`, which is `DROP TRIGGER IF EXISTS` doing its job on a first run and
+is exactly what makes the file re-runnable.
+
+It was written with no database to run it against, so the pre-apply checks
+were ten source assertions, confirmed to fail when the array read is restored.
 
 **2026-11-06 — duplicate-replay 23505s were filling the Postgres log (`20261106170000_absorb_duplicate_scan_replays.sql`, NOT applied)**
 
@@ -1726,7 +1735,9 @@ editors.
   padding) — same specificity resolves by source order.
 
 **Applied 2026-11-05, through the dashboard SQL Editor rather than
-`Apply-Migration.ps1`.** `db.<ref>.supabase.co` is IPv6-only since Supabase
+`Apply-Migration.ps1`.** (Superseded 2026-11-06: the script works against the
+session-mode pooler, and `20261106180000` was applied that way.)
+`db.<ref>.supabase.co` is IPv6-only since Supabase
 removed dedicated IPv4 from direct connections, and the applying machine has
 no global IPv6 address, so psql could not resolve it at all — see the
 2026-11-04 script entry above, which now detects exactly that and points at
