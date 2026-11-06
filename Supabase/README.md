@@ -1349,27 +1349,37 @@ parsing the whole value — per employee, on every visit, because
 - **The arithmetic:** 150,504 scans over 835 employees at ~59 compressed bytes
   per entry — roughly **9 MB read and ~28 MB of JSON parsed to produce 835
   integers**. Nothing else in that query is expensive.
-- **The fix is a column that already exists.** `20261001040000` added
-  `employees.scan_parity_count`, a plain integer maintained by
-  `trg_append_scan_log()` on every matched scan. Same number, no TOAST fetch,
-  no decompression, no parse. One expression changed in the view; no schema
-  change and no client change.
+- **A measurement killed the first draft.** `scan_parity_count` already
+  existed and looked like a free answer — but one employee of 814 already has
+  `scan_parity_count <> jsonb_array_length(scan_logs)`. That counter only ever
+  **increments**: `delete_employee_scan_log()` does not decrement it, and
+  `trim_employee_scan_logs()` leaves it alone because it carries IN/OUT
+  parity. It means "scans ever recorded" where the view needs "entries still
+  in the log" — and the number labels the button that **opens** that log, so
+  the two must agree. They will diverge for *everyone* once the data passes
+  180 days and trimming starts.
+- **So the fix is a separately maintained `employees.scan_logs_count`.** Three
+  functions write `scan_logs` — `trg_append_scan_log()`,
+  `delete_employee_scan_log()` and `trim_employee_scan_logs()` — and all three
+  use a plain `update ... set scan_logs = ...`, so one `BEFORE INSERT OR UPDATE
+  OF scan_logs` trigger catches every writer, including any future one. The
+  count cannot drift, and it equals what the view used to compute **exactly**,
+  so no displayed number changes.
+- **Added without a table rewrite.** Nullable, no default, which in PG11+ is a
+  catalogue change. A `STORED` generated column would be more declarative but
+  takes `ACCESS EXCLUSIVE` and rewrites a table whose TOAST holds ~9 MB —
+  every scan would block for the duration. The backfill is the one slow
+  statement and takes brief row locks, so run it off-peak.
 - **Why it plausibly explains the 4-second scans.** Peak scan volume is only
   **42/minute**, far too low to saturate anything by itself, so contention is
   the better explanation than per-scan cost. A 1.9-second query on a free-tier
   instance holds a connection that scans queue behind; the kiosk gives up at
   `ONLINE_SCAN_TIMEOUT_MS`, falls back offline, queues, and replays — which is
   where `20261106170000`’s duplicate-request 23505s come from.
-- **A semantic note, because the number is user-facing.** `scan_parity_count`
-  only ever increments: `delete_employee_scan_log()` does not decrement it and
-  `trim_employee_scan_logs()` deliberately leaves it alone. So it means "scans
-  ever recorded" where `jsonb_array_length(scan_logs)` means "entries still
-  retained". **Identical today** — nothing has been trimmed, `scan_events_archive`
-  is empty, no data is 180 days old — and they diverge only after a trim or a
-  manual deletion. DirectoryPage renders this as the label on the button that
-  opens the scan log ("267 view"), so a future divergence would make the count
-  overstate the list it opens. If that becomes wrong the answer is a separately
-  maintained retained-count column, not a return to de-TOASTing per page load.
+- **No semantic change at all.** `scan_logs_count` is the length of
+  `scan_logs`, maintained by trigger, which is precisely what the view
+  computed before. The earlier draft traded correctness for speed; this one
+  gets both.
 - **`last_scan` is left alone.** It reads the array too, but the client does
   not select it — `DIRECTORY_COLUMNS` is explicit for exactly this reason — and
   an unselected view column costs nothing. `open_remarks` and `total_remarks`

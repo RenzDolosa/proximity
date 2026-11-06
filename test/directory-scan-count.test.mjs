@@ -10,6 +10,9 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const DIR = new URL('../Supabase/migrations/', import.meta.url);
+const migration = readFileSync(
+  fileURLToPath(new URL('20261106180000_directory_scan_count_without_detoast.sql', DIR)), 'utf8',
+);
 const strip = (src) => src.split('\n').map((l) => {
   const at = l.indexOf('--');
   return at === -1 ? l : l.slice(0, at);
@@ -41,14 +44,65 @@ test('the view is defined, by the migration that de-TOASTed it', () => {
 // THE FIX. Reading the LENGTH of a TOASTed jsonb array costs a full fetch,
 // decompress and parse; scan_parity_count is a fixed-width integer in the
 // heap tuple.
-test('total_scans reads the counter column, never the array', () => {
+test('total_scans reads a stored count, never the array', () => {
   const { body } = latestView();
   const line = body.split('\n').find((l) => /AS total_scans/i.test(l));
   assert.ok(line, 'total_scans must still exist — the client selects it');
-  assert.ok(/scan_parity_count/.test(line),
-    'total_scans must come from the maintained counter');
+  assert.ok(/scan_logs_count/.test(line), 'total_scans must come from the stored count');
   assert.ok(!/jsonb_array_length/.test(line),
     'reading the array length is the 1.9-second query this migration removes');
+});
+
+// THE MEASUREMENT THAT KILLED THE FIRST DRAFT. scan_parity_count already
+// existed and held the same number — except for one employee of 814, because
+// it only ever increments: delete_employee_scan_log() does not decrement it,
+// and trim_employee_scan_logs() leaves it alone since it carries IN/OUT
+// parity. It means "scans ever recorded" where this column means "entries
+// still in the log", and the view's number labels the button that OPENS that
+// log. Once the data passes 180 days and trimming starts, they diverge for
+// everyone, permanently.
+test('the parity counter is not reused as a log length', () => {
+  assert.ok(!/scan_parity_count/.test(latestView().body),
+    'scan_parity_count counts scans ever, not entries retained — it would '
+    + 'overstate the list the number labels');
+});
+
+// Three functions write scan_logs — trg_append_scan_log(),
+// delete_employee_scan_log() and trim_employee_scan_logs() — and all three do
+// it with a plain UPDATE, so one BEFORE trigger catches every writer,
+// including any future one nobody has written yet.
+test('the stored count is maintained by a trigger on the column itself', () => {
+  assert.ok(/BEFORE INSERT OR UPDATE OF scan_logs ON public\.employees/i.test(migration),
+    'must fire on any write to scan_logs, by any writer');
+  assert.ok(!/BEFORE INSERT OR UPDATE ON public\.employees/i.test(migration),
+    'a bare UPDATE trigger would re-read the array when a name or photo '
+    + 'changes, to recompute a number that cannot have changed');
+  assert.ok(/new\.scan_logs_count := coalesce\(jsonb_array_length\(new\.scan_logs\)/.test(migration),
+    'BEFORE, so the value lands in the same tuple rather than a second write');
+});
+
+test('the column is backfilled, and only then made non-null', () => {
+  const trigger = migration.indexOf('CREATE TRIGGER');
+  // Line-ending agnostic: this file is checked out CRLF on Windows, and an
+  // anchor written with \n silently returns -1 there.
+  const backfill = migration.search(/UPDATE public\.employees\s+SET scan_logs_count/);
+  const notNull = migration.indexOf('SET NOT NULL');
+  assert.ok(trigger !== -1 && backfill !== -1 && notNull !== -1, 'all three steps must exist');
+  assert.ok(trigger < backfill,
+    'the trigger must exist first, or a scan landing mid-backfill is fixed and '
+    + 'then re-broken');
+  assert.ok(backfill < notNull, 'NOT NULL before the backfill fails on every existing row');
+});
+
+// ADD COLUMN with a default or a STORED generated expression rewrites the
+// table under ACCESS EXCLUSIVE — every scan would block for the duration, on
+// a table whose TOAST holds ~9 MB.
+test('adding the column does not rewrite the table', () => {
+  const add = migration.match(/ALTER TABLE public\.employees ADD COLUMN[^;]*/i)[0];
+  assert.ok(/IF NOT EXISTS/i.test(add), 'must be re-runnable');
+  assert.ok(!/DEFAULT|GENERATED/i.test(add),
+    'a default or generated expression on ADD COLUMN takes ACCESS EXCLUSIVE '
+    + 'and rewrites the table, blocking every scan');
 });
 
 // CREATE OR REPLACE VIEW requires identical column names, order and types.
