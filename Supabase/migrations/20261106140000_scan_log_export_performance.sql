@@ -11,19 +11,26 @@
 --      limit 1)
 --
 -- That unpacks the employee's ENTIRE scan_logs array once per exported row
--- and linear-scans it for one match. An employee with 267 scans costs
--- 267 x 267 = 71,289 element comparisons on their own account, and there
--- are 835 cards. The work grows with the SQUARE of how much each person
--- scans, which is why this worked when the trim-job migration noted "most
--- of 729 employees average 17 entries total" and does not now.
+-- and linear-scans it for one match. The work grows with the SQUARE of how
+-- much each person scans, which is why this worked when the trim-job
+-- migration (20261001041500) could write "most of 729 employees average 17
+-- entries total" and does not now.
 --
--- WHY "ALL DATES" IS THE ONE THAT FAILS, specifically. trim_employee_scan_logs()
--- (20261001041500) deletes scan_logs entries past 180 days, while
--- scan_events_archive (20260930000000) keeps the scan rows forever. So for
--- every archived row the subquery scans a full array looking for an entry
--- that was deliberately deleted: maximum work, guaranteed zero result. A
--- narrow recent range may well still complete today; the unbounded export
--- cannot.
+-- MEASURED ON PRODUCTION 2026-11-06, after this was written: 150,504 rows in
+-- scan_events, and a largest scan_logs array of 1,325 entries. The heaviest
+-- employee alone therefore costs on the order of 1,325 x 1,325, about 1.8
+-- MILLION element comparisons, and every other employee adds their own
+-- square on top.
+--
+-- A GUESS THAT TURNED OUT NOT TO APPLY, left here because the reasoning
+-- becomes true later. This file originally argued that "All dates" fails
+-- specifically because trim_employee_scan_logs() deletes scan_logs entries
+-- past 180 days while scan_events_archive keeps the scan rows forever, so
+-- archived rows scan a full array for an entry that was deliberately
+-- deleted. That mechanism is real, but scan_events_archive held ZERO rows
+-- when measured -- nothing is old enough to have been archived yet. The
+-- quadratic term was sufficient on its own. Expect the archive effect to
+-- start contributing once the data passes 180 days.
 --
 -- THREE CHANGES, and no signature change. The argument types and the
 -- RETURNS TABLE column list are byte-identical, so this is a true CREATE OR

@@ -1345,11 +1345,14 @@ who ran it.
   (`USING (is_admin() OR user_id = auth.uid())`) as well as a filter inside
   `get_export_tasks()`, because that rule must be true in the database, not
   merely true in the function everyone currently happens to call.
-- **It also fixes a silent truncation.** `get_all_scan_events()` capped at
-  100,000 rows and said nothing — an org past that cap got the newest
-  100,000 and an `.xlsx` that looked complete. `get_scan_events_page()` stops
-  when a page comes back short, so "all" means all. The new client-side
-  ceiling is 500,000 and it **reports** rather than truncates.
+- **It also fixes a silent truncation, and that turned out to be the urgent
+  half.** `get_all_scan_events()` capped at 100,000 rows and said nothing.
+  Production was measured at **150,504** rows on 2026-11-06, so a completed
+  "export all" was handing over the newest 100,000 and omitting **50,504** —
+  a third of the history — in a file that looked complete.
+  `get_scan_events_page()` stops when a page comes back short, so "all" means
+  all. At that size the export is **16 requests**, and the 500,000 ceiling
+  **reports** rather than truncates.
 - **Keyset, never `OFFSET`.** An `OFFSET` page re-walks and discards every
   row before it, so page 500 costs 500 times page 1 and the end of a large
   export reaches the same statement timeout from the other direction. The
@@ -1434,12 +1437,19 @@ row:
   their own account, and there are 835 cards. This was fine when
   `20261001041500` could note "most of 729 employees average 17 entries
   total". It is not fine now, and it gets worse every day the system runs.
-- **"All dates" is the worst possible input, which is why it is the one that
-  fails.** `trim_employee_scan_logs()` (`20261001041500`) deletes `scan_logs`
-  entries past 180 days, while `scan_events_archive` (`20260930000000`) keeps
-  the scan rows forever. So every archived row scans a full array looking for
-  an entry that was deliberately deleted: maximum work, guaranteed zero
-  result. A narrow recent range may well still complete.
+- **Measured on production after this was written:** 150,504 rows in
+  `scan_events` and a largest `scan_logs` array of **1,325** entries. The
+  heaviest employee alone costs on the order of 1,325 × 1,325 — about **1.8
+  million** element comparisons — and every other employee adds their own
+  square on top.
+- **A guess that turned out not to apply.** This entry originally argued that
+  "All dates" fails specifically because `trim_employee_scan_logs()` deletes
+  `scan_logs` entries past 180 days while `scan_events_archive` keeps the scan
+  rows forever, so archived rows scan a full array for an entry that was
+  deliberately deleted. The mechanism is real, but `scan_events_archive` held
+  **zero rows** when measured — nothing is old enough to have been archived.
+  The quadratic term was sufficient by itself. The archive effect should start
+  contributing once the data passes 180 days.
 - **Three changes, no signature change.** The date filter moves inside each
   `UNION ALL` branch so both `scanned_at DESC` indexes can be used; the
   100,000-row cap is applied **before** directions are looked up rather than
