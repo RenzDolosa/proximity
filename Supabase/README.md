@@ -1334,7 +1334,7 @@ long applied. Probe before believing one.
 
 ### Change log (most recent first)
 
-**2026-11-06 — export manager: a ledger, and paged exports (`20261106150000_export_tasks.sql`, NOT applied)**
+**2026-11-06 — export manager: a ledger, and paged exports (`20261106150000_export_tasks.sql`, applied 2026-11-06)**
 
 `20261106140000` made the export *finish*. This removes the other way it can
 fail — one statement returning the whole history — and adds the record of
@@ -1408,9 +1408,13 @@ table whose whole job is to be a complete record. The clamp is now 500 and
 **3 requests** rather than 25,000, newest-first order preserved, an injected
 archival duplicate dropped, admin seeing an Operator column and three rows
 where a manager sees two and no Operator column, a viewer refused, and the
-empty and error states both replacing "Loading…". Not verified: the SQL
-itself — there is still no local Postgres on this machine.
-**2026-11-06 — the scan log export was quadratic (`20261106140000_scan_log_export_performance.sql`, NOT applied)**
+empty and error states both replacing "Loading…".
+
+**Applied 2026-11-06 and reported successful**, which is the first real
+confirmation the SQL is valid — it was written with no database to run it
+against. Unlike `20261106140000`, this one needs the client change too: the
+four new RPCs answer `PGRST202` to the deployed app until the branch ships.
+**2026-11-06 — the scan log export was quadratic (`20261106140000_scan_log_export_performance.sql`, applied 2026-11-06)**
 
 "Export all scan logs" returned `canceling statement due to statement
 timeout`. Not because the result set is large — because `get_all_scan_events()`
@@ -1459,10 +1463,15 @@ row:
   rows, same bytes on the wire. Today it delivers zero bytes and burns a full
   statement timeout, so this is strictly cheaper than the status quo.
 
-**Not verified against a database.** There is no local Postgres or Docker on
-this machine, so this was reviewed by reading rather than executed. The
-checks that exist are source assertions.
-**2026-11-06 — overtime, and scans outside a shift (`20261106090000_overtime_and_after_hours.sql`, NOT applied)**
+**Applied 2026-11-06 and reported successful.** It was written without a
+database to run it against — there is no local Postgres or Docker on this
+machine — so the pre-apply checks were source assertions only. The applied
+result is the first real confirmation that the SQL is valid.
+
+Because the signature is unchanged, this took effect on the **deployed**
+app immediately, with no release: the browser was already calling
+`get_all_scan_events()`, and only the function body changed.
+**2026-11-06 — overtime, and scans outside a shift (`20261106090000_overtime_and_after_hours.sql`, applied 2026-11-06)**
 
 `20261104090000` left `shift_rules` as half a shift: `starts_at` and
 `grace_minutes`, so the system could answer "did they arrive on time" but not
