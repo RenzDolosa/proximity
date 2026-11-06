@@ -1333,6 +1333,58 @@ the day each entry was written and not maintained since.** Several of them are
 long applied. Probe before believing one.
 
 ### Change log (most recent first)
+**2026-11-06 — Employee Manager was de-TOASTing every scan log to count them (`20261106180000_directory_scan_count_without_detoast.sql`, NOT applied)**
+
+Found while investigating why scans exceed the kiosk’s 4-second timeout. The
+Postgres log carries `duration: 1859.992 ms` for a PostgREST query against
+`employee_directory`, in the same minute as a burst of scan timeouts.
+
+The view computed `jsonb_array_length(e.scan_logs) AS total_scans`.
+`scan_logs` grows with every matched scan, so it is TOASTed and compressed,
+and reading its **length** means fetching every chunk, decompressing and
+parsing the whole value — per employee, on every visit, because
+`EmployeesModel.listDirectory()` refetches the view in full and selects
+`total_scans`.
+
+- **The arithmetic:** 150,504 scans over 835 employees at ~59 compressed bytes
+  per entry — roughly **9 MB read and ~28 MB of JSON parsed to produce 835
+  integers**. Nothing else in that query is expensive.
+- **The fix is a column that already exists.** `20261001040000` added
+  `employees.scan_parity_count`, a plain integer maintained by
+  `trg_append_scan_log()` on every matched scan. Same number, no TOAST fetch,
+  no decompression, no parse. One expression changed in the view; no schema
+  change and no client change.
+- **Why it plausibly explains the 4-second scans.** Peak scan volume is only
+  **42/minute**, far too low to saturate anything by itself, so contention is
+  the better explanation than per-scan cost. A 1.9-second query on a free-tier
+  instance holds a connection that scans queue behind; the kiosk gives up at
+  `ONLINE_SCAN_TIMEOUT_MS`, falls back offline, queues, and replays — which is
+  where `20261106170000`’s duplicate-request 23505s come from.
+- **A semantic note, because the number is user-facing.** `scan_parity_count`
+  only ever increments: `delete_employee_scan_log()` does not decrement it and
+  `trim_employee_scan_logs()` deliberately leaves it alone. So it means "scans
+  ever recorded" where `jsonb_array_length(scan_logs)` means "entries still
+  retained". **Identical today** — nothing has been trimmed, `scan_events_archive`
+  is empty, no data is 180 days old — and they diverge only after a trim or a
+  manual deletion. DirectoryPage renders this as the label on the button that
+  opens the scan log ("267 view"), so a future divergence would make the count
+  overstate the list it opens. If that becomes wrong the answer is a separately
+  maintained retained-count column, not a return to de-TOASTing per page load.
+- **`last_scan` is left alone.** It reads the array too, but the client does
+  not select it — `DIRECTORY_COLUMNS` is explicit for exactly this reason — and
+  an unselected view column costs nothing. `open_remarks` and `total_remarks`
+  read `remarks_log` the same way; that array is a few dozen entries org-wide,
+  nowhere near the TOAST threshold.
+
+**What this does not settle.** `scan_proximity_code()` also reads `scan_logs`
+four times per scan and returns the whole array in a response the caller
+discards. That is real waste, but at 42 scans/minute it does not on its own
+explain a 4-second scan, and fixing it needs the live function body — this
+repo’s copy is known to be behind.
+
+**Not verified against a database** — still no local Postgres here. Six source
+assertions, including that the guard fails when the array read is restored.
+
 **2026-11-06 — duplicate-replay 23505s were filling the Postgres log (`20261106170000_absorb_duplicate_scan_replays.sql`, NOT applied)**
 
 Reported from the dashboard: bursts of
