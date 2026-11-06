@@ -1334,6 +1334,58 @@ long applied. Probe before believing one.
 
 ### Change log (most recent first)
 
+**2026-11-06 — the scan log export was quadratic (`20261106140000_scan_log_export_performance.sql`, NOT applied)**
+
+"Export all scan logs" returned `canceling statement due to statement
+timeout`. Not because the result set is large — because `get_all_scan_events()`
+resolved each row's IN/OUT direction with a correlated subquery that
+re-expanded that employee's **entire** `scan_logs` array, once per exported
+row:
+
+```sql
+(select elem->>'direction'
+ from jsonb_array_elements(e.scan_logs) as elem
+ where elem->>'scan_id' = se.id::text
+ limit 1)
+```
+
+- **The work grows with the square of how much each person scans.** An
+  employee with 267 scans costs 267 × 267 = 71,289 element comparisons on
+  their own account, and there are 835 cards. This was fine when
+  `20261001041500` could note "most of 729 employees average 17 entries
+  total". It is not fine now, and it gets worse every day the system runs.
+- **"All dates" is the worst possible input, which is why it is the one that
+  fails.** `trim_employee_scan_logs()` (`20261001041500`) deletes `scan_logs`
+  entries past 180 days, while `scan_events_archive` (`20260930000000`) keeps
+  the scan rows forever. So every archived row scans a full array looking for
+  an entry that was deliberately deleted: maximum work, guaranteed zero
+  result. A narrow recent range may well still complete.
+- **Three changes, no signature change.** The date filter moves inside each
+  `UNION ALL` branch so both `scanned_at DESC` indexes can be used; the
+  100,000-row cap is applied **before** directions are looked up rather than
+  after; and `scan_logs` is expanded **once** into a hash-joinable set. The
+  third removes the quadratic term, the other two make it cheap rather than
+  merely finite. Argument types and the `RETURNS TABLE` list are
+  byte-identical, so this is a true `CREATE OR REPLACE` — no `DROP`, no stale
+  overload of the kind `20261009000000` had to clean up, and no client change.
+- **Identical results, not merely similar.** The direction lookup was a
+  scalar subquery, so it never added or removed rows — moving it after the
+  `LIMIT` cannot change which rows come back. The replacement is keyed on
+  **(employee_id, scan_id)**, not `scan_id` alone, because the old subquery
+  read that row's own employee's array; keying globally would let another
+  employee's entry win and flip an IN to an OUT. Archived rows still return a
+  null direction, exactly as before, because their entries really are gone.
+- **`MATERIALIZED` is explicit, not incidental.** The capped set is
+  referenced twice. Inlined into both, the top-N over the union would run
+  again to feed the direction lookup, quietly restoring most of the cost.
+  Guarded by `test/scan-log-export.test.mjs`.
+- **Costs nothing in egress or log ingestion.** Same single request, same
+  rows, same bytes on the wire. Today it delivers zero bytes and burns a full
+  statement timeout, so this is strictly cheaper than the status quo.
+
+**Not verified against a database.** There is no local Postgres or Docker on
+this machine, so this was reviewed by reading rather than executed. The
+checks that exist are source assertions.
 **2026-11-06 — overtime, and scans outside a shift (`20261106090000_overtime_and_after_hours.sql`, NOT applied)**
 
 `20261104090000` left `shift_rules` as half a shift: `starts_at` and
