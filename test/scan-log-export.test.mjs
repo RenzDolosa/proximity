@@ -35,12 +35,12 @@ const PREVIOUS = '20260930000000_scan_events_archival.sql';
 // definition rather than assuming the fix is last means this test keeps
 // working when a later migration touches the function again — and fails
 // honestly if that later one reintroduces the old shape.
-function latestDefinition() {
+function latestDefinition(name = 'get_all_scan_events') {
   const files = readdirSync(fileURLToPath(DIR)).filter((f) => f.endsWith('.sql')).sort();
   let found = null;
   for (const f of files) {
     const sql = code(read(f));
-    const at = sql.search(/CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.get_all_scan_events/i);
+    const at = sql.search(new RegExp(`CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+public\\.${name}\\s*\\(`, 'i'));
     if (at === -1) continue;
     const body = sql.slice(at);
     const end = body.indexOf('$function$;');
@@ -145,11 +145,92 @@ test('the signature is byte-identical to the version being replaced', () => {
     'no DROP should be needed when the signature is unchanged');
 });
 
-test('the client still calls it the same way', () => {
+// ---- the paged replacement (20261106150000) ----
+//
+// Fixing the quadratic lookup made the single statement finish. It did not
+// remove the other failure mode: one statement whose duration grows with the
+// data will reach the statement timeout again eventually. Pages do.
+
+test('the client exports in pages, not one statement', () => {
   const model = readFileSync(
     fileURLToPath(new URL('../JS/Models/ScanEventsModel.js', import.meta.url)), 'utf8',
   );
-  assert.ok(/rpc\('get_all_scan_events',\s*\{\s*p_from:.*p_to:/s.test(model),
-    'the export is a server-side RPC taking a date range — a client-side '
-    + 'filter would ship rows only to discard them');
+  assert.ok(/rpc\('get_scan_events_page'/.test(model),
+    'the export must go through the paged RPC');
+  assert.ok(!/rpc\('get_all_scan_events'/.test(model),
+    'the single-shot RPC capped at 100,000 rows WITHOUT saying so, which is '
+    + 'worse than timing out because it looks like success');
+  assert.ok(/p_from:.*p_to:/s.test(model),
+    'the date range stays server-side — a client-side filter would ship rows '
+    + 'only to discard them');
+});
+
+// OFFSET re-walks and discards every row before the page, so page 500 costs
+// 500 times page 1 and the end of a large export reaches the same timeout
+// from the other direction.
+test('paging is keyset, never offset', () => {
+  const { body } = latestDefinition('get_scan_events_page');
+  assert.ok(/p_after_scanned_at/.test(body) && /p_after_id/.test(body),
+    'the cursor needs both halves of (scanned_at, id)');
+  assert.ok(/\(\s*\w+\.scanned_at,\s*\w+\.id\s*\)\s*<\s*\(\s*p_after_scanned_at,\s*p_after_id\s*\)/i.test(body),
+    'the row-wise tuple comparison is what lets the planner use the '
+    + 'scanned_at index as a starting position');
+  assert.ok(!/\boffset\b/i.test(body), 'no OFFSET anywhere in the paged path');
+});
+
+// Two scans sharing a timestamp could straddle a page boundary in an unstable
+// order and be silently dropped or duplicated between pages.
+test('the page order breaks ties on id', () => {
+  const { body } = latestDefinition('get_scan_events_page');
+  // Line-scoped. A `[^;]*` tail runs straight past the first clause into the
+  // second — the CTEs between them contain no semicolon — and reports one
+  // giant match where there are two.
+  const orders = body.match(/order by\s+\w+\.scanned_at\s+desc[^\r\n]*/gi) || [];
+  assert.ok(orders.length >= 2, 'both the capped set and the final select must order');
+  for (const clause of orders) {
+    assert.ok(/id desc/i.test(clause),
+      `ordering by scanned_at alone is not a total order: ${clause.trim().slice(0, 60)}`);
+  }
+});
+
+test('a client cannot ask for a page big enough to time out', () => {
+  const { body } = latestDefinition('get_scan_events_page');
+  assert.ok(/least\(coalesce\(p_limit[^)]*\),\s*\d+\)/i.test(body),
+    'p_limit must be clamped server-side, or the cap is advisory');
+});
+
+test('the paged function returns the id its own cursor needs', () => {
+  const { body } = latestDefinition('get_scan_events_page');
+  const head = body.slice(0, body.indexOf('LANGUAGE plpgsql'));
+  assert.ok(/RETURNS TABLE\(\s*id uuid/i.test(head),
+    'without id in the output the client cannot build the next cursor — which '
+    + 'is why this is a new function rather than a changed one');
+});
+
+// The two export functions resolve direction the same way, and must not
+// drift. This is the test that stops a future edit from "fixing" one and
+// leaving the other quadratic.
+test('neither export function resolves direction per row', () => {
+  for (const name of ['get_all_scan_events', 'get_scan_events_page']) {
+    const { body } = latestDefinition(name);
+    assert.ok(!/elem\s*->>\s*'scan_id'\s*=\s*\w+\.id::text/i.test(body),
+      `${name} has the correlated lookup back`);
+    assert.ok(/left join\s+directions/i.test(body), `${name} must join a directions set`);
+    assert.ok(/with\s+capped\s+as\s+materialized/i.test(body),
+      `${name} must materialise its capped set`);
+  }
+});
+
+// get_scan_feed() still uses the correlated subquery and that is FINE: it is
+// hard-capped at a handful of rows, so the array is walked a bounded number
+// of times. Listed explicitly so the next reader knows it was considered
+// rather than missed — and so this test fails if that cap ever grows.
+test('the one remaining correlated direction lookup is a bounded one', () => {
+  const baseline = code(read('20260922072224_production_schema_baseline.sql'));
+  const at = baseline.search(/FUNCTION public\.get_scan_feed\(/i);
+  const head = baseline.slice(at, at + 200);
+  const defaultLimit = Number((head.match(/p_limit integer DEFAULT (\d+)/i) || [])[1]);
+  assert.ok(Number.isFinite(defaultLimit) && defaultLimit <= 100,
+    'get_scan_feed keeps the per-row scan_logs expansion, which is only safe '
+    + `because it returns a handful of rows; its default limit is now ${defaultLimit}`);
 });

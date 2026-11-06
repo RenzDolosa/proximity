@@ -26,6 +26,16 @@ export function canViewAlerts(profile) {
   return isAdminOrManager(profile);
 }
 
+// Export Manager. Same gate as running an export itself
+// (is_admin_or_manager() inside get_scan_events_page()), because a ledger of
+// exports is only useful to someone who can make one. The SCOPE inside the
+// page is a separate rule and lives server-side: get_export_tasks() and the
+// export_tasks RLS policy both return every task to an admin and only your
+// own to anyone below. A UI convenience only; the RPC is the real boundary.
+export function canViewExportTasks(profile) {
+  return isAdminOrManager(profile);
+}
+
 // The Scanner registry panel (Settings) is readable by admins and anyone
 // with Scanner scope (get_scanners()); only admins can change it
 // (update_scanner()).

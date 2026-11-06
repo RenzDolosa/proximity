@@ -2,7 +2,7 @@
 // #standalone-scanner) and only one is ever visible at a time. This module
 // owns that switch so main.js's auth-state handler stays a one-liner.
 import { $, $$ } from '../Utils/dom.js';
-import { appState, isAdmin, canViewEmployeeManager, canViewScanner, canViewSettings, canViewAttendance, canViewDashboard, canViewAlerts } from './state.js';
+import { appState, isAdmin, canViewEmployeeManager, canViewScanner, canViewSettings, canViewAttendance, canViewDashboard, canViewAlerts, canViewExportTasks } from './state.js';
 import { render } from './router.js';
 import { startAlertsBadge, stopAlertsBadge } from './alertsBadge.js';
 import { hiddenGroupIds, bottomNavRoutes, BOTTOM_NAV_LABEL } from './navGroups.js';
@@ -79,6 +79,9 @@ export function showShell() {
   $('#nav-users').classList.toggle('hidden', !isAdmin());
   $('#nav-settings').classList.toggle('hidden', !canViewSettings());
   $('#nav-audit').classList.toggle('hidden', !isAdmin());
+  // Visible to admins and managers; what each SEES inside is scoped
+  // server-side by get_export_tasks() and the export_tasks RLS policy.
+  $('#nav-exports').classList.toggle('hidden', !canViewExportTasks());
   $('button[data-route="dashboard"]').classList.toggle('hidden', !canViewDashboard());
   // Same gate and same data as the Dashboard — whoever can see who is on site
   // can see who to account for.
@@ -97,6 +100,7 @@ export function showShell() {
   if (appState.route === 'analytics' && !canViewScanner()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users'));
   if (appState.route === 'attendance' && !canViewAttendance()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users')));
   if (appState.route === 'settings' && !canViewSettings()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : (isAdmin() ? 'audit' : 'users'));
+  if (appState.route === 'exports' && !canViewExportTasks()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : (isAdmin() ? 'audit' : 'users')));
   if (appState.route === 'audit' && !isAdmin()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : 'users'));
   render();
   startAlertsBadge();

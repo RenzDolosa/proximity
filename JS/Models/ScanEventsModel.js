@@ -22,12 +22,24 @@ export const ScanEventsModel = {
     });
   },
 
-  // "Export all scan logs" — full scan_events history. A separate RPC from
-  // recentFeed rather than a huge p_limit because a full-org export carries its
-  // own is_admin_or_manager() gate, which kiosk accounts must not pass.
-  // from/to filter server-side so a narrow range doesn't ship discarded rows.
-  async listAll({ from = null, to = null } = {}) {
-    return supabase.rpc('get_all_scan_events', { p_from: from, p_to: to });
+  // One keyset page of "Export all scan logs". A separate RPC from recentFeed
+  // rather than a huge p_limit because a full-org export carries its own
+  // is_admin_or_manager() gate, which kiosk accounts must not pass. from/to
+  // filter server-side so a narrow range doesn't ship discarded rows.
+  //
+  // Replaced listAll()/get_all_scan_events(), which returned everything in one
+  // statement: that hit the Postgres statement timeout, and capped silently at
+  // 100,000 rows when it didn't. The cursor is the previous page's last
+  // (scanned_at, id) — see Utils/exportChunking.js for why both halves are
+  // needed and why this is keyset rather than offset.
+  async scanLogPage({ from = null, to = null, cursor = null, limit } = {}) {
+    return supabase.rpc('get_scan_events_page', {
+      p_from: from,
+      p_to: to,
+      p_after_scanned_at: cursor?.afterScannedAt ?? null,
+      p_after_id: cursor?.afterId ?? null,
+      p_limit: limit,
+    });
   },
 
   // Same matching and gate as scan(), but inserts nothing: no feed entry, no

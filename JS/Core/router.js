@@ -10,6 +10,7 @@ import { renderAttendance } from '../Features/Attendance/AttendancePage.js';
 import { renderUsers } from '../Features/Users/UsersPage.js';
 import { renderSettings } from '../Features/Settings/SettingsPage.js';
 import { renderAuditLog } from '../Features/Audit/AuditLogPage.js';
+import { renderExportTasks } from '../Features/Exports/ExportTasksPage.js';
 import { renderMuster } from '../Features/Muster/MusterPage.js';
 
 const titles = {
@@ -27,6 +28,7 @@ const titles = {
   attendance: ['Attendance', 'Daily first IN, last OUT, and time on site per employee'],
   users: ['Users & Roles', 'Manage login accounts and permission tiers'],
   settings: ['Settings', 'App-wide configuration'],
+  exports: ['Export Manager', 'Every export run from this app — who, what, and how many rows'],
   audit: ['Audit Log', 'Who did what — destructive and permission-changing actions only'],
 };
 
@@ -52,6 +54,7 @@ export function render() {
   if (appState.route === 'attendance') renderAttendance();
   if (appState.route === 'users') renderUsers();
   if (appState.route === 'settings') renderSettings();
+  if (appState.route === 'exports') renderExportTasks();
   if (appState.route === 'audit') renderAuditLog();
 }
 

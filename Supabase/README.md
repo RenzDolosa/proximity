@@ -1334,6 +1334,82 @@ long applied. Probe before believing one.
 
 ### Change log (most recent first)
 
+**2026-11-06 — export manager: a ledger, and paged exports (`20261106150000_export_tasks.sql`, NOT applied)**
+
+`20261106140000` made the export *finish*. This removes the other way it can
+fail — one statement returning the whole history — and adds the record of
+who ran it.
+
+- **The scoping rule, as asked:** an admin sees every task; everyone below
+  admin sees only their own. It is an **RLS policy** on `export_tasks`
+  (`USING (is_admin() OR user_id = auth.uid())`) as well as a filter inside
+  `get_export_tasks()`, because that rule must be true in the database, not
+  merely true in the function everyone currently happens to call.
+- **It also fixes a silent truncation.** `get_all_scan_events()` capped at
+  100,000 rows and said nothing — an org past that cap got the newest
+  100,000 and an `.xlsx` that looked complete. `get_scan_events_page()` stops
+  when a page comes back short, so "all" means all. The new client-side
+  ceiling is 500,000 and it **reports** rather than truncates.
+- **Keyset, never `OFFSET`.** An `OFFSET` page re-walks and discards every
+  row before it, so page 500 costs 500 times page 1 and the end of a large
+  export reaches the same statement timeout from the other direction. The
+  cursor is a row-wise `(scanned_at, id) < (p_after_scanned_at, p_after_id)`
+  comparison, which the planner can use as a starting position. `id` is in
+  the output precisely so the client can build that cursor, which is why
+  this is a **new** function rather than a changed one — adding a column to
+  a `RETURNS TABLE` needs `DROP` then `CREATE`, and dropping the function
+  the export depends on in the same migration that introduces its
+  replacement trades a working fallback for tidiness.
+- **`id` also breaks the ordering tie.** Two scans sharing a timestamp could
+  otherwise straddle a page boundary in an unstable order and be silently
+  dropped or duplicated between pages.
+- **The archival race is handled in the client.** `archive_old_scan_events()`
+  runs at 03:00 UTC and moves rows between `scan_events` and
+  `scan_events_archive`. Reading both tables is what stops archival from
+  making rows *vanish* from an in-flight export — the row keeps its `id` and
+  `scanned_at`, so the cursor never steps over it — but it does mean a row
+  moved mid-export can be read twice. `Utils/exportChunking.js` dedupes by
+  `id`; a duplicate in a payroll export is worse than a slow one.
+- **Recorded at the start, not only on success.** A browser that dies
+  mid-export leaves a row on `running` forever, and that is the honest
+  outcome: the rows really did leave the database and nothing knows whether
+  they reached a disk. A ledger that only records successes is a receipt.
+- **No files are stored, so there is no download link.** The `.xlsx` is built
+  in the browser and saved to the operator’s own disk, exactly as before.
+  Storing files would mean Storage, and **every download from Storage is
+  billed egress**. The page offers "Re-run" instead, which repeats the export
+  from its recorded parameters at the same cost the first one had.
+- **The ledger cannot be rewritten from the client.** No `INSERT`/`UPDATE`/
+  `DELETE` policy exists at all; the two `SECURITY DEFINER` writers are the
+  only way in, and `finish_export_task()` is scoped to the caller’s own
+  still-`running` task — not `is_admin_or_manager()`, because an admin has no
+  business closing someone else’s export.
+- **`user_id` has no foreign key,** and `operator_name` is snapshotted
+  beside it. Same shape and same reason as `audit_log.actor_id/actor_name`: a
+  record of who exported personal attendance data must outlive the account
+  that did it, and a cascading FK would erase exactly the rows an
+  investigation wants.
+- **Cost.** Egress unchanged — the same rows cross the wire whether they
+  arrive in one response or eleven. Log ingestion: one event per page plus
+  two for the ledger, so roughly **10–13 events (~20–26 KB) per export**
+  against a 1 GB monthly allowance. For scale, every door scan is one event
+  too, and there are thousands of those a day. The listing carries its total
+  via `count(*) over ()` rather than a second count RPC.
+
+**A real bug, caught in a browser rather than by reading.** The listing RPC
+originally clamped `p_limit` to 200 while `Components/Pagination.js` offers
+500 rows per page: the client asked for 500, got 200, then computed the next
+page’s offset as 500 and **stepped over the 300 in between** — silently, in a
+table whose whole job is to be a complete record. The clamp is now 500 and
+`test/export-manager.test.mjs` ties the migration, the model and
+`PAGE_SIZES` together so they cannot drift.
+
+**Verified before apply, with stubs and no requests:** 25,000 rows walked in
+**3 requests** rather than 25,000, newest-first order preserved, an injected
+archival duplicate dropped, admin seeing an Operator column and three rows
+where a manager sees two and no Operator column, a viewer refused, and the
+empty and error states both replacing "Loading…". Not verified: the SQL
+itself — there is still no local Postgres on this machine.
 **2026-11-06 — the scan log export was quadratic (`20261106140000_scan_log_export_performance.sql`, NOT applied)**
 
 "Export all scan logs" returned `canceling statement due to statement

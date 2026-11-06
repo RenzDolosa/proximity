@@ -6,12 +6,97 @@
 // actually clicked: collects an optional date range, then performs the
 // export itself and resolves once it's done — same "the modal owns the
 // whole collect-input-then-act flow" pattern as RevokeCardModal.js.
+//
+// PAGED SINCE 2026-11-06, and recorded in the export ledger. One statement
+// returning the whole history timed out in production; it also capped at
+// 100,000 rows without saying so, which is the worse of the two failures
+// because it looks like success. See Utils/exportChunking.js.
 import { $ } from '../Utils/dom.js';
 import { fmtTime } from '../Utils/format.js';
 import { dateRangePickerHTML, mountDateRangePicker } from './DateRangePicker.js';
 import { openModal, closeModal, setModalLocked } from './Modal.js';
 import { ScanEventsModel } from '../Models/ScanEventsModel.js';
+import { ExportTasksModel } from '../Models/ExportTasksModel.js';
+import {
+  EXPORT_PAGE_SIZE, EXPORT_ROW_CEILING, newExportState, appendPage,
+  nextCursor, isFinalPage, exportProgressLabel, hitRowCeiling,
+} from '../Utils/exportChunking.js';
 import { exportXlsx, todayStamp } from '../Utils/xlsxExport.js';
+
+export const SCAN_LOG_EXPORT_MODULE = 'scan_logs';
+
+const COLUMNS = [
+  { key: 'scanned_at', label: 'Scanned at' },
+  { key: 'employee_name', label: 'Employee' },
+  { key: 'department', label: 'Department' },
+  { key: 'proximity_code', label: 'Proximity code', text: true },
+  { key: 'scanner_id', label: 'Scanner' },
+  { key: 'direction', label: 'Direction' },
+  { key: 'result', label: 'Result' },
+];
+
+const toSheetRow = (s) => ({
+  scanned_at: fmtTime(s.scanned_at),
+  // A null employee_name means an unmatched/unassigned-card scan attempt
+  // (see scan_events.result) — genuinely no employee to show, not a
+  // data-loading gap, so this is a plain em dash rather than something that
+  // reads as an error.
+  employee_name: s.employee_name || '—',
+  department: s.department || '',
+  proximity_code: s.proximity_code || '',
+  scanner_id: s.scanner_id || '—',
+  direction: (s.direction || '—').toUpperCase(),
+  result: s.result || '',
+});
+
+/**
+ * Walk every page of the range and return the rows.
+ *
+ * Exported so the Export Manager's "Re-run" uses the identical path rather
+ * than a second implementation that drifts from this one.
+ *
+ * @param {object} range `{ from, to }`, ISO strings or null
+ * @param {(label: string) => void} [onProgress]
+ */
+export async function fetchAllScanLogs({ from, to }, onProgress) {
+  const state = newExportState();
+  let cursor = null;
+  let page = 0;
+
+  for (;;) {
+    page += 1;
+    onProgress?.(exportProgressLabel(state.rows.length, page));
+    const { data, error } = await ScanEventsModel.scanLogPage({
+      from, to, cursor, limit: EXPORT_PAGE_SIZE,
+    });
+    if (error) return { rows: state.rows, error };
+
+    const rows = data || [];
+    appendPage(state, rows);
+
+    // Checked BEFORE the final-page test: a run that stops at the ceiling has
+    // not exported everything, and must not be reported as if it had.
+    if (hitRowCeiling(state)) {
+      return {
+        rows: state.rows,
+        error: {
+          message: `This range has more than ${EXPORT_ROW_CEILING.toLocaleString()} scans. `
+            + 'Export it in narrower date ranges — a spreadsheet that large is '
+            + 'not reliably openable anyway.',
+        },
+      };
+    }
+
+    if (isFinalPage(rows, EXPORT_PAGE_SIZE)) break;
+    cursor = nextCursor(rows);
+    // A full page that yields no cursor would loop forever on the same rows.
+    // Should be impossible (id and scanned_at are both NOT NULL), so this is
+    // a stop rather than a retry.
+    if (!cursor) break;
+  }
+
+  return { rows: state.rows, error: null };
+}
 
 /** @returns {Promise<{ confirmed: boolean, error?: { message: string } }>} */
 export function openExportScanLogsModal() {
@@ -22,6 +107,7 @@ export function openExportScanLogsModal() {
       <div class="filter-row" style="margin-bottom:14px;">
         ${dateRangePickerHTML('esl-range', { emptyLabel: 'All dates' })}
       </div>
+      <div class="emp-meta" id="esl-progress" style="margin-bottom:10px;"></div>
       <div class="auth-error hidden" id="esl-error"></div>
       <div class="actions">
         <button class="ghost" id="esl-cancel">Cancel</button>
@@ -46,10 +132,12 @@ export function openExportScanLogsModal() {
 
     $('#esl-ok', overlay).addEventListener('click', async () => {
       const errEl = $('#esl-error', overlay);
+      const progressEl = $('#esl-progress', overlay);
       const okBtn = $('#esl-ok', overlay);
       const showError = (message) => {
         errEl.textContent = message;
         errEl.classList.remove('hidden');
+        progressEl.textContent = '';
         okBtn.disabled = false;
         okBtn.textContent = 'Export';
         setModalLocked(overlay, false);
@@ -63,42 +151,54 @@ export function openExportScanLogsModal() {
       // for anyone not on UTC.
       const from = fromVal ? new Date(`${fromVal}T00:00:00`).toISOString() : null;
       const to = toVal ? new Date(`${toVal}T23:59:59.999`).toISOString() : null;
+      const filename = `scan-logs-${fromVal || 'all'}_${toVal || 'all'}-${todayStamp()}.xlsx`;
 
       okBtn.disabled = true;
       okBtn.textContent = 'Exporting…';
       setModalLocked(overlay, true);
 
-      const { data, error } = await ScanEventsModel.listAll({ from, to });
-      if (error) { showError(error.message); return; }
-      if (!data.length) { showError('No scan history to export for that range.'); return; }
+      // Recorded before a single row is fetched. If this call fails the
+      // export still runs — a ledger that can block an export is worse than
+      // one with a gap in it, and the gap is visible either way.
+      const { data: taskId } = await ExportTasksModel.start(
+        SCAN_LOG_EXPORT_MODULE, filename, { from, to },
+      );
+      const settle = async (status, rowCount, detail) => {
+        if (!taskId) return;
+        await ExportTasksModel.finish(taskId, { status, rowCount, detail }).catch(() => {});
+      };
 
-      exportXlsx({
-        filename: `scan-logs-${fromVal || 'all'}_${toVal || 'all'}-${todayStamp()}.xlsx`,
-        sheetName: 'Scan logs',
-        columns: [
-          { key: 'scanned_at', label: 'Scanned at' },
-          { key: 'employee_name', label: 'Employee' },
-          { key: 'department', label: 'Department' },
-          { key: 'proximity_code', label: 'Proximity code', text: true },
-          { key: 'scanner_id', label: 'Scanner' },
-          { key: 'direction', label: 'Direction' },
-          { key: 'result', label: 'Result' },
-        ],
-        rows: data.map((s) => ({
-          scanned_at: fmtTime(s.scanned_at),
-          // A null employee_name means an unmatched/unassigned-card scan
-          // attempt (see scan_events.result) — genuinely no employee to
-          // show, not a data-loading gap, so this is a plain em dash
-          // rather than something that reads as an error.
-          employee_name: s.employee_name || '—',
-          department: s.department || '',
-          proximity_code: s.proximity_code || '',
-          scanner_id: s.scanner_id || '—',
-          direction: (s.direction || '—').toUpperCase(),
-          result: s.result || '',
-        })),
-      });
+      const { rows, error } = await fetchAllScanLogs(
+        { from, to }, (label) => { progressEl.textContent = label; },
+      );
+      if (error) {
+        await settle('failed', rows.length, error.message);
+        showError(error.message);
+        return;
+      }
+      if (!rows.length) {
+        await settle('failed', 0, 'No scan history in range');
+        showError('No scan history to export for that range.');
+        return;
+      }
 
+      try {
+        exportXlsx({
+          filename,
+          sheetName: 'Scan logs',
+          columns: COLUMNS,
+          rows: rows.map(toSheetRow),
+        });
+      } catch (err) {
+        // The rows were fetched; only the file failed. Recorded as failed
+        // with the reason, because "the data left the database" and "the
+        // operator got a spreadsheet" are different facts.
+        await settle('failed', rows.length, err.message);
+        showError(err.message);
+        return;
+      }
+
+      await settle('finished', rows.length, null);
       finish({ confirmed: true });
       closeModal(overlay);
     });

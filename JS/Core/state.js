@@ -26,6 +26,9 @@ export function isAdmin() {
 export function isAdminOrManager() {
   return access.isAdminOrManager(appState.profile);
 }
+export function canViewExportTasks() {
+  return access.canViewExportTasks(appState.profile);
+}
 export function canViewAttendance() {
   return access.canViewAttendance(appState.profile);
 }
