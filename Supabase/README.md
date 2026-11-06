@@ -1333,6 +1333,72 @@ the day each entry was written and not maintained since.** Several of them are
 long applied. Probe before believing one.
 
 ### Change log (most recent first)
+**2026-11-06 — duplicate-replay 23505s were filling the Postgres log (`20261106170000_absorb_duplicate_scan_replays.sql`, NOT applied)**
+
+Reported from the dashboard: bursts of
+`23505 duplicate key value violates unique constraint "scan_events_request_id_key"`
+— eleven in one minute at 08:31, more at 09:04 and 09:16. **Nothing was
+broken.** This was `20261023070023`’s idempotency working exactly as
+designed, and announcing it as an error every single time.
+
+The chain, end to end:
+
+1. `StandaloneScanner.js` mints a `request_id` and calls
+   `scan_proximity_code_compact()`.
+2. The response does not arrive within `ONLINE_SCAN_TIMEOUT_MS` (**4s**), so
+   the kiosk gives up and takes the offline path. The request is **still in
+   flight** and goes on to commit — the client says so itself.
+3. The same scan is queued, with the **same** `request_id`.
+4. `flushQueue()` replays it, the INSERT hits the partial unique index, and
+   Postgres raises 23505.
+5. The client treats 23505 as success (`isDuplicateScanRequestError`) and
+   drops the queue entry. The data was always right: no second `scan_logs`
+   entry, no flipped IN/OUT parity.
+
+- **The only damage was the error itself.** Raised uncaught, so Postgres
+  wrote an ERROR line per replay. On a free plan already past its
+  log-ingestion grace period that is a real cost, and a dashboard full of red
+  reads as an incident when it is a no-op.
+- **The fix is to look before inserting,** not to react to the violation.
+  `prior_scan_for_request()` resolves a known `request_id` to the response it
+  already produced, so a replay costs one indexed lookup and never reaches
+  the INSERT. That also upgrades what "idempotent" means here: the first
+  version only guaranteed the duplicate did not take **effect**: it did not
+  make asking twice **safe**.
+- **Direction is read back, not recomputed.** It comes from `scan_logs`’s
+  length, which the first call already incremented — recomputing would
+  return the opposite of what the original scan said. The timestamp is the
+  original one too: a replay is a re-reading of a past event, not a new one.
+- **`prior_scan_for_request()` is `SECURITY DEFINER` while its caller stays
+  `SECURITY INVOKER`.** A kiosk account cannot `SELECT public.employees`
+  directly, so an invoker-rights lookup would find nothing, fall through to
+  the INSERT, and raise the very error being removed. It is gated on the same
+  `is_admin() OR can_view_scanner()` as `scan_events`’ own SELECT policy and
+  returns exactly the fields a successful scan already returns to that
+  caller, so it exposes nothing new.
+- **The rare concurrent case is handled but still logs.** If the original
+  request was in flight when the replay checked, the lookup finds nothing and
+  the INSERT still collides; an `EXCEPTION WHEN unique_violation` handler
+  then resolves to the original response instead of failing. A caught
+  exception does **not** unwrite the ERROR line — only `ON CONFLICT` inside
+  the INSERT would, and that INSERT lives in `scan_proximity_code()`, whose
+  live body is ahead of this repo. Rare by construction, where the replay
+  case was constant.
+- **Signature byte-identical**, so a true `CREATE OR REPLACE` with no client
+  change. `scan_proximity_code()` is not touched.
+
+**What this deliberately does not fix.** Every one of those log lines meant a
+scan that took **longer than 4 seconds** and succeeded anyway. That is worth
+knowing, and after this change the log stops saying it. The response now
+carries `duplicate: true` so the count remains observable to a caller. The
+same log window also showed a **1.86-second** PostgREST query against
+`employee_directory`, which points at the same underlying slowness.
+
+**Not verified against a database** — still no local Postgres or Docker on
+this machine. Eleven source assertions cover the shapes that matter,
+including that the lookup precedes the INSERT; the guard was confirmed to
+fail when the lookup is removed.
+
 
 **2026-11-06 — export manager: a ledger, and paged exports (`20261106150000_export_tasks.sql`, applied 2026-11-06)**
 
