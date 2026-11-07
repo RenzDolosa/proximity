@@ -129,10 +129,9 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM anon;
 -- costs nothing and removes the only privileges on these tables that policies
 -- do not mediate.
 --
--- SELECT/INSERT/UPDATE/DELETE are deliberately LEFT IN PLACE. Every one of
--- them is governed by a policy that this audit checked, and narrowing them
--- further needs something this repo cannot see -- see the note at the foot of
--- this file.
+-- This step is about the verbs RLS cannot reach, on EVERY table. Which
+-- tables authenticated should hold SELECT/INSERT/UPDATE/DELETE on at all is
+-- a separate question, answered in step 4.
 REVOKE TRUNCATE, TRIGGER, REFERENCES ON ALL TABLES IN SCHEMA public FROM authenticated;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   REVOKE TRUNCATE, TRIGGER, REFERENCES ON TABLES FROM authenticated;
@@ -217,34 +216,97 @@ NOTIFY pgrst, 'reload schema';
 --   where table_schema='public' and grantee='authenticated' order by 1;
 --
 -- ---------------------------------------------------------------------
--- DELIBERATELY NOT DONE HERE, and why
+-- 4. authenticated keeps only the relations PostgREST actually reaches.
 -- ---------------------------------------------------------------------
--- `authenticated` keeps SELECT on tables the client never reads directly --
--- scan_events, scan_events_archive, export_tasks, audit_log, alerts,
--- scanners, and the two unused directory views. Only four relations are
--- reached through PostgREST at all (employees, proximity_cards, profiles and
--- employee_directory), so those grants could be dropped, and dropping
--- scan_events in particular would stop any logged-in account pulling 150,504
--- rows of movement history in one request.
+-- The client reaches exactly four relations directly. Everything else in
+-- schema public is read through SECURITY DEFINER RPCs, which run as the
+-- function owner and need no grant on the caller at all.
 --
--- It is not done because several functions exist only in the live database --
--- get_alerts, get_scanners, get_onsite_roster, get_dashboard_stats,
--- get_scanner_performance_stats, update_scanner, raise_alert and others are
--- in test/schema-drift.test.mjs's KNOWN_MISSING allowlists. If any of them is
--- SECURITY INVOKER rather than DEFINER, it reads those tables with the
--- CALLER's privileges and revoking the grant breaks it. Guessing would trade
--- a theoretical exposure for a real outage.
+-- The prize is scan_events: today any logged-in account can
+-- GET /rest/v1/scan_events?select=* and pull 150,504 rows of movement
+-- history -- who was where, and when -- in one request. The RPCs that are
+-- supposed to serve that data are paginated and projected; the raw grant
+-- walks around all of it.
 --
--- One query decides it:
+-- WHAT MADE THIS SAFE TO DO, having been deferred once for lack of proof:
 --
---   select p.proname, p.prosecdef as security_definer
---   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
---   where n.nspname = 'public'
---     and p.proname in ('get_alerts','get_scanners','get_onsite_roster',
---                       'get_dashboard_stats','get_unread_alert_count',
---                       'acknowledge_alert','acknowledge_all_alerts',
---                       'get_scanner_performance_stats','update_scanner',
---                       'raise_alert')
---   order by 1;
+--   1. All ten live-only functions are SECURITY DEFINER (measured:
+--      get_alerts, get_scanners, get_onsite_roster, get_dashboard_stats,
+--      get_unread_alert_count, acknowledge_alert, acknowledge_all_alerts,
+--      get_scanner_performance_stats, update_scanner, raise_alert --
+--      prosecdef true for every one). They read their tables as the owner.
 --
--- All true -> the remaining grants can go in a follow-up.
+--   2. No SECURITY INVOKER function touches any table revoked below. The
+--      four invokers the client calls -- get_dashboard_pulse,
+--      get_onsite_roster_delta, get_thumbs_to_recompress and
+--      get_employees_missing_thumb -- read only employees, whose grant is
+--      kept. shift_rule_for() and site_travel_minutes() are invoker and do
+--      read shift_rules/site_travel_rules, but nothing calls them from the
+--      client: they run inside definer functions, where the effective user
+--      is the owner. Checked for BARE table names as well as public.
+--      qualified ones, since these functions pin search_path and
+--      `from scan_events` is perfectly legal.
+--
+--   3. Those two tables have RLS on with ZERO policies, so the grant is
+--      already inert for authenticated. Removing it changes nothing and
+--      stops it reading as permission.
+--
+-- Guarded with to_regclass because alerts and scanners exist only in the
+-- live database -- no migration in this repo creates them (see
+-- test/schema-drift.test.mjs KNOWN_MISSING_DEPENDENCIES). A plain REVOKE
+-- naming them would abort this whole file on any database that lacks them.
+DO $$
+DECLARE
+  v_rel text;
+BEGIN
+  FOREACH v_rel IN ARRAY ARRAY[
+    'public.scan_events',
+    'public.scan_events_archive',
+    'public.audit_log',
+    'public.export_tasks',
+    'public.alerts',
+    'public.scanners',
+    'public.shift_rules',
+    'public.site_travel_rules',
+    'public.proximity_card_directory',
+    'public.unassigned_active_proximity_cards'
+  ] LOOP
+    IF to_regclass(v_rel) IS NOT NULL THEN
+      EXECUTE format('REVOKE ALL ON TABLE %s FROM authenticated', v_rel);
+    END IF;
+  END LOOP;
+END $$;
+
+-- Restated rather than left implicit, so this file describes the whole
+-- intended end state instead of half of it. Re-granting the four verbs
+-- does NOT bring back TRUNCATE/TRIGGER/REFERENCES revoked in step 2.
+--
+-- All four verbs on the three createModel() tables, not just the ones a
+-- grep finds: Models/BaseModel.js builds its queries as `.from(table)` with
+-- a VARIABLE, so insert and delete are reachable on employees, profiles and
+-- proximity_cards whether or not a caller uses them today. Each is governed
+-- by a policy this audit checked -- profiles INSERT and DELETE both require
+-- is_admin(), employees and proximity_cards require is_admin_or_manager().
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.employees TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.proximity_cards TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.profiles TO authenticated;
+
+-- security_invoker = true, so reading it also needs SELECT on employees and
+-- proximity_cards underneath -- both granted above.
+GRANT SELECT ON public.employee_directory TO authenticated;
+
+-- ---------------------------------------------------------------------
+-- VERIFY AFTER APPLYING
+-- ---------------------------------------------------------------------
+--   -- anon: zero rows.
+--   -- authenticated: exactly the four relations, and no TRUNCATE anywhere.
+--   select grantee, table_name,
+--          string_agg(privilege_type, ',' order by privilege_type) as privs
+--   from information_schema.role_table_grants
+--   where table_schema='public' and grantee in ('anon','authenticated')
+--   group by 1,2 order by 1,2;
+--
+-- Then exercise the app as the admin: Dashboard, Employee Manager,
+-- Proximity Cards, Attendance, Scanner Analytics, Alerts, Audit Log and a
+-- Test Scan. Every one of those reads through an RPC whose grants this file
+-- does not touch, so the expectation is that nothing changes at all.

@@ -1333,6 +1333,74 @@ the day each entry was written and not maintained since.** Several of them are
 long applied. Probe before believing one.
 
 ### Change log (most recent first)
+**2026-11-06 — RLS audit: anon held every privilege, and `all` outranked the role (`20261106190000_tighten_anon_grants_and_scope_reads.sql`, NOT applied)**
+
+Full read of the RLS surface: 11 tables, 21 policies, 63 `SECURITY DEFINER`
+functions, 3 views. Two findings worth acting on, plus one dashboard setting
+that turned out to matter more than either.
+
+**🔴 The urgent one was not in the schema at all.** Authentication → Sign In /
+Providers → **"Allow new users to sign up" was ON**, while the app has no
+signup UI — `AuthScreen.js` has carried a comment since 2026-09-19 saying
+self-service was removed and pointing at *"the Supabase Dashboard setting
+that actually closes the door at the API level"*. The code knew; the toggle
+was never flipped. With it on, anyone holding the published anon key could
+`POST /auth/v1/signup`, get a profile auto-created at `role=viewer` /
+`access_scope=all` (the column default), and read the entire directory. **No
+unauthorized accounts were found** — all 10 profiles are accounted for, newest
+2026-09-29.
+
+- **`GRANT ALL … TO anon` on 5 tables and 3 views.** Not reachable — RLS is on
+  everywhere, policies resolve false with no `auth.uid()`, PostgREST exposes
+  no TRUNCATE, `anon` is NOLOGIN. Still wrong: **RLS does not apply to
+  TRUNCATE**, and it leaves RLS as the single point of failure on the tables
+  holding the PII while the anon key ships in the client bundle. It was also
+  *growing* — `export_tasks` had it although `20261106150000` grants nothing,
+  because Supabase default privileges re-apply `ALL` to anon for every new
+  table. The defaults are changed too, or the fix decays.
+- **`access_scope` defaults to `all`, and all three read helpers granted on
+  scope alone.** So the next account created would read `employees` (email,
+  phone, `scan_logs`), `proximity_cards` and every `scan_event`. Now `all`
+  means "everything your role allows": an explicit `scanner` or
+  `employee_manager` still grants on its own, the catch-all needs manager or
+  admin behind it. **Verified against all ten live accounts — not one
+  changes.** `accessControl.js` is updated in step, since the UI being
+  stricter than the database is how this stayed invisible.
+- **`authenticated` now holds grants on only the four relations PostgREST
+  actually reaches** (`employees`, `proximity_cards`, `profiles`,
+  `employee_directory`). `scan_events` is the prize: any logged-in account
+  could previously `GET /rest/v1/scan_events?select=*` for 150,504 rows of
+  movement history in one request. Safe to do because **all ten live-only
+  functions measured `prosecdef = true`**, and no `SECURITY INVOKER` function
+  touches a revoked table — checked for bare names as well as `public.`
+  qualified ones, since those functions pin `search_path`.
+
+**Two near-misses while writing it.** `BaseModel.js` builds queries as
+`.from(table)` with a *variable*, so a grep for `.from('profiles')` sees only
+select and update while insert and delete are equally reachable — the grants
+cover all four. And `alerts`/`scanners` exist only in the live database, so
+the revoke is wrapped in `to_regclass` or the file would abort anywhere they
+are absent.
+
+**What was already right**, and worth not re-litigating: RLS on all 11 tables
+plus an `rls_auto_enable` event trigger; **every one of the 63 definer
+functions pins `search_path`**; no genuinely ungated RPC;
+`prevent_self_privilege_escalation()` covers `role`, `access_scope` *and*
+`is_active`; `shift_rules`/`site_travel_rules` are deny-all by having zero
+policies; all three views are `security_invoker`; `scan_events` has no UPDATE
+or DELETE policy, so scan history is append-only from any client.
+
+**Tests:** 18 added, suite at **428**. The existing suite missed both findings
+— `access-control.test.mjs` tested the account shapes that exist in production
+and never the one the DEFAULT produces, and nothing tested grants at all. One
+new guard fails the build if client code ever reaches a revoked relation,
+because that failure would otherwise show up as an outage after deploy rather
+than in CI. Confirmed by adding a `.from('scan_events')` and watching it fail.
+
+**Not verified against a database** — reviewed by reading, with every claim
+checked against live via the SQL Editor (grants, policy counts, `prosecdef`,
+the profile breakdown).
+
 **2026-11-06 — Employee Manager was de-TOASTing every scan log to count them (`20261106180000_directory_scan_count_without_detoast.sql`, applied 2026-11-06)**
 
 Found while investigating why scans exceed the kiosk’s 4-second timeout. The

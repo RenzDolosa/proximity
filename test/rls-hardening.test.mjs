@@ -6,7 +6,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   canViewEmployeeManager, canViewScanner, canViewSettings, canViewScannerRegistry,
@@ -139,11 +139,74 @@ test('the verbs RLS cannot govern are removed from authenticated', () => {
     'and must not come back on the next table');
 });
 
-// Narrowing these would need the bodies of the live-only functions
-// (get_alerts, get_onsite_roster, ...) to prove they are SECURITY DEFINER.
-// Asserted so the omission reads as a decision, not an oversight.
-test('the DML authenticated still holds is left for policies to govern', () => {
-  assert.ok(!/REVOKE[^\n]*SELECT[^\n]*FROM authenticated/i.test(sql),
-    'revoking SELECT needs the live-only function bodies first — see the '
-    + 'footnote in the migration');
+// ---- authenticated keeps only what PostgREST reaches ----
+//
+// Unblocked by measuring prosecdef on all ten live-only functions (all true)
+// and confirming no SECURITY INVOKER function touches any table below. The
+// prize is scan_events: 150,504 rows of movement history that any logged-in
+// account could otherwise pull in one request.
+
+const REVOKED_FROM_AUTHENTICATED = [
+  'public.scan_events', 'public.scan_events_archive', 'public.audit_log',
+  'public.export_tasks', 'public.alerts', 'public.scanners',
+  'public.shift_rules', 'public.site_travel_rules',
+  'public.proximity_card_directory', 'public.unassigned_active_proximity_cards',
+];
+
+test('every RPC-only relation is revoked from authenticated', () => {
+  for (const rel of REVOKED_FROM_AUTHENTICATED) {
+    assert.ok(sql.includes(`'${rel}'`), `${rel} must lose its direct grant`);
+  }
+  assert.ok(/REVOKE ALL ON TABLE %s FROM authenticated/.test(sql),
+    'the revoke must actually be executed, not just listed');
+});
+
+// alerts and scanners exist only in the live database — no migration here
+// creates them. A plain REVOKE naming them aborts the whole file anywhere
+// they are absent.
+test('the revoke tolerates relations this repo does not create', () => {
+  assert.ok(/to_regclass\(v_rel\) IS NOT NULL/i.test(sql),
+    'alerts and scanners are in schema-drift KNOWN_MISSING_DEPENDENCIES');
+});
+
+// BaseModel builds `.from(table)` with a VARIABLE, so insert and delete are
+// reachable on all three createModel tables whether or not a caller uses
+// them today. A grep for .from('profiles') sees only select and update.
+test('the four reachable relations keep exactly the verbs the client can issue', () => {
+  for (const t of ['employees', 'proximity_cards', 'profiles']) {
+    assert.ok(new RegExp(`GRANT SELECT, INSERT, UPDATE, DELETE ON public\\.${t} TO authenticated`).test(sql),
+      `${t} is wrapped by createModel(), which exposes all four verbs`);
+  }
+  assert.ok(/GRANT SELECT ON public\.employee_directory TO authenticated/.test(sql),
+    'the grid view is read-only');
+  assert.ok(!/GRANT[^\n]*TRUNCATE/i.test(sql), 'no re-grant may reintroduce TRUNCATE');
+});
+
+// security_invoker = true, so the view is only readable if the caller can
+// read both tables it joins.
+test('the view keeps the underlying grants it needs', () => {
+  const viewAt = sql.indexOf('GRANT SELECT ON public.employee_directory');
+  for (const t of ['employees', 'proximity_cards']) {
+    assert.ok(sql.indexOf(`GRANT SELECT, INSERT, UPDATE, DELETE ON public.${t}`) < viewAt,
+      `employee_directory is security_invoker and joins ${t}`);
+  }
+});
+
+// The client reaches exactly four relations. If a fifth ever appears, this
+// migration's grant list is wrong and the app breaks on deploy, not in CI.
+test('no client code reaches a relation this migration revokes', () => {
+  const walk = (d) => readdirSync(d, { withFileTypes: true })
+    .flatMap((e) => (e.isDirectory() ? walk(`${d}/${e.name}`) : [`${d}/${e.name}`]));
+  const root = fileURLToPath(new URL('../JS', import.meta.url));
+  const js = walk(root).filter((f) => f.endsWith('.js'))
+    .map((f) => readFileSync(f, 'utf8')).join('\n');
+  const reached = new Set([...js.matchAll(/\.from\(\s*['"`]([a-z_]+)['"`]/g)].map((m) => m[1]));
+  for (const rel of REVOKED_FROM_AUTHENTICATED) {
+    const bare = rel.replace('public.', '');
+    assert.ok(!reached.has(bare),
+      `${bare} is reached by .from() but this migration revokes it — that is an outage`);
+  }
+  assert.deepEqual([...reached].sort(),
+    ['employee_directory', 'employees', 'profiles', 'proximity_cards'],
+    'the set of directly-reached relations changed; revisit the grant list');
 });
