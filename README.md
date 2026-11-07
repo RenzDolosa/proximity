@@ -701,7 +701,30 @@ credentials. Neither was reported by a user; opening Settings fires both.
 that is a `count(*)` over 150,504 rows, and the only cheap alternative is an
 estimate that would change a number the panel presents as exact.
 
-Migration `20261107130000_settings_panel_repairs.sql`; 9 tests, suite at 438.
+- **…and once it worked, every row said the same thing.** All nine read
+  `WITH pgrst_source AS (SELECT "pgrst_call".* FROM …` — PostgREST's wrapper,
+  identical for every RPC — so the one column meant to identify the slow
+  query identified nothing. `JS/Utils/queryLabel.js` now pulls the RPC or
+  relation name out of the wrapper (`get_scan_logs_trim_status()`,
+  `insert employees`), with the full SQL kept as the fallback for any shape
+  it doesn't recognise.
+
+  **It classifies on a whitelist, not a parse.** A quoted Postgres identifier
+  may legally contain `<`, a quote or a newline, and `pg_stat_statements`
+  records the text of statements that *failed* too — so "it came from the
+  database" is not a reason to trust it. Anything not shaped like a plain
+  unquoted identifier falls through to the raw path, and `esc()` still wraps
+  every branch. Net effect is **less** in the DOM than before: a recognised
+  row renders a name instead of 500 characters of schema, columns and
+  predicates.
+
+  One ordering subtlety worth not re-deriving: writes are matched *before*
+  function calls, because `INSERT INTO "public"."employees"("full_name", …)`
+  puts the column list's paren exactly where a function's argument list would
+  and is otherwise indistinguishable from a call to a function named
+  `employees`.
+
+Migration `20261107130000_settings_panel_repairs.sql`; 23 tests, suite at 452.
 
 **2026-11-06 (later) — the scanner can finally be diagnosed**
 
