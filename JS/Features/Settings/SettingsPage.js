@@ -21,6 +21,7 @@ import { ProfilesModel } from '../../Models/ProfilesModel.js';
 import { ScanSoundsModel, SOUND_KEYS, SOUND_LABELS, MAX_FILE_SIZE_BYTES } from '../../Models/ScanSoundsModel.js';
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { QueryStatsModel } from '../../Models/QueryStatsModel.js';
+import { describeQuery } from '../../Utils/queryLabel.js';
 import { ScanArchiveModel } from '../../Models/ScanArchiveModel.js';
 import { ScanLogsTrimModel } from '../../Models/ScanLogsTrimModel.js';
 import { ScannerSilenceModel } from '../../Models/ScannerSilenceModel.js';
@@ -919,13 +920,19 @@ function paintQueryStats() {
     return;
   }
   const oldestSince = queryStats.reduce((oldest, r) => (!oldest || r.stats_since < oldest ? r.stats_since : oldest), null);
+  // Every PostgREST statement opens with the same `WITH pgrst_source AS …`
+  // wrapper, so showing the raw text made all nine rows identical and the
+  // panel unactionable. describeQuery() pulls the RPC or relation name out;
+  // an unrecognised shape still falls back to the full SQL. Both halves of
+  // what it returns are untrusted text and stay inside esc().
+  const rows = queryStats.map((r) => ({ r, q: describeQuery(r.query) }));
   body.innerHTML = `
     <table>
       <thead><tr><th>Query</th><th class="col-shrink">Calls</th><th class="col-shrink">Mean</th><th class="col-shrink">Total</th><th class="col-shrink">Max</th><th class="col-shrink">Rows</th><th class="col-shrink">Cache hit</th></tr></thead>
       <tbody>
-        ${queryStats.map((r) => `
+        ${rows.map(({ r, q }) => `
           <tr>
-            <td class="mono" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.query)}">${esc(r.query)}</td>
+            <td class="mono" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(q.title)}">${esc(q.label)}</td>
             <td class="col-shrink mono">${r.calls.toLocaleString()}</td>
             <td class="col-shrink mono"${r.mean_exec_time_ms >= queryThresholdMs * 2 ? ' style="color:var(--bad);font-weight:600;"' : ''}>${r.mean_exec_time_ms}ms</td>
             <td class="col-shrink mono">${(r.total_exec_time_ms / 1000).toFixed(1)}s</td>
