@@ -188,6 +188,15 @@ nav.rail button.active .ic{color:var(--accent);}
 #dash-panel > *{flex:0 0 auto;}
 #dash-panel > .table-scroll{flex:1 1 auto;}
 
+/* Muster: same fix as Attendance and the Dashboard, for the same reason. The
+   toolbar and the "as of / n uncertain" status line were scrolling away with
+   the list, so Refresh, Print and the uncertain filter all went off-screen as
+   soon as a marshal started reading names — the exact moment those controls
+   are wanted. #mu-body becomes the bounded scroller and the two rows above it
+   stay put, matching every table page in the app. */
+#content > #mu-status{flex:0 0 auto;}
+#mu-body{flex:1 1 auto;min-height:200px;overflow-y:auto;}
+
 /* PHONE: stop boxing the rows into their own little scroller.
    The inner scroll area exists to give `thead th{position:sticky}` something
    to stick to. In card mode the thead is visually hidden, so on a phone that
@@ -205,6 +214,11 @@ nav.rail button.active .ic{color:var(--accent);}
   #dash-panel,
   #att-body{display:block;min-height:0;}
   #analytics-body .table-scroll{max-height:none;}
+  /* Muster, same reasoning. One column on a phone already, so a 46dvh cap
+     inside a bounded #mu-body inside #content is three scrollers deep for
+     one list of names. Let the page scroll; the sites just stack. */
+  #mu-body{flex:0 0 auto;min-height:0;overflow:visible;}
+  .muster-site-body{max-height:none;overflow:visible;}
 }
 
 /* Unread-alerts count on the sidebar's Alerts button (Core/alertsBadge.js). */

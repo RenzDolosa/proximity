@@ -19,6 +19,18 @@ import {
 } from '../../Utils/muster.js';
 
 let accounted = new Set();
+// Site names the reader has folded away. Collapse hides with CSS rather than
+// dropping the rows, so a tick survives a fold and the counts below keep
+// working off a list that is always complete.
+let collapsed = new Set();
+// The "N uncertain" badge doubles as a filter: everyone whose last scan is
+// old, and nobody else. That is the sub-list a marshal chases once the
+// obvious names have walked up.
+let onlyUnsure = false;
+// The unfiltered grouping, kept so counts can be recomputed on a tick without
+// repainting — losing scroll position halfway through a headcount would be
+// its own small disaster — and so a filter can never shrink a denominator.
+let allGroups = [];
 
 export async function renderMuster() {
   const content = $('#content');
@@ -30,6 +42,7 @@ export async function renderMuster() {
         <input class="search" id="mu-search" type="search" placeholder="Search name, code, department…" />
       </div>
       <div class="toolbar-actions">
+        <button class="ghost" id="mu-expand">Collapse all</button>
         <button class="ghost" id="mu-reset">Reset ticks</button>
         <button class="ghost" id="mu-print">Print</button>
         <button class="primary" id="mu-refresh">Refresh</button>
@@ -43,10 +56,39 @@ export async function renderMuster() {
   $('#mu-reset').addEventListener('click', () => { accounted = new Set(); paint(); });
   $('#mu-print').addEventListener('click', () => window.print());
   $('#mu-refresh').addEventListener('click', refresh);
+  $('#mu-expand').addEventListener('click', toggleAll);
+
+  // Delegated, bound once. #mu-status and #mu-body have their innerHTML
+  // replaced on every paint, but the elements themselves survive — so these
+  // outlive the repaints that a per-node listener would not.
+  $('#mu-status').addEventListener('click', (e) => {
+    if (!e.target.closest('#mu-unsure')) return;
+    onlyUnsure = !onlyUnsure;
+    paint();
+  });
+  $('#mu-body').addEventListener('click', (e) => {
+    const head = e.target.closest('[data-site-toggle]');
+    if (!head) return;
+    const site = head.dataset.siteToggle;
+    if (collapsed.has(site)) collapsed.delete(site); else collapsed.add(site);
+    paint();
+  });
+  $('#mu-body').addEventListener('change', (e) => {
+    const cb = e.target.closest('input[data-person]');
+    if (!cb) return;
+    if (cb.checked) accounted.add(cb.dataset.person); else accounted.delete(cb.dataset.person);
+    paintCounts();
+  });
 
   if (snap) paint();
   // Opportunistic, never blocking: the list is already on screen by now.
   refresh({ quiet: true });
+}
+
+function toggleAll() {
+  const allFolded = allGroups.length > 0 && allGroups.every((g) => collapsed.has(g.site));
+  collapsed = allFolded ? new Set() : new Set(allGroups.map((g) => g.site));
+  paint();
 }
 
 async function refresh({ quiet = false } = {}) {
@@ -73,10 +115,14 @@ function setStatus(snap, { failed = false } = {}) {
   if (!snap) { el.textContent = ''; return; }
   const age = snapshotAge(snap.savedAt);
   const totals = musterTotals(groupForMuster(deriveRoster(snap.rows)));
+  // The badge is a button, not decoration: pressing it narrows the grid to
+  // the people it counts. aria-pressed rather than a separate control, so the
+  // thing that reports the number is the thing that filters by it.
   el.innerHTML = `
     <span class="${age.stale ? 'badge unassigned_card' : ''}">As of ${esc(age.text)}</span>
     · ${totals.people} to account for across ${totals.sites} site${totals.sites === 1 ? '' : 's'}
-    ${totals.unsure ? `· <span class="badge inactive_card">${totals.unsure} uncertain</span>` : ''}
+    ${totals.unsure ? `· <button type="button" id="mu-unsure" class="badge inactive_card mu-filter${onlyUnsure ? ' is-on' : ''}" aria-pressed="${onlyUnsure}" title="${esc(CERTAINTY.unsure)} — show only these">${totals.unsure} uncertain</button>` : ''}
+    ${onlyUnsure ? '· <span class="mu-filter-note">showing only uncertain — click the badge to clear</span>' : ''}
     ${failed ? '· <span class="badge inactive_card">no network — showing the saved list</span>' : ''}
   `;
 }
@@ -88,36 +134,61 @@ function paint() {
   setStatus(snap);
   if (!snap) return;
 
+  const all = deriveRoster(snap.rows);
+  // Grouped BEFORE any filter. Everything a site's "n of m" line reports is
+  // measured against this, so narrowing the view can never make a site look
+  // more complete than it is — the one lie this page must not tell.
+  allGroups = groupForMuster(all);
+
   const q = ($('#mu-search')?.value || '').trim().toLowerCase();
-  const rows = deriveRoster(snap.rows).filter((r) => !q
-    || String(r.full_name ?? '').toLowerCase().includes(q)
-    || String(r.employee_code ?? '').toLowerCase().includes(q)
-    || String(r.department ?? '').toLowerCase().includes(q));
+  const rows = all.filter((r) => (!onlyUnsure || certainty(r) === 'unsure'))
+    .filter((r) => !q
+      || String(r.full_name ?? '').toLowerCase().includes(q)
+      || String(r.employee_code ?? '').toLowerCase().includes(q)
+      || String(r.department ?? '').toLowerCase().includes(q));
 
   const groups = groupForMuster(rows);
   if (!groups.length) {
-    body.innerHTML = `<div class="empty-state">${q ? 'Nobody matches that search.' : 'Nobody is recorded as being on site.'}</div>`;
+    body.innerHTML = `<div class="empty-state">${
+      onlyUnsure ? 'No scan is old enough to be uncertain. Click the badge again to show everyone.'
+        : q ? 'Nobody matches that search.'
+          : 'Nobody is recorded as being on site.'}</div>`;
+    paintExpandLabel();
     return;
   }
 
-  body.innerHTML = groups.map(siteHTML).join('');
-  $$('input[data-person]', body).forEach((cb) => cb.addEventListener('change', () => {
-    if (cb.checked) accounted.add(cb.dataset.person); else accounted.delete(cb.dataset.person);
-    paintCounts();
-  }));
+  // The grid is positional: cell order is scanner order (see scannerOrder in
+  // Utils/muster.js), three across, so Scanner 4 lands under Scanner 1.
+  // A site that filters down to nobody is dropped rather than left as an
+  // empty cell, which does shift the others — accepted, because a column of
+  // blank panels is worse to read under pressure than a shifted one.
+  body.innerHTML = `<div class="muster-grid">${groups.map(siteHTML).join('')}</div>`;
   paintCounts();
+  paintExpandLabel();
+}
+
+function paintExpandLabel() {
+  const btn = $('#mu-expand');
+  if (!btn) return;
+  const allFolded = allGroups.length > 0 && allGroups.every((g) => collapsed.has(g.site));
+  btn.textContent = allFolded ? 'Expand all' : 'Collapse all';
 }
 
 function siteHTML(group) {
+  const isFolded = collapsed.has(group.site);
   return `
-    <section class="panel muster-site" style="padding:16px;margin-bottom:12px;">
-      <div class="panel-head" style="margin-bottom:10px;">
-        <div>
+    <section class="panel muster-site${isFolded ? ' is-folded' : ''}" style="padding:16px;">
+      <button type="button" class="muster-site-head" data-site-toggle="${esc(group.site)}"
+              aria-expanded="${!isFolded}">
+        <span class="muster-site-caret" aria-hidden="true">${isFolded ? '▸' : '▾'}</span>
+        <span>
           <h3 style="margin:0 0 2px;">${esc(group.site)}</h3>
-          <div class="emp-meta" data-site-count="${esc(group.site)}"></div>
-        </div>
+          <span class="emp-meta" data-site-count="${esc(group.site)}"></span>
+        </span>
+      </button>
+      <div class="muster-site-body">
+        ${group.departments.map(deptHTML).join('')}
       </div>
-      ${group.departments.map(deptHTML).join('')}
     </section>`;
 }
 
@@ -149,13 +220,38 @@ function personHTML(p) {
 
 // Counts update on tick without repainting the whole list — losing scroll
 // position halfway through a headcount would be its own small disaster.
+//
+// Computed from allGroups and the accounted Set rather than by counting
+// checkboxes in the DOM, which is what it used to do. Two reasons: a folded
+// or filtered site has no boxes on screen and would have read "0 of 0", and
+// the old version matched a panel to its site by comparing h3 text, so any
+// change to this heading's markup silently broke every count.
 function paintCounts() {
+  const bySite = new Map(allGroups.map((g) => [g.site, g]));
   $$('[data-site-count]').forEach((el) => {
-    const site = el.dataset.siteCount;
-    const boxes = $$(`.muster-site input[data-person]`)
-      .filter((b) => b.closest('.muster-site').querySelector('h3').textContent === site);
-    const done = boxes.filter((b) => b.checked).length;
-    el.textContent = `${done} of ${boxes.length} accounted for`;
-    el.classList.toggle('muster-done', boxes.length > 0 && done === boxes.length);
+    const group = bySite.get(el.dataset.siteCount);
+    if (!group) return;
+    const total = group.count;
+    const done = group.departments
+      .reduce((n, d) => n + d.people.filter((p) => accounted.has(p.id)).length, 0);
+    // The denominator is the whole site even when a filter is on, so nobody
+    // reads "4 of 4" off a narrowed list and calls the building clear. The
+    // count of what is actually on screen is spelled out next to it.
+    const shown = visibleCount(group);
+    el.textContent = `${done} of ${total} accounted for`
+      + (shown < total ? ` · ${shown} shown` : '');
+    el.classList.toggle('muster-done', total > 0 && done === total);
   });
+}
+
+function visibleCount(group) {
+  const q = ($('#mu-search')?.value || '').trim().toLowerCase();
+  if (!q && !onlyUnsure) return group.count;
+  return group.departments.reduce((n, d) => n + d.people.filter((p) => {
+    if (onlyUnsure && certainty(p) !== 'unsure') return false;
+    if (!q) return true;
+    return String(p.full_name ?? '').toLowerCase().includes(q)
+      || String(p.employee_code ?? '').toLowerCase().includes(q)
+      || String(p.department ?? '').toLowerCase().includes(q);
+  }).length, 0);
 }

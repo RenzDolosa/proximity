@@ -672,6 +672,56 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-07 (later) — Muster reads as a grid of scanners, not one long column**
+
+At an assembly point every site should be on screen at once. The page now
+lays sites out **three across in scanner order** — Scanner 1 left, 2 middle,
+3 right, 4 under 1 — with each list capped and scrolling inside its own
+panel, so six scanners fit a screen instead of one owning the viewport.
+
+- **Site order changed from headcount to scanner number**, and that reversed
+  a deliberate decision. The old rule put the biggest sheet first because
+  *"that is the sheet somebody needs handed to them first"* — an argument
+  about a single scrolling column, where position meant priority. In a grid
+  position means *location*, and what matters is that a marshal finds the
+  same scanner in the same cell at every drill. Headcount order moves a
+  scanner the moment headcounts shift. Sorting is on the prefix before the
+  number, so two buildings that each have a Scanner 1 stay grouped rather
+  than interleaving, and `Unknown scanner` is pushed out of cell 1.
+- **Sites fold** to just their name and `n of m accounted for`, plus a
+  Collapse all / Expand all button. Folding hides with CSS rather than
+  dropping rows, so a tick survives a fold and the counts stay honest.
+- **The `n uncertain` badge is now the filter for those people** — press it
+  and the grid shows only names whose last scan is old.
+- **The toolbar and status line stay put.** `#mu-body` is the bounded
+  scroller now, matching every table page; Refresh, Print and the uncertain
+  filter used to scroll away the moment anyone started reading names.
+
+**Counts are computed from the data, not from the DOM.** The old version
+counted checkboxes and matched a panel to its site by comparing `h3` text —
+so a folded or filtered site would have read "0 of 0", and any change to that
+heading's markup silently broke every count. The denominator is now always
+the whole site even when a filter is on, with `· n shown` beside it: nobody
+should read "4 of 4" off a narrowed list and call a building clear.
+
+**Three breakpoints, measured rather than picked.** A muster row needs a
+**367px column** to keep name, code, badge and timestamp on one line; below
+that it wraps to 61px, and by 279px the timestamp overflows the row. The grid
+gets `viewport − 216px sidebar − 48px padding`, so three columns need 1366px
+and two need 1010px. Verified by measuring rendered rows at seven widths, and
+the 3-column placement was confirmed as `S1:L1 S2:M1 S3:R1 S4:L2 S5:M2 S6:R2`.
+
+Print is unchanged in output and had to be defended to stay that way: the
+grid collapses to one column, the scroll cap comes off, and **folded sites
+print in full** — otherwise Print would silently omit whoever was hidden
+behind a fold, which is the exact failure this page exists to prevent.
+
+**Tests:** 4 added, suite at **456**. The old ordering test would still have
+passed against the new code — its fixtures were named `Big` and `Small`, and
+B sorts before S — so it asserted an order the code no longer produces and
+agreed anyway. Replaced with one whose counts ascend, which is the proof that
+headcount is not deciding position.
+
 **2026-11-07 — two Settings panels, one broken since it shipped**
 
 Found by reading 60 seconds of Postgres logs while verifying Google Drive
