@@ -20,6 +20,11 @@ const sql = readFileSync(
   return at === -1 ? l : l.slice(0, at);
 }).join('\n');
 
+const followUp = readFileSync(
+  fileURLToPath(new URL('../Supabase/migrations/20261106200000_employee_directory_read_only.sql', import.meta.url)),
+  'utf8',
+);
+
 const body = (fn) => {
   const at = sql.search(new RegExp(`CREATE OR REPLACE FUNCTION public\\.${fn}\\(\\)`, 'i'));
   assert.notEqual(at, -1, `${fn} must be redefined`);
@@ -177,9 +182,25 @@ test('the four reachable relations keep exactly the verbs the client can issue',
     assert.ok(new RegExp(`GRANT SELECT, INSERT, UPDATE, DELETE ON public\\.${t} TO authenticated`).test(sql),
       `${t} is wrapped by createModel(), which exposes all four verbs`);
   }
-  assert.ok(/GRANT SELECT ON public\.employee_directory TO authenticated/.test(sql),
-    'the grid view is read-only');
   assert.ok(!/GRANT[^\n]*TRUNCATE/i.test(sql), 'no re-grant may reintroduce TRUNCATE');
+});
+
+// CAUGHT BY READING THE POST-APPLY GRANT TABLE, not by any test here.
+// GRANT IS ADDITIVE: it adds to what a role already holds rather than
+// describing an end state. employee_directory was not in 20261106190000's
+// revoke list — it is one of the four relations the client reaches — so it
+// kept the baseline's GRANT ALL, and `GRANT SELECT` on it re-stated one verb
+// it already had while saying nothing about the other three.
+//
+// The migration's comment and this test agreed with each other and neither
+// agreed with the database. Asserting a GRANT can never prove the absence of
+// another one, so this asserts the REVOKE.
+test('the grid view is read-only, by revoke and not merely by grant', () => {
+  assert.ok(/REVOKE INSERT, UPDATE, DELETE ON public\.employee_directory FROM authenticated/i.test(followUp),
+    'a write privilege on this view is only harmless while it stays a '
+    + 'multi-table join with no INSTEAD OF trigger');
+  assert.ok(/GRANT SELECT ON public\.employee_directory TO authenticated/.test(followUp),
+    'and the one privilege it should carry is restated');
 });
 
 // security_invoker = true, so the view is only readable if the caller can
