@@ -40,28 +40,42 @@ export function canViewExportTasks(profile) {
 // with Scanner scope (get_scanners()); only admins can change it
 // (update_scanner()).
 export function canViewScannerRegistry(profile) {
-  return isAdmin(profile) || ['all', 'scanner'].includes(profile?.access_scope);
+  // Same shape as canViewScanner: the registry is part of that surface.
+  return isAdmin(profile) || profile?.access_scope === 'scanner'
+    || (profile?.role === 'manager' && profile?.access_scope === 'all');
 }
 
 export function canEditScannerRegistry(profile) {
   return isAdmin(profile);
 }
 
+// MIRRORS can_view_employee_manager() AS OF 20261106190000, which is the
+// real boundary. 'all' no longer grants on its own: it is the DEFAULT
+// access_scope, so a brand-new viewer used to satisfy this. An explicit
+// 'employee_manager' still does, because that is the narrow grant working
+// as intended.
 export function canViewEmployeeManager(profile) {
-  return isAdmin(profile) || profile?.role === 'manager' ||
-    ['all', 'employee_manager'].includes(profile?.access_scope);
+  return isAdmin(profile) || profile?.role === 'manager'
+    || profile?.access_scope === 'employee_manager';
 }
 
+// Mirrors can_view_scanner(). 'scanner' grants on its own at any role --
+// that is how the kiosk accounts are provisioned -- while the catch-all
+// 'all' now needs a role behind it.
 export function canViewScanner(profile) {
-  return isAdmin(profile) || ['all', 'scanner'].includes(profile?.access_scope);
+  return isAdmin(profile) || profile?.access_scope === 'scanner'
+    || (profile?.role === 'manager' && profile?.access_scope === 'all');
 }
 
 export function isScannerOnlyAccount(profile) {
   return canViewScanner(profile) && !canViewEmployeeManager(profile) && !isAdmin(profile);
 }
 
+// Mirrors can_view_settings(), same rule.
 export function canViewSettings(profile) {
-  return isAdmin(profile) || ['all', 'employee_manager', 'scanner'].includes(profile?.access_scope);
+  return isAdmin(profile)
+    || ['employee_manager', 'scanner'].includes(profile?.access_scope)
+    || (profile?.role === 'manager' && profile?.access_scope === 'all');
 }
 
 export function settingsShowSounds(profile) {
