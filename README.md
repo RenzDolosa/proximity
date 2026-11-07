@@ -672,6 +672,37 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-07 — two Settings panels, one broken since it shipped**
+
+Found by reading 60 seconds of Postgres logs while verifying Google Drive
+credentials. Neither was reported by a user; opening Settings fires both.
+
+- **Query performance raised `42P01` on every load.**
+  `get_slow_query_stats()` pins `search_path TO 'public'` and names
+  `pg_stat_statements` unqualified, but the extension lives in `extensions` —
+  and **a function-level `search_path` replaces the session's rather than
+  extending it**. `reset_slow_query_stats()` has the same bug, unreached only
+  because it sits behind a confirm dialog. The panel has almost certainly
+  never worked: both verifications recorded for it were run in the SQL Editor
+  as `postgres`, whose `search_path` *does* include `extensions`, so neither
+  exercised the function.
+
+  This also retroactively undercuts the 2026-10-17 decision to raise
+  `log_min_duration_statement` to 1000 ms, which was justified by "the 200 ms
+  –1 s band is still visible in Query performance." It was not. That section
+  now carries a correction.
+
+- **`get_scan_logs_trim_status()` took 1852 ms** to return three integers —
+  three `jsonb_array_length(scan_logs)` calls over 814 employees, the same
+  de-TOAST defect `20261106180000` removed from the Employee Manager grid.
+  Now reads the `scan_logs_count` column that migration already added.
+
+`get_scan_archive_status()` shares the window at 1488 ms and is left alone:
+that is a `count(*)` over 150,504 rows, and the only cheap alternative is an
+estimate that would change a number the panel presents as exact.
+
+Migration `20261107130000_settings_panel_repairs.sql`; 9 tests, suite at 438.
+
 **2026-11-06 (later) — the scanner can finally be diagnosed**
 
 Three additions, all client-side. **No migration, no new RPC, and the one
@@ -1393,7 +1424,18 @@ the Postgres log. They are still counted — calls, mean, total — in
 `pg_stat_statements`, which is what Settings → Query performance actually
 reads. That panel keeps its own 200 ms default on purpose: "what is slow"
 is worth knowing well before a statement is slow enough to justify writing
-its full text to a metered log. 1000 ms is also still under both
+its full text to a metered log.
+
+> **Correction (2026-11-07).** The trade above was argued on a fallback that
+> did not work. `get_slow_query_stats()` pinned `search_path TO 'public'`
+> while `pg_stat_statements` lives in `extensions`, so the panel raised
+> `42P01` on every load and had done so since it shipped — meaning the
+> 200 ms–1 s band was visible in *neither* place between 2026-10-17 and
+> `20261107130000`. The reasoning is sound now that the panel works; it was
+> not sound when it was written, and the only reason that went unnoticed is
+> that nothing checks whether a diagnostics panel is still answering.
+
+1000 ms is also still under both
 `statement_timeout` values (`anon` 3 s, `authenticated` 8 s), so anything
 heading for a timeout is still logged in full.
 

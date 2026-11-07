@@ -1158,6 +1158,14 @@ but this view is queryable directly.
   or query — the panel's own confirm-dialog copy says so explicitly
   before an admin can trigger it.
 
+> **Both of those functions were broken from the day they shipped** until
+> `20261107130000`. They pinned `search_path TO 'public'` while
+> `pg_stat_statements` lives in `extensions`, so every call raised
+> `42P01 relation "pg_stat_statements" does not exist`. The verifications
+> recorded in this section are real but were run in the SQL Editor as
+> `postgres` — whose `search_path` includes `extensions` — so none of them
+> went through the function. See the 2026-11-07 change log entry.
+
 Both functions' owner (`postgres`, the role `apply_migration` runs
 `CREATE FUNCTION` as on this project) is a member of `pg_read_all_stats`,
 which is what lets a `SECURITY DEFINER` function read every role's
@@ -1333,6 +1341,67 @@ the day each entry was written and not maintained since.** Several of them are
 long applied. Probe before believing one.
 
 ### Change log (most recent first)
+**2026-11-07 — Settings: the Query performance panel had never worked, and the trim status cost 1.85s (`20261107130000_settings_panel_repairs.sql`, NOT applied)**
+
+Both found by reading 60 seconds of Postgres logs while verifying Google
+Drive credentials — neither was reported by a user. Opening Settings fires
+all three statements below:
+
+```
+12:05:11  duration: 1513.892 ms  get_scan_logs_trim_status()
+12:05:10  duration: 1488.155 ms  get_scan_archive_status()
+12:05:09  42P01  relation "pg_stat_statements" does not exist
+```
+
+- **`42P01` on every load of Query performance.** `pg_stat_statements` is
+  created `WITH SCHEMA extensions` by the baseline, but
+  `get_slow_query_stats()` pins `SET search_path TO 'public'` and then names
+  the view unqualified. **A function-level `search_path` replaces the
+  session's rather than extending it**, so `extensions` is not on it.
+  `reset_slow_query_stats()` has the identical bug with
+  `pg_stat_statements_reset()` — unreported only because reaching it needs a
+  deliberate click through a confirm dialog. Fixed by `ALTER FUNCTION … SET
+  search_path TO 'public', 'extensions'` rather than by rewriting the bodies:
+  nothing to re-review, and no way to introduce a typo into 40 lines of
+  working SQL.
+
+  **This panel has likely never worked.** The two verifications recorded for
+  it above — "confirmed 1,458+ rows" and the `pg_read_all_stats` membership
+  check — were both run in the SQL Editor as `postgres`, whose `search_path`
+  *does* include `extensions`. Neither went through the function. The gap
+  between "this query works" and "this query works from inside this function"
+  is exactly the gap a pinned `search_path` creates, and it is invisible to
+  the obvious way of checking.
+
+- **`get_scan_logs_trim_status()` at 1852 ms.** The same defect
+  `20261106180000` removed from `employee_directory`, left behind in the one
+  other place that counts scan-log entries: three
+  `jsonb_array_length(scan_logs)` calls across all 814 employees, walking
+  ~28 MB of TOASTed JSON to produce three numbers. Now reads
+  `employees.scan_logs_count`, which already exists, is maintained by
+  `trg_employees_sync_scan_logs_count`, and measured `diverged = 0` across
+  all 814 rows after that migration. A substitution, not a new mechanism —
+  nothing to backfill.
+
+`get_scan_archive_status()` shares the window at 1488 ms and is deliberately
+**not** touched: its cost is a plain `count(*)` over 150,504 `scan_events`
+rows — volume, not TOAST — and the only way to make that cheap is a
+`reltuples` estimate, which would quietly change a figure the panel presents
+as exact.
+
+**Tests:** 9 added, suite at **438**. Both guards were confirmed to fail when
+the bug is reintroduced (drop `extensions` from the search_path → two
+failures; restore `jsonb_array_length` → one). The migration also carries a
+`DO` block that raises if the extension is absent entirely, since that is the
+one cause the `ALTER`s cannot fix and it would otherwise surface as the same
+`42P01` after a successful apply.
+
+**Not verified against a database** — reviewed by reading. The extension's
+live schema should be confirmed with
+`select extname, extnamespace::regnamespace from pg_extension where extname =
+'pg_stat_statements'` before applying; zero rows means the fix is a
+`CREATE EXTENSION`, not a `search_path`.
+
 **2026-11-06 — RLS audit: anon held every privilege, and `all` outranked the role (`20261106190000_tighten_anon_grants_and_scope_reads.sql`, NOT applied)**
 
 Full read of the RLS surface: 11 tables, 21 policies, 63 `SECURITY DEFINER`
