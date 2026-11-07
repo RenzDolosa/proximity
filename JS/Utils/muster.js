@@ -30,10 +30,43 @@ export function siteOf(row) {
   return id || 'Unknown scanner';
 }
 
+// Scanner 1 left, 2 middle, 3 right, 4 under 1 — the grid MusterPage lays
+// these out in.
+//
+// This REPLACED "most people first", which had a real argument behind it: the
+// biggest sheet is the one somebody needs handed to them first. That argument
+// was about a single scrolling column, where position meant priority. In a
+// grid every site is on screen at once, and what matters instead is that a
+// marshal finds the same scanner in the same cell at every drill — headcount
+// order moves a scanner the moment headcounts shift, so it is never twice in
+// the same place.
+//
+// Sorts on the PREFIX before the number, so scanners stay grouped by the site
+// they belong to ("Alpha - Scanner 2" before "Beta - Scanner 1") rather than
+// interleaving two buildings that both happen to have a Scanner 1.
+const TRAILING_NUMBER = /^(.*?)(\d+)\s*$/;
+
+export function scannerOrder(a, b) {
+  const pa = TRAILING_NUMBER.exec(String(a ?? ''));
+  const pb = TRAILING_NUMBER.exec(String(b ?? ''));
+  const prefix = (String(pa ? pa[1] : a ?? '').trim())
+    .localeCompare(String(pb ? pb[1] : b ?? '').trim(), undefined, { numeric: true });
+  if (prefix) return prefix;
+  // A name with no trailing number sorts after the numbered ones rather than
+  // landing at position zero — "Unknown scanner" must never take cell 1.
+  if (pa && !pb) return -1;
+  if (!pa && pb) return 1;
+  if (pa && pb) {
+    const n = Number(pa[2]) - Number(pb[2]);
+    if (n) return n;
+  }
+  return String(a ?? '').localeCompare(String(b ?? ''));
+}
+
 /**
- * Site -> departments -> people. Sites with the most people first, because
- * that is the sheet somebody needs handed to them first; within a site,
- * departments alphabetically so two printouts of the same roster match.
+ * Site -> departments -> people, in scanner order (see scannerOrder above);
+ * within a site, departments alphabetically so two printouts of the same
+ * roster match.
  */
 export function groupForMuster(rows) {
   const bySite = new Map();
@@ -61,7 +94,7 @@ export function groupForMuster(rows) {
         (n, d) => n + d.people.filter((p) => certainty(p) === 'unsure').length, 0);
       return { site, departments, count, unsure };
     })
-    .sort((a, b) => b.count - a.count || a.site.localeCompare(b.site));
+    .sort((a, b) => scannerOrder(a.site, b.site));
 }
 
 function byName(a, b) {

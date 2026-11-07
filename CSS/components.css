@@ -701,6 +701,41 @@ tr.row-clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2
 /* Muster list (Features/Muster/MusterPage.js). Read at an assembly point,
    often on a phone, often in a hurry — so rows are tap-sized and the name is
    the largest thing in them. */
+/* Three across, filled in scanner order: Scanner 1 left, 2 middle, 3 right,
+   4 under 1. Grid rather than columns because `columns` flows top-to-bottom
+   then across, which would put Scanner 2 underneath Scanner 1.
+   align-items:start stops a short site stretching to match a tall neighbour
+   and leaving a panel of empty rules. */
+.muster-grid{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;align-items:start;
+}
+/* These two widths are measured, not picked. A .muster-person row holds a
+   name, a code, sometimes a "check" badge, and a right-aligned timestamp; it
+   needs a 367px column to keep all of that on ONE line. Below that it wraps
+   to 61px — 40% taller per row, which is what a marshal pays for while
+   scanning names — and by 279px the timestamp overflows the row outright.
+   #content gives the grid (viewport - 216px sidebar - 48px padding), so
+   367px columns need 1366px for three and 1010px for two. */
+@media (max-width:1365px){ .muster-grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
+@media (max-width:1009px){ .muster-grid{grid-template-columns:minmax(0,1fr);} }
+
+/* The head is a button so folding works from the keyboard and announces
+   itself; it has to be stripped back to looking like the heading it replaced. */
+.muster-site-head{
+  display:flex;align-items:flex-start;gap:8px;width:100%;
+  background:none;border:0;padding:0;margin:0 0 10px;
+  text-align:left;cursor:pointer;color:inherit;font:inherit;
+}
+.muster-site-head:hover h3{color:var(--accent);}
+.muster-site-caret{line-height:1.4;color:var(--text-muted);}
+.muster-site.is-folded .muster-site-head{margin-bottom:0;}
+.muster-site.is-folded .muster-site-body{display:none;}
+
+/* The cap is what makes three columns worth having: six sites stay on one
+   screen instead of one site owning the viewport. Each list scrolls itself. */
+.muster-site-body{max-height:min(46dvh,520px);overflow-y:auto;}
+
 .muster-dept{margin-bottom:12px;}
 .muster-dept:last-child{margin-bottom:0;}
 .muster-list{list-style:none;margin:0;padding:0;}
@@ -719,12 +754,29 @@ tr.row-clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2
 .muster-in{margin-left:auto;white-space:nowrap;}
 .muster-done{color:var(--good);}
 
+/* The "n uncertain" badge is also the filter for those people, so it needs to
+   look pressable and to show when it is pressed. */
+.mu-filter{cursor:pointer;font:inherit;border:1px solid transparent;}
+.mu-filter:hover{filter:brightness(1.15);}
+.mu-filter.is-on{border-color:currentColor;box-shadow:0 0 0 2px var(--surface-raised);}
+.mu-filter-note{color:var(--text-muted);}
+
 @media print{
   /* One site per page, everything else gone. The sheet is the deliverable. */
   #sidebar,#topbar,.bottom-nav,.toolbar,#mu-status{display:none !important;}
   #content{padding:0 !important;overflow:visible !important;}
+  /* Undo the whole on-screen layout. A printed sheet is carried and read one
+     site at a time, so the grid collapses to a single column, the scroll cap
+     comes off (a capped panel prints only its first screenful), and a folded
+     site prints in full — otherwise Print would silently omit whoever was
+     hidden behind a fold, which is the exact failure this page exists to
+     prevent. */
+  #mu-body .muster-grid{display:block;}
   .muster-site{break-after:page;border:none;padding:0 !important;}
   .muster-site:last-child{break-after:auto;}
+  .muster-site-caret{display:none !important;}
+  .muster-site.is-folded .muster-site-body,
+  .muster-site-body{display:block !important;max-height:none !important;overflow:visible !important;}
   .muster-person label{min-height:0;padding:3px 0;}
   .muster-person input{-webkit-appearance:none;appearance:none;border:1px solid #000;border-radius:2px;}
 }

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   isAccountable, certainty, siteOf, groupForMuster, musterTotals,
-  snapshotAge, SNAPSHOT_WARN_MS,
+  snapshotAge, SNAPSHOT_WARN_MS, scannerOrder,
 } from '../JS/Utils/muster.js';
 import { toSnapshotRows } from '../JS/Utils/musterCache.js';
 
@@ -47,15 +47,66 @@ test('a missing scanner or department still gets a group', () => {
   assert.equal(groups[0].count, 1);
 });
 
-test('sites are ordered by how many people are in them', () => {
-  // The biggest sheet is the one somebody needs handed to them first.
+// REPLACED "sites are ordered by how many people are in them" (2026-11-07).
+//
+// That rule had a real argument — the biggest sheet is the one somebody needs
+// handed to them first — but it assumed a single scrolling column, where
+// position meant priority. MusterPage now lays sites out three across, so
+// every site is on screen at once and position means LOCATION instead: a
+// marshal should find the same scanner in the same cell at every drill.
+// Headcount order moves a scanner the moment headcounts shift.
+//
+// Worth knowing: the old test would still pass against the new code, because
+// its fixtures were named 'Big' and 'Small' and B sorts before S. It asserted
+// an order the code no longer produces and agreed anyway.
+test('sites fill the grid in scanner order, not headcount order', () => {
+  // Scanner 3 is deliberately the busiest: under the old rule it took cell 1.
   const rows = [
-    p({ id: 'a', last_scanner_id: 'Small' }),
-    p({ id: 'b', last_scanner_id: 'Big' }),
-    p({ id: 'c', last_scanner_id: 'Big' }),
-    p({ id: 'd', last_scanner_id: 'Big' }),
+    p({ id: 'a', last_scanner_id: 'Krus3K - Scanner 3' }),
+    p({ id: 'b', last_scanner_id: 'Krus3K - Scanner 3' }),
+    p({ id: 'c', last_scanner_id: 'Krus3K - Scanner 3' }),
+    p({ id: 'd', last_scanner_id: 'Krus3K - Scanner 1' }),
+    p({ id: 'e', last_scanner_id: 'Krus3K - Scanner 2' }),
   ];
-  assert.deepEqual(groupForMuster(rows).map((g) => g.site), ['Big', 'Small']);
+  const groups = groupForMuster(rows);
+  assert.deepEqual(groups.map((g) => g.site),
+    ['Krus3K - Scanner 1', 'Krus3K - Scanner 2', 'Krus3K - Scanner 3']);
+  // Counts ascending is the proof: headcount is not what decides position.
+  assert.deepEqual(groups.map((g) => g.count), [1, 1, 3]);
+});
+
+test('scanner 10 sorts after scanner 9, not between 1 and 2', () => {
+  const sites = ['S 10', 'S 2', 'S 1', 'S 9'];
+  assert.deepEqual(sites.slice().sort(scannerOrder), ['S 1', 'S 2', 'S 9', 'S 10'],
+    'a string sort would read 10 as "1","0" and put it second');
+});
+
+// Two buildings that each have a Scanner 1 must not interleave — a marshal
+// reading the left column should be reading one site, not alternating.
+test('scanners stay grouped by the site they belong to', () => {
+  const sites = ['Beta - Scanner 1', 'Alpha - Scanner 2', 'Beta - Scanner 2', 'Alpha - Scanner 1'];
+  assert.deepEqual(sites.slice().sort(scannerOrder),
+    ['Alpha - Scanner 1', 'Alpha - Scanner 2', 'Beta - Scanner 1', 'Beta - Scanner 2']);
+});
+
+// siteOf() falls back to 'Unknown scanner' for a row with no scanner id, and
+// those people are exactly the ones most at risk of being missed. Cell 1 is
+// where the eye lands, and it belongs to a real scanner.
+test('"Unknown scanner" never takes the first cell', () => {
+  const sites = ['Unknown scanner', 'Krus3K - Scanner 2', 'Krus3K - Scanner 1'];
+  assert.deepEqual(sites.slice().sort(scannerOrder),
+    ['Krus3K - Scanner 1', 'Krus3K - Scanner 2', 'Unknown scanner']);
+});
+
+test('ordering is total and stable for junk input', () => {
+  for (const pair of [[null, 'S 1'], [undefined, null], ['', 'S 1'], ['S 1', 'S 1']]) {
+    const [a, b] = pair;
+    assert.equal(typeof scannerOrder(a, b), 'number');
+    // `| 0` because Math.sign(0) is 0 and -Math.sign(0) is -0, and strict
+    // equality uses Object.is, under which those two are not equal.
+    assert.equal(Math.sign(scannerOrder(a, b)) | 0, -Math.sign(scannerOrder(b, a)) | 0,
+      'an inconsistent comparator makes Array.sort order undefined');
+  }
 });
 
 test('people are sorted by name so two printouts match', () => {
