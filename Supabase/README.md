@@ -1343,18 +1343,22 @@ long applied. Probe before believing one.
 ### Change log (most recent first)
 **2026-11-10 — scanner silence hours, alert channels, and the notify-alert push (NOT applied)**
 
-Five migrations, applied in this order:
+Six migrations, applied in this order:
 
 1. `20261110090000_scanner_silence_active_hours.sql`
 2. `20261110091000_alert_channels.sql`
 3. `20261110092000_notify_alert_webhook.sql`
 4. `20261110093000_viber_channel.sql`
-5. `20261110094000_ntfy_channel.sql`
+5. `20261110094000_ntfy_channel.sql` — **superseded, see 6**
+6. `20261110095000_drop_ntfy_channel.sql`
 
-**ntfy** needs no schema beyond widening the `channel` CHECK — no token, no
-account, no subscriber table, because publishing to a topic needs no
-knowledge of who is listening. That asymmetry with Viber is the whole reason
-it is offered first.
+**ntfy was withdrawn the same day it landed.** 5 is left in place because it
+is already in the applied ledger; 6 undoes it forward. Deleting an applied
+migration would leave this directory describing a database that never
+existed, and replaying from scratch would then diverge from production.
+6 deletes any `ntfy` rows **before** tightening the CHECK, because a
+tightened constraint is validated against existing rows and would abort
+rather than drop them. The live channels are Viber and Telegram.
 
 **`viber_subscribers`** — `(viber_id, name, subscribed, first_seen_at,
 last_seen_at)`, RLS on, `is_admin()` for ALL, and `REVOKE ALL` from both

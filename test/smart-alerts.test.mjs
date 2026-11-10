@@ -50,7 +50,8 @@ const silence = read('../Supabase/migrations/20261110090000_scanner_silence_acti
 const channels = read('../Supabase/migrations/20261110091000_alert_channels.sql');
 const webhook = read('../Supabase/migrations/20261110092000_notify_alert_webhook.sql');
 const viber = read('../Supabase/migrations/20261110093000_viber_channel.sql');
-const viberNtfy = read('../Supabase/migrations/20261110094000_ntfy_channel.sql');
+const ntfyAdd = read('../Supabase/migrations/20261110094000_ntfy_channel.sql');
+const ntfyDrop = read('../Supabase/migrations/20261110095000_drop_ntfy_channel.sql');
 const fn = read('../Supabase/functions/notify-alert/index.ts');
 
 // ---- the failure that would be invisible ----
@@ -259,7 +260,7 @@ test('Viber is offered first and Telegram is kept as a fallback', () => {
   assert.match(tsCode(fn), /c\.channel === "telegram"/, 'removing a working transport buys nothing');
 });
 
-test('the channel constraint accepts viber and still rejects anything else', () => {
+test('the channel constraint is rebuilt rather than altered in place', () => {
   assert.match(viber, /CHECK \(channel IN \('viber', 'telegram', 'email'\)\)/);
   assert.match(viber, /DROP CONSTRAINT IF EXISTS alert_channels_channel_check/,
     'a CHECK cannot be altered in place');
@@ -319,105 +320,51 @@ test('an unsubscribe flags the row rather than deleting it', () => {
   assert.ok(!/DELETE/i.test(hook.slice(at, at + 260)));
 });
 
-// ---- ntfy ----
+// ---- ntfy, withdrawn ----
 //
-// The module cannot be imported: it calls Deno.serve at load. parseNtfyTarget
-// is pure and dependency-free, so its source is lifted out and evaluated —
-// which is worth the awkwardness, because URL splitting is the one piece of
-// real logic in this channel and the self-hosted case is easy to get wrong.
-const parseNtfyTarget = (() => {
-  const src = tsCode(fn);
-  const at = src.indexOf('export function parseNtfyTarget');
-  assert.notEqual(at, -1, 'parseNtfyTarget must stay exported and self-contained');
-  const body = src.slice(at).replace('export function', 'function');
-  const end = body.indexOf('\n}') + 2;
-  // Strip the TS annotations the evaluator will not accept.
-  const js = body.slice(0, end)
-    .replace(/: \{ server: string; topic: string \}/, '')
-    .replace(/\(target: string\)/, '(target)');
-  // eslint-disable-next-line no-new-func
-  return new Function(`${js}; return parseNtfyTarget;`)();
-})();
+// 20261110094000 widened the CHECK to accept it and was APPLIED to the live
+// project before the decision was reversed, so 20261110095000 undoes it
+// forward rather than the file being deleted. These guard the removal being
+// complete in both directions: no code path left behind, and no drift
+// between the repo and a database that really did accept 'ntfy' for an hour.
 
-test('a bare topic goes to the public instance', () => {
-  assert.deepEqual(parseNtfyTarget('aB3xK9'), { server: 'https://ntfy.sh', topic: 'aB3xK9' });
-  assert.deepEqual(parseNtfyTarget('  aB3xK9  '), { server: 'https://ntfy.sh', topic: 'aB3xK9' },
-    'a topic pasted from a phone arrives with whitespace');
+test('the revert narrows the constraint and is a forward migration', () => {
+  assert.match(ntfyDrop, /CHECK \(channel IN \('viber', 'telegram', 'email'\)\)/);
+  assert.match(ntfyAdd, /CHECK \(channel IN \('ntfy', 'viber', 'telegram', 'email'\)\)/,
+    'the migration that introduced it stays in the repo — it is in the applied ledger');
 });
 
-// Accepting a URL is what makes self-hosting a Settings edit rather than a
-// migration — and self-hosting is the real fix for "the topic is the password".
-test('a full URL is split into server and topic', () => {
-  assert.deepEqual(parseNtfyTarget('https://ntfy.example.com/alerts'),
-    { server: 'https://ntfy.example.com', topic: 'alerts' });
-  assert.deepEqual(parseNtfyTarget('https://ntfy.sh/aB3xK9/'),
-    { server: 'https://ntfy.sh', topic: 'aB3xK9' }, 'a trailing slash is not part of the topic');
-  assert.deepEqual(parseNtfyTarget('http://192.168.1.10:8080/alerts'),
-    { server: 'http://192.168.1.10:8080', topic: 'alerts' }, 'a LAN instance keeps its port');
+// A tightened CHECK is validated against existing rows, so a saved ntfy
+// destination would abort the ALTER rather than being dropped.
+test('ntfy rows are deleted before the constraint is tightened', () => {
+  const del = ntfyDrop.indexOf("WHERE channel = 'ntfy'");
+  const alter = ntfyDrop.indexOf('ADD CONSTRAINT alert_channels_channel_check');
+  assert.ok(del !== -1 && del < alter, 'the delete has to come first or the ALTER fails');
+  assert.match(ntfyDrop, /RETURNING id, kind, enabled/,
+    'an operator should see what was removed, not discover it later');
 });
 
-test('a URL with no topic yields an empty one, which the sender rejects', () => {
-  assert.equal(parseNtfyTarget('https://ntfy.sh/').topic, '');
-  assert.match(tsCode(fn), /if \(!topic\) throw new Error\("ntfy target has no topic"\)/);
-});
-
-// ntfy's documented shorthand puts title and tags in HTTP HEADERS, and HTTP
-// headers are ASCII. A scanner named "Daungan22K – Gate" (en dash) either
-// throws when the header is set or arrives mangled.
-test('ntfy is published as JSON, not as headers', () => {
+test('no ntfy code path survives anywhere', () => {
   const code = tsCode(fn);
-  const at = code.indexOf('async function sendNtfy');
-  const send = code.slice(at, code.indexOf('const NTFY_PRIORITY') > at ? code.length : code.indexOf('async function sendViber'));
-  assert.match(send, /"Content-Type": "application\/json"/);
-  assert.match(send, /JSON\.stringify\(\{[\s\S]*topic,/);
-  assert.ok(!/headers:\s*\{[^}]*Title/i.test(send),
-    'a header title cannot carry a non-ASCII scanner label');
-});
-
-// The reason for choosing ntfy at all: priority 5 breaks through Android's
-// Do Not Disturb, so a critical alert at 03:00 actually wakes someone.
-test('severity maps to a priority that can wake someone', () => {
-  const code = tsCode(fn);
-  assert.match(code, /critical: 5/);
-  assert.match(code, /warning: 4/);
-  assert.match(code, /\?\? 3/, 'an unknown severity must still send, at normal priority');
-});
-
-// The topic is the only access control on ntfy.sh, and these logs are
-// readable by anyone with project access.
-test('the ntfy topic never reaches a log line or an error message', () => {
-  const code = tsCode(fn);
-  const at = code.indexOf('async function sendNtfy');
-  const send = code.slice(at, at + 1400);
-  const thrown = [...send.matchAll(/throw new Error\(([^;]*)\)/g)].map((m) => m[1]);
-  for (const t of thrown) {
-    assert.ok(!/\btopic\b/.test(t) || /no topic/.test(t),
-      `an error carries the topic: ${t.slice(0, 80)}`);
+  for (const token of ['sendNtfy', 'parseNtfyTarget', 'NTFY_PRIORITY', 'ntfy.sh']) {
+    assert.ok(!code.includes(token), `notify-alert still references ${token}`);
+  }
+  const page = read('../JS/Features/Settings/SettingsPage.js');
+  for (const token of ['generateTopic', 'TOPIC_ALPHABET', 'ac-generate', 'value="ntfy"']) {
+    assert.ok(!page.includes(token), `SettingsPage still references ${token}`);
   }
 });
 
-test('ntfy is offered first, and Viber stays in the dropdown', () => {
+test('the dropdown offers exactly Telegram and Viber', () => {
   const page = read('../JS/Features/Settings/SettingsPage.js');
-  const select = page.slice(page.indexOf('id="ac-channel"'), page.indexOf('id="ac-channel"') + 320);
-  assert.ok(select.indexOf('value="ntfy"') < select.indexOf('value="viber"'),
-    'ntfy is the one that works without an approval step');
-  assert.match(select, /value="viber"/, 'Viber stays, as asked');
-  assert.match(viberNtfy, /CHECK \(channel IN \('ntfy', 'viber', 'telegram', 'email'\)\)/);
+  const select = page.slice(page.indexOf('id="ac-channel"'), page.indexOf('</select>'));
+  const options = [...select.matchAll(/value="([a-z]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(options, ['viber', 'telegram']);
 });
 
-// "proximity-alerts" is guessable in one try. Math.random() is guessable in
-// rather more than one, but far fewer than 57^32.
-test('a generated topic is long and from a CSPRNG', () => {
-  const page = read('../JS/Features/Settings/SettingsPage.js');
-  const at = page.indexOf('function generateTopic');
-  const body = page.slice(at, at + 420);
-  assert.match(body, /crypto\.getRandomValues/);
-  assert.ok(!/Math\.random/.test(body), 'a predictable topic is a public alert feed');
-  assert.match(page, /function generateTopic\(length = 32\)/);
-});
-
-// Masking without a copy path would make the topic unrecoverable the moment
-// it is saved — and it is the only way to subscribe a second phone later.
+// Kept after ntfy went: a Viber id is re-pickable from the subscriber list
+// and a Telegram id re-readable from getUpdates, so nothing is unrecoverable
+// — but copying still beats reading digits off a mask and retyping them.
 test('a masked destination is still copyable', () => {
   const page = read('../JS/Features/Settings/SettingsPage.js');
   const at = page.indexOf('function copyableMasked');

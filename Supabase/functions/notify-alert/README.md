@@ -4,30 +4,16 @@ Pushes a newly-recorded alert to every enabled row in `alert_channels`.
 
 | channel | credential | setup | notes |
 |---|---|---|---|
-| **ntfy** | none | generate a topic | free, no account, works immediately |
 | **viber** | `VIBER_AUTH_TOKEN` | Public Account + webhook | needs [`viber-webhook`](../viber-webhook/README.md) |
-| **telegram** | `TELEGRAM_BOT_TOKEN` | BotFather | fallback |
+| **telegram** | `TELEGRAM_BOT_TOKEN` | BotFather | fallback, and the quickest to get working |
 | `email` | — | — | accepted by the schema, **rejected here loudly** rather than counted as delivered |
 
-## ntfy
-
-One POST, no account, no token. Settings generates a 32-character random
-topic; anyone subscribed to it on the ntfy app gets a push.
-
-Severity maps to ntfy priority — `critical` → 5, which **breaks through
-Android's Do Not Disturb**. That is the reason to prefer it over email for a
-scanner that dies at 03:00.
-
-> **The topic is the only access control on ntfy.sh.** Anyone who knows or
-> guesses it reads every alert published to it, and these carry scanner names
-> and timings. That is why the topic is generated rather than named, shown
-> masked, and never written to a log line. Self-hosting ntfy is the real fix;
-> a full URL is accepted in place of a bare topic, so that's a Settings edit.
-
-Published as **JSON to the server root**, not with ntfy's documented
-`Title:`/`Tags:` header shorthand — HTTP headers are ASCII, and a scanner
-named `Daungan22K – Gate` would either throw when the header is set or arrive
-mangled.
+> **ntfy was added on 2026-11-10 and withdrawn the same day.** The migration
+> that introduced it (`20261110094000`) had already been applied, so
+> `20261110095000` reverts it forward rather than the file being deleted —
+> the repo stays an honest record of what the database went through. If it
+> comes back, `20261110094000` and the commit that added `sendNtfy()` are
+> what to copy from.
 
 > ### Viber's two traps
 >
@@ -205,9 +191,7 @@ together.
 |---|---|
 | nothing arrives, no log line | no enabled `alert_channels` row matches the kind — the trigger no-ops before calling |
 | nothing arrives, `net._http_response` shows 403 | `NOTIFY_ALERT_SECRET` and the Vault `notify_alert_secret` have drifted |
-| `ntfy 403` | the topic is reserved by somebody else's ntfy account — generate a new one |
-| `ntfy 429` | rate limited. At ~4 alerts/day this means something else is publishing to your topic |
-| ntfy sends but nothing arrives | the phone is subscribed to a different topic. Use the copy button in Settings rather than retyping it |
+| **401 in `net._http_response`, empty function logs** | **Verify JWT is still on.** See Deploying above — this is the commonest setup failure and the one that looks like nothing happened |
 | `viber status 6` | the recipient has not subscribed to the Public Account. The commonest failure, and the one that looks like a bug |
 | `viber status 2` | malformed request — usually an id pasted with whitespace |
 | `viber status 1` / `invalid auth token` | `VIBER_AUTH_TOKEN` wrong, or set on `notify-alert` but not `viber-webhook` |

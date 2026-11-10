@@ -89,59 +89,6 @@ async function sendTelegram(token: string, chatId: string, text: string) {
   }
 }
 
-// ntfy, published as JSON to the server root rather than as headers on
-// POST /<topic>.
-//
-// THE HEADER FORM CANNOT CARRY A SCANNER LABEL. ntfy's documented shorthand
-// puts the title and tags in HTTP headers, and HTTP headers are ASCII — a
-// scanner named "Daungan22K – Gate" (en dash) either throws when the header
-// is set or arrives mangled. The JSON form carries everything in a UTF-8
-// body and has no such limit.
-//
-// Severity maps to ntfy's priority because that is the whole point of
-// choosing it: priority 5 breaks through Android's Do Not Disturb, so a
-// critical alert at 03:00 actually wakes someone.
-const NTFY_PRIORITY: Record<string, number> = { critical: 5, warning: 4, info: 3 };
-
-export function parseNtfyTarget(target: string): { server: string; topic: string } {
-  const t = String(target ?? "").trim();
-  if (!/^https?:\/\//i.test(t)) {
-    // A bare topic goes to the public instance.
-    return { server: "https://ntfy.sh", topic: t };
-  }
-  // A full URL lets a self-hosted server be a Settings edit rather than a
-  // migration. The topic is the last path segment.
-  const u = new URL(t);
-  const topic = u.pathname.replace(/^\/+|\/+$/g, "");
-  return { server: u.origin, topic };
-}
-
-async function sendNtfy(target: string, alert: AlertPayload, text: string) {
-  const { server, topic } = parseNtfyTarget(target);
-  if (!topic) throw new Error("ntfy target has no topic");
-
-  const res = await fetch(`${server}/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      topic,
-      title: `Proximity — ${String(alert.kind ?? "alert").replace(/_/g, " ")}`,
-      message: text,
-      priority: NTFY_PRIORITY[String(alert.severity ?? "")] ?? 3,
-      tags: ["rotating_light"],
-    }),
-  });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    // 403 on ntfy.sh means the topic is reserved by someone else's account,
-    // which reads as nonsense without the hint.
-    const hint = res.status === 403 ? " (topic may be reserved by another account)" : "";
-    // The topic is NOT included: it is the only access control there is, and
-    // these logs are readable by anyone with project access.
-    throw new Error(`ntfy ${res.status}${hint}: ${detail.slice(0, 160)}`);
-  }
-}
-
 // VIBER RETURNS HTTP 200 ON FAILURE. `res.ok` is true for an unsubscribed
 // recipient, a bad token and a malformed id alike — the real outcome is the
 // `status` field in the body, where 0 means success and anything else does
@@ -227,12 +174,7 @@ Deno.serve(async (req) => {
   // predictable about the order things are attempted in.
   for (const c of channels) {
     try {
-      if (c.channel === "ntfy") {
-        // No credential of its own: the topic is the whole secret, which is
-        // why Settings generates it rather than letting anyone name one.
-        await sendNtfy(c.target, alert, text);
-        sent++;
-      } else if (c.channel === "viber") {
+      if (c.channel === "viber") {
         if (!viberToken) throw new Error("VIBER_AUTH_TOKEN is not set");
         await sendViber(viberToken, c.target, text);
         sent++;

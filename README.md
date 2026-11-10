@@ -691,23 +691,22 @@ file can drift from the live state between sessions.*
 > abstracted the transport, so leaving it in costs nothing and covers the
 > days while a Public Account is still being approved.
 
-> **ntfy is the channel that works today**, and is what Settings offers
-> first. No account, no token, no approval: generate a topic, install the
-> app, subscribe. Severity maps to ntfy priority, so a `critical` alert goes
-> out at priority 5 and **breaks through Android's Do Not Disturb** — which
-> is the whole point for a scanner that dies at 03:00.
+> **ntfy was added and withdrawn the same day.** `20261110094000` widened the
+> channel CHECK to accept it and **had already been applied to production**,
+> so `20261110095000` reverts it forward rather than the file being deleted
+> — a deleted applied migration leaves the repo describing a database that
+> never existed, and repairing the ledger needs a CLI this project has never
+> had installed. The revert deletes any `ntfy` rows first, because a
+> tightened CHECK is validated against existing rows and would otherwise
+> abort rather than drop them.
 >
-> **The topic is the only access control on ntfy.sh.** Settings generates 32
-> random characters from `crypto.getRandomValues` rather than letting anyone
-> name one, shows it masked, and offers a copy button — masking without a
-> copy path would make it unrecoverable, and it is the only way to subscribe
-> a second phone later. It is never written to a log line. Self-hosting is
-> the real fix; a full URL is accepted instead of a bare topic, so that is a
-> Settings edit rather than a migration.
->
-> Published as JSON to the server root, not with ntfy's `Title:` header
-> shorthand: HTTP headers are ASCII, and `Daungan22K – Gate` would either
-> throw or arrive mangled.
+> **Deploying either function requires turning Verify JWT off.** Supabase
+> rejects a call without an `Authorization` bearer before the function's code
+> runs, and both of these are called by something that cannot send one —
+> `pg_net` carrying only `x-notify-secret`, Viber carrying only its HMAC
+> signature. Left on, alerts fail with 401 while the function's own logs stay
+> empty, which reads as "never called". The shared secret and the signature
+> are the replacements for that check.
 
 
 357 of 422 alerts were `scanner_went_silent`, and ~305 of those fell between
