@@ -1343,12 +1343,18 @@ long applied. Probe before believing one.
 ### Change log (most recent first)
 **2026-11-10 — scanner silence hours, alert channels, and the notify-alert push (NOT applied)**
 
-Four migrations, applied in this order:
+Five migrations, applied in this order:
 
 1. `20261110090000_scanner_silence_active_hours.sql`
 2. `20261110091000_alert_channels.sql`
 3. `20261110092000_notify_alert_webhook.sql`
 4. `20261110093000_viber_channel.sql`
+5. `20261110094000_ntfy_channel.sql`
+
+**ntfy** needs no schema beyond widening the `channel` CHECK — no token, no
+account, no subscriber table, because publishing to a topic needs no
+knowledge of who is listening. That asymmetry with Viber is the whole reason
+it is offered first.
 
 **`viber_subscribers`** — `(viber_id, name, subscribed, first_seen_at,
 last_seen_at)`, RLS on, `is_admin()` for ALL, and `REVOKE ALL` from both

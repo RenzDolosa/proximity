@@ -691,6 +691,24 @@ file can drift from the live state between sessions.*
 > abstracted the transport, so leaving it in costs nothing and covers the
 > days while a Public Account is still being approved.
 
+> **ntfy is the channel that works today**, and is what Settings offers
+> first. No account, no token, no approval: generate a topic, install the
+> app, subscribe. Severity maps to ntfy priority, so a `critical` alert goes
+> out at priority 5 and **breaks through Android's Do Not Disturb** — which
+> is the whole point for a scanner that dies at 03:00.
+>
+> **The topic is the only access control on ntfy.sh.** Settings generates 32
+> random characters from `crypto.getRandomValues` rather than letting anyone
+> name one, shows it masked, and offers a copy button — masking without a
+> copy path would make it unrecoverable, and it is the only way to subscribe
+> a second phone later. It is never written to a log line. Self-hosting is
+> the real fix; a full URL is accepted instead of a bare topic, so that is a
+> Settings edit rather than a migration.
+>
+> Published as JSON to the server root, not with ntfy's `Title:` header
+> shorthand: HTTP headers are ASCII, and `Daungan22K – Gate` would either
+> throw or arrive mangled.
+
 
 357 of 422 alerts were `scanner_went_silent`, and ~305 of those fell between
 20:00 and 07:00 Asia/Manila. A scanner that is quiet at 02:00 is not broken,

@@ -295,8 +295,19 @@ export async function renderSettings() {
     <div class="panel" style="padding:20px;">
       <h3 style="margin:0 0 4px;">Notifications</h3>
       ${panelNote(
-        'Push alerts to Viber as they happen, instead of waiting to notice the badge.',
-        `<p><strong>They have to subscribe first.</strong> A Viber Public
+        'Push alerts as they happen, instead of waiting to notice the badge.',
+        `<p><strong>ntfy is the one that works today.</strong> No account, no
+         token, no approval: press <em>Generate</em>, save, then install the
+         ntfy app and subscribe to that topic. Priority is mapped from
+         severity, so a critical alert breaks through Do Not Disturb.</p>
+         <p><strong>On ntfy.sh the topic is the only access control there
+         is.</strong> Anyone who knows or guesses it reads every alert
+         published to it, and these carry scanner names and timings — which
+         is why <em>Generate</em> produces 32 random characters rather than
+         letting you name one. It is shown masked afterwards; use the copy
+         button to add another device. Self-hosting ntfy removes the issue
+         entirely, and a full URL is accepted here instead of a bare topic.</p>
+         <p><strong>Viber needs setting up first.</strong> A Viber Public
          Account cannot message someone who has not subscribed to it — send
          them the PA link, have them open the chat, and their name appears in
          the list below. Saving an id for someone who has not subscribed
@@ -1070,7 +1081,7 @@ function paintAlertChannels() {
             <tr>
               <td>
                 <span class="badge role-viewer">${esc(c.channel)}</span>
-                <span class="mono">${esc(maskTarget(c.target))}</span>
+                ${copyableMasked(c.target, c.channel)}
               </td>
               <td>${esc(kindLabel(c.kind))}</td>
               <td class="col-shrink">
@@ -1088,6 +1099,7 @@ function paintAlertChannels() {
       <label style="flex:0 0 auto;">
         <span class="emp-meta">Channel</span>
         <select id="ac-channel" style="min-width:120px;">
+          <option value="ntfy">ntfy</option>
           <option value="viber">Viber</option>
           <option value="telegram">Telegram</option>
         </select>
@@ -1095,12 +1107,14 @@ function paintAlertChannels() {
       <label style="flex:1 1 200px;min-width:0;">
         <span class="emp-meta">Send to</span>
         <input id="ac-target" type="text" inputmode="text" autocomplete="off"
-               list="ac-viber-ids" placeholder="pick a Viber subscriber, or paste an id" />
+               list="ac-viber-ids" placeholder="topic, or a full ntfy URL" />
         <datalist id="ac-viber-ids">
           ${viberSubscribers.map((s) => `
             <option value="${esc(s.viber_id)}">${esc(s.name || 'Viber user')}</option>`).join('')}
         </datalist>
       </label>
+      <button type="button" class="ghost" id="ac-generate"
+              title="Generate a random ntfy topic. The topic is the only thing keeping your alerts private on ntfy.sh, so it should not be guessable.">Generate</button>
       <label style="flex:0 0 auto;">
         <span class="emp-meta">Sends</span>
         <select id="ac-kind" style="min-width:160px;">
@@ -1117,6 +1131,45 @@ function maskTarget(target) {
   const s = String(target ?? '');
   if (s.length <= 6) return s;
   return `${s.slice(0, 3)}…${s.slice(-4)}`;
+}
+
+// Masked text, real value on the clipboard.
+//
+// Hand-rolled rather than copyableHTML(), which renders the value it copies —
+// the opposite of what is wanted here. The class names are the component's
+// own, so Components/Copyable.js's single delegated listener (already bound
+// in main.js) handles the click with no extra JS.
+//
+// AN NTFY TOPIC HAS TO STAY RETRIEVABLE. It is the only way to subscribe a
+// second phone later, and masking without a copy path would make it
+// unrecoverable the moment it is saved. A Viber id is re-pickable from the
+// subscriber list, so this matters most for ntfy — but it costs nothing to
+// offer for every channel.
+function copyableMasked(target, channel) {
+  const v = String(target ?? '');
+  const label = channel === 'ntfy' ? 'ntfy topic' : 'destination';
+  return `<span class="copyable">`
+    + `<span class="copyable-text mono">${esc(maskTarget(v))}</span>`
+    + `<button type="button" class="copyable-btn" data-copy="${esc(v)}" `
+    + `title="Copy ${esc(label)}" aria-label="Copy ${esc(label)}">`
+    + `<span aria-hidden="true">⧉</span></button></span>`;
+}
+
+// 32 characters from the URL-safe alphabet, via crypto.getRandomValues.
+//
+// NOT Math.random(), and not a friendly name. On the public ntfy.sh instance
+// the topic IS the access control: anyone who knows or guesses it reads every
+// alert published to it. "proximity-alerts" is guessable in one try, and a
+// predictable PRNG is guessable in rather more than one but far fewer than
+// this.
+const TOPIC_ALPHABET = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function generateTopic(length = 32) {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  // Modulo over a 57-character alphabet from 256 values is very slightly
+  // biased. It is not worth rejection-sampling for: the bias costs a
+  // fraction of a bit across 32 characters, against ~186 bits of entropy.
+  return [...bytes].map((b) => TOPIC_ALPHABET[b % TOPIC_ALPHABET.length]).join('');
 }
 
 async function onAlertChannelSubmit(e) {
@@ -1140,6 +1193,17 @@ async function onAlertChannelSubmit(e) {
 }
 
 async function onAlertChannelClick(e) {
+  if (e.target.closest('#ac-generate')) {
+    const input = $('#ac-target');
+    if (!input) return;
+    input.value = generateTopic();
+    // Selected, not just filled: the next thing anyone does with a fresh
+    // topic is copy it into the ntfy app on their phone.
+    input.focus();
+    input.select();
+    return;
+  }
+
   const del = e.target.closest('[data-ac-delete]');
   const toggle = e.target.closest('[data-ac-toggle]');
   if (!del && !toggle) return;
