@@ -84,9 +84,42 @@ Telegram message to an already-configured chat — not an open relay.
 | `502` | `{"error": "channel lookup failed"}` | PostgREST unreachable, or every channel failed |
 | `503` | `{"error": "not configured"}` | a required secret is missing |
 
+## Deploying
+
+> ### ⚠️ JWT verification must be OFF for this function
+>
+> Supabase rejects calls to an Edge Function without a valid `Authorization`
+> bearer **before your code runs**. This function is called by `pg_net` from
+> a database trigger, which sends only `x-notify-secret` — so with JWT
+> verification left on, every alert fails with **401** and
+> `net._http_response` shows it, while the function's own logs stay empty.
+>
+> Dashboard → Edge Functions → `notify-alert` → **Settings** → turn off
+> *Verify JWT*. With the CLI it is `--no-verify-jwt`, or in `config.toml`:
+>
+> ```toml
+> [functions.notify-alert]
+> verify_jwt = false
+> ```
+>
+> The shared secret is the replacement for that check, which is the whole
+> reason it exists. Sending the service-role key from the trigger instead
+> would work, but would put a far more powerful credential on every call.
+
+**Dashboard (no CLI):** Edge Functions → *Deploy a new function* → *Via
+editor*, name it `notify-alert`, paste `index.ts`, deploy, then turn off
+Verify JWT as above.
+
+**CLI:** the Supabase CLI does not support a global `npm install`. Use npx:
+
+```bash
+npx supabase@latest functions deploy notify-alert --project-ref <ref> --no-verify-jwt
+```
+
 ## Secrets
 
-Set these yourself; none of them belong in the repo.
+Set these yourself; none of them belong in the repo. The dashboard equivalent
+is Edge Functions → **Secrets**.
 
 ```bash
 supabase secrets set NOTIFY_ALERT_SECRET="<a long random string>"

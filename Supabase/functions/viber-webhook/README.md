@@ -44,10 +44,36 @@ Exceptions: `403` for a bad signature (no log line — this URL is effectively
 public once registered, and logging rejections would let anyone inflate the
 log bill), `405` for anything but POST, `503` for a missing secret.
 
-## Secrets
+## Deploying
+
+> ### ⚠️ JWT verification must be OFF for this function too
+>
+> Viber posts callbacks with its own `X-Viber-Content-Signature` and no
+> `Authorization` header. With JWT verification on, Supabase returns 401
+> before this code runs — and Viber, seeing repeated failures, **unsets the
+> webhook**, which ends subscriber discovery permanently and silently.
+>
+> Dashboard → Edge Functions → `viber-webhook` → **Settings** → turn off
+> *Verify JWT*. The HMAC signature check is the replacement, and it is
+> stronger than a bearer token because the secret is never transmitted.
+
+**Dashboard (no CLI):** Edge Functions → *Deploy a new function* → *Via
+editor*, name it `viber-webhook`, paste `index.ts`, deploy, turn off Verify
+JWT, **then** run `set_webhook` below. Registering before the function is
+live makes Viber reject the URL.
+
+**CLI:**
 
 ```bash
-supabase secrets set VIBER_AUTH_TOKEN="<from partners.viber.com>"
+npx supabase@latest functions deploy viber-webhook --project-ref <ref> --no-verify-jwt
+```
+
+## Secrets
+
+Dashboard: Edge Functions → **Secrets**. Or:
+
+```bash
+npx supabase@latest secrets set VIBER_AUTH_TOKEN="<from partners.viber.com>"
 ```
 
 The **same** token as `notify-alert`: it is both the send credential and the
