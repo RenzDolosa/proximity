@@ -10,6 +10,7 @@ import { esc, fmtTime } from '../Utils/format.js';
 import { toast } from '../Utils/toast.js';
 import { canEditScannerRegistry } from '../Core/state.js';
 import { ScannersModel } from '../Models/ScannersModel.js';
+import { isFresh, markFetched } from '../Utils/freshness.js';
 import { scannerState, SCANNER_STATE_LABEL, scannerStateBadgeClass } from '../Utils/dashboard.js';
 import { reportError } from '../Utils/userError.js';
 import { panelNote } from './PanelNote.js';
@@ -40,9 +41,24 @@ export function scannersPanelHTML() {
     </div>`;
 }
 
-export async function mountScannersPanel() {
-  $('#sc-refresh')?.addEventListener('click', load);
+// MOUNTING AND FETCHING ARE DIFFERENT JOBS, and this is the one panel where
+// they used to be the same call. Settings re-renders its markup on every
+// visit, so the listener below must be re-bound every time — but the list
+// behind it does not need refetching every time. Skipping the whole call to
+// save the request would have left a panel that renders and does nothing.
+//
+// So: bind always, paint from what is already held, and only reach the
+// network when the window has expired. `maxAgeMs` defaults to 0, which
+// Utils/freshness.js reads as "always refetch" — a caller that does not opt
+// in keeps the old behaviour.
+const SCANNERS_KEY = 'settings:scanners';
+
+export async function mountScannersPanel({ maxAgeMs = 0 } = {}) {
+  // Arrow, not a bare `load` reference: addEventListener passes the event as
+  // the first argument, which would arrive as this function's options bag.
+  $('#sc-refresh')?.addEventListener('click', () => load());
   if (loaded) paint();
+  if (isFresh(SCANNERS_KEY, maxAgeMs)) return;
   await load();
 }
 
@@ -53,6 +69,9 @@ async function load() {
   err?.classList.add('hidden');
   rows = data || [];
   loaded = true;
+  // Only on success: a failed list must not start a window in which the
+  // panel refuses to try again.
+  markFetched(SCANNERS_KEY);
   paint();
 }
 

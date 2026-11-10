@@ -1,5 +1,7 @@
 import { $, $$ } from '../Utils/dom.js';
 import { appState } from './state.js';
+import { setRoute as meterSetRoute } from './requestLog.js';
+import { ROUTE_TITLES } from './navGroups.js';
 import { renderDashboard } from '../Features/Dashboard/DashboardPage.js';
 import { renderAlerts } from '../Features/Alerts/AlertsPage.js';
 import { renderDirectory } from '../Features/Directory/DirectoryPage.js';
@@ -13,24 +15,10 @@ import { renderAuditLog } from '../Features/Audit/AuditLogPage.js';
 import { renderExportTasks } from '../Features/Exports/ExportTasksPage.js';
 import { renderMuster } from '../Features/Muster/MusterPage.js';
 
-const titles = {
-  dashboard: ['Dashboard', 'Who is on site right now, plus scanner and card health'],
-  muster: ['Muster', 'Who to account for at the assembly point — works without a network'],
-  alerts: ['Alerts', 'Server-raised warnings — acknowledge them once handled'],
-  directory: ['Employee Manager', 'View and edit the employee directory'],
-  proximity: ['Proximity Cards', 'Issue and revoke proximity IDs, linked to employees'],
-  // Not "against the live directory" any more: commissioning mode is on by
-  // default, so the default answer comes from the offline cache. The note
-  // under the toggle names the source and its age for the scan in front of
-  // you, which a page subtitle cannot.
-  scanner: ['Test Scan', 'Try a proximity ID — results here are not logged'],
-  analytics: ['Scanner Analytics', 'Scan activity, match rates, and per-scanner health over time'],
-  attendance: ['Attendance', 'Daily first IN, last OUT, and time on site per employee'],
-  users: ['Users & Roles', 'Manage login accounts and permission tiers'],
-  settings: ['Settings', 'App-wide configuration'],
-  exports: ['Export Manager', 'Every export run from this app — who, what, and how many rows'],
-  audit: ['Audit Log', 'Who did what — destructive and permission-changing actions only'],
-};
+// Moved to Core/navGroups.js so the command palette can offer the same
+// destinations without importing this module, which pulls in every feature
+// page. One definition, two readers.
+const titles = ROUTE_TITLES;
 
 export function render() {
   // Keep the hash in sync even when the route changed programmatically
@@ -44,6 +32,11 @@ export function render() {
   const [title, sub] = titles[appState.route];
   $('#page-title').textContent = title;
   $('#page-sub').textContent = sub;
+  // Pushed, not pulled: Core/state.js imports supabaseClient.js, which
+  // imports the meter, so the meter reaching back for appState.route would
+  // close an import cycle. Set before the render call below, so every request
+  // that render triggers is attributed to the screen that triggered it.
+  meterSetRoute(appState.route);
   if (appState.route === 'dashboard') renderDashboard();
   if (appState.route === 'muster') renderMuster();
   if (appState.route === 'alerts') renderAlerts();

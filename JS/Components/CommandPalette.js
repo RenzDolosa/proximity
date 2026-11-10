@@ -1,0 +1,139 @@
+// Ctrl/Cmd+K — jump to any employee or any page without navigating there.
+//
+// Searches what is already in memory (appState.employeesCache plus the route
+// list), so it costs no request and works offline.
+//
+// WHICH ROUTES IT OFFERS is read from the rail buttons' own .hidden state,
+// exactly as Core/screens.js's paintNavGroups() does, rather than re-deriving
+// permissions here. That is the rule this file must not break: one place
+// decides what an account can see, and a second opinion is how a palette ends
+// up offering a scanner-only kiosk a route to the audit log.
+import { $, $$ } from '../Utils/dom.js';
+import { esc } from '../Utils/format.js';
+import { appState } from '../Core/state.js';
+import { GROUPED_ROUTES, ROUTE_TITLES } from '../Core/navGroups.js';
+import { searchPalette, moveSelection } from '../Utils/paletteSearch.js';
+
+let overlay = null;
+let results = [];
+let selected = 0;
+
+function visibleRoutes() {
+  return GROUPED_ROUTES.filter((route) => {
+    const btn = $(`nav.rail button[data-route="${route}"]`);
+    return Boolean(btn) && !btn.classList.contains('hidden');
+  });
+}
+
+export function isPaletteOpen() { return Boolean(overlay); }
+
+export function closePalette() {
+  if (!overlay) return;
+  overlay.remove();
+  overlay = null;
+  results = [];
+  selected = 0;
+}
+
+export function openPalette() {
+  if (overlay) return;
+  overlay = document.createElement('div');
+  overlay.className = 'cmdk-overlay';
+  overlay.innerHTML = `
+    <div class="cmdk" role="dialog" aria-modal="true" aria-label="Search">
+      <input id="cmdk-input" type="text" autocomplete="off" spellcheck="false"
+             placeholder="Search people, cards, or pages…" aria-controls="cmdk-list" />
+      <div id="cmdk-list" class="cmdk-list" role="listbox"></div>
+      <div class="cmdk-foot emp-meta">
+        <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
+        <span><kbd>enter</kbd> open</span>
+        <span><kbd>esc</kbd> close</span>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const input = $('#cmdk-input', overlay);
+  const paint = () => {
+    results = searchPalette({
+      query: input.value,
+      employees: appState.employeesCache,
+      routes: visibleRoutes(),
+      titles: ROUTE_TITLES,
+    });
+    selected = 0;
+    paintList();
+  };
+
+  input.addEventListener('input', paint);
+  input.addEventListener('keydown', onKey);
+  // Clicking the backdrop closes; clicking inside the panel must not.
+  overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) closePalette(); });
+  $('#cmdk-list', overlay).addEventListener('click', (e) => {
+    const row = e.target.closest('[data-index]');
+    if (row) choose(Number(row.dataset.index));
+  });
+
+  paint();
+  input.focus();
+}
+
+function paintList() {
+  const list = $('#cmdk-list', overlay);
+  if (!list) return;
+  if (!results.length) {
+    list.innerHTML = '<div class="cmdk-empty emp-meta">Nothing matches. People are searched from the copy Employee Manager already loaded — open it once if this looks short.</div>';
+    return;
+  }
+  list.innerHTML = results.map((r, i) => `
+    <div class="cmdk-row${i === selected ? ' is-sel' : ''}" role="option"
+         aria-selected="${i === selected}" data-index="${i}">
+      <span class="cmdk-kind">${r.kind === 'route' ? 'page' : 'person'}</span>
+      <span class="cmdk-label">${esc(r.label)}</span>
+      <span class="cmdk-hint emp-meta">${esc(r.hint || '')}</span>
+    </div>`).join('');
+}
+
+function onKey(e) {
+  if (e.key === 'Escape') { e.preventDefault(); closePalette(); return; }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    selected = moveSelection(selected, e.key === 'ArrowDown' ? 1 : -1, results.length);
+    paintList();
+    $('.cmdk-row.is-sel', overlay)?.scrollIntoView({ block: 'nearest' });
+    return;
+  }
+  if (e.key === 'Enter') { e.preventDefault(); choose(selected); }
+}
+
+async function choose(index) {
+  const hit = results[index];
+  if (!hit) return;
+  closePalette();
+  if (hit.kind === 'route') {
+    appState.route = hit.route;
+    const { render } = await import('../Core/router.js');
+    render();
+    return;
+  }
+  // A person resolves to Employee Manager with their name in the search box.
+  // Opening their record straight from here would need the row's full shape,
+  // and the palette deliberately holds only what the grid already cached.
+  appState.route = 'directory';
+  const { render } = await import('../Core/router.js');
+  render();
+  const search = $('#dir-search');
+  if (search) {
+    search.value = hit.row?.employee_code || hit.label;
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    search.focus();
+  }
+}
+
+export function initCommandPalette() {
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      if (overlay) closePalette(); else openPalette();
+    }
+  });
+}

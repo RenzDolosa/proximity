@@ -22,6 +22,16 @@ import { ScanSoundsModel, SOUND_KEYS, SOUND_LABELS, MAX_FILE_SIZE_BYTES } from '
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { QueryStatsModel } from '../../Models/QueryStatsModel.js';
 import { describeQuery } from '../../Utils/queryLabel.js';
+import { readSummary, resetMeter } from '../../Core/requestLog.js';
+import { shareOfAllowance } from '../../Utils/requestMeter.js';
+import { isFresh, markFetched, invalidate } from '../../Utils/freshness.js';
+
+// Matches DIRECTORY_MAX_AGE_MS in DirectoryPage: long enough that flicking
+// between sidebar items costs nothing, short enough that another admin's
+// change shows up without a reload. Every panel here also has its own
+// Refresh button, and those call their loader directly rather than going
+// through openGroup(), so an explicit refresh is never suppressed.
+const SETTINGS_MAX_AGE_MS = 60 * 1000;
 import { ScanArchiveModel } from '../../Models/ScanArchiveModel.js';
 import { ScanLogsTrimModel } from '../../Models/ScanLogsTrimModel.js';
 import { ScannerSilenceModel } from '../../Models/ScannerSilenceModel.js';
@@ -63,13 +73,19 @@ let photoLoaded = false;
 let queryStats = null; // array once loaded, else null
 let queryStatsError = null;
 let queryStatsLoaded = false;
-// Matches get_slow_query_stats()'s own p_threshold_ms default. It used to
-// match log_min_duration_statement too; that was raised to 1000 ms on
-// 2026-10-17 to cut log ingestion, and this deliberately stayed at 200.
-// The two answer different questions: this panel reads pg_stat_statements
-// and asks "what is slow", which is worth knowing well before a statement
-// is slow enough to be worth writing its full text to the log.
-let queryThresholdMs = 200;
+// 1000 ms, matching log_min_duration_statement rather than
+// get_slow_query_stats()'s own 200 ms default.
+//
+// This was 200 on the reasoning that the panel and the log answer different
+// questions — "what is slow" is worth knowing before a statement is slow
+// enough to justify writing its full text to a metered log. That reasoning
+// still holds, but it produced a fifteen-row table where every row was red,
+// and a list on which everything is urgent sorts nothing. At 1000 the panel
+// shows what is actually at risk of the 8 s statement_timeout.
+//
+// NOTHING IS LOST, only hidden by default: pg_stat_statements still counts
+// the 200-1000 ms band, and typing 200 into the box brings it straight back.
+let queryThresholdMs = 1000;
 
 let archiveStatus = null; // { live_count, oldest_live_scanned_at, archive_count, last_archived_at, last_run } once loaded, else null
 let archiveStatusError = null;
@@ -265,6 +281,32 @@ export async function renderSettings() {
 
     scanners: canViewScannerRegistry() ? scannersPanelHTML() : '',
 
+    // The replacement for the Egress / Log Ingestion tiles removed on
+    // 2026-10-05. Those asked Supabase; this counts locally, which is the
+    // only option left once the usage API turned out not to exist.
+    requests: !isAdmin() ? '' : `
+    <div class="panel" style="padding:20px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <h3 style="margin:0 0 4px;">Request volume</h3>
+        <button type="button" class="ghost danger" id="rq-reset">Reset counts</button>
+      </div>
+      ${panelNote(
+        'How many requests this app makes, counted in this browser.',
+        `<p>Supabase bills <strong>Log Ingestion per request</strong>, not per
+         byte — one log line each, however small the response. So the number
+         that moves that bill is how many calls you make, which is what this
+         counts.</p>
+         <p><strong>It counts this browser only.</strong> Other devices,
+         kiosks on other tablets, and Supabase's own internal traffic are all
+         invisible here. Use it to find which screen generates volume, not to
+         reconcile against an invoice.</p>
+         <p>The Egress and Log Ingestion tiles that used to sit in this panel
+         were removed on 2026-10-05: Supabase exposes no usage API to ask, so
+         counting before the request leaves is the only place left.</p>`,
+      )}
+      <div id="rq-body"></div>
+    </div>`,
+
     queryPerf: !isAdmin() ? '' : `
     <div class="panel" style="padding:20px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
@@ -391,7 +433,7 @@ export async function renderSettings() {
     { id: 'rules', label: 'Attendance rules', hint: 'Shift times, and what counts as late',
       html: panels.shifts },
     { id: 'data', label: 'Data & maintenance', hint: 'Storage, retention jobs, and query health',
-      html: panels.usage + panels.photos + panels.archival + panels.trimming + panels.queryPerf },
+      html: panels.usage + panels.requests + panels.photos + panels.archival + panels.trimming + panels.queryPerf },
   ].filter((group) => group.html.trim());
 
   const onlyAccount = groups.length === 1;
@@ -420,6 +462,18 @@ export async function renderSettings() {
   if (showSounds && loaded) { paintRows(); paintStorageSummary(); }
   if (showPhotos && photoLoaded) paintPhotoStorage();
   if (isAdmin()) {
+    paintRequestMeter();
+    $('#rq-reset').addEventListener('click', async () => {
+      const ok = await openConfirmModal({
+        title: 'Reset request counts?',
+        message: 'Clears the request tally held in THIS browser only — other devices keep their own. Nothing on the server changes, and no data other than the counts is affected.',
+        confirmLabel: 'Reset',
+      });
+      if (!ok) return;
+      resetMeter();
+      paintRequestMeter();
+      toast('Request counts reset');
+    });
     if (queryStatsLoaded) paintQueryStats();
     $('#qs-refresh').addEventListener('click', () => loadQueryStats());
     $('#qs-threshold').addEventListener('change', (e) => {
@@ -506,6 +560,15 @@ export async function renderSettings() {
       loadTrimStatus();
     });
     if (silenceStatusLoaded) paintSilenceStatus();
+    // These two were the only panels with no repaint-from-state on render —
+    // they painted solely from inside their own loaders. That was invisible
+    // while every visit refetched, and would have left both stuck on
+    // "Loading…" forever the moment a freshness window skipped the fetch.
+    // Both read module state that outlives the render, so they are safe to
+    // call unconditionally; paintSiteRules() and paintShiftRules() each
+    // handle the not-yet-loaded case themselves.
+    paintSiteRules();
+    paintShiftRules();
     $('#ss-run').addEventListener('click', async () => {
       silenceChecking = true;
       const btn = $('#ss-run');
@@ -548,9 +611,18 @@ export async function renderSettings() {
   // with the `groups` array above — a loader listed under the wrong group
   // fires when the wrong section is opened, which looks exactly like a panel
   // that never loads.
+  // Binds listeners to markup that renderSettings just rebuilt, so it has to
+  // run on EVERY visit, freshness window or not. mountScannersPanel() does
+  // its own freshness check for the data half — see the note in
+  // ScannersPanel.js on why mounting and fetching had to be separated.
+  const groupMounts = {
+    scanning: () => [
+      canViewScannerRegistry() ? mountScannersPanel({ maxAgeMs: SETTINGS_MAX_AGE_MS }) : null,
+    ],
+  };
+
   const groupLoaders = {
     scanning: () => [
-      canViewScannerRegistry() ? mountScannersPanel() : null,
       showSounds ? loadSounds() : null,
       showPhotos && isAdmin() ? loadThumbStats() : null,
       isAdmin() ? loadSilenceStatus() : null,
@@ -570,15 +642,41 @@ export async function renderSettings() {
 
   // Settings used to fire all nine of these on every single visit — the
   // `*Loaded` flags gated PAINTING, never fetching, so flicking to Settings
-  // five times cost forty-five round trips. Now a group fetches once, the
-  // first time it is opened, and a visit that only changes the theme costs
-  // nothing at all. Each group's panels still run concurrently with each
-  // other, which is what the old Promise.all was actually for.
-  const started = new Set();
+  // five times cost forty-five round trips. A group now fetches once per
+  // freshness window, and a visit that only changes the theme costs nothing.
+  // Each group's panels still run concurrently with each other, which is what
+  // the old Promise.all was actually for.
+  //
+  // THE WINDOW IS THE FIX, AND IT IS THE SECOND HALF OF ONE. The first
+  // attempt used `const started = new Set()` declared right here — a local,
+  // so it was rebuilt on every render and only ever de-duplicated within a
+  // single visit. Settings' own Request volume panel is what exposed it:
+  // 20 of 41 requests in a session came from this one screen, because
+  // reopening it refetched the whole group every time.
+  //
+  // Shares Utils/freshness.js with Employee Manager, and the same 60s window,
+  // so "how stale may a screen be" has one answer in this app rather than
+  // one per page. The panels repaint from module state above regardless, so
+  // skipping the fetch costs nothing visible.
   const openGroup = async (id) => {
-    if (started.has(id) || !groupLoaders[id]) return;
-    started.add(id);
-    await Promise.all(groupLoaders[id]().filter(Boolean));
+    const work = (groupMounts[id]?.() || []).filter(Boolean);
+    const key = `settings:${id}`;
+    const stale = groupLoaders[id] && !isFresh(key, SETTINGS_MAX_AGE_MS);
+    if (stale) {
+      // Marked BEFORE the await, not after: `pending` below and the toggle
+      // listener can both reach the same group in one render, and marking
+      // afterwards would let both get past the check and fetch twice.
+      markFetched(key);
+      work.push(...groupLoaders[id]().filter(Boolean));
+    }
+    try {
+      await Promise.all(work);
+    } catch (e) {
+      // A thrown load must not leave the key looking fresh, or the failure
+      // sticks for the whole window with no way to retry but waiting.
+      if (stale) invalidate(key);
+      throw e;
+    }
   };
 
   const pending = [];
@@ -894,6 +992,56 @@ function setThumbButtons(running) {
   if (refresh) refresh.disabled = running;
 }
 
+// No loader: the counts are already in this browser, so there is nothing to
+// fetch — which is the entire point of the panel.
+function paintRequestMeter() {
+  const body = $('#rq-body');
+  if (!body) return;
+  const s = readSummary();
+  if (!s.today) {
+    body.innerHTML = '<div class="empty-state">No requests counted yet today. Move around the app and come back.</div>';
+    return;
+  }
+  const share = shareOfAllowance(s.projectedMonthly);
+  const pct = (n) => `${(n * 100).toFixed(n < 0.1 ? 1 : 0)}%`;
+  const bar = (n, max) => `<div class="rq-bar" style="width:${max > 0 ? Math.max(2, Math.round((n / max) * 100)) : 0}%"></div>`;
+  const topRoute = s.byRoute[0]?.count || 0;
+  const topName = s.byName[0]?.count || 0;
+
+  body.innerHTML = `
+    <div class="rq-stats">
+      <div class="stat"><div class="stat-value">${s.today.toLocaleString()}</div><div class="stat-label">Requests today</div></div>
+      <div class="stat"><div class="stat-value">${s.perMinute.toFixed(1)}</div><div class="stat-label">Per minute</div></div>
+      <div class="stat"><div class="stat-value">${s.projectedMonthly.toLocaleString()}</div><div class="stat-label">Monthly at today's rate</div></div>
+      <div class="stat"><div class="stat-value">${pct(share.low)}–${pct(share.high)}</div><div class="stat-label">Of a 1 GB log allowance</div></div>
+    </div>
+    <p class="emp-meta" style="margin:10px 0 14px;">
+      One gateway log line per request, roughly 1–2 KB each — hence the range.
+      "Monthly" extrapolates from today so far, so it is a rate, not a forecast.
+      <strong>background</strong> is the alerts badge, which polls on a timer
+      wherever you are; everything else is charged to the screen that was open,
+      which is not always the screen that caused it.
+    </p>
+    <div class="rq-cols">
+      <div>
+        <div class="dept-breakdown-title">By screen</div>
+        ${s.byRoute.slice(0, 8).map((r) => `
+          <div class="rq-row"><span class="rq-name">${esc(r.name)}</span>${bar(r.count, topRoute)}<span class="mono emp-meta">${r.count.toLocaleString()}</span></div>
+        `).join('')}
+      </div>
+      <div>
+        <div class="dept-breakdown-title">By call</div>
+        ${s.byName.slice(0, 8).map((r) => `
+          <div class="rq-row"><span class="rq-name mono">${esc(r.name)}</span>${bar(r.count, topName)}<span class="mono emp-meta">${r.count.toLocaleString()}</span></div>
+        `).join('')}
+      </div>
+    </div>
+    ${s.days > 1 ? `<div class="emp-meta" style="margin-top:12px;">Earlier days — ${
+      s.history.slice(0, -1).map((d) => `${esc(d.day.slice(5))}: ${d.total.toLocaleString()}`).join(' · ')
+    }</div>` : ''}
+  `;
+}
+
 async function loadQueryStats() {
   const { data, error } = await QueryStatsModel.list(queryThresholdMs);
   queryStatsError = error ? reportError(error, 'settings.queryStats', "Couldn't load performance figures.") : null;
@@ -926,7 +1074,12 @@ function paintQueryStats() {
   // an unrecognised shape still falls back to the full SQL. Both halves of
   // what it returns are untrusted text and stay inside esc().
   const rows = queryStats.map((r) => ({ r, q: describeQuery(r.query) }));
+  // Scrolls inside the panel rather than pushing it wider than every other
+  // panel on the page. Seven columns plus a query label will not fit a
+  // narrow window, and the alternative — letting the panel grow — made this
+  // one card visibly wider than the ones above and below it.
   body.innerHTML = `
+    <div class="qs-scroll">
     <table>
       <thead><tr><th>Query</th><th class="col-shrink">Calls</th><th class="col-shrink">Mean</th><th class="col-shrink">Total</th><th class="col-shrink">Max</th><th class="col-shrink">Rows</th><th class="col-shrink">Cache hit</th></tr></thead>
       <tbody>
@@ -943,6 +1096,7 @@ function paintQueryStats() {
         `).join('')}
       </tbody>
     </table>
+    </div>
     ${oldestSince ? `<div class="emp-meta" style="margin-top:8px;">Accumulated since ${esc(fmtTime(oldestSince))}${queryStats.length >= 50 ? ' — showing the top 50 by total time' : ''}</div>` : ''}
   `;
 }

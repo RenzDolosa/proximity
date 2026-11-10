@@ -8,9 +8,15 @@ import { initAppUpdates } from './Utils/appUpdate.js';
 import { initNavDrawer } from './Core/navDrawer.js';
 import { initHintDropdownWatch } from './Components/Hint.js';
 import { initCopyWatch } from './Components/Copyable.js';
+import { initCommandPalette } from './Components/CommandPalette.js';
 
 initAuthScreen();
 initRouter();
+// Ctrl/Cmd+K. Registered once at the document, like the other delegated
+// watchers below. It reads the rail buttons to decide what it may offer, so
+// it is inert until the shell exists and harmless on the auth screen and in
+// the standalone scanner, where there are none.
+initCommandPalette();
 initNavDrawer();
 // Delegated from the document, so modals rebuilt from innerHTML need no
 // re-wiring. See Components/Hint.js.

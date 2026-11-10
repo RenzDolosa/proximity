@@ -19,6 +19,7 @@ import { openConfirmModal, openConfirmProgressModal } from '../../Components/Con
 import { wireAvatarPreview } from '../../Utils/avatarPreview.js';
 import { buildIdentityIndex, identityKey } from '../../Utils/employeeCode.js';
 import { isFresh, markFetched, invalidate } from '../../Utils/freshness.js';
+import { scoreDirectory, matchesCheck, SEVERITY_BADGE } from '../../Utils/dataQuality.js';
 
 const DIRECTORY_KEY = 'directory';
 // Long enough that flicking between sidebar items costs nothing, short enough
@@ -39,6 +40,11 @@ let pageSize = 50;
 let loaded = false; // distinguishes "never fetched yet" from "fetched, zero rows"
 let scanChannel = null; // created once, kept alive for the rest of the session — see below
 let unresolvedOnly = false; // toolbar toggle — resets to off each fresh page load, same as `page`
+// A CHECKS id from Utils/dataQuality.js, or null. Same lifetime as
+// `unresolvedOnly` and deliberately exclusive with it: two independent
+// narrowings active at once produce an empty grid nobody can explain.
+let qualityFilter = null;
+let qualityOpen = false; // the panel is collapsed until asked for
 let exportMenu = null;
 let visibleRows = []; // the current search/toggle-filtered set (pre-pagination) — kept in sync by paintDirectoryTable(), read by the Export button so it exports what's actually on screen, not just the current page
 
@@ -64,6 +70,7 @@ export async function renderDirectory() {
         ` : ''}
       </div>
     </div>
+    <div id="dir-quality"></div>
     <div class="table-scroll"><div id="dir-table-wrap">${loaded ? '' : 'Loading…'}</div></div>
     <div id="dir-pagination"></div>
   `;
@@ -73,9 +80,28 @@ export async function renderDirectory() {
   $('#dir-unresolved-toggle').addEventListener('click', (e) => {
     unresolvedOnly = !unresolvedOnly;
     e.target.classList.toggle('active', unresolvedOnly);
+    // Exclusive with the quality filter: two narrowings at once produces an
+    // empty grid with no single thing to switch off to explain it.
+    if (unresolvedOnly) qualityFilter = null;
     page = 1;
     paintDirectoryTable($('#dir-search')?.value || '');
   });
+
+  // Delegated: #dir-quality's contents are replaced on every repaint, but the
+  // element itself survives, so one listener outlives all of them.
+  $('#dir-quality').addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-quality-check]');
+    if (!chip) return;
+    const id = chip.dataset.qualityCheck;
+    qualityFilter = qualityFilter === id ? null : id;
+    if (qualityFilter) unresolvedOnly = false;
+    $('#dir-unresolved-toggle')?.classList.toggle('active', unresolvedOnly);
+    page = 1;
+    paintDirectoryTable($('#dir-search')?.value || '');
+  });
+  $('#dir-quality').addEventListener('toggle', (e) => {
+    if (e.target.id === 'dir-quality-details') qualityOpen = e.target.open;
+  }, true);
   // Both exports are the same intent at different scope, so they live under
   // one control with the scope as the choice. A viewer sees only the plain
   // button (no scan-log access), so both paths route through this function.
@@ -225,6 +251,49 @@ async function refreshDirectoryInPlace() {
   paintDirectoryTable($('#dir-search')?.value || '');
 }
 
+// Every count here comes from the directory rows already in
+// appState.employeesCache — no request, which is the only reason this can sit
+// on a page that refetches on a 60s freshness window.
+function paintQuality() {
+  const el = $('#dir-quality');
+  if (!el) return;
+  const { issues, total, clean } = scoreDirectory(appState.employeesCache);
+  const found = issues.filter((i) => i.count > 0);
+  if (!total) { el.innerHTML = ''; return; }
+
+  const headline = found.length
+    ? `${(total - clean).toLocaleString()} of ${total.toLocaleString()} records need attention`
+    : `All ${total.toLocaleString()} records look clean`;
+
+  el.innerHTML = `
+    <details class="panel dq-panel" id="dir-quality-details"${qualityOpen ? ' open' : ''}>
+      <summary class="dq-summary">
+        <span class="dq-title">Data quality</span>
+        <span class="emp-meta">${esc(headline)}</span>
+        ${qualityFilter ? '<span class="badge unassigned_card">filtered</span>' : ''}
+      </summary>
+      <div class="dq-body">
+        ${found.length ? `<div class="dq-chips">
+          ${found.map((i) => `
+            <button type="button" class="dq-chip${qualityFilter === i.id ? ' is-on' : ''}"
+                    data-quality-check="${esc(i.id)}" aria-pressed="${qualityFilter === i.id}"
+                    title="${esc(i.hint)}">
+              <span class="badge ${SEVERITY_BADGE[i.severity]}">${i.count.toLocaleString()}</span>
+              <span>${esc(i.label)}</span>
+            </button>`).join('')}
+        </div>` : '<div class="emp-meta">Nothing to fix on any of the seven checks.</div>'}
+        <p class="emp-meta dq-note">
+          Counted from the rows already on screen — no extra request.
+          A record with several problems is counted once in the headline and
+          once per check below, so the chips add up to more than the headline.
+          <strong>Employees with no card at all are not visible here:</strong>
+          this grid is a join through <span class="mono">proximity_cards</span>,
+          so someone who was never issued one is absent from it entirely.
+        </p>
+      </div>
+    </details>`;
+}
+
 function paintDirectoryTable(filter) {
   const wrap = $('#dir-table-wrap');
   const f = filter.trim().toLowerCase();
@@ -235,8 +304,10 @@ function paintDirectoryTable(filter) {
   const unresolvedCount = appState.employeesCache.filter((e) => e.open_remarks > 0).length;
   const countEl = $('#dir-unresolved-count');
   if (countEl) countEl.textContent = unresolvedCount || '';
+  paintQuality();
   const allRows = appState.employeesCache.filter((e) => {
     if (unresolvedOnly && !(e.open_remarks > 0)) return false;
+    if (qualityFilter && !matchesCheck(e, qualityFilter, appState.employeesCache)) return false;
     return !f || [e.full_name, e.employee_code, e.department, e.position, e.active_proximity_code]
       .some((v) => (v || '').toLowerCase().includes(f));
   });
@@ -244,7 +315,9 @@ function paintDirectoryTable(filter) {
   if (!allRows.length) {
     const emptyReason = unresolvedOnly
       ? 'No employees have unresolved remarks right now.'
-      : (isAdminOrManager() ? 'Add your first employee to get started.' : 'Nothing matches your search.');
+      : qualityFilter
+        ? 'Nothing matches that data-quality check any more.'
+        : (isAdminOrManager() ? 'Add your first employee to get started.' : 'Nothing matches your search.');
     wrap.innerHTML = `<div class="empty-state"><strong>No employees found</strong>${emptyReason}</div>`;
     return;
   }

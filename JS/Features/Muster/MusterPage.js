@@ -32,6 +32,23 @@ let onlyUnsure = false;
 // its own small disaster — and so a filter can never shrink a denominator.
 let allGroups = [];
 
+// Assembly-point mode: pure black, large type, taller rows. This list is read
+// outdoors on a phone in daylight by someone counting under pressure, and the
+// normal 13px muted grey is tuned for an office monitor.
+//
+// Persisted per device rather than per account, because it is a property of
+// WHERE the device is — the tablet that lives by the fire door wants it on
+// permanently; the same person's desk browser does not.
+const BRIGHT_KEY = 'proximity.muster.assemblyMode';
+let brightMode = readBrightMode();
+
+function readBrightMode() {
+  try { return localStorage.getItem(BRIGHT_KEY) === '1'; } catch { return false; }
+}
+function writeBrightMode(on) {
+  try { localStorage.setItem(BRIGHT_KEY, on ? '1' : '0'); } catch { /* private mode — honour it for this session only */ }
+}
+
 export async function renderMuster() {
   const content = $('#content');
   const snap = readSnapshot();
@@ -42,6 +59,8 @@ export async function renderMuster() {
         <input class="search" id="mu-search" type="search" placeholder="Search name, code, department…" />
       </div>
       <div class="toolbar-actions">
+        <button class="ghost${brightMode ? ' active' : ''}" id="mu-bright" aria-pressed="${brightMode}"
+                title="Pure black, larger names, taller rows — for reading outdoors in daylight">Assembly mode</button>
         <button class="ghost" id="mu-expand">Collapse all</button>
         <button class="ghost" id="mu-reset">Reset ticks</button>
         <button class="ghost" id="mu-print">Print</button>
@@ -49,7 +68,7 @@ export async function renderMuster() {
       </div>
     </div>
     <div id="mu-status" class="emp-meta" style="margin-bottom:10px;"></div>
-    <div id="mu-body">${snap ? '' : '<div class="empty-state">No roster saved on this device yet. Open the Dashboard once while online, and it will be available here even without a network.</div>'}</div>
+    <div id="mu-body"${brightMode ? ' class="mu-assembly"' : ''}>${snap ? '' : '<div class="empty-state">No roster saved on this device yet. Open the Dashboard once while online, and it will be available here even without a network.</div>'}</div>
   `;
 
   $('#mu-search').addEventListener('input', paint);
@@ -57,6 +76,15 @@ export async function renderMuster() {
   $('#mu-print').addEventListener('click', () => window.print());
   $('#mu-refresh').addEventListener('click', refresh);
   $('#mu-expand').addEventListener('click', toggleAll);
+  // Class toggle only — no repaint. A marshal who hits this mid-headcount
+  // must not lose their scroll position or watch the list rebuild.
+  $('#mu-bright').addEventListener('click', (ev) => {
+    brightMode = !brightMode;
+    writeBrightMode(brightMode);
+    $('#mu-body').classList.toggle('mu-assembly', brightMode);
+    ev.currentTarget.classList.toggle('active', brightMode);
+    ev.currentTarget.setAttribute('aria-pressed', String(brightMode));
+  });
 
   // Delegated, bound once. #mu-status and #mu-body have their innerHTML
   // replaced on every paint, but the elements themselves survive — so these

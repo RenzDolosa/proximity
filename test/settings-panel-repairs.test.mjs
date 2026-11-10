@@ -144,6 +144,75 @@ test('the readout keeps the exact shape the Settings panel renders', () => {
 
 // pg_cron's own history table is not something this app controls the shape
 // of, and a failure reading it must not take down the counts above it.
+// ---- the panel, once it actually rendered ----
+
+test('the threshold defaults to the statement-timeout band, not 200ms', () => {
+  const page = readFileSync(
+    fileURLToPath(new URL('../JS/Features/Settings/SettingsPage.js', import.meta.url)), 'utf8');
+  assert.match(page, /let queryThresholdMs = 1000;/,
+    'at 200 every row rendered red, and a list where everything is urgent sorts nothing');
+  // The input is still there, so the 200-1000 band is hidden by default, not
+  // lost — pg_stat_statements keeps counting it either way.
+  assert.match(page, /id="qs-threshold"[^>]*value="\$\{queryThresholdMs\}"/);
+});
+
+test('the table scrolls inside its panel instead of widening it', () => {
+  const page = readFileSync(
+    fileURLToPath(new URL('../JS/Features/Settings/SettingsPage.js', import.meta.url)), 'utf8');
+  const css = readFileSync(fileURLToPath(new URL('../CSS/components.css', import.meta.url)), 'utf8');
+  assert.match(page, /<div class="qs-scroll">/);
+  assert.match(css, /\.qs-scroll\{[^}]*overflow-x:auto/,
+    'without this the panel grew wider than every other card on the page');
+  assert.ok(!/\.qs-scroll\{[^}]*flex:/.test(css),
+    'deliberately not .table-scroll — that carries a flex basis and min-height for a page-level table');
+});
+
+// ---- assembly-point mode (Muster) ----
+//
+// White-on-black for reading outdoors. The print path is the dangerous half:
+// browsers drop background colours when printing, so white text would land on
+// white paper and the blank sheet would look like a successful print.
+
+test('assembly mode is forced back to black-on-white for print', () => {
+  const css = readFileSync(fileURLToPath(new URL('../CSS/components.css', import.meta.url)), 'utf8');
+  const print = css.slice(css.indexOf('@media print'));
+  for (const sel of ['.muster-name', '.muster-site h3']) {
+    assert.ok(print.includes(`#mu-body.mu-assembly ${sel}`),
+      `${sel} keeps its white text into print — that sheet comes out blank`);
+  }
+  assert.match(print, /#mu-body\.mu-assembly \.muster-site[\s\S]{0,200}background:transparent !important/);
+});
+
+test('assembly mode is scoped to the muster body and nothing else', () => {
+  const css = readFileSync(fileURLToPath(new URL('../CSS/components.css', import.meta.url)), 'utf8');
+  for (const line of css.split('\n')) {
+    if (!line.includes('mu-assembly')) continue;
+    if (line.trim().startsWith('/*') || line.trim().startsWith('*')) continue;
+    assert.ok(line.includes('#mu-body.mu-assembly'),
+      `unscoped assembly rule would leak into the rest of the app: ${line.trim()}`);
+  }
+});
+
+// Toggling mid-headcount must not rebuild the list: a marshal would lose
+// their scroll position partway through counting people.
+test('the toggle flips a class rather than repainting', () => {
+  const page = readFileSync(
+    fileURLToPath(new URL('../JS/Features/Muster/MusterPage.js', import.meta.url)), 'utf8');
+  const handler = page.slice(page.indexOf("$('#mu-bright')"), page.indexOf("$('#mu-bright')") + 420);
+  assert.match(handler, /classList\.toggle\('mu-assembly', brightMode\)/);
+  assert.ok(!/\bpaint\(\)/.test(handler), 'a repaint here loses the reader their place');
+});
+
+// Per device, not per account: the tablet by the fire door wants this on
+// permanently, the same person's desk browser does not.
+test('the preference survives a reload and a storage failure', () => {
+  const page = readFileSync(
+    fileURLToPath(new URL('../JS/Features/Muster/MusterPage.js', import.meta.url)), 'utf8');
+  assert.match(page, /localStorage\.getItem\(BRIGHT_KEY\)/);
+  assert.match(page, /catch \{ return false; \}/,
+    'private mode must not throw on a page whose whole purpose is working when things are broken');
+});
+
 test('the cron lookup stays best-effort', () => {
   const fn = latestFunction('get_scan_logs_trim_status');
   assert.match(fn.body, /exception when others then\s*\n?\s*v_last_run := null/i,

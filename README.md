@@ -672,6 +672,94 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-10 — five features that add no requests**
+
+Chosen against one constraint: Supabase bills **Log Ingestion per request**
+(one API-gateway line each, whatever the payload weighs), so anything new had
+to read data already on the client. None of these adds a call.
+
+- **Settings → Request volume.** Counts the app's own calls locally, grouped
+  by screen and by RPC, with a monthly projection and what that implies
+  against a 1 GB log allowance. This is the replacement for the Egress / Log
+  Ingestion tiles removed on 2026-10-05 — those asked Supabase, and the live
+  project proved there is no usage API to ask. Counting before the request
+  leaves is the only place left. `Core/supabaseClient.js` wraps `rpc`,
+  `from` and `functions.invoke` on the one shared client; the route is
+  **pushed in from the router**, because `Core/state.js` already imports
+  `supabaseClient.js` and pulling would close an import cycle.
+- **Dashboard → On site by scanner.** Per-door occupancy from the roster the
+  page already refreshes every 60s, splitting live / old-IN / inactive on
+  exactly the definitions `Utils/dashboard.js` uses for the cards above it,
+  plus the longest standing IN.
+- **Employee Manager → Data quality.** Seven checks over the directory rows
+  already loaded. The two that matter are card/status mismatches — a leaver
+  holding a live card is a door that still opens. Each chip filters the grid.
+- **Muster → Assembly mode.** Pure black, 17px names, 56px rows, for reading
+  outdoors on a phone. Per device, not per account.
+- **Ctrl/Cmd+K command palette.** Jumps to any of 814 people or any page,
+  from `appState.employeesCache` and the route list — so it answers offline.
+
+**Three bugs the tests caught, all in code I had just written.**
+`dayKey()` used `toISOString()` (UTC) while the per-minute rate measured from
+*local* midnight, so every rate was wrong by the timezone offset — and at
+UTC+8 a day would have rolled over at 08:00, mid-shift. `prune()` kept "the
+last N dates from now", which silently discards days *newer* than now if a
+clock steps backwards. And `Number(null)`, `Number('')` and `Number([])` are
+all `0`, which is finite — so rows with an unknown duration were ranking as
+"just arrived" in the occupancy board.
+
+**Two things deliberately not built.** The scorecard does **not** report
+"active employee with no card", because `employee_directory` is an INNER join
+through `proximity_cards` — someone never issued a card is absent from the
+payload entirely, so the number would always be zero for the wrong reason.
+The panel says so on screen. And `Utils/occupancy.js` exports no duration
+formatter: `Utils/attendance.js` already owns `fmtDuration`, and a second one
+would have printed "3d 6h" in the board and "78h 00m" in the table two inches
+below it.
+
+**One refactor to avoid drift:** the route title map moved from a private
+`titles` object in `router.js` to `ROUTE_TITLES` in `Core/navGroups.js`.
+`navGroups.js` imports nothing, so the palette can read it without pulling in
+every feature page, and the labels now sit beside the grouping the suite
+already checks covers the router exactly.
+
+**Print was the dangerous part of assembly mode.** Browsers drop background
+colours when printing, so white-on-black would have printed white text onto
+white paper — a blank sheet that looks like a successful print. Forced back
+to black-on-white in the print block rather than relying on anyone toggling
+it off first.
+
+**Tests:** 42 added, suite **488 → 530**. Verified by running all five
+modules against 814 synthetic directory rows and a 458-person roster:
+occupancy totals summed to exactly 458, the palette returned nothing for
+`audit` on an account with that route hidden, and the scorecard's chips summed
+to 506 against a headline of 414 — which is the documented behaviour, since a
+record with three problems is one record needing attention.
+
+**Not visually verified.** The logic was exercised end to end, but the CSS —
+the four-up stat grid, the chips, the palette overlay, assembly mode — has
+not been looked at in a browser.
+
+**The meter found a bug on its first real session, which is the point of it.**
+20 of 41 requests came from Settings alone: opening the page refetched every
+panel in an expanded group, every single time. The lazy-load guard already
+existed — `const started = new Set()` — but it was declared *inside*
+`renderSettings()`, so it was rebuilt on every render and only ever
+de-duplicated within one visit. Settings now shares
+`Utils/freshness.js` and the same 60s window as Employee Manager, so "how
+stale may a screen be" has one answer in this app rather than one per page.
+Each panel's own Refresh button calls its loader directly and is never
+suppressed.
+
+Fixing it surfaced two things that had been invisible while every visit
+refetched. `mountScannersPanel()` **bound the panel's listeners and fetched
+the list in the same call**, so gating it on freshness would have rendered a
+scanner panel whose Refresh button did nothing — mounting and fetching are
+now separate, with the mount running on every render and the fetch windowed.
+And **Shifts and Travel were the only two panels with no repaint-from-state
+on render**; they painted solely from inside their own loaders, which would
+have left both stuck on "Loading…" the moment a window skipped the fetch.
+
 **2026-11-07 (later) — Muster reads as a grid of scanners, not one long column**
 
 At an assembly point every site should be on screen at once. The page now
