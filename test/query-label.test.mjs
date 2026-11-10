@@ -113,6 +113,40 @@ test("PostgREST's own scaffolding is not mistaken for a relation", () => {
   assert.equal(q.kind, 'raw');
 });
 
+// get_slow_query_stats() returns left(query, 500). PostgREST enumerates every
+// selected column fully qualified, and employee_directory names fifteen of
+// them — so the FROM clause falls past 500 characters and the one query most
+// worth identifying was the only one still printing raw SQL in the panel.
+test('a statement truncated before its FROM is still identified', () => {
+  const cols = ['id', 'employee_code', 'full_name', 'department', 'position', 'email',
+    'phone', 'photo_url', 'photo_file_id', 'status', 'active_proximity_code',
+    'proximity_card_active', 'proximity_card_id', 'total_scans', 'open_remarks'];
+  const full = 'WITH pgrst_source AS ( SELECT '
+    + cols.map((c) => `"public"."employee_directory"."${c}"`).join(', ')
+    + ' FROM "public"."employee_directory" ORDER BY "full_name" ASC )';
+  assert.ok(full.indexOf('FROM "public"') > 500,
+    'fixture must actually reproduce the truncation, or this proves nothing');
+
+  const truncated = full.slice(0, 500);
+  const q = describeQuery(truncated);
+  assert.equal(q.kind, 'select');
+  assert.equal(q.label, 'select employee_directory');
+  assert.ok(!q.label.includes('pgrst_source'));
+  // And the untruncated form must still resolve the same way.
+  assert.equal(describeQuery(full).label, 'select employee_directory');
+});
+
+test('a qualified column reference does not override an explicit write verb', () => {
+  const sql = 'WITH pgrst_source AS (INSERT INTO "public"."employees"("full_name") '
+    + 'SELECT "public"."employees"."full_name" FROM x RETURNING "public"."employees".*)';
+  assert.equal(describeQuery(sql).label, 'insert employees');
+});
+
+test('the truncation fallback still refuses junk identifiers and other schemas', () => {
+  assert.equal(describeQuery('SELECT "auth"."users"."id" FROM').kind, 'raw');
+  assert.equal(describeQuery('SELECT "public"."<img src=x>"."id" FROM').kind, 'raw');
+});
+
 test('empty and non-string input do not throw', () => {
   for (const v of [undefined, null, '', 0, {}, []]) {
     const q = describeQuery(v);

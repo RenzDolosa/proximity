@@ -39,6 +39,18 @@ export const MAX_KEYS_PER_DAY = 200;
 // 08:00 local, mid-morning, splitting one shift across two "days"; and the
 // per-minute rate below measures from LOCAL midnight, so a UTC key made the
 // two disagree by exactly the timezone offset and the rate came out wrong.
+// Calls driven by a timer rather than by the screen you are on. Charging
+// these to whatever page happens to be open makes the "by screen" column
+// read as if that page caused them — Settings collected 46 of one simply
+// because it is the page you sit on while reading this panel.
+//
+// Only unambiguous names belong here. `profiles` is deliberately absent:
+// loadProfile() fires on every auth event (background), and the Users page
+// lists the same table, and both arrive as `.from('profiles')` — the meter
+// sees a table name, not a call site, so it cannot tell them apart. Guessing
+// would trade a visible misattribution for an invisible one.
+export const BACKGROUND_CALLS = new Set(['get_unread_alert_count']);
+
 export function dayKey(nowMs = Date.now()) {
   const d = new Date(nowMs);
   const p = (n) => String(n).padStart(2, '0');
@@ -65,7 +77,7 @@ export function record(rec, { kind, name, route }, nowMs = Date.now()) {
   const base = rec && typeof rec === 'object' && rec.days ? rec : emptyRecord();
   const day = dayKey(nowMs);
   const label = `${kind === 'rpc' ? 'rpc' : 'rest'}:${String(name || 'unknown')}`;
-  const where = String(route || 'unknown');
+  const where = BACKGROUND_CALLS.has(String(name)) ? 'background' : String(route || 'unknown');
 
   const days = { ...base.days };
   const bucket = days[day] ? { ...days[day] } : { total: 0, byName: {}, byRoute: {} };

@@ -823,6 +823,19 @@ tr.row-clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2
   .occ-row{gap:6px;font-size:12px;}
 }
 
+/* Query performance table (Settings). Seven columns plus a query label do not
+   fit a narrow window, and without this the table pushed the panel wider than
+   every other card on the page instead of scrolling inside it.
+   A dedicated class rather than .table-scroll: that one carries a flex basis,
+   a 120px min-height and a border meant for a page-level table area, none of
+   which belong on a table nested inside a panel. */
+.qs-scroll{overflow-x:auto;max-width:100%;}
+.qs-scroll table{min-width:620px;}
+/* The query cell is the only elastic column, so it is what gives when the
+   window is narrow — the numbers beside it are the point of the row. */
+.qs-scroll td.mono:first-child{max-width:340px;}
+@media (max-width:900px){ .qs-scroll td.mono:first-child{max-width:200px;} }
+
 /* Request volume panel (Settings). Two side-by-side breakdowns, each a row of
    label / proportional bar / count. */
 .rq-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}

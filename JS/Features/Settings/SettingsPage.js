@@ -73,13 +73,19 @@ let photoLoaded = false;
 let queryStats = null; // array once loaded, else null
 let queryStatsError = null;
 let queryStatsLoaded = false;
-// Matches get_slow_query_stats()'s own p_threshold_ms default. It used to
-// match log_min_duration_statement too; that was raised to 1000 ms on
-// 2026-10-17 to cut log ingestion, and this deliberately stayed at 200.
-// The two answer different questions: this panel reads pg_stat_statements
-// and asks "what is slow", which is worth knowing well before a statement
-// is slow enough to be worth writing its full text to the log.
-let queryThresholdMs = 200;
+// 1000 ms, matching log_min_duration_statement rather than
+// get_slow_query_stats()'s own 200 ms default.
+//
+// This was 200 on the reasoning that the panel and the log answer different
+// questions — "what is slow" is worth knowing before a statement is slow
+// enough to justify writing its full text to a metered log. That reasoning
+// still holds, but it produced a fifteen-row table where every row was red,
+// and a list on which everything is urgent sorts nothing. At 1000 the panel
+// shows what is actually at risk of the 8 s statement_timeout.
+//
+// NOTHING IS LOST, only hidden by default: pg_stat_statements still counts
+// the 200-1000 ms band, and typing 200 into the box brings it straight back.
+let queryThresholdMs = 1000;
 
 let archiveStatus = null; // { live_count, oldest_live_scanned_at, archive_count, last_archived_at, last_run } once loaded, else null
 let archiveStatusError = null;
@@ -1012,6 +1018,9 @@ function paintRequestMeter() {
     <p class="emp-meta" style="margin:10px 0 14px;">
       One gateway log line per request, roughly 1–2 KB each — hence the range.
       "Monthly" extrapolates from today so far, so it is a rate, not a forecast.
+      <strong>background</strong> is the alerts badge, which polls on a timer
+      wherever you are; everything else is charged to the screen that was open,
+      which is not always the screen that caused it.
     </p>
     <div class="rq-cols">
       <div>
@@ -1065,7 +1074,12 @@ function paintQueryStats() {
   // an unrecognised shape still falls back to the full SQL. Both halves of
   // what it returns are untrusted text and stay inside esc().
   const rows = queryStats.map((r) => ({ r, q: describeQuery(r.query) }));
+  // Scrolls inside the panel rather than pushing it wider than every other
+  // panel on the page. Seven columns plus a query label will not fit a
+  // narrow window, and the alternative — letting the panel grow — made this
+  // one card visibly wider than the ones above and below it.
   body.innerHTML = `
+    <div class="qs-scroll">
     <table>
       <thead><tr><th>Query</th><th class="col-shrink">Calls</th><th class="col-shrink">Mean</th><th class="col-shrink">Total</th><th class="col-shrink">Max</th><th class="col-shrink">Rows</th><th class="col-shrink">Cache hit</th></tr></thead>
       <tbody>
@@ -1082,6 +1096,7 @@ function paintQueryStats() {
         `).join('')}
       </tbody>
     </table>
+    </div>
     ${oldestSince ? `<div class="emp-meta" style="margin-top:8px;">Accumulated since ${esc(fmtTime(oldestSince))}${queryStats.length >= 50 ? ' — showing the top 50 by total time' : ''}</div>` : ''}
   `;
 }

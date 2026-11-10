@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   dayKey, emptyRecord, record, prune, summarize,
-  estimateLogBytes, shareOfAllowance, KEEP_DAYS, MAX_KEYS_PER_DAY,
+  estimateLogBytes, shareOfAllowance, KEEP_DAYS, MAX_KEYS_PER_DAY, BACKGROUND_CALLS,
 } from '../JS/Utils/requestMeter.js';
 
 // LOCAL 06:00, built from parts rather than parsed from a Z-suffixed string.
@@ -46,6 +46,38 @@ test('record does not mutate the record it is given', () => {
   add(before);
   assert.equal(JSON.stringify(before), snapshot,
     'a shared mutable record would double-count on any re-render');
+});
+
+// ---- timer-driven calls are not the open screen's fault ----
+//
+// The alerts badge polls every 180s and on every visibility change, wherever
+// you are. Charged to the open screen it made Settings look like the most
+// expensive page in the app: 46 of its 70 requests were this one call,
+// collected because Settings is where you sit while reading the panel.
+test('the alerts badge poll is attributed to background, not the open screen', () => {
+  const r = add(emptyRecord(), { kind: 'rpc', name: 'get_unread_alert_count', route: 'settings' });
+  assert.deepEqual(summarize(r, T).byRoute, [{ name: 'background', count: 1 }]);
+});
+
+test('a real screen call is still charged to that screen', () => {
+  const r = add(emptyRecord(), { kind: 'rpc', name: 'get_slow_query_stats', route: 'settings' });
+  assert.deepEqual(summarize(r, T).byRoute, [{ name: 'settings', count: 1 }]);
+});
+
+// loadProfile() (background, every auth event) and the Users page's list both
+// arrive as `.from('profiles')`. The meter sees a table name, not a call
+// site, so tagging it would trade a visible misattribution for a hidden one.
+test('ambiguous names are left attributed to the screen, not guessed at', () => {
+  assert.ok(!BACKGROUND_CALLS.has('profiles'),
+    'the meter cannot tell loadProfile() from the Users page list');
+  const r = add(emptyRecord(), { kind: 'rest', name: 'profiles', route: 'users' });
+  assert.deepEqual(summarize(r, T).byRoute, [{ name: 'users', count: 1 }]);
+});
+
+test('the by-call breakdown is unaffected by the re-attribution', () => {
+  const r = add(emptyRecord(), { kind: 'rpc', name: 'get_unread_alert_count', route: 'settings' });
+  assert.deepEqual(summarize(r, T).byName, [{ name: 'rpc:get_unread_alert_count', count: 1 }],
+    'only where it is charged changes, never what it was');
 });
 
 // ---- the projection, which is the number someone will act on ----

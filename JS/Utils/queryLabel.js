@@ -54,6 +54,17 @@ const WRITES = [
 ];
 const READ = rx('FROM\\s+(?:"(IDENT)"|(IDENT))\\s*\\.\\s*(?:"(IDENT)"|(IDENT))');
 
+// Last resort before giving up and printing SQL: a schema-qualified COLUMN
+// reference, `"public"."employee_directory"."full_name"` or `…".*`.
+//
+// get_slow_query_stats() returns left(query, 500), and PostgREST enumerates
+// every selected column fully qualified. The employee_directory read names
+// fifteen columns that way, which runs past 500 characters BEFORE the FROM
+// clause — so the one query most worth identifying was the one that always
+// fell through to raw SQL. The relation name is still right there in the
+// select list.
+const QUALIFIED_COLUMN = rx('"(IDENT)"\\s*\\.\\s*"(IDENT)"\\s*\\.\\s*(?:"|\\*)', 'gi');
+
 // Prose, deliberately not SQL keywords — the tooltip should read as a
 // description of the row, not as a fragment of the statement it replaced.
 const PHRASE = {
@@ -105,6 +116,16 @@ export function describeQuery(sql) {
   const read = text.match(READ);
   const hit = read && relation('select', read);
   if (hit) return hit;
+
+  // Truncated before its FROM. Reported as a read because the writes above
+  // are matched on an explicit verb and none of them fired — an INSERT or
+  // UPDATE names its target in the first few words, so it cannot be truncated
+  // out the way a select list can.
+  for (const m of text.matchAll(QUALIFIED_COLUMN)) {
+    const p = { schema: m[1], name: m[2] };
+    if (!usable(p)) continue;
+    return { kind: 'select', label: `select ${p.name}`, title: `${PHRASE.select} public.${p.name}` };
+  }
 
   // Deliberately the whole statement. An unrecognised shape is the one case
   // where an admin needs the text to work out what they are looking at, and

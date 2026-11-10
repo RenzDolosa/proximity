@@ -144,6 +144,29 @@ test('the readout keeps the exact shape the Settings panel renders', () => {
 
 // pg_cron's own history table is not something this app controls the shape
 // of, and a failure reading it must not take down the counts above it.
+// ---- the panel, once it actually rendered ----
+
+test('the threshold defaults to the statement-timeout band, not 200ms', () => {
+  const page = readFileSync(
+    fileURLToPath(new URL('../JS/Features/Settings/SettingsPage.js', import.meta.url)), 'utf8');
+  assert.match(page, /let queryThresholdMs = 1000;/,
+    'at 200 every row rendered red, and a list where everything is urgent sorts nothing');
+  // The input is still there, so the 200-1000 band is hidden by default, not
+  // lost — pg_stat_statements keeps counting it either way.
+  assert.match(page, /id="qs-threshold"[^>]*value="\$\{queryThresholdMs\}"/);
+});
+
+test('the table scrolls inside its panel instead of widening it', () => {
+  const page = readFileSync(
+    fileURLToPath(new URL('../JS/Features/Settings/SettingsPage.js', import.meta.url)), 'utf8');
+  const css = readFileSync(fileURLToPath(new URL('../CSS/components.css', import.meta.url)), 'utf8');
+  assert.match(page, /<div class="qs-scroll">/);
+  assert.match(css, /\.qs-scroll\{[^}]*overflow-x:auto/,
+    'without this the panel grew wider than every other card on the page');
+  assert.ok(!/\.qs-scroll\{[^}]*flex:/.test(css),
+    'deliberately not .table-scroll — that carries a flex basis and min-height for a page-level table');
+});
+
 // ---- assembly-point mode (Muster) ----
 //
 // White-on-black for reading outdoors. The print path is the dangerous half:
