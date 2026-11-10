@@ -6,5 +6,15 @@
 const SUPABASE_URL = 'https://kjwttqmbcjvkivgmwuev.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtqd3R0cW1iY2p2a2l2Z213dWV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwMDY3NTAsImV4cCI6MjEwNDU4Mjc1MH0.XZwhkCwKilR2o7GOs-UmBlFyPObYt5Z8gUNl3WKLg8Y';
 
+// Instrumented so Settings can report how many requests this app makes and
+// from which screen. Supabase bills Log Ingestion per EVENT -- one gateway
+// line per request, whatever the payload weighs -- and exposes no usage API
+// to ask (the project-usage Edge Function was removed on 2026-10-05 after
+// every candidate path 404'd). Counting here costs nothing: it never calls
+// anything, it only tallies calls that were going to happen anyway.
+import { instrument } from './requestLog.js';
+
 export { SUPABASE_URL, SUPABASE_ANON_KEY };
-export const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase = instrument(
+  window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY),
+);

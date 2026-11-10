@@ -22,6 +22,8 @@ import { ScanSoundsModel, SOUND_KEYS, SOUND_LABELS, MAX_FILE_SIZE_BYTES } from '
 import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { QueryStatsModel } from '../../Models/QueryStatsModel.js';
 import { describeQuery } from '../../Utils/queryLabel.js';
+import { readSummary, resetMeter } from '../../Core/requestLog.js';
+import { shareOfAllowance } from '../../Utils/requestMeter.js';
 import { ScanArchiveModel } from '../../Models/ScanArchiveModel.js';
 import { ScanLogsTrimModel } from '../../Models/ScanLogsTrimModel.js';
 import { ScannerSilenceModel } from '../../Models/ScannerSilenceModel.js';
@@ -265,6 +267,32 @@ export async function renderSettings() {
 
     scanners: canViewScannerRegistry() ? scannersPanelHTML() : '',
 
+    // The replacement for the Egress / Log Ingestion tiles removed on
+    // 2026-10-05. Those asked Supabase; this counts locally, which is the
+    // only option left once the usage API turned out not to exist.
+    requests: !isAdmin() ? '' : `
+    <div class="panel" style="padding:20px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <h3 style="margin:0 0 4px;">Request volume</h3>
+        <button type="button" class="ghost danger" id="rq-reset">Reset counts</button>
+      </div>
+      ${panelNote(
+        'How many requests this app makes, counted in this browser.',
+        `<p>Supabase bills <strong>Log Ingestion per request</strong>, not per
+         byte — one log line each, however small the response. So the number
+         that moves that bill is how many calls you make, which is what this
+         counts.</p>
+         <p><strong>It counts this browser only.</strong> Other devices,
+         kiosks on other tablets, and Supabase's own internal traffic are all
+         invisible here. Use it to find which screen generates volume, not to
+         reconcile against an invoice.</p>
+         <p>The Egress and Log Ingestion tiles that used to sit in this panel
+         were removed on 2026-10-05: Supabase exposes no usage API to ask, so
+         counting before the request leaves is the only place left.</p>`,
+      )}
+      <div id="rq-body"></div>
+    </div>`,
+
     queryPerf: !isAdmin() ? '' : `
     <div class="panel" style="padding:20px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;">
@@ -391,7 +419,7 @@ export async function renderSettings() {
     { id: 'rules', label: 'Attendance rules', hint: 'Shift times, and what counts as late',
       html: panels.shifts },
     { id: 'data', label: 'Data & maintenance', hint: 'Storage, retention jobs, and query health',
-      html: panels.usage + panels.photos + panels.archival + panels.trimming + panels.queryPerf },
+      html: panels.usage + panels.requests + panels.photos + panels.archival + panels.trimming + panels.queryPerf },
   ].filter((group) => group.html.trim());
 
   const onlyAccount = groups.length === 1;
@@ -420,6 +448,18 @@ export async function renderSettings() {
   if (showSounds && loaded) { paintRows(); paintStorageSummary(); }
   if (showPhotos && photoLoaded) paintPhotoStorage();
   if (isAdmin()) {
+    paintRequestMeter();
+    $('#rq-reset').addEventListener('click', async () => {
+      const ok = await openConfirmModal({
+        title: 'Reset request counts?',
+        message: 'Clears the request tally held in THIS browser only — other devices keep their own. Nothing on the server changes, and no data other than the counts is affected.',
+        confirmLabel: 'Reset',
+      });
+      if (!ok) return;
+      resetMeter();
+      paintRequestMeter();
+      toast('Request counts reset');
+    });
     if (queryStatsLoaded) paintQueryStats();
     $('#qs-refresh').addEventListener('click', () => loadQueryStats());
     $('#qs-threshold').addEventListener('change', (e) => {
@@ -892,6 +932,53 @@ function setThumbButtons(running) {
     repair.textContent = repairRun && !repairRun.finished ? 'Repairing…' : 'Repair missing';
   }
   if (refresh) refresh.disabled = running;
+}
+
+// No loader: the counts are already in this browser, so there is nothing to
+// fetch — which is the entire point of the panel.
+function paintRequestMeter() {
+  const body = $('#rq-body');
+  if (!body) return;
+  const s = readSummary();
+  if (!s.today) {
+    body.innerHTML = '<div class="empty-state">No requests counted yet today. Move around the app and come back.</div>';
+    return;
+  }
+  const share = shareOfAllowance(s.projectedMonthly);
+  const pct = (n) => `${(n * 100).toFixed(n < 0.1 ? 1 : 0)}%`;
+  const bar = (n, max) => `<div class="rq-bar" style="width:${max > 0 ? Math.max(2, Math.round((n / max) * 100)) : 0}%"></div>`;
+  const topRoute = s.byRoute[0]?.count || 0;
+  const topName = s.byName[0]?.count || 0;
+
+  body.innerHTML = `
+    <div class="rq-stats">
+      <div class="stat"><div class="stat-value">${s.today.toLocaleString()}</div><div class="stat-label">Requests today</div></div>
+      <div class="stat"><div class="stat-value">${s.perMinute.toFixed(1)}</div><div class="stat-label">Per minute</div></div>
+      <div class="stat"><div class="stat-value">${s.projectedMonthly.toLocaleString()}</div><div class="stat-label">Monthly at today's rate</div></div>
+      <div class="stat"><div class="stat-value">${pct(share.low)}–${pct(share.high)}</div><div class="stat-label">Of a 1 GB log allowance</div></div>
+    </div>
+    <p class="emp-meta" style="margin:10px 0 14px;">
+      One gateway log line per request, roughly 1–2 KB each — hence the range.
+      "Monthly" extrapolates from today so far, so it is a rate, not a forecast.
+    </p>
+    <div class="rq-cols">
+      <div>
+        <div class="dept-breakdown-title">By screen</div>
+        ${s.byRoute.slice(0, 8).map((r) => `
+          <div class="rq-row"><span class="rq-name">${esc(r.name)}</span>${bar(r.count, topRoute)}<span class="mono emp-meta">${r.count.toLocaleString()}</span></div>
+        `).join('')}
+      </div>
+      <div>
+        <div class="dept-breakdown-title">By call</div>
+        ${s.byName.slice(0, 8).map((r) => `
+          <div class="rq-row"><span class="rq-name mono">${esc(r.name)}</span>${bar(r.count, topName)}<span class="mono emp-meta">${r.count.toLocaleString()}</span></div>
+        `).join('')}
+      </div>
+    </div>
+    ${s.days > 1 ? `<div class="emp-meta" style="margin-top:12px;">Earlier days — ${
+      s.history.slice(0, -1).map((d) => `${esc(d.day.slice(5))}: ${d.total.toLocaleString()}`).join(' · ')
+    }</div>` : ''}
+  `;
 }
 
 async function loadQueryStats() {

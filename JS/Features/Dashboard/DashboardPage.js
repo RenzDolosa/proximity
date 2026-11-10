@@ -13,6 +13,7 @@ import { renderPagination } from '../../Components/Pagination.js';
 import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
 import { fmtDuration } from '../../Utils/attendance.js';
 import { summarizeRoster, filterRoster, mergeRosterDelta, deriveRoster } from '../../Utils/dashboard.js';
+import { occupancyByScanner, longestOnSite } from '../../Utils/occupancy.js';
 import { DashboardModel } from '../../Models/DashboardModel.js';
 import { openDepartmentRosterModal } from '../../Components/DepartmentRosterModal.js';
 import { saveSnapshot } from '../../Utils/musterCache.js';
@@ -283,6 +284,7 @@ function paintStats() {
       ${statCard('Open remarks', stats.employees_with_open_remarks, { route: 'directory' })}
       ${statCard('Unassigned active cards', stats.unassigned_active_cards, { route: 'proximity' })}
     </div>
+    ${occupancyHTML(derived)}
     ${sum.byDepartment.length ? `
       <div class="dept-breakdown">
         <div class="dept-breakdown-title">On site by department</div>
@@ -327,6 +329,37 @@ function paintStats() {
       openDepartmentRosterModal(department, filterRoster(derived, { department, view: 'live' }));
     });
   });
+}
+
+// Which door everyone came in by, from the roster already in memory — no
+// request of its own, which is the only reason it earns a place on a page
+// that already runs a 60-second refresh.
+//
+// Hidden entirely below two scanners: with one door the bars say nothing the
+// "On site" card above has not already said, and the whole point is the
+// comparison between them.
+function occupancyHTML(derived) {
+  const groups = occupancyByScanner(derived);
+  if (groups.length < 2) return '';
+  const longest = longestOnSite(derived);
+  return `
+    <div class="dept-breakdown">
+      <div class="dept-breakdown-title">On site by scanner</div>
+      <div class="occ-list">
+        ${groups.map((g) => `
+          <div class="occ-row">
+            <span class="occ-name">${esc(g.site)}</span>
+            <span class="occ-track"><span class="occ-bar" style="width:${Math.max(2, Math.round(g.share * 100))}%"></span></span>
+            <span class="occ-count mono">${g.total.toLocaleString()}</span>
+            ${g.stale ? `<span class="badge unassigned_card" title="Active employees whose last IN is older than the stale window — possibly already left">${g.stale} old</span>` : ''}
+            ${g.other ? `<span class="badge inactive_card" title="Not an active employee, but the last scan was an IN — still a body in the building as far as any door knows">${g.other} inactive</span>` : ''}
+          </div>`).join('')}
+      </div>
+      ${longest ? `<div class="emp-meta" style="margin-top:8px;">Longest on site ·
+        ${esc(longest.full_name || 'Unknown')}
+        <span class="mono">${esc(longest.employee_code || '')}</span>
+        · ${esc(fmtDuration(longest.seconds_on_site))}</div>` : ''}
+    </div>`;
 }
 
 // seconds_on_site and is_stale are attached at PAINT time, not on arrival: both

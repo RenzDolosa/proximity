@@ -30,6 +30,33 @@ export const NAV_GROUPS = Object.freeze([
 // other is the failure this guards.
 export const GROUPED_ROUTES = Object.freeze(NAV_GROUPS.flatMap((g) => [...g.routes]));
 
+// [title, subtitle] per route — the topbar heading, and what the command
+// palette offers as a destination.
+//
+// Lives here rather than in router.js because navGroups.js imports nothing,
+// so anything may import it without risking a cycle; router.js pulls in every
+// feature page, which makes it a poor module to depend on for a string. It
+// also puts the labels next to the grouping that the test suite already
+// checks covers the router exactly.
+export const ROUTE_TITLES = Object.freeze({
+  dashboard: ['Dashboard', 'Who is on site right now, plus scanner and card health'],
+  muster: ['Muster', 'Who to account for at the assembly point — works without a network'],
+  alerts: ['Alerts', 'Server-raised warnings — acknowledge them once handled'],
+  directory: ['Employee Manager', 'View and edit the employee directory'],
+  proximity: ['Proximity Cards', 'Issue and revoke proximity IDs, linked to employees'],
+  // Not "against the live directory" any more: commissioning mode is on by
+  // default, so the default answer comes from the offline cache. The note
+  // under the toggle names the source and its age for the scan in front of
+  // you, which a page subtitle cannot.
+  scanner: ['Test Scan', 'Try a proximity ID — results here are not logged'],
+  analytics: ['Scanner Analytics', 'Scan activity, match rates, and per-scanner health over time'],
+  attendance: ['Attendance', 'Daily first IN, last OUT, and time on site per employee'],
+  users: ['Users & Roles', 'Manage login accounts and permission tiers'],
+  settings: ['Settings', 'App-wide configuration'],
+  exports: ['Export Manager', 'Every export run from this app — who, what, and how many rows'],
+  audit: ['Audit Log', 'Who did what — destructive and permission-changing actions only'],
+});
+
 // Which groups still have something in them for this account.
 //
 // Access control hides individual buttons, so a VIEWER can empty a whole
