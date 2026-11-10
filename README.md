@@ -672,7 +672,25 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
-**2026-11-10 (later) — smart alerts: silence hours, and push to Telegram (NOT applied)**
+**2026-11-10 (later) — smart alerts: silence hours, and push to Viber (NOT applied)**
+
+> **Viber, not Telegram**, and it is not a one-word swap. Viber has no
+> `getUpdates`: the only moment a recipient's id is knowable is when Viber
+> posts a webhook callback. That forces a second Edge Function
+> (`viber-webhook`) and a `viber_subscribers` table — and the webhook has to
+> be **ours**, because Viber also posts `delivered`/`seen` for every message,
+> so pointing it at webhook.site to grab an id would leak a running feed of
+> when this site's alerts were delivered and read.
+>
+> The other trap: **Viber returns HTTP 200 on failure.** An unsubscribed
+> recipient, a bad token and a malformed id all come back `200 OK`; the real
+> outcome is the `status` field in the body. Checking `res.ok` alone would
+> report every failure as delivered.
+>
+> Telegram is kept as a selectable fallback — the `channel` column already
+> abstracted the transport, so leaving it in costs nothing and covers the
+> days while a Public Account is still being approved.
+
 
 357 of 422 alerts were `scanner_went_silent`, and ~305 of those fell between
 20:00 and 07:00 Asia/Manila. A scanner that is quiet at 02:00 is not broken,

@@ -1,5 +1,11 @@
 // Pushes a newly-recorded alert to every enabled channel.
 //
+// Viber is the primary transport; Telegram is kept because the channel
+// column already abstracted the transport and leaving it in costs nothing —
+// it is a working fallback while a Viber Public Account is still being
+// approved. 'email' is accepted by the schema and rejected here, loudly,
+// rather than counted as delivered.
+//
 // Called by the trg_alerts_notify trigger via pg_net (see migration
 // 20261110092000), never by a browser. There is no CORS handling here on
 // purpose: nothing in the frontend should be able to reach this, and the
@@ -12,6 +18,7 @@
 // to act on and without the chat id.
 
 const TELEGRAM_API = "https://api.telegram.org";
+const VIBER_SEND_URL = "https://chatapi.viber.com/pa/send_message";
 
 type AlertPayload = {
   id?: string;
@@ -82,6 +89,36 @@ async function sendTelegram(token: string, chatId: string, text: string) {
   }
 }
 
+// VIBER RETURNS HTTP 200 ON FAILURE. `res.ok` is true for an unsubscribed
+// recipient, a bad token and a malformed id alike — the real outcome is the
+// `status` field in the body, where 0 means success and anything else does
+// not. Checking only the HTTP status would report every one of those as
+// delivered, which is the single easiest way to get this wrong.
+async function sendViber(token: string, receiver: string, text: string) {
+  const res = await fetch(VIBER_SEND_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Viber-Auth-Token": token },
+    body: JSON.stringify({
+      receiver,
+      type: "text",
+      text,
+      // Required by the API even for a Public Account; shown as the sender.
+      sender: { name: "Proximity" },
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`viber http ${res.status}`);
+  }
+  const body = await res.json().catch(() => ({}));
+  if (body?.status !== 0) {
+    // status 6 is the one worth recognising: the recipient has not
+    // subscribed to the Public Account, which is a setup problem rather than
+    // an outage and reads as nonsense without the hint.
+    const hint = body?.status === 6 ? " (recipient has not subscribed to the Public Account)" : "";
+    throw new Error(`viber status ${body?.status}: ${String(body?.status_message ?? "").slice(0, 120)}${hint}`);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
 
@@ -126,7 +163,8 @@ Deno.serve(async (req) => {
   const channels = all.filter((c) => c.kind === null || c.kind === alert.kind);
   if (channels.length === 0) return json({ sent: 0 });
 
-  const token = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
+  const telegramToken = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
+  const viberToken = Deno.env.get("VIBER_AUTH_TOKEN") ?? "";
   const text = formatMessage(alert);
   let sent = 0;
   const failures: string[] = [];
@@ -136,9 +174,13 @@ Deno.serve(async (req) => {
   // predictable about the order things are attempted in.
   for (const c of channels) {
     try {
-      if (c.channel === "telegram") {
-        if (!token) throw new Error("TELEGRAM_BOT_TOKEN is not set");
-        await sendTelegram(token, c.target, text);
+      if (c.channel === "viber") {
+        if (!viberToken) throw new Error("VIBER_AUTH_TOKEN is not set");
+        await sendViber(viberToken, c.target, text);
+        sent++;
+      } else if (c.channel === "telegram") {
+        if (!telegramToken) throw new Error("TELEGRAM_BOT_TOKEN is not set");
+        await sendTelegram(telegramToken, c.target, text);
         sent++;
       } else {
         // Accepted by the schema so the column can grow into it, rejected

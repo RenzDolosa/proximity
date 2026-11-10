@@ -43,6 +43,7 @@ const tsCode = (src) => src
 const silence = read('../Supabase/migrations/20261110090000_scanner_silence_active_hours.sql');
 const channels = read('../Supabase/migrations/20261110091000_alert_channels.sql');
 const webhook = read('../Supabase/migrations/20261110092000_notify_alert_webhook.sql');
+const viber = read('../Supabase/migrations/20261110093000_viber_channel.sql');
 const fn = read('../Supabase/functions/notify-alert/index.ts');
 
 // ---- the failure that would be invisible ----
@@ -219,6 +220,96 @@ test('the chat id never reaches a log line', () => {
 test('messages are sent as plain text', () => {
   assert.ok(!/parse_mode/.test(tsCode(fn)),
     'a scanner label is user-supplied; a stray underscore would mangle the message or be rejected outright');
+});
+
+// ---- Viber ----
+//
+// The two things that make Viber different from Telegram, and the two ways
+// this is easiest to get wrong.
+
+// Viber answers HTTP 200 for an unsubscribed recipient, a bad token and a
+// malformed id alike. `res.ok` is true for all of them; the real outcome is
+// the `status` field in the body. Checking only the HTTP status would report
+// every one of those as delivered.
+test('a Viber send is judged on the body status, not the HTTP status', () => {
+  const body = tsCode(fn);
+  const at = body.indexOf('async function sendViber');
+  assert.notEqual(at, -1);
+  const send = body.slice(at, body.indexOf('Deno.serve'));
+  assert.match(send, /body\?\.status !== 0/,
+    'HTTP 200 with status 6 is a failure, and the commonest one');
+  assert.ok(send.indexOf('res.ok') < send.indexOf('body?.status'),
+    'both checks are needed, in that order');
+  assert.match(send, /status === 6/, 'the unsubscribed case deserves a readable hint');
+});
+
+test('Viber is offered first and Telegram is kept as a fallback', () => {
+  const page = read('../JS/Features/Settings/SettingsPage.js');
+  const select = page.slice(page.indexOf('id="ac-channel"'), page.indexOf('id="ac-channel"') + 260);
+  assert.ok(select.indexOf('value="viber"') < select.indexOf('value="telegram"'),
+    'the first option is the default, and Viber is what was asked for');
+  assert.match(tsCode(fn), /c\.channel === "viber"/);
+  assert.match(tsCode(fn), /c\.channel === "telegram"/, 'removing a working transport buys nothing');
+});
+
+test('the channel constraint accepts viber and still rejects anything else', () => {
+  assert.match(viber, /CHECK \(channel IN \('viber', 'telegram', 'email'\)\)/);
+  assert.match(viber, /DROP CONSTRAINT IF EXISTS alert_channels_channel_check/,
+    'a CHECK cannot be altered in place');
+});
+
+test('the subscriber list is as locked down as the channel list', () => {
+  assert.match(viber, /REVOKE ALL ON TABLE public\.viber_subscribers FROM anon/);
+  assert.match(viber, /REVOKE ALL ON TABLE public\.viber_subscribers FROM authenticated/);
+  assert.match(viber, /ENABLE ROW LEVEL SECURITY/);
+  assert.match(viber, /REVOKE ALL ON FUNCTION public\.get_viber_subscribers\(\) FROM anon/);
+});
+
+// delivered/seen arrive ~twice per message per recipient and carry nothing.
+// They are the bulk of this function's traffic, so they have to be discarded
+// before any database round trip.
+test('delivery receipts are dropped before any database work', () => {
+  const hook = tsCode(read('../Supabase/functions/viber-webhook/index.ts'));
+  const handler = hook.slice(hook.indexOf('Deno.serve'));
+  const receipts = handler.indexOf('"delivered"');
+  assert.notEqual(receipts, -1);
+  assert.ok(receipts < handler.indexOf('SUPABASE_SERVICE_ROLE_KEY'),
+    'reading env for a receipt is already more work than a receipt deserves');
+  assert.ok(receipts < handler.indexOf('upsertSubscriber'));
+});
+
+// Viber signs callbacks with HMAC-SHA256 of the RAW body. Re-serialising a
+// parsed object produces different bytes and never verifies.
+test('the webhook verifies the signature over the raw body', () => {
+  const hook = tsCode(read('../Supabase/functions/viber-webhook/index.ts'));
+  assert.match(hook, /const raw = await req\.text\(\)/);
+  const handler = hook.slice(hook.indexOf('Deno.serve'));
+  assert.ok(handler.indexOf('signatureValid') < handler.indexOf('JSON.parse(raw)'),
+    'parse after verifying, never before');
+  assert.match(hook, /name: "HMAC", hash: "SHA-256"/);
+});
+
+// A non-2xx makes Viber retry, and repeated failures make it unset the
+// webhook — which silently ends subscriber discovery for good.
+test('the webhook answers 200 even when its own work failed', () => {
+  const hook = tsCode(read('../Supabase/functions/viber-webhook/index.ts'));
+  const at = hook.indexOf('} catch (e) {');
+  const branch = hook.slice(at, at + 260);
+  assert.match(branch, /json\(\{ status: 0 \}\)/, 'Viber unsets a webhook that keeps failing');
+  assert.ok(!/\b50\d\b/.test(branch));
+});
+
+test("Viber's own validation ping is answered, or the bot stays inert", () => {
+  const hook = tsCode(read('../Supabase/functions/viber-webhook/index.ts'));
+  assert.match(hook, /event === "webhook"/);
+});
+
+test('an unsubscribe flags the row rather than deleting it', () => {
+  const hook = tsCode(read('../Supabase/functions/viber-webhook/index.ts'));
+  const at = hook.indexOf('"unsubscribed"');
+  assert.match(hook.slice(at, at + 260), /upsertSubscriber\([^)]*false\)/s,
+    'a destination that vanishes from the picker looks like a bug');
+  assert.ok(!/DELETE/i.test(hook.slice(at, at + 260)));
 });
 
 // ---- the badge, which is the other half of the cost story ----

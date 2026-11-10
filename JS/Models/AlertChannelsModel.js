@@ -27,4 +27,12 @@ export const AlertChannelsModel = {
   async remove(id) {
     return supabase.rpc('delete_alert_channel', { p_id: id });
   },
+
+  // Everyone who has subscribed to the Viber Public Account, captured by the
+  // viber-webhook function. Viber has no getUpdates, so this list is the only
+  // way an admin can learn an id — and picking a name beats pasting an opaque
+  // string nobody can verify by eye.
+  async viberSubscribers() {
+    return supabase.rpc('get_viber_subscribers');
+  },
 };

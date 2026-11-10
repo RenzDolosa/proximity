@@ -102,6 +102,7 @@ let trimRunning = false;
 // Settings → Notifications. Admin-only, and the table behind it is revoked
 // from both client roles (20261110091000) — these go through RPCs.
 let alertChannels = null; // array once loaded, else null
+let viberSubscribers = []; // [{ viber_id, name, last_seen_at }] — the destination picker
 let alertChannelsError = null;
 let alertChannelsLoaded = false;
 let alertChannelSaving = false;
@@ -294,17 +295,21 @@ export async function renderSettings() {
     <div class="panel" style="padding:20px;">
       <h3 style="margin:0 0 4px;">Notifications</h3>
       ${panelNote(
-        'Push alerts to Telegram as they happen, instead of waiting to notice the badge.',
-        `<p>A chat id is a <strong>credential</strong> — anyone holding it and
-         the bot token can post to that chat. This list is admin-only and the
-         table behind it is unreachable except through these controls.</p>
-         <p><strong>The bot has to be messaged first.</strong> A Telegram bot
-         cannot start a conversation, so send it anything (or add it to the
-         group) before saving the id here, or the first alert fails with
-         "bot can't initiate conversation".</p>
-         <p>Setup, including how to find a chat id, is in
-         <span class="mono">Supabase/functions/notify-alert/README.md</span>.
-         A group id is negative — keep the minus sign.</p>`,
+        'Push alerts to Viber as they happen, instead of waiting to notice the badge.',
+        `<p><strong>They have to subscribe first.</strong> A Viber Public
+         Account cannot message someone who has not subscribed to it — send
+         them the PA link, have them open the chat, and their name appears in
+         the list below. Saving an id for someone who has not subscribed
+         fails with Viber status 6.</p>
+         <p>The list fills itself from the <span class="mono">viber-webhook</span>
+         function, because Viber has no way to look an id up on demand. If it
+         is empty, nobody has opened the chat yet.</p>
+         <p>A destination id is a <strong>credential</strong> — anyone holding
+         it and the bot token can message that person. This list is
+         admin-only, stored masked, and the tables behind it are unreachable
+         except through these controls.</p>
+         <p>Telegram is still selectable as a fallback. Setup for both is in
+         <span class="mono">Supabase/functions/notify-alert/README.md</span>.</p>`,
       )}
       <div id="ac-body">${alertChannelsLoaded ? '' : 'Loading…'}</div>
     </div>`,
@@ -1028,9 +1033,20 @@ function setThumbButtons(running) {
 }
 
 async function loadAlertChannels() {
-  const { data, error } = await AlertChannelsModel.list();
-  alertChannelsError = error ? reportError(error, 'settings.alertChannels', "Couldn't load notification channels.") : null;
-  alertChannels = error ? null : (data || []);
+  // Both in one round trip rather than one per panel open. The subscriber
+  // list is what makes the destination picker usable at all — Viber has no
+  // getUpdates, so an id can only be learned from a webhook callback.
+  const [channelsRes, subsRes] = await Promise.all([
+    AlertChannelsModel.list(),
+    AlertChannelsModel.viberSubscribers(),
+  ]);
+  alertChannelsError = channelsRes.error
+    ? reportError(channelsRes.error, 'settings.alertChannels', "Couldn't load notification channels.")
+    : null;
+  alertChannels = channelsRes.error ? null : (channelsRes.data || []);
+  // A failed subscriber lookup is not fatal: the id can still be typed in,
+  // and blocking the whole panel on the convenience half would be worse.
+  viberSubscribers = subsRes.error ? [] : (subsRes.data || []);
   alertChannelsLoaded = true;
   paintAlertChannels();
 }
@@ -1071,11 +1087,19 @@ function paintAlertChannels() {
     <form id="ac-form" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;">
       <label style="flex:0 0 auto;">
         <span class="emp-meta">Channel</span>
-        <select id="ac-channel" style="min-width:120px;"><option value="telegram">Telegram</option></select>
+        <select id="ac-channel" style="min-width:120px;">
+          <option value="viber">Viber</option>
+          <option value="telegram">Telegram</option>
+        </select>
       </label>
-      <label style="flex:1 1 180px;min-width:0;">
-        <span class="emp-meta">Chat id</span>
-        <input id="ac-target" type="text" inputmode="text" autocomplete="off" placeholder="-1001234567890" />
+      <label style="flex:1 1 200px;min-width:0;">
+        <span class="emp-meta">Send to</span>
+        <input id="ac-target" type="text" inputmode="text" autocomplete="off"
+               list="ac-viber-ids" placeholder="pick a Viber subscriber, or paste an id" />
+        <datalist id="ac-viber-ids">
+          ${viberSubscribers.map((s) => `
+            <option value="${esc(s.viber_id)}">${esc(s.name || 'Viber user')}</option>`).join('')}
+        </datalist>
       </label>
       <label style="flex:0 0 auto;">
         <span class="emp-meta">Sends</span>

@@ -1,8 +1,23 @@
 # `notify-alert`
 
 Pushes a newly-recorded alert to every enabled row in `alert_channels`.
-Telegram today; the schema accepts `email` so the column can grow into it
-without a migration.
+**Viber** is the primary transport; Telegram is kept as a working fallback
+(the channel column already abstracted it, so leaving it in costs nothing).
+`email` is accepted by the schema and rejected here, loudly, rather than
+counted as delivered.
+
+> ### Viber's two traps
+>
+> **1. It returns HTTP 200 on failure.** An unsubscribed recipient, a bad
+> token and a malformed id all come back `200 OK`. The real outcome is the
+> `status` field in the body — `0` is success, anything else is not.
+> Checking only `res.ok` reports every failure as delivered.
+>
+> **2. You cannot message someone who has not subscribed.** A Public Account
+> can only message people who have opened a chat with it. There is no way to
+> look an id up on demand — no `getUpdates` equivalent — which is the entire
+> reason the [`viber-webhook`](../viber-webhook/README.md) function and the
+> `viber_subscribers` table exist.
 
 Called by the `trg_alerts_notify` trigger on `public.alerts` via `pg_net`
 (migration `20261110092000`). **Never called by a browser** — there is no
@@ -52,8 +67,11 @@ Set these yourself; none of them belong in the repo.
 
 ```bash
 supabase secrets set NOTIFY_ALERT_SECRET="<a long random string>"
-supabase secrets set TELEGRAM_BOT_TOKEN="<from @BotFather>"
+supabase secrets set VIBER_AUTH_TOKEN="<from partners.viber.com>"
 ```
+
+`TELEGRAM_BOT_TOKEN` is only needed if you keep a Telegram row in
+`alert_channels`. A missing token fails just that channel, not the request.
 
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically.
 
@@ -65,7 +83,32 @@ select vault.create_secret('https://<ref>.supabase.co/functions/v1/notify-alert'
 select vault.create_secret('<the same long random string>', 'notify_alert_secret');
 ```
 
-## Getting a Telegram chat id
+## Setting up Viber
+
+1. Create a **Public Account** at [partners.viber.com](https://partners.viber.com).
+   A personal Viber account is not enough — the bot API only works for a PA.
+2. Copy its **auth token** and set it as `VIBER_AUTH_TOKEN` on *both*
+   functions.
+3. Deploy `viber-webhook`, then point Viber at it **once**:
+
+   ```bash
+   curl -X POST https://chatapi.viber.com/pa/set_webhook \
+     -H "X-Viber-Auth-Token: $VIBER_AUTH_TOKEN" \
+     -d '{"url":"https://<ref>.supabase.co/functions/v1/viber-webhook",
+          "event_types":["subscribed","unsubscribed","conversation_started","message"]}'
+   ```
+
+   A `{"status":0}` back means Viber accepted it. **Until this succeeds the
+   PA is inert** and no id can ever be discovered.
+4. Send each person the PA's share link. When they open the chat, their name
+   appears in **Settings → Notifications**.
+5. Pick them from the list and save.
+
+`event_types` deliberately omits `delivered` and `seen`. The function
+discards them anyway, but not subscribing to them avoids ~2 pointless
+invocations per message per recipient.
+
+## Getting a Telegram chat id (fallback only)
 
 1. Message [@BotFather](https://t.me/BotFather) → `/newbot` → copy the token.
 2. Send any message to your new bot, or add it to the group you want alerts in.
@@ -106,8 +149,11 @@ together.
 |---|---|
 | nothing arrives, no log line | no enabled `alert_channels` row matches the kind — the trigger no-ops before calling |
 | nothing arrives, `net._http_response` shows 403 | `NOTIFY_ALERT_SECRET` and the Vault `notify_alert_secret` have drifted |
-| `403 bot can't initiate conversation` | nobody has messaged the bot yet (see above) |
-| `400 chat not found` | wrong chat id, or a group id with the minus sign dropped |
+| `viber status 6` | the recipient has not subscribed to the Public Account. The commonest failure, and the one that looks like a bug |
+| `viber status 2` | malformed request — usually an id pasted with whitespace |
+| `viber status 1` / `invalid auth token` | `VIBER_AUTH_TOKEN` wrong, or set on `notify-alert` but not `viber-webhook` |
+| subscriber list stays empty | `set_webhook` never succeeded, or it points at the wrong project ref |
+| `403 bot can't initiate conversation` | Telegram fallback: nobody has messaged the bot yet |
 | alerts recorded but never pushed | Vault secrets missing — the trigger returns silently by design |
 
 Check what pg_net actually did:
