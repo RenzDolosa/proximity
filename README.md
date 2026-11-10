@@ -740,6 +740,26 @@ record with three problems is one record needing attention.
 the four-up stat grid, the chips, the palette overlay, assembly mode — has
 not been looked at in a browser.
 
+**The meter found a bug on its first real session, which is the point of it.**
+20 of 41 requests came from Settings alone: opening the page refetched every
+panel in an expanded group, every single time. The lazy-load guard already
+existed — `const started = new Set()` — but it was declared *inside*
+`renderSettings()`, so it was rebuilt on every render and only ever
+de-duplicated within one visit. Settings now shares
+`Utils/freshness.js` and the same 60s window as Employee Manager, so "how
+stale may a screen be" has one answer in this app rather than one per page.
+Each panel's own Refresh button calls its loader directly and is never
+suppressed.
+
+Fixing it surfaced two things that had been invisible while every visit
+refetched. `mountScannersPanel()` **bound the panel's listeners and fetched
+the list in the same call**, so gating it on freshness would have rendered a
+scanner panel whose Refresh button did nothing — mounting and fetching are
+now separate, with the mount running on every render and the fetch windowed.
+And **Shifts and Travel were the only two panels with no repaint-from-state
+on render**; they painted solely from inside their own loaders, which would
+have left both stuck on "Loading…" the moment a window skipped the fetch.
+
 **2026-11-07 (later) — Muster reads as a grid of scanners, not one long column**
 
 At an assembly point every site should be on screen at once. The page now

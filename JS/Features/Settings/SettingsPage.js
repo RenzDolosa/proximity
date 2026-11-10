@@ -24,6 +24,14 @@ import { QueryStatsModel } from '../../Models/QueryStatsModel.js';
 import { describeQuery } from '../../Utils/queryLabel.js';
 import { readSummary, resetMeter } from '../../Core/requestLog.js';
 import { shareOfAllowance } from '../../Utils/requestMeter.js';
+import { isFresh, markFetched, invalidate } from '../../Utils/freshness.js';
+
+// Matches DIRECTORY_MAX_AGE_MS in DirectoryPage: long enough that flicking
+// between sidebar items costs nothing, short enough that another admin's
+// change shows up without a reload. Every panel here also has its own
+// Refresh button, and those call their loader directly rather than going
+// through openGroup(), so an explicit refresh is never suppressed.
+const SETTINGS_MAX_AGE_MS = 60 * 1000;
 import { ScanArchiveModel } from '../../Models/ScanArchiveModel.js';
 import { ScanLogsTrimModel } from '../../Models/ScanLogsTrimModel.js';
 import { ScannerSilenceModel } from '../../Models/ScannerSilenceModel.js';
@@ -546,6 +554,15 @@ export async function renderSettings() {
       loadTrimStatus();
     });
     if (silenceStatusLoaded) paintSilenceStatus();
+    // These two were the only panels with no repaint-from-state on render —
+    // they painted solely from inside their own loaders. That was invisible
+    // while every visit refetched, and would have left both stuck on
+    // "Loading…" forever the moment a freshness window skipped the fetch.
+    // Both read module state that outlives the render, so they are safe to
+    // call unconditionally; paintSiteRules() and paintShiftRules() each
+    // handle the not-yet-loaded case themselves.
+    paintSiteRules();
+    paintShiftRules();
     $('#ss-run').addEventListener('click', async () => {
       silenceChecking = true;
       const btn = $('#ss-run');
@@ -588,9 +605,18 @@ export async function renderSettings() {
   // with the `groups` array above — a loader listed under the wrong group
   // fires when the wrong section is opened, which looks exactly like a panel
   // that never loads.
+  // Binds listeners to markup that renderSettings just rebuilt, so it has to
+  // run on EVERY visit, freshness window or not. mountScannersPanel() does
+  // its own freshness check for the data half — see the note in
+  // ScannersPanel.js on why mounting and fetching had to be separated.
+  const groupMounts = {
+    scanning: () => [
+      canViewScannerRegistry() ? mountScannersPanel({ maxAgeMs: SETTINGS_MAX_AGE_MS }) : null,
+    ],
+  };
+
   const groupLoaders = {
     scanning: () => [
-      canViewScannerRegistry() ? mountScannersPanel() : null,
       showSounds ? loadSounds() : null,
       showPhotos && isAdmin() ? loadThumbStats() : null,
       isAdmin() ? loadSilenceStatus() : null,
@@ -610,15 +636,41 @@ export async function renderSettings() {
 
   // Settings used to fire all nine of these on every single visit — the
   // `*Loaded` flags gated PAINTING, never fetching, so flicking to Settings
-  // five times cost forty-five round trips. Now a group fetches once, the
-  // first time it is opened, and a visit that only changes the theme costs
-  // nothing at all. Each group's panels still run concurrently with each
-  // other, which is what the old Promise.all was actually for.
-  const started = new Set();
+  // five times cost forty-five round trips. A group now fetches once per
+  // freshness window, and a visit that only changes the theme costs nothing.
+  // Each group's panels still run concurrently with each other, which is what
+  // the old Promise.all was actually for.
+  //
+  // THE WINDOW IS THE FIX, AND IT IS THE SECOND HALF OF ONE. The first
+  // attempt used `const started = new Set()` declared right here — a local,
+  // so it was rebuilt on every render and only ever de-duplicated within a
+  // single visit. Settings' own Request volume panel is what exposed it:
+  // 20 of 41 requests in a session came from this one screen, because
+  // reopening it refetched the whole group every time.
+  //
+  // Shares Utils/freshness.js with Employee Manager, and the same 60s window,
+  // so "how stale may a screen be" has one answer in this app rather than
+  // one per page. The panels repaint from module state above regardless, so
+  // skipping the fetch costs nothing visible.
   const openGroup = async (id) => {
-    if (started.has(id) || !groupLoaders[id]) return;
-    started.add(id);
-    await Promise.all(groupLoaders[id]().filter(Boolean));
+    const work = (groupMounts[id]?.() || []).filter(Boolean);
+    const key = `settings:${id}`;
+    const stale = groupLoaders[id] && !isFresh(key, SETTINGS_MAX_AGE_MS);
+    if (stale) {
+      // Marked BEFORE the await, not after: `pending` below and the toggle
+      // listener can both reach the same group in one render, and marking
+      // afterwards would let both get past the check and fetch twice.
+      markFetched(key);
+      work.push(...groupLoaders[id]().filter(Boolean));
+    }
+    try {
+      await Promise.all(work);
+    } catch (e) {
+      // A thrown load must not leave the key looking fresh, or the failure
+      // sticks for the whole window with no way to retry but waiting.
+      if (stale) invalidate(key);
+      throw e;
+    }
   };
 
   const pending = [];
