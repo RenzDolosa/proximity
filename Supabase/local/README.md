@@ -37,6 +37,58 @@ the `anon`/`authenticated`/`service_role` roles, the `auth` schema behind
 real work, and doing it in the same phase as fixing the migrations means you
 can't tell which layer a failure came from. Validate the migrations first.
 
+## Running a VERIFY block: `Invoke-Sql.ps1`
+
+Every migration here ends in a VERIFY block, and running one used to mean the
+dashboard SQL editor or a bare `psql` — which is installed but **not on PATH**
+on this machine, failure mode 1 in `Apply-Migration.ps1`'s docstring. Same
+connection handling as that script, for queries instead of files.
+
+```powershell
+.\Supabase\local\Invoke-Sql.ps1 -Sql "select pg_get_function_result(oid) from pg_proc where proname = 'get_scan_events_page' and pronamespace = 'public'::regnamespace;"
+```
+
+```
+rows: 1  |  output: 118 B  |  slowest statement: 2.4 ms
+log ingestion: 0 events (psql does not go through PostgREST)
+```
+
+**Read-only by default.** The session sets `default_transaction_read_only`, so
+an `UPDATE` with a mistyped `WHERE` fails with *"cannot execute UPDATE in a
+read-only transaction"* instead of running. `-Write` turns that off — but a
+schema change belongs in a migration applied by `Apply-Migration.ps1`, which
+records it in `schema_migrations`, not in an ad-hoc query that leaves no trace.
+
+Also takes `-File` for a .sql file, `-Csv` for unaligned output, `-TimeoutMs`
+(default 15000) and `-WhatIfOnly`, which connects to nothing.
+
+### What it costs
+
+- **Log Ingestion: nothing.** The billed log line is written by the API
+  gateway, one per HTTP request through PostgREST. psql speaks the Postgres
+  wire protocol straight to the session pooler and never touches that path.
+- **The Postgres log is a different thing, and is not free.** `postgres` — the
+  role psql connects as — still has `log_min_duration_statement = 200`.
+  `20261017090000` raised it to 1000 ms, but only on `anon`, `authenticated`
+  and `service_role`, because those are the roles live traffic runs as. A
+  query here that takes longer than 200 ms writes one line, and the script
+  warns when that happens. `test/psql-tooling.test.mjs` fails if that
+  migration is ever changed to cover `postgres` too, since the threshold in
+  the script would then be wrong.
+- **Egress: the bytes of the result set.** A verification query returns a
+  handful of rows. The footer prints the size, so `select * from scan_events`
+  — ~150,000 rows, and the only way this script can cost real money — is
+  obvious immediately rather than at the end of the month. Over 1 MB it warns.
+
+### `_PsqlCommon.ps1`
+
+Dot-sourced by both scripts; defines functions and runs nothing. It holds the
+five connection guards that used to live in `Apply-Migration.ps1`'s body —
+psql discovery, PG* versus URI, the `'@'`-in-the-password trap, the IPv6-only
+hostname check, and UTF-8 client encoding. They are shared rather than copied
+because a second copy is how a fixed bug comes back; `test/psql-tooling.test.mjs`
+fails if either script redefines one.
+
 ## Also here: `export-project.sh`
 
 Captures a complete, restorable copy of the live Supabase project — schema,
