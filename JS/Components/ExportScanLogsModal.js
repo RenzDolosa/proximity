@@ -11,6 +11,13 @@
 // returning the whole history timed out in production; it also capped at
 // 100,000 rows without saying so, which is the worse of the two failures
 // because it looks like success. See Utils/exportChunking.js.
+//
+// AND THEN IT CAPPED AT 1,000 INSTEAD, for the same reason in a different
+// place: PostgREST's db-max-rows truncated each page to 1,000, the loop read
+// that as the end, and five consecutive exports came out a sixth of a percent
+// complete. Fixed by 20261111120000 (the RPC returns one jsonb value, which
+// the cap cannot touch) and by readPage() (the loop compares against the
+// server's stated page size, never its own).
 import { $ } from '../Utils/dom.js';
 import { fmtTime } from '../Utils/format.js';
 import { dateRangePickerHTML, mountDateRangePicker } from './DateRangePicker.js';
@@ -19,8 +26,9 @@ import { ScanEventsModel } from '../Models/ScanEventsModel.js';
 import { ExportTasksModel } from '../Models/ExportTasksModel.js';
 import {
   EXPORT_PAGE_SIZE, EXPORT_ROW_CEILING, newExportState, appendPage,
-  nextCursor, isFinalPage, exportProgressLabel, hitRowCeiling,
+  nextCursor, readPage, exportProgressLabel, hitRowCeiling,
 } from '../Utils/exportChunking.js';
+import { POSTGREST_MAX_ROWS } from '../Utils/rowCap.js';
 import { exportXlsx, todayStamp } from '../Utils/xlsxExport.js';
 
 export const SCAN_LOG_EXPORT_MODULE = 'scan_logs';
@@ -62,17 +70,31 @@ export async function fetchAllScanLogs({ from, to }, onProgress) {
   const state = newExportState();
   let cursor = null;
   let page = 0;
+  let limit = EXPORT_PAGE_SIZE;
 
   for (;;) {
     page += 1;
     onProgress?.(exportProgressLabel(state.rows.length, page));
     const { data, error } = await ScanEventsModel.scanLogPage({
-      from, to, cursor, limit: EXPORT_PAGE_SIZE,
+      from, to, cursor, limit,
     });
     if (error) return { rows: state.rows, error };
 
-    const rows = data || [];
+    // `final` comes from readPage, NOT from comparing against the page size
+    // this loop asked for. Those two were the same number right up until
+    // PostgREST's db-max-rows quietly made them different, and every export
+    // between 2026-11-06 and 2026-11-11 stopped after 1,000 rows as a result.
+    const { rows, final } = readPage(data, limit);
     appendPage(state, rows);
+
+    // A bare array means 20261111120000 is not applied yet and the old
+    // set-returning RPC is answering. PostgREST caps that at db-max-rows
+    // whatever we ask for, so continuing to ask for 10,000 makes the database
+    // compute 9,000 rows a page that never leave it — ten times the work, and
+    // the cursor only advances by what arrives. The export is correct either
+    // way; this stops it being needlessly expensive while the migration is
+    // outstanding.
+    if (Array.isArray(data)) limit = POSTGREST_MAX_ROWS;
 
     // Checked BEFORE the final-page test: a run that stops at the ceiling has
     // not exported everything, and must not be reported as if it had.
@@ -87,7 +109,7 @@ export async function fetchAllScanLogs({ from, to }, onProgress) {
       };
     }
 
-    if (isFinalPage(rows, EXPORT_PAGE_SIZE)) break;
+    if (final) break;
     cursor = nextCursor(rows);
     // A full page that yields no cursor would loop forever on the same rows.
     // Should be impossible (id and scanned_at are both NOT NULL), so this is

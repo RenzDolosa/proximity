@@ -672,6 +672,62 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-11 — every scan log export was 1,000 rows, and said *Finished***
+
+Reported by users as "the scan logs export is missing rows". It was missing
+almost all of them: against the **150,504** rows measured on 2026-11-06, a
+completed "export all" contained **1,000** — about **0.7%** — with a green
+*Finished* badge in Export Manager.
+
+> **"Limited to 1000 rows" is the same cap that took a third of the
+> Attendance report on 2026-10-08.** Third time it has bitten this project.
+> PostgREST's `db-max-rows` is **1000** here, set deliberately as a cost
+> guard. It applies **after** the function's own `LIMIT`, and it is invisible
+> to `supabase-js` — a 206 with a `Content-Range` header and a shorter body.
+
+The paged export dead-ended on page one:
+
+1. the client asks `get_scan_events_page` for 10,000 rows
+2. the function computes 10,000
+3. PostgREST returns 1,000
+4. the client reads `1000 < 10000` as *short page = end of data*, and stops
+
+The export ledger had been recording it in plain sight — five runs, five
+different date ranges, `row_count` of exactly **1000** every time.
+
+**The fix is a shape change, not a number change.** `db-max-rows` caps the
+number of **rows** in a response, so `get_scan_events_page` now returns a
+single `jsonb` value — `{"limit": n, "rows": [...]}` — which is one row and
+cannot be capped. Setting the client's page size to 1000 instead would also
+have worked, and is what the Attendance export does; it would have cost
+**151 requests** per full export rather than 16, and left the export's
+correctness depending on a dashboard setting staying where it is.
+
+- **The response states its own page size**, and the client compares against
+  that rather than against the number it asked for. Substituting one for the
+  other *is* the bug; the only durable guard is for the number to come from
+  the side that applied it.
+- **The loop no longer trusts a short page on its own.** Against the old
+  set-returning RPC — still live if the frontend ships before the migration
+  is applied — only an **empty** page ends the walk, because the real cap is
+  not knowable from the client. One extra request, and it cannot truncate.
+- **Raising `db-max-rows` was rejected.** It would lift the ceiling on every
+  table, view and RPC in the project to serve one admin-gated export, and it
+  exists only in the dashboard.
+
+**Egress: unchanged to the byte** — the same rows cross the wire, and
+`jsonb_agg` emits the keys PostgREST would have. **Log ingestion: down** —
+16 requests for a full export instead of the 151 the 1000-row alternative
+needs, and 150,504 rows instead of 1,000 for all of them.
+
+**Tests:** 14 added, suite **591 → 605**. Both load-bearing guards confirmed
+to fail when the fix is reverted: restoring `RETURNS TABLE`, and comparing
+against `EXPORT_PAGE_SIZE` inside the export loop.
+
+**The migration is not applied.** Until it is, the frontend alone fixes the
+truncation — it pages the old RPC 1,000 at a time and gets every row, just in
+151 requests instead of 16.
+
 **2026-11-10 (later) — smart alerts: silence hours, and push to Viber (NOT applied)**
 
 > **Viber, not Telegram**, and it is not a one-word swap. Viber has no

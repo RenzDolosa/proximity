@@ -16,6 +16,9 @@
 // This module is pure and knows nothing about Supabase, so the paging rules
 // are tested rather than eyeballed.
 
+// WHAT THE CLIENT ASKS FOR. Only meaningful because 20261111120000 made
+// get_scan_events_page return a single jsonb value instead of a set — see
+// readPage() below for the year this number spent being ignored.
 export const EXPORT_PAGE_SIZE = 10000;
 
 // A stop, not a silent truncation. get_all_scan_events() capped at 100,000
@@ -46,6 +49,49 @@ export function nextCursor(rows) {
  */
 export function isFinalPage(rows, pageSize = EXPORT_PAGE_SIZE) {
   return !Array.isArray(rows) || rows.length < pageSize;
+}
+
+/**
+ * Normalise one response into `{ rows, final }`.
+ *
+ * THE BUG THIS EXISTS FOR, reported 2026-11-11 as "the export is missing
+ * rows". Every export produced exactly 1,000 and reported success.
+ *
+ * isFinalPage() above is correct, and was being fed a lie. PostgREST enforces
+ * `db-max-rows` — 1000 on this project, set deliberately — on every response,
+ * AFTER the function's own LIMIT and without telling the caller anything
+ * supabase-js surfaces. So the client asked for 10,000, the server computed
+ * 10,000, the wire carried 1,000, and `1000 < 10000` read as "short page, end
+ * of data". One page, then stop.
+ *
+ * The lesson is not "use 1000". It is that THE CLIENT CANNOT SEE THE CAP, so
+ * it must never compare against a page size it chose itself:
+ *
+ *   {limit, rows}  the current shape. The server states the page size it
+ *                  actually honoured, and that is what the comparison uses.
+ *                  Immune to db-max-rows because one jsonb value is one row.
+ *
+ *   [ ... ]        a bare array — the RETURNS TABLE version from
+ *                  20261106150000, still live if the frontend ships before
+ *                  the migration is applied. The real cap is unknowable here,
+ *                  so ONLY an empty page ends the walk. That costs one extra
+ *                  request and cannot truncate, whatever the cap turns out to
+ *                  be. Reading both shapes is what lets the two halves of
+ *                  this fix land in either order.
+ */
+export function readPage(data, requested = EXPORT_PAGE_SIZE) {
+  if (data && !Array.isArray(data) && Array.isArray(data.rows)) {
+    const limit = Number(data.limit);
+    const asked = Number(requested);
+    // Number(null) and Number('') are both 0, and 0 is finite — hence > 0
+    // rather than Number.isFinite alone, or a malformed limit would make
+    // every page "short" and stop the export on page one all over again.
+    const size = limit > 0 ? limit
+      : (asked > 0 ? asked : EXPORT_PAGE_SIZE);
+    return { rows: data.rows, final: isFinalPage(data.rows, size) };
+  }
+  const rows = Array.isArray(data) ? data : [];
+  return { rows, final: rows.length === 0 };
 }
 
 /** Fresh accumulator. `seen` is what makes the dedupe below possible. */
