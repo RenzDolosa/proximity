@@ -25,6 +25,8 @@ import { describeQuery } from '../../Utils/queryLabel.js';
 import { readSummary, resetMeter } from '../../Core/requestLog.js';
 import { shareOfAllowance } from '../../Utils/requestMeter.js';
 import { isFresh, markFetched, invalidate } from '../../Utils/freshness.js';
+import { AlertChannelsModel } from '../../Models/AlertChannelsModel.js';
+import { ALERT_KINDS } from '../../Utils/alertKinds.js';
 
 // Matches DIRECTORY_MAX_AGE_MS in DirectoryPage: long enough that flicking
 // between sidebar items costs nothing, short enough that another admin's
@@ -96,6 +98,14 @@ let trimStatus = null; // { total_entries, employees_with_entries, max_entries_f
 let trimStatusError = null;
 let trimStatusLoaded = false;
 let trimRunning = false;
+
+// Settings → Notifications. Admin-only, and the table behind it is revoked
+// from both client roles (20261110091000) — these go through RPCs.
+let alertChannels = null; // array once loaded, else null
+let viberSubscribers = []; // [{ viber_id, name, last_seen_at }] — the destination picker
+let alertChannelsError = null;
+let alertChannelsLoaded = false;
+let alertChannelSaving = false;
 
 let silenceStatus = null; // { silence_minutes, total_scanners, enabled_scanners, silent_now, last_run } once loaded, else null
 let silenceStatusError = null;
@@ -281,6 +291,29 @@ export async function renderSettings() {
 
     scanners: canViewScannerRegistry() ? scannersPanelHTML() : '',
 
+    notifications: !isAdmin() ? '' : `
+    <div class="panel" style="padding:20px;">
+      <h3 style="margin:0 0 4px;">Notifications</h3>
+      ${panelNote(
+        'Push alerts as they happen, instead of waiting to notice the badge.',
+        `<p><strong>Viber needs setting up first.</strong> A Viber Public
+         Account cannot message someone who has not subscribed to it — send
+         them the PA link, have them open the chat, and their name appears in
+         the list below. Saving an id for someone who has not subscribed
+         fails with Viber status 6.</p>
+         <p>The list fills itself from the <span class="mono">viber-webhook</span>
+         function, because Viber has no way to look an id up on demand. If it
+         is empty, nobody has opened the chat yet.</p>
+         <p>A destination id is a <strong>credential</strong> — anyone holding
+         it and the bot token can message that person. This list is
+         admin-only, stored masked, and the tables behind it are unreachable
+         except through these controls.</p>
+         <p>Telegram is still selectable as a fallback. Setup for both is in
+         <span class="mono">Supabase/functions/notify-alert/README.md</span>.</p>`,
+      )}
+      <div id="ac-body">${alertChannelsLoaded ? '' : 'Loading…'}</div>
+    </div>`,
+
     // The replacement for the Egress / Log Ingestion tiles removed on
     // 2026-10-05. Those asked Supabase; this counts locally, which is the
     // only option left once the usage API turned out not to exist.
@@ -426,7 +459,7 @@ export async function renderSettings() {
     { id: 'account', label: 'Your account', hint: 'How this browser looks, and your own sign-in', open: true,
       html: panels.appearance + panels.password },
     { id: 'scanning', label: 'Scanning & kiosks', hint: 'The scanners themselves, and what they play and show',
-      html: panels.scanners + panels.sounds + panels.thumbs + panels.silence + panels.travel },
+      html: panels.scanners + panels.sounds + panels.thumbs + panels.silence + panels.notifications + panels.travel },
     // Its own group rather than a fourth panel under Scanning: a shift start
     // is a fact about the working day, not about a kiosk, and it is the
     // Attendance report it changes.
@@ -569,6 +602,12 @@ export async function renderSettings() {
     // handle the not-yet-loaded case themselves.
     paintSiteRules();
     paintShiftRules();
+    // Same reason as the two above: the freshness window means this panel's
+    // loader does not run on every visit, so the render path has to paint it
+    // from state or it sits on "Loading…" until the window expires.
+    if (alertChannelsLoaded) paintAlertChannels();
+    $('#ac-body').addEventListener('click', onAlertChannelClick);
+    $('#ac-body').addEventListener('submit', onAlertChannelSubmit);
     $('#ss-run').addEventListener('click', async () => {
       silenceChecking = true;
       const btn = $('#ss-run');
@@ -626,6 +665,7 @@ export async function renderSettings() {
       showSounds ? loadSounds() : null,
       showPhotos && isAdmin() ? loadThumbStats() : null,
       isAdmin() ? loadSilenceStatus() : null,
+      isAdmin() ? loadAlertChannels() : null,
       isAdmin() ? loadSiteRules() : null,
     ],
     rules: () => [
@@ -990,6 +1030,172 @@ function setThumbButtons(running) {
     repair.textContent = repairRun && !repairRun.finished ? 'Repairing…' : 'Repair missing';
   }
   if (refresh) refresh.disabled = running;
+}
+
+async function loadAlertChannels() {
+  // Both in one round trip rather than one per panel open. The subscriber
+  // list is what makes the destination picker usable at all — Viber has no
+  // getUpdates, so an id can only be learned from a webhook callback.
+  const [channelsRes, subsRes] = await Promise.all([
+    AlertChannelsModel.list(),
+    AlertChannelsModel.viberSubscribers(),
+  ]);
+  alertChannelsError = channelsRes.error
+    ? reportError(channelsRes.error, 'settings.alertChannels', "Couldn't load notification channels.")
+    : null;
+  alertChannels = channelsRes.error ? null : (channelsRes.data || []);
+  // A failed subscriber lookup is not fatal: the id can still be typed in,
+  // and blocking the whole panel on the convenience half would be worse.
+  viberSubscribers = subsRes.error ? [] : (subsRes.data || []);
+  alertChannelsLoaded = true;
+  paintAlertChannels();
+}
+
+function paintAlertChannels() {
+  const body = $('#ac-body');
+  if (!body) return;
+  if (alertChannelsError) {
+    body.innerHTML = `<div class="empty-state">${esc(alertChannelsError)}</div>`;
+    return;
+  }
+  if (!alertChannels) { body.innerHTML = 'Loading…'; return; }
+
+  const kindLabel = (k) => ALERT_KINDS.find((x) => x.value === (k || ''))?.label || k;
+  body.innerHTML = `
+    ${alertChannels.length ? `
+      <table>
+        <thead><tr><th>Destination</th><th>Sends</th><th class="col-shrink">On</th><th class="col-shrink"></th></tr></thead>
+        <tbody>
+          ${alertChannels.map((c) => `
+            <tr>
+              <td>
+                <span class="badge role-viewer">${esc(c.channel)}</span>
+                ${copyableMasked(c.target)}
+              </td>
+              <td>${esc(kindLabel(c.kind))}</td>
+              <td class="col-shrink">
+                <input type="checkbox" data-ac-toggle="${esc(c.id)}" ${c.enabled ? 'checked' : ''}
+                       ${alertChannelSaving ? 'disabled' : ''} aria-label="Enabled" />
+              </td>
+              <td class="col-shrink">
+                <button type="button" class="ghost danger" data-ac-delete="${esc(c.id)}"
+                        ${alertChannelSaving ? 'disabled' : ''}>Remove</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>` : '<div class="empty-state">No destinations yet. Alerts are still recorded — nothing is pushed anywhere.</div>'}
+    <form id="ac-form" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;">
+      <label style="flex:0 0 auto;">
+        <span class="emp-meta">Channel</span>
+        <select id="ac-channel" style="min-width:120px;">
+          <option value="viber">Viber</option>
+          <option value="telegram">Telegram</option>
+        </select>
+      </label>
+      <label style="flex:1 1 200px;min-width:0;">
+        <span class="emp-meta">Send to</span>
+        <input id="ac-target" type="text" inputmode="text" autocomplete="off"
+               list="ac-viber-ids" placeholder="pick a Viber subscriber, or paste an id" />
+        <datalist id="ac-viber-ids">
+          ${viberSubscribers.map((s) => `
+            <option value="${esc(s.viber_id)}">${esc(s.name || 'Viber user')}</option>`).join('')}
+        </datalist>
+      </label>
+      <label style="flex:0 0 auto;">
+        <span class="emp-meta">Sends</span>
+        <select id="ac-kind" style="min-width:160px;">
+          ${ALERT_KINDS.map((k) => `<option value="${esc(k.value)}">${esc(k.label)}</option>`).join('')}
+        </select>
+      </label>
+      <button type="submit" class="primary" ${alertChannelSaving ? 'disabled' : ''}>${alertChannelSaving ? 'Saving…' : 'Add'}</button>
+    </form>`;
+}
+
+// Enough to recognise which chat a row is, not enough to be worth copying
+// off a shared screen. The full value is never rendered after it is saved.
+function maskTarget(target) {
+  const s = String(target ?? '');
+  if (s.length <= 6) return s;
+  return `${s.slice(0, 3)}…${s.slice(-4)}`;
+}
+
+// Masked text, real value on the clipboard.
+//
+// Hand-rolled rather than copyableHTML(), which renders the value it copies —
+// the opposite of what is wanted here. The class names are the component's
+// own, so Components/Copyable.js's single delegated listener (already bound
+// in main.js) handles the click with no extra JS.
+//
+// A MASKED VALUE STILL HAS TO BE RETRIEVABLE. A Viber id can be re-picked
+// from the subscriber list and a Telegram chat id re-read from getUpdates,
+// so nothing here is unrecoverable — but copying beats reading digits off a
+// masked string and retyping them somewhere else, which is how a destination
+// ends up one character wrong and silently receiving nothing.
+function copyableMasked(target) {
+  const v = String(target ?? '');
+  const label = 'destination';
+  return `<span class="copyable">`
+    + `<span class="copyable-text mono">${esc(maskTarget(v))}</span>`
+    + `<button type="button" class="copyable-btn" data-copy="${esc(v)}" `
+    + `title="Copy ${esc(label)}" aria-label="Copy ${esc(label)}">`
+    + `<span aria-hidden="true">⧉</span></button></span>`;
+}
+
+
+async function onAlertChannelSubmit(e) {
+  if (e.target.id !== 'ac-form') return;
+  e.preventDefault();
+  if (alertChannelSaving) return;
+  const target = $('#ac-target')?.value?.trim();
+  if (!target) { toast('A chat id is required.', 'error'); return; }
+
+  alertChannelSaving = true;
+  paintAlertChannels();
+  const { error } = await AlertChannelsModel.save({
+    channel: $('#ac-channel')?.value || 'telegram',
+    target,
+    kind: $('#ac-kind')?.value || null,
+  });
+  alertChannelSaving = false;
+  if (error) { toast(reportError(error, 'settings.alertChannels'), 'error'); paintAlertChannels(); return; }
+  toast('Destination saved. The next alert will go there.');
+  await loadAlertChannels();
+}
+
+async function onAlertChannelClick(e) {
+  const del = e.target.closest('[data-ac-delete]');
+  const toggle = e.target.closest('[data-ac-toggle]');
+  if (!del && !toggle) return;
+  if (alertChannelSaving) return;
+
+  if (del) {
+    const row = alertChannels?.find((c) => c.id === del.dataset.acDelete);
+    const ok = await openConfirmModal({
+      title: 'Remove this destination?',
+      message: `Alerts will stop being pushed to ${row ? maskTarget(row.target) : 'it'}. They are still recorded and still shown on the Alerts page — only the push stops.`,
+      confirmLabel: 'Remove',
+    });
+    if (!ok) return;
+    alertChannelSaving = true;
+    paintAlertChannels();
+    const { error } = await AlertChannelsModel.remove(del.dataset.acDelete);
+    alertChannelSaving = false;
+    if (error) { toast(reportError(error, 'settings.alertChannels'), 'error'); paintAlertChannels(); return; }
+    toast('Destination removed');
+    await loadAlertChannels();
+    return;
+  }
+
+  const row = alertChannels?.find((c) => c.id === toggle.dataset.acToggle);
+  if (!row) return;
+  alertChannelSaving = true;
+  paintAlertChannels();
+  const { error } = await AlertChannelsModel.save({
+    id: row.id, channel: row.channel, target: row.target, kind: row.kind, enabled: !row.enabled,
+  });
+  alertChannelSaving = false;
+  if (error) { toast(reportError(error, 'settings.alertChannels'), 'error'); paintAlertChannels(); return; }
+  await loadAlertChannels();
 }
 
 // No loader: the counts are already in this browser, so there is nothing to

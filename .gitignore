@@ -21,3 +21,6 @@ supabase-export-*/
 # Wrangler's local dev state (Miniflare caches, local KV/D1). Regenerated on
 # every `npm run preview`; nothing in it is source.
 .wrangler/
+
+# Supabase CLI scratch (project ref, CLI version) - written by npx supabase
+.temp/

@@ -7,14 +7,28 @@ import { fmtBadgeCount } from '../Utils/dashboard.js';
 import { AlertsModel } from '../Models/AlertsModel.js';
 import { isAdminOrManager } from './state.js';
 
-// 3 minutes, raised from 60s on 2026-10-21. Every poll writes an API-gateway
-// log event, and this one runs on every open admin/manager tab on every page,
-// so it was the second-largest request producer after the Dashboard timer.
-// Nothing upstream is faster than this anyway: scanner-silence alerts are
-// raised by a cron running every 15 minutes, and the badge catches up
-// instantly on visibilitychange, so what this interval really governs is how
-// stale a count can get on a tab somebody is already staring at.
-const POLL_MS = 180000;
+// 10 minutes. Was 60s until 2026-10-21, then 180s, now this.
+//
+// Every poll writes an API-gateway log event, and this one runs on every open
+// admin/manager tab on every page — ~340 of the ~6,700 lines a day the
+// project produced before this change, second only to the Dashboard timer.
+//
+// WHAT CHANGED THE ANSWER: alerts now push to Telegram the moment they are
+// recorded (migration 20261110092000 → the notify-alert function). The badge
+// has stopped being how anyone finds out something is wrong, so the interval
+// only governs how stale a number looks on a tab somebody is already staring
+// at. Nothing upstream is faster anyway — scanner-silence is raised by a cron
+// running every 15 minutes — and the badge still catches up instantly on
+// visibilitychange.
+//
+// This was chosen over the obvious alternative of a Realtime subscription on
+// alerts INSERT. Realtime removes the poll entirely, but replaces a measured
+// ~340 log lines a day with a WebSocket whose heartbeat cost on this plan
+// could not be measured (the Supabase log API was unreachable at the time).
+// Trading a known cost for an unknown one is a bad trade on a project already
+// past its billing grace period. Revisit when query_logs can confirm what
+// realtime heartbeats actually cost; this constant is the whole rollback.
+const POLL_MS = 600000;
 let timer = null;
 let visibilityHandler = null;
 

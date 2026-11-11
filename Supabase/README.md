@@ -1341,6 +1341,90 @@ the day each entry was written and not maintained since.** Several of them are
 long applied. Probe before believing one.
 
 ### Change log (most recent first)
+**2026-11-10 — scanner silence hours, alert channels, and the notify-alert push (NOT applied)**
+
+Six migrations, applied in this order:
+
+1. `20261110090000_scanner_silence_active_hours.sql`
+2. `20261110091000_alert_channels.sql`
+3. `20261110092000_notify_alert_webhook.sql`
+4. `20261110093000_viber_channel.sql`
+5. `20261110094000_ntfy_channel.sql` — **superseded, see 6**
+6. `20261110095000_drop_ntfy_channel.sql`
+
+**ntfy was withdrawn the same day it landed.** 5 is left in place because it
+is already in the applied ledger; 6 undoes it forward. Deleting an applied
+migration would leave this directory describing a database that never
+existed, and replaying from scratch would then diverge from production.
+6 deletes any `ntfy` rows **before** tightening the CHECK, because a
+tightened constraint is validated against existing rows and would abort
+rather than drop them. The live channels are Viber and Telegram.
+
+**`viber_subscribers`** — `(viber_id, name, subscribed, first_seen_at,
+last_seen_at)`, RLS on, `is_admin()` for ALL, and `REVOKE ALL` from both
+client roles like `alert_channels`. It exists because **Viber has no
+`getUpdates`**: an id is only knowable when Viber posts a callback, so the
+`viber-webhook` function records them and `get_viber_subscribers()` backs the
+destination picker. An `unsubscribed` event flags the row rather than
+deleting it, so a destination that stopped working is visible instead of
+silently absent. The `alert_channels` CHECK is dropped and re-added to accept
+`viber` — a CHECK cannot be altered in place.
+
+**`scanner_silence_active_now(p_at, p_tz, p_default_from, p_default_to)`** —
+new, `STABLE SECURITY DEFINER`, pinned search_path, revoked from `anon`.
+Returns whether anyone is expected to be at work. Reads the union of every
+`shift_rules` window where **both** `starts_at` and `ends_at` are set,
+widened each way by `grace_minutes`; midnight wrap is a union of two spans,
+matching `trg_detect_after_hours()`. With no usable rules it falls back to
+`p_default_from`–`p_default_to` (07:00–20:00) rather than returning false,
+because `shift_rules` is empty and an empty union would have disabled silence
+alerting entirely — a safety feature failing closed and silent.
+
+**`check_scanner_silence(integer)`** — body only. **The signature is
+deliberately unchanged:** pg_cron is scheduled against it, and an added
+optional parameter would create a second overload rather than replace it,
+making the no-argument call ambiguous and stopping the job. The gate is
+evaluated once before the loop, and being outside the window returns 0 rather
+than raising, so an admin pressing "Check now" at 22:00 is told nothing was
+flagged instead of being handed an error.
+
+**`get_scanner_silence_status(integer)`** — additive keys only
+(`alerting_active_now`, `usable_shift_rules`, `window_source`,
+`default_window`). Existing keys keep their names, so a deployed client is
+unaffected.
+
+**`alert_channels`** — `(kind, channel, target, enabled)`, RLS on, policy
+`is_admin()` for ALL, and **`REVOKE ALL` from both `anon` and
+`authenticated`**. Supabase's default privileges grant DML on every new
+table, so without the explicit revoke the policy would be the only thing
+between a logged-in viewer and a list of chat ids. Reached only through
+`get_alert_channels()`, `set_alert_channel(...)` and
+`delete_alert_channel(uuid)`, all `is_admin()`-gated again server-side.
+Unique on `(channel, target, coalesce(kind,''))` so saving twice edits rather
+than duplicating.
+
+**`trg_alerts_notify`** — `AFTER INSERT ON alerts`, calling `net.http_post`
+to the `notify-alert` function. Two properties worth not losing:
+
+- it **returns early on a cheap `EXISTS`** when no enabled channel matches the
+  kind, so an unconfigured install pays an index probe and nothing else;
+- its exception handler is `WHEN OTHERS` and returns `NEW`, so a broken
+  Telegram config **cannot stop an alert being recorded**. That is strictly
+  more important than the notification.
+
+Secrets (`notify_alert_url`, `notify_alert_secret`) live in Vault and are
+created by hand — see the migration header. Nothing sensitive is in the repo.
+
+**Cost:** zero new polling. The silence gate runs inside an existing 15-minute
+cron job and causes *fewer* alerts; the trigger fires ~4 times a day once the
+overnight noise stops. The alert-badge poll widened from 180s to 600s rather
+than becoming a Realtime subscription — see the root README for why.
+
+**Not applied, not verified.** Supabase MCP returned a permission error on
+every call, so `get_advisors`, `query_logs` and live `pg_get_functiondef`
+could not be run. Each migration carries its own VERIFY block.
+
+
 **2026-11-07 — Settings: the Query performance panel had never worked, and the trim status cost 1.85s (`20261107130000_settings_panel_repairs.sql`, NOT applied)**
 
 Both found by reading 60 seconds of Postgres logs while verifying Google

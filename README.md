@@ -672,6 +672,99 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-10 (later) — smart alerts: silence hours, and push to Viber (NOT applied)**
+
+> **Viber, not Telegram**, and it is not a one-word swap. Viber has no
+> `getUpdates`: the only moment a recipient's id is knowable is when Viber
+> posts a webhook callback. That forces a second Edge Function
+> (`viber-webhook`) and a `viber_subscribers` table — and the webhook has to
+> be **ours**, because Viber also posts `delivered`/`seen` for every message,
+> so pointing it at webhook.site to grab an id would leak a running feed of
+> when this site's alerts were delivered and read.
+>
+> The other trap: **Viber returns HTTP 200 on failure.** An unsubscribed
+> recipient, a bad token and a malformed id all come back `200 OK`; the real
+> outcome is the `status` field in the body. Checking `res.ok` alone would
+> report every failure as delivered.
+>
+> Telegram is kept as a selectable fallback — the `channel` column already
+> abstracted the transport, so leaving it in costs nothing and covers the
+> days while a Public Account is still being approved.
+
+> **ntfy was added and withdrawn the same day.** `20261110094000` widened the
+> channel CHECK to accept it and **had already been applied to production**,
+> so `20261110095000` reverts it forward rather than the file being deleted
+> — a deleted applied migration leaves the repo describing a database that
+> never existed, and repairing the ledger needs a CLI this project has never
+> had installed. The revert deletes any `ntfy` rows first, because a
+> tightened CHECK is validated against existing rows and would otherwise
+> abort rather than drop them.
+>
+> **Deploying either function requires turning Verify JWT off.** Supabase
+> rejects a call without an `Authorization` bearer before the function's code
+> runs, and both of these are called by something that cannot send one —
+> `pg_net` carrying only `x-notify-secret`, Viber carrying only its HMAC
+> signature. Left on, alerts fail with 401 while the function's own logs stay
+> empty, which reads as "never called". The shared secret and the signature
+> are the replacements for that check.
+
+
+357 of 422 alerts were `scanner_went_silent`, and ~305 of those fell between
+20:00 and 07:00 Asia/Manila. A scanner that is quiet at 02:00 is not broken,
+it is a scanner at a closed site — and those 305 are why nobody reads the 52
+that are real. Three migrations, one Edge Function, one Settings panel.
+
+- **`check_scanner_silence()` only fires during expected working hours.**
+  Scanners have no department and `shift_rules` is keyed by department, so
+  "expected active" is the union of every shift window (`starts_at` to
+  `ends_at`, widened both ways by `grace_minutes`, midnight-wrapping handled
+  as a union exactly like `trg_detect_after_hours`). **The empty-table case
+  is the whole design:** `shift_rules` had zero rows, and the union of an
+  empty set is empty — taken literally this would have switched silence
+  alerting off completely, including for a scanner that dies at noon. An
+  empty or unusable table falls back to 07:00–20:00; real rules take over
+  automatically the moment any exist. A rule with no `ends_at` contributes
+  nothing, since `ends_at` is opt-in and guessing would invent a schedule.
+- **`alert_channels`** holds delivery targets, admin-only, and **revoked from
+  both client roles** — a chat id plus a bot token is a credential, so the
+  table is reachable only through three admin-gated RPCs, like the other ten
+  RPC-only relations. The audit log records that a channel changed and
+  deliberately **does not copy the target into it**.
+- **A `pg_net` trigger on `alerts` INSERT** calls the new `notify-alert`
+  function. pg_net rather than a dashboard webhook so the wiring lives in the
+  repo — this project has already been bitten once by a setting that existed
+  only in the dashboard. Secrets live in Vault; nothing sensitive is in the
+  migration. The trigger **short-circuits on a cheap `EXISTS` when no channel
+  is configured**, and **can never abort the INSERT**: a broken Telegram
+  config must not stop alerts being recorded.
+- **Settings → Notifications**, admin-only, with targets masked after saving.
+
+**The badge poll went 180s → 600s instead of becoming a Realtime
+subscription.** The spec asked for Realtime, and it does remove the poll
+entirely — but it replaces a *measured* ~340 log lines/day with a WebSocket
+whose heartbeat cost could not be measured, because the Supabase log API was
+unreachable. Trading a known cost for an unknown one is a bad trade on a
+project already past its billing grace period. Push notifications are what
+made the badge stop being the primary signal, so widening the interval buys
+most of the same win from one constant, and that constant is the rollback.
+
+**Estimated effect on the ~6,700 lines/day baseline:** −238 (badge), +6
+(channels panel), +4 (notify-alert invocations) ≈ **−3.4%**. Egress flat to
+slightly down; the suppressed alerts are rows nobody fetches.
+
+**Tests:** 22 added, suite **550 → 572**. The two that matter were confirmed
+to fail when reintroduced: removing the empty-table fallback, and narrowing
+the trigger's exception handler so a notification failure could abort the
+INSERT.
+
+**Nothing here has been applied or verified.** The Supabase MCP connection
+returns `You do not have permission to perform this action` on every call, so
+`get_advisors`, `query_logs` and live `pg_get_functiondef` were all
+impossible. The migrations were written against the repo's copy of
+`check_scanner_silence` — if the deployed body has drifted, applying this
+overwrites that drift. Apply order and verification queries are at the foot
+of each migration file.
+
 **2026-11-10 — five features that add no requests**
 
 Chosen against one constraint: Supabase bills **Log Ingestion per request**
