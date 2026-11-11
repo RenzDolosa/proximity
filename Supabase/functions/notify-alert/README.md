@@ -224,7 +224,9 @@ together.
 | `viber status 2` | malformed request — usually an id pasted with whitespace |
 | `viber status 1` / `invalid auth token` | `VIBER_AUTH_TOKEN` wrong, or set on `notify-alert` but not `viber-webhook` |
 | subscriber list stays empty | `set_webhook` never succeeded, or it points at the wrong project ref |
-| `403 bot can't initiate conversation` | Telegram fallback: nobody has messaged the bot yet |
+| `telegram 404` | **the bot token, never the chat.** Usually a copied `bot` prefix (`bot123456:AAH…`) — the code strips it now, but a truncated or revoked token 404s too. Check with `curl https://api.telegram.org/bot<TOKEN>/getMe` |
+| `telegram 400 chat not found` | wrong chat id, or a group id with the minus sign dropped |
+| `telegram 403 bot can't initiate conversation` | nobody has messaged the bot yet |
 | alerts recorded but never pushed | Vault secrets missing — the trigger returns silently by design |
 
 Check what pg_net actually did:

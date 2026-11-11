@@ -320,6 +320,35 @@ test('an unsubscribe flags the row rather than deleting it', () => {
   assert.ok(!/DELETE/i.test(hook.slice(at, at + 260)));
 });
 
+// ---- Telegram's 404 ----
+//
+// Cost a live debugging round. BotFather shows the token as `123456789:AAH…`
+// while every URL in the docs reads `/bot<token>/`, so the prefix gets
+// copied with it — building `/botbot123…`, which Telegram answers 404.
+// A wrong CHAT id is 400 "chat not found" and an un-messaged bot is 403, so
+// 404 is always the token and never the recipient.
+test('a copied "bot" prefix is stripped from the token', () => {
+  const code = tsCode(fn);
+  assert.match(code, /function normalizeTelegramToken/);
+  const at = code.indexOf('function normalizeTelegramToken');
+  const body = code.slice(at, at + 220);
+  assert.match(body, /\.trim\(\)/, 'a trailing newline from a paste also 404s');
+  assert.match(body, /replace\(\/\^bot\/i, ""\)/);
+  // A real token starts with the numeric bot id, so this can never eat part
+  // of a valid one.
+  assert.match(code, /sendTelegram\(rawToken: string/,
+    'normalisation has to happen on the way in, not at each call site');
+});
+
+test('a telegram 404 says it is the token, not the chat', () => {
+  const code = tsCode(fn);
+  const at = code.indexOf('async function sendTelegram');
+  const body = code.slice(at, code.indexOf('Deno.serve'));
+  assert.match(body, /res\.status === 404/);
+  assert.match(body, /bad bot token/,
+    'without the hint, 404 reads as "the recipient does not exist"');
+});
+
 // ---- ntfy, withdrawn ----
 //
 // 20261110094000 widened the CHECK to accept it and was APPLIED to the live

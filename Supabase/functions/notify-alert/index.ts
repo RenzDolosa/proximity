@@ -75,7 +75,18 @@ function formatMessage(alert: AlertPayload): string {
   ].filter(Boolean).join("\n");
 }
 
-async function sendTelegram(token: string, chatId: string, text: string) {
+// BotFather shows the token as `123456789:AAH…`, but every URL in the docs
+// reads `/bot<token>/` — so the `bot` prefix gets copied along with it about
+// half the time. That builds `/botbot123456789:AAH…` and Telegram answers
+// **404**, which looks like "chat not found" to anyone debugging and is
+// nothing of the sort. A real token always starts with the numeric bot id,
+// so a leading `bot` is never part of one and is always safe to strip.
+function normalizeTelegramToken(raw: string): string {
+  return raw.trim().replace(/^bot/i, "");
+}
+
+async function sendTelegram(rawToken: string, chatId: string, text: string) {
+  const token = normalizeTelegramToken(rawToken);
   const res = await fetch(`${TELEGRAM_API}/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -83,9 +94,14 @@ async function sendTelegram(token: string, chatId: string, text: string) {
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
+    // 404 is the token, never the chat — a wrong chat id is 400 "chat not
+    // found" and an un-messaged bot is 403. Without the hint, 404 reads as
+    // "the recipient doesn't exist" and sends people looking in the wrong
+    // place, which it did here.
+    const hint = res.status === 404 ? " (bad bot token — check for a copied 'bot' prefix)" : "";
     // The chat id is deliberately absent: these logs are readable by anyone
     // with project access and the id is the sensitive half of the pair.
-    throw new Error(`telegram ${res.status}: ${detail.slice(0, 200)}`);
+    throw new Error(`telegram ${res.status}${hint}: ${detail.slice(0, 200)}`);
   }
 }
 
