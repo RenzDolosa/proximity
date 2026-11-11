@@ -33,9 +33,18 @@ const RENDER_CAP = 300;
  * person's attendance normal" without reading anything. No request, no
  * column, no migration — see Utils/scanHeatmap.js.
  */
-function heatmapHTML(logs) {
+function heatmapHTML(logs, selectedDay = '') {
   const { days, summary } = buildHeatmap(logs);
-  const cells = days.map((d) => `<i class="hm-cell hm-${d.state} hm-i${intensity(d.count)}" title="${esc(dayLabel(d, { fmtDate: (k) => k }))}"></i>`).join('');
+  // A button, not a styled <i>: this is a control now, and it has to be
+  // reachable by keyboard and announced as one. `disabled` on an empty day
+  // rather than hiding it — the gap in the grid is information, but there is
+  // nothing to filter to.
+  const cells = days.map((d) => `<button type="button"
+      class="hm-cell hm-${d.state} hm-i${intensity(d.count)}${d.key === selectedDay ? ' is-sel' : ''}"
+      data-day="${esc(d.key)}"${d.count ? '' : ' disabled'}
+      aria-pressed="${d.key === selectedDay}"
+      title="${esc(dayLabel(d, { fmtDate: (k) => k }))}${d.count ? ' · click to filter' : ''}"
+    ></button>`).join('');
 
   // What the colours were judged against, stated rather than implied. With
   // too little history the outlier test did not run at all, and reporting
@@ -50,18 +59,21 @@ function heatmapHTML(logs) {
     summary.basis === 'self' && summary.oddDays ? `<span class="hm-flag warn-text">${summary.oddDays} unusual</span>` : '',
   ].filter(Boolean).join('');
 
+  // Returns the INSIDE of .hm-wrap, not the wrapper. The wrapper is a stable
+  // node in the modal body so the delegated click listener below survives a
+  // repaint — rebuilding it would drop the listener with it.
   return `
-    <div class="hm-wrap">
       <div class="hm-head">
         <span>Last ${HEATMAP_DAYS} days</span>
-        <span class="hm-sub">${summary.daysWithScans} active · ${summary.totalScans} scans</span>
+        <span class="hm-sub">${selectedDay
+          ? `filtered to ${esc(selectedDay)} — click again to clear`
+          : `${summary.daysWithScans} active · ${summary.totalScans} scans`}</span>
       </div>
-      <div class="hm-grid">${cells}</div>
+      <div class="hm-grid" role="group" aria-label="Filter the log to one day">${cells}</div>
       <div class="hm-foot">
         <span class="hm-sub">${basis}</span>
         <span class="hm-flags">${flags}</span>
       </div>
-    </div>
   `;
 }
 
@@ -185,7 +197,7 @@ export async function openScanLogModal(employeeId, initialDate = '') {
 
     bodyEl.className = '';
     bodyEl.innerHTML = `
-      ${heatmapHTML(logs)}
+      <div class="hm-wrap" id="log-heatmap"></div>
       <div class="filter-row" id="log-filter-row" style="margin-bottom:10px;">
         ${dateRangePickerHTML('log-range', { from: prevFrom, to: prevTo, emptyLabel: 'All dates' })}
         <select id="log-scanner">
@@ -197,17 +209,48 @@ export async function openScanLogModal(employeeId, initialDate = '') {
       <div id="log-list" style="max-height:340px;overflow-y:auto;"></div>
     `;
 
+    // The picker IS the selection state — there is no second variable to
+    // drift from it. A single day is a range whose ends are equal, which is
+    // exactly what clicking one cell sets.
+    const selectedDay = () => {
+      const from = $('#log-range .drp-from', overlay)?.value || '';
+      const to = $('#log-range .drp-to', overlay)?.value || '';
+      return from && from === to ? from : '';
+    };
+    const paintHeatmap = () => {
+      const host = $('#log-heatmap', overlay);
+      if (host) host.innerHTML = heatmapHTML(logs, selectedDay());
+    };
+    // Built from `logs`, never from the filtered set: the grid is the thirty
+    // days in context, and redrawing it from its own filter would leave one
+    // lit cell and twenty-nine blanks.
+    const paintAll = () => { paintHeatmap(); paintList(); };
+
     // Filtering is local to the rows already fetched, so repainting on apply
     // costs nothing — the picker itself never triggers a request.
-    const picker = mountDateRangePicker($('#log-range', overlay), { onApply: paintList });
+    const picker = mountDateRangePicker($('#log-range', overlay), { onApply: paintAll });
     onModalClose(() => picker?.destroy());
     $('#log-scanner', overlay).addEventListener('change', paintList);
     $('#log-clear', overlay).addEventListener('click', () => {
       picker?.set({ from: '', to: '' });
       $('#log-scanner', overlay).value = 'all';
-      paintList();
+      paintAll();
     });
-    paintList();
+
+    // Delegated on the wrapper, which paintHeatmap() never replaces — so one
+    // listener survives every repaint. Clicking the selected day clears it,
+    // because the alternative is a filter you can set from the grid and have
+    // to clear from somewhere else.
+    $('#log-heatmap', overlay).addEventListener('click', (e) => {
+      const cell = e.target.closest('button[data-day]');
+      if (!cell || cell.disabled) return;
+      const day = cell.dataset.day;
+      const next = day === selectedDay() ? '' : day;
+      picker?.set({ from: next, to: next });
+      paintAll();
+    });
+
+    paintAll();
   };
 
   await refresh();
