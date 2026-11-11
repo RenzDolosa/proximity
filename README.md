@@ -672,6 +672,49 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-11 (last) — click a heatmap day, and tap a badge to find its owner**
+
+Two features, no new requests and no migration.
+
+**Heatmap cells filter the log.** The grid shipped this morning answered
+*"which day was odd?"* and then made you scroll 300 rows to find out why.
+Clicking a cell now sets the date filter below it; clicking the selected day
+clears it. The modal's filter was already local to rows in memory, so this
+costs nothing.
+
+Cells are real `<button>`s rather than styled `<i>`s — once a thing does
+something it has to be keyboard-reachable and announced as a control. Empty
+days render `disabled`: the gap is information, but there is nothing to
+filter to. **The picker is the selection state**, with no second variable
+beside it to drift — a single day is just a range whose ends are equal.
+
+**Tap a badge anywhere, and the palette opens on its owner.** A proximity
+card lands on the desk and the question is *"whose is this?"*. That meant
+reading ten digits off the card and typing them without a transposition.
+
+The reader is a keyboard wedge, so this turned out to be a listener rather
+than a lookup: `paletteSearch.js` **already** ranks `active_proximity_code`
+as an exact match against the 814 directory rows in memory. Zero requests,
+zero keystrokes.
+
+> **Telling a reader from a person is a cadence test, not a prefix.** The
+> characters are indistinguishable; what differs is that a wedge types ten
+> of them in ~100 ms. This project measured that from the other side
+> already — 58 of 59 "unknown card" alerts were truncated reads, because a
+> 200 ms poll could not keep up with one.
+>
+> **The failure mode to avoid is swallowing real typing**, not missing a
+> read: a missed read costs one manual search, a stolen keystroke corrupts
+> what someone was writing and they will not know why. So every guard errs
+> toward letting the keystroke through — never while anything editable has
+> focus, never with a modifier held, and `preventDefault` only on the
+> terminating Enter of a **complete** read.
+
+**Tests:** 28 added, suite **681 → 709**. Four guards confirmed to fail when
+reverted, including the two most likely to break silently: a click listener
+bound to a node that gets rebuilt on repaint, and `preventDefault` moved
+ahead of the completeness check.
+
 **2026-11-11 (latest) — seven pages that refetched on every click, and a badge asking what the Dashboard just answered**
 
 Both halves **subtract** from the bill rather than avoiding an increase.

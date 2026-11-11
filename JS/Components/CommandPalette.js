@@ -13,6 +13,7 @@ import { esc } from '../Utils/format.js';
 import { appState } from '../Core/state.js';
 import { GROUPED_ROUTES, ROUTE_TITLES } from '../Core/navGroups.js';
 import { searchPalette, moveSelection } from '../Utils/paletteSearch.js';
+import { emptyTapState, feedKey, acceptsCardTap, isCardRead } from '../Utils/cardTap.js';
 
 let overlay = null;
 let results = [];
@@ -35,7 +36,12 @@ export function closePalette() {
   selected = 0;
 }
 
-export function openPalette() {
+/**
+ * @param {string} [initialQuery] prefilled and searched immediately — used by
+ *   the card-tap listener below, which has a code and no reason to make
+ *   anyone retype it.
+ */
+export function openPalette(initialQuery = '') {
   if (overlay) return;
   overlay = document.createElement('div');
   overlay.className = 'cmdk-overlay';
@@ -73,8 +79,12 @@ export function openPalette() {
     if (row) choose(Number(row.dataset.index));
   });
 
+  input.value = String(initialQuery || '');
   paint();
   input.focus();
+  // Selected, not just placed: a card tap that matched one person should let
+  // the next keystroke replace the code rather than append to it.
+  input.select();
 }
 
 function paintList() {
@@ -130,10 +140,43 @@ async function choose(index) {
 }
 
 export function initCommandPalette() {
+  // A badge reader is a keyboard wedge, so a card tapped on the desk reader
+  // arrives here as a burst of keystrokes ending in Enter. Catching it opens
+  // the palette on that code, and the ranking in paletteSearch.js already
+  // treats `active_proximity_code` as an exact match — so "whose card is
+  // this?" is answered from the rows in memory, with no request and nothing
+  // typed. See Utils/cardTap.js for how a reader is told from a person.
+  let tap = emptyTapState();
+
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
       e.preventDefault();
       if (overlay) closePalette(); else openPalette();
+      return;
     }
+
+    // A wedge sends no modifiers, and anything held down is a shortcut
+    // someone meant. Checked before the state machine so a Ctrl-chord cannot
+    // leave half a code in the buffer.
+    if (e.ctrlKey || e.metaKey || e.altKey) { tap = emptyTapState(); return; }
+
+    // Re-read on every key rather than latched: focus moves constantly, and
+    // the only moment that matters is the one the keystroke arrived in.
+    if (!acceptsCardTap(document.activeElement, {
+      paletteOpen: Boolean(overlay),
+      modalOpen: Boolean(document.querySelector('.overlay')),
+    })) {
+      tap = emptyTapState();
+      return;
+    }
+
+    const { state, code } = feedKey(tap, { key: e.key, at: e.timeStamp });
+    tap = state;
+    if (!code || !isCardRead(code)) return;
+    // Only now, with a complete read in hand, is the Enter consumed. Every
+    // earlier keystroke was allowed through untouched — nothing is
+    // intercepted on the strength of a guess about where the burst is going.
+    e.preventDefault();
+    openPalette(code.trim());
   });
 }

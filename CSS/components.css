@@ -572,7 +572,17 @@ tr.row-clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2
    compare week against week. grid-auto-rows keeps the cells square without
    aspect-ratio, which Safari 14 does not have. */
 .hm-grid{display:grid;grid-template-columns:repeat(15,1fr);gap:3px;}
-.hm-cell{display:block;width:100%;padding-top:100%;border-radius:2px;background:var(--border-soft);}
+/* A real <button>, so it is keyboard-reachable and announced as a control.
+   The reset strips the UA chrome a button carries by default. */
+.hm-cell{display:block;width:100%;padding:0;padding-top:100%;border:0;border-radius:2px;
+         background:var(--border-soft);cursor:pointer;appearance:none;font:inherit;}
+.hm-cell:disabled{cursor:default;}
+.hm-cell:not(:disabled):hover{outline:1px solid var(--text-faint);outline-offset:1px;}
+.hm-cell:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+/* The selected day outlines in the text colour rather than the accent: the
+   cell underneath is already blue on a complete day, and accent-on-accent
+   reads as nothing at 14px. */
+.hm-cell.is-sel{outline:2px solid var(--text);outline-offset:1px;}
 .hm-complete{background:var(--accent);}
 .hm-odd{background:var(--warn);}
 .hm-open{background:var(--bad);}
