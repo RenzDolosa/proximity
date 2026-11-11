@@ -191,29 +191,53 @@ NOTIFY pgrst, 'reload schema';
 
 -- VERIFY -------------------------------------------------------------------
 --
---   -- 1. it returns one jsonb value, not a set
+-- READ THIS FIRST. `db-max-rows` is enforced by PostgREST, not by Postgres.
+-- A psql session does not go through PostgREST, so the 1,000-row truncation
+-- IS NOT REPRODUCIBLE HERE -- the old set-returning definition also returns
+-- 5,000 rows when called from psql. "I ran the function in the SQL Editor and
+-- got more than 1,000" therefore proves nothing about the bug.
+--
+-- What psql can settle is the RETURN TYPE, which is the whole mechanism: the
+-- cap limits how many ROWS a response may contain, and a scalar is one row.
+-- Check 1 is the proof. The end-to-end confirmation is check 5, in a browser.
+--
+--   -- 1. THE PROOF: it returns one jsonb value, not a set
 --   select pg_get_function_result(oid) from pg_proc
 --   where proname = 'get_scan_events_page' and pronamespace = 'public'::regnamespace;
---   -- expect: jsonb   (NOT "TABLE(...)" -- that version is capped at 1000)
+--   -- expect: jsonb   (NOT "TABLE(...)" -- that version is what gets capped)
 --
 --   -- 2. exactly one definition survived the drop
 --   select count(*) from pg_proc
 --   where proname = 'get_scan_events_page' and pronamespace = 'public'::regnamespace;
---   -- expect: 1
+--   -- expect: 1   (2 means a stale overload, and calls become ambiguous)
 --
---   -- 3. a page really can exceed 1000 rows now
---   select jsonb_array_length(public.get_scan_events_page(null, null, null, null, 5000) -> 'rows');
---   -- expect: 5000, or the total row count if the table holds fewer.
---   -- Before this migration the same call returned at most 1000.
+--   -- 3. the DROP took the ACL with it, so the grants must be back
+--   select grantee, privilege_type from information_schema.routine_privileges
+--   where routine_name = 'get_scan_events_page' and routine_schema = 'public';
+--   -- expect: authenticated/EXECUTE, and postgres. NOT anon, NOT PUBLIC.
 --
---   -- 4. the clamp is reported, not just applied
---   select public.get_scan_events_page(null, null, null, null, 999999) -> 'limit';
---   -- expect: 25000
+--   -- 4. the body behaves, with the admin gate satisfied.
+--   -- is_admin_or_manager() reads auth.uid(), which is NULL in psql, so a
+--   -- bare call raises 'not permitted to export scan history'. Borrow a real
+--   -- admin's id for the length of one transaction and roll it back.
+--   begin;
+--     select set_config('request.jwt.claims',
+--       json_build_object(
+--         'sub', (select id from public.profiles where role = 'admin' limit 1),
+--         'role', 'authenticated')::text, true);
+--     select jsonb_array_length(public.get_scan_events_page(null,null,null,null,5000) -> 'rows') as rows_in_page,
+--            public.get_scan_events_page(null,null,null,null,999999) -> 'limit' as clamped_limit;
+--   rollback;
+--   -- expect rows_in_page 5000 (or the total, if fewer exist) and
+--   -- clamped_limit 25000. This confirms the shape and the clamp. It does
+--   -- NOT confirm the fix -- see the note at the top.
 --
---   -- 5. how many rows an "all dates" export should actually produce
+--   -- 5. THE END-TO-END CHECK, and the only one that exercises PostgREST.
 --   select (select count(*) from public.scan_events)
 --        + (select count(*) from public.scan_events_archive) as expected_rows;
---   -- compare against the ROWS column in Export Manager after a re-run
+--   -- Then run "Export all scan logs" with no date range in the browser and
+--   -- compare the ROWS column in Export Manager. They must match. Anything
+--   -- that lands on exactly 1000 means the frontend has not shipped yet.
 --
 -- ROLLBACK -----------------------------------------------------------------
 --
