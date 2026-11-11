@@ -672,6 +672,43 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-11 (later) — `Invoke-Sql.ps1`, so a VERIFY block can actually be run**
+
+Every migration in this repo ends in a VERIFY block. Running one meant the
+dashboard SQL editor or a bare `psql`, which is installed but **not on PATH**
+on this machine — failure mode 1 in `Apply-Migration.ps1`'s own docstring,
+hit again while verifying the export fix above.
+
+- **Read-only by default.** The session sets `default_transaction_read_only`,
+  so an `UPDATE` with a mistyped `WHERE` fails rather than runs. `-Write`
+  turns it off, but a schema change belongs in a migration that gets recorded
+  in `schema_migrations`, not an ad-hoc query that leaves no trace.
+- **The five connection guards moved to `_PsqlCommon.ps1`**, dot-sourced by
+  both scripts. Each was written after a specific failure against the live
+  project — psql not on PATH, an empty PowerShell variable silently
+  connecting to localhost, a password containing `'@'` being read as part of
+  the hostname, an IPv6-only hostname failing like a typo, and a multi-byte
+  character in a comment aborting a transaction. A second copy is how a fixed
+  bug comes back, so a test fails if either script redefines one.
+- **It reports what the query cost**, in the same spirit as the request
+  meter: rows, output size, and the slowest statement's server-side time.
+
+**On the standing egress/log constraint.** Log Ingestion is billed per API
+gateway request, one line per HTTP call through PostgREST — and psql speaks
+the Postgres wire protocol straight to the pooler, so this tool **cannot move
+that number at all**. The Postgres log is separate and is not free: the
+`postgres` role still has `log_min_duration_statement = 200`, because
+`20261017090000` raised it to 1000 ms only on `anon`, `authenticated` and
+`service_role`. A query over 200 ms writes one line, and the script says so.
+Egress is the bytes of the result set, printed after every run, with a warning
+above 1 MB — `select * from scan_events` is the only way this costs real money
+and it is now impossible to do that without noticing.
+
+**Tests:** 11 added, suite **606 → 617**. Confirmed to fail when the shared
+module is bypassed and when the read-only default is flipped. Both scripts
+were parse-checked and exercised through `-WhatIfOnly`, which connects to
+nothing; neither was run against the live project in this session.
+
 **2026-11-11 — every scan log export was 1,000 rows, and said *Finished***
 
 Reported by users as "the scan logs export is missing rows". It was missing

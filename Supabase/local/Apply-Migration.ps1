@@ -102,23 +102,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-function Find-Psql {
-  $onPath = Get-Command psql -ErrorAction SilentlyContinue
-  if ($onPath) { return $onPath.Source }
-  # Newest major version first, so a 17 client is preferred over an older one.
-  # A client older than the server refuses to connect cleanly.
-  $roots = @("$env:ProgramFiles\PostgreSQL", "${env:ProgramFiles(x86)}\PostgreSQL", "$env:LOCALAPPDATA\Programs\PostgreSQL")
-  foreach ($root in $roots) {
-    if (-not (Test-Path $root)) { continue }
-    $dirs = Get-ChildItem $root -Directory -ErrorAction SilentlyContinue |
-      Sort-Object { [int]($_.Name -replace '\D', '0') } -Descending
-    foreach ($d in $dirs) {
-      $candidate = Join-Path $d.FullName 'bin\psql.exe'
-      if (Test-Path $candidate) { return $candidate }
-    }
-  }
-  return $null
-}
+# The five guards below used to live in this file. They are shared with
+# Invoke-Sql.ps1 now, because a second copy of a bug fix is how the bug comes
+# back -- test/psql-tooling.test.mjs fails if either script redefines them.
+. (Join-Path $PSScriptRoot '_PsqlCommon.ps1')
 
 if (-not (Test-Path $File)) { throw "Migration file not found: $File" }
 $resolved = (Resolve-Path $File).Path
@@ -131,10 +118,7 @@ if ($name -notmatch '^(?<version>\d{14})_(?<label>.+)$') {
 $version = $Matches['version']
 $label = $Matches['label']
 
-$psql = Find-Psql
-if (-not $psql) {
-  throw "psql not found. Install the PostgreSQL 17 client tools (winget install -e --id PostgreSQL.PostgreSQL.17), or add its bin\ directory to PATH."
-}
+$psql = Get-PsqlOrThrow
 
 Write-Host "psql      : $psql"
 Write-Host "migration : $name"
@@ -146,167 +130,26 @@ if ($WhatIfOnly) {
   return
 }
 
-# FOURTH WAY THIS HAS GONE WRONG (2026-11-04). A Supabase database password
-# containing '@' breaks the URI before psql ever opens a socket: the FIRST '@'
-# ends the userinfo section, so libpq reads the rest of the password plus the
-# real host as one hostname and fails with
-#   could not translate host name "<tail-of-password>@db.<ref>.supabase.co"
-# which reads like DNS or a VPN problem and is neither. Worse, it prints part
-# of the password into the terminal, and from there into whatever the operator
-# pastes for help.
-#
-# So there are two supported shapes, and the env-var one is now preferred:
-#
-#   1. $env:PGHOST + $env:PGPASSWORD (+ PGUSER/PGDATABASE/PGPORT) -- libpq's
-#      own variables. The password is passed as a literal and needs NO
-#      percent-encoding, whatever is in it. Nothing is interpolated into a URL.
-#   2. $env:SUPABASE_DB_URL / -ConnectionString -- a URI, which requires every
-#      one of @ : / ? # % in the password to be percent-encoded.
-$useEnvVars = [string]::IsNullOrWhiteSpace($ConnectionString) -and
-              -not [string]::IsNullOrWhiteSpace($env:PGHOST)
+# Guards 2 through 5 in the docstring above are implemented in
+# _PsqlCommon.ps1, dot-sourced near the top: choosing between the PG*
+# variables and a URI, catching a password that contains '@' before libpq
+# reads half of it as a hostname, and refusing an IPv6-only host on a network
+# without IPv6. Resolve-PsqlTarget returns an EMPTY argument array for the
+# PG* path, so nothing is interpolated and no password is ever printed.
+$target = Resolve-PsqlTarget $ConnectionString
+Write-Host "target    : $($target.Display)"
+Test-HostReachable $target.Host
+$conn = $target.Args
 
-if ($useEnvVars) {
-  if ([string]::IsNullOrWhiteSpace($env:PGPASSWORD)) {
-    throw '$env:PGHOST is set but $env:PGPASSWORD is empty, so psql would prompt and hang.'
-  }
-  Write-Host "target    : $env:PGHOST (from PG* environment variables)"
-} elseif ([string]::IsNullOrWhiteSpace($ConnectionString)) {
-  throw @'
-No connection target. Use EITHER of these (note the $env: prefix -- plain
-$NAME is a PowerShell variable, not an environment variable, and expands to
-empty, which silently connects to localhost).
-
-PREFERRED -- no encoding needed, whatever characters the password contains:
-
-  $env:PGHOST     = 'db.<ref>.supabase.co'
-  $env:PGPORT     = '5432'
-  $env:PGUSER     = 'postgres'
-  $env:PGDATABASE = 'postgres'
-  $env:PGPASSWORD = '<password>'      # literal, paste it exactly
-
-OR a URI, if the password contains none of @ : / ? # % (if it does, each one
-must be percent-encoded -- '@' becomes '%40'):
-
-  $env:SUPABASE_DB_URL = 'postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres'
-
-Get the host and user from Project Settings > Database > Connection string >
-"Session pooler" -- note the user is postgres.<ref>, not plain postgres. Use
-port 5432 on that host, NOT 6543: 6543 is transaction mode, which hands back a
-different backend per transaction and is not safe for --single-transaction
-DDL.
-
-Do not use db.<ref>.supabase.co unless this machine has IPv6 -- that hostname
-is IPv6-only now and fails with "could not translate host name".
-'@
-} else {
-  # Caught here rather than by DNS, so the message names the real cause and
-  # does not echo the password. A well-formed URI has exactly one '@': the one
-  # separating userinfo from host.
-  $atCount = ([regex]::Matches($ConnectionString, '@')).Count
-  if ($atCount -gt 1) {
-    throw @'
-The connection string has more than one '@', so libpq will read part of the
-password as the hostname and fail with "could not translate host name".
-
-The password almost certainly contains an '@'. Either percent-encode it ('@'
-becomes '%40', and likewise %3A : / %2F ? %3F # %23 % %25), or avoid the URI
-entirely -- which is the better option:
-
-  $env:SUPABASE_DB_URL = ''           # clear the broken one first
-  $env:PGHOST     = 'db.<ref>.supabase.co'
-  $env:PGPORT     = '5432'
-  $env:PGUSER     = 'postgres'
-  $env:PGDATABASE = 'postgres'
-  $env:PGPASSWORD = '<password>'
-
-If a password fragment has already been printed to a terminal or pasted
-anywhere, treat it as exposed and reset it: Project Settings > Database >
-Reset database password.
-'@
-  }
-}
-
-# Empty array = no connection argument, so libpq falls back to the PG* vars.
-$target = if ($useEnvVars) { @() } else { @($ConnectionString) }
-
-# FIFTH WAY THIS HAS GONE WRONG (2026-11-04, same session as the fourth).
-# db.<ref>.supabase.co is IPv6-ONLY: Supabase removed dedicated IPv4 from
-# direct connections, so that name has an AAAA record and no A record. On a
-# network without IPv6 psql fails with
-#   could not translate host name "db.<ref>.supabase.co" to address:
-#   Name or service not known
-# which reads as a mistyped hostname, or as the project having been deleted.
-# It is neither -- the name is correct and the project is fine, that address
-# family just is not reachable from here.
-#
-# Checked before connecting, because the answer ("use the session-mode
-# pooler, with a different username") is not guessable from the error text.
-function Test-HostReachable([string] $HostName) {
-  if ([string]::IsNullOrWhiteSpace($HostName)) { return }
-
-  $hasA = $false
-  $hasAAAA = $false
-  try { $hasA = [bool](Resolve-DnsName $HostName -Type A -ErrorAction Stop | Where-Object { $_.Type -eq 'A' }) } catch {}
-  try { $hasAAAA = [bool](Resolve-DnsName $HostName -Type AAAA -ErrorAction Stop | Where-Object { $_.Type -eq 'AAAA' }) } catch {}
-
-  if ($hasA) { return }  # An IPv4 path exists; nothing to warn about.
-
-  # Warn rather than throw: this may be transient DNS, and psql's own error is
-  # more informative than a guess would be.
-  if (-not $hasAAAA) {
-    Write-Warning "$HostName does not resolve at all. Check the hostname and this machine's DNS."
-    return
-  }
-
-  $globalV6 = Get-NetIPAddress -AddressFamily IPv6 -ErrorAction SilentlyContinue |
-    Where-Object { $_.PrefixOrigin -ne 'WellKnown' -and $_.IPAddress -notlike 'fe80*' -and $_.IPAddress -ne '::1' }
-  if ($globalV6) { return }
-
-  throw @"
-$HostName resolves to IPv6 only, and this machine has no global IPv6 address.
-
-psql would fail with "could not translate host name ... Name or service not
-known", which looks like a typo and is not: the hostname is correct and the
-project is fine, but db.<ref>.supabase.co lost its IPv4 address when Supabase
-removed dedicated IPv4 from direct connections.
-
-Use the SESSION-MODE POOLER instead, which has IPv4. Note the username:
-
-  `$env:PGHOST     = 'aws-N-<region>.pooler.supabase.com'   # N + region from the dashboard
-  `$env:PGPORT     = '5432'                                 # 5432, NOT 6543
-  `$env:PGUSER     = 'postgres.<project-ref>'               # NOT plain 'postgres'
-  `$env:PGDATABASE = 'postgres'
-  `$env:PGPASSWORD = '<password>'
-
-Project Settings > Database > Connection string > "Session pooler" has the
-exact host and user. Port 6543 on that same host is TRANSACTION mode and is
-not safe for --single-transaction DDL; 5432 is session mode and is.
-"@
-}
-
-# Skipped for -WhatIfOnly, which connects to nothing by contract.
-$checkHost = if ($useEnvVars) { $env:PGHOST } else {
-  # Pull the host out of the URI without touching the password: everything
-  # after the LAST '@' is the hostspec, then strip port and path.
-  $authority = ($ConnectionString -replace '^[a-z]+://', '')
-  $hostspec = $authority.Substring($authority.LastIndexOf('@') + 1)
-  ($hostspec -split '[:/?]')[0]
-}
-Test-HostReachable $checkHost
-
-# The migration files are UTF-8 (em-dashes and arrows in comments, in nearly
-# all of them). psql otherwise takes client_encoding from the Windows console
-# locale, which is usually WIN1252 here, and a multi-byte character in a
-# comment is then enough to abort the whole transaction with "invalid byte
-# sequence for encoding". Setting it explicitly is why this works from
-# PowerShell at all.
-$env:PGCLIENTENCODING = 'UTF8'
+# Guard 5: UTF-8, or a multi-byte character in a SQL comment aborts the whole
+# transaction with "invalid byte sequence for encoding".
+Set-PsqlEncoding
 
 if ($RecordOnly) {
   Write-Host 'Recording only - the SQL is NOT run.' -ForegroundColor Yellow
 } else {
   # --single-transaction + ON_ERROR_STOP: all of it lands, or none of it does.
-  & $psql @target `
+  & $psql @conn `
     --single-transaction `
     --set ON_ERROR_STOP=1 `
     --quiet `
@@ -327,7 +170,7 @@ insert into supabase_migrations.schema_migrations (version, name)
 values ('$version', '$label')
 on conflict (version) do nothing;
 "@
-& $psql @target --set ON_ERROR_STOP=1 --quiet --no-psqlrc -c $insert
+& $psql @conn --set ON_ERROR_STOP=1 --quiet --no-psqlrc -c $insert
 if ($LASTEXITCODE -eq 0) {
   Write-Host "Recorded in schema_migrations as $version." -ForegroundColor Green
 } elseif ($RecordOnly) {
