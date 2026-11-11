@@ -320,6 +320,47 @@ test('an unsubscribe flags the row rather than deleting it', () => {
   assert.ok(!/DELETE/i.test(hook.slice(at, at + 260)));
 });
 
+// ---- CI must not re-enable JWT verification ----
+//
+// The workflow deployed every function with `--no-verify-jwt=false`, which
+// explicitly turns verification ON. Running it against notify-alert would
+// have silently undone a working alert pipeline: pg_net records a 401 while
+// the function's own logs stay empty, so it reads as "never called".
+//
+// These two are the only endpoints called by something that cannot send a
+// bearer token. A third would need adding here AND in the workflow, which is
+// the point of pinning both.
+const UNAUTHENTICATED_ENDPOINTS = ['notify-alert', 'viber-webhook'];
+
+test('CI deploys the webhook endpoints with JWT verification off', () => {
+  const wf = read('../.github/workflows/deploy-supabase.yml');
+  const at = wf.indexOf('no_jwt()');
+  assert.notEqual(at, -1, 'the per-function JWT policy is gone');
+  const fnBlock = wf.slice(at, at + 260);
+  for (const slug of UNAUTHENTICATED_ENDPOINTS) {
+    assert.ok(fnBlock.includes(slug), `${slug} is not exempted — deploying it would 401 every alert`);
+  }
+});
+
+test('every other function keeps JWT verification', () => {
+  const wf = read('../.github/workflows/deploy-supabase.yml');
+  assert.match(wf, /JWT=--no-verify-jwt=false/,
+    'browser-called functions rely on the platform check, not their own');
+  assert.match(wf, /JWT=--no-verify-jwt;/, 'and the exempt branch has to actually disable it');
+});
+
+// A newer CLI added an interactive confirmation to `functions deploy`, and a
+// runner has no terminal to answer it. It failed closed — nothing was
+// changed — but it failed on every deploy.
+test('the deploy is non-interactive and uses the current flags', () => {
+  const wf = read('../.github/workflows/deploy-supabase.yml');
+  const at = wf.indexOf('supabase functions deploy');
+  const cmd = wf.slice(at, at + 200);
+  assert.match(cmd, /--yes/, 'CI has no stdin to confirm with');
+  assert.match(cmd, /--remote=/, '--project-ref is deprecated and removed in v4');
+  assert.ok(!/--project-ref/.test(cmd));
+});
+
 // ---- Telegram's 404 ----
 //
 // Cost a live debugging round. BotFather shows the token as `123456789:AAH…`

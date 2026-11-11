@@ -176,12 +176,48 @@ jobs:
             echo "Nothing selected for deploy — see the previous step."
             exit 0
           fi
+          # WHICH FUNCTIONS MUST NOT VERIFY A JWT.
+          #
+          # Supabase rejects a call with no `Authorization` bearer BEFORE the
+          # function's own code runs. Everything called from the browser
+          # (proximity-scan, admin-users, upload-employee-photo) sends the
+          # user's JWT and must keep that check. These two cannot:
+          #
+          #   notify-alert   called by pg_net from the trg_alerts_notify
+          #                  trigger, carrying only x-notify-secret
+          #   viber-webhook  called by Viber, carrying only its own
+          #                  X-Viber-Content-Signature
+          #
+          # Each replaces the check with its own: a shared secret and an
+          # HMAC-SHA256 over the raw body respectively.
+          #
+          # This list is load-bearing. Deploying notify-alert WITH
+          # verification silently breaks alert delivery — pg_net records a
+          # 401 while the function's own logs stay empty, which reads as
+          # "never called". test/smart-alerts.test.mjs pins it so a third
+          # unauthenticated endpoint cannot be added without updating this.
+          no_jwt() {
+            case "$1" in
+              notify-alert|viber-webhook) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
           while read -r slug; do
             [ -n "$slug" ] || continue
-            echo "::group::deploy $slug"
+            if no_jwt "$slug"; then JWT=--no-verify-jwt; else JWT=--no-verify-jwt=false; fi
+            echo "::group::deploy $slug ($JWT)"
+            # --yes because a newer CLI added an interactive confirmation to
+            # `functions deploy`, and a runner has no terminal to answer it:
+            # "Confirmation required ... This run can't ask because stdout is
+            # not a terminal. Nothing was changed." It failed closed, which is
+            # the right way round, but it failed on every deploy.
+            #
+            # --remote replaces --project-ref, deprecated and removed in v4.
             supabase functions deploy "$slug" \
-              --project-ref "$PROJECT_REF" \
-              --no-verify-jwt=false
+              --remote="$PROJECT_REF" \
+              --yes \
+              "$JWT"
             echo "::endgroup::"
           done < "$LIST"
 
