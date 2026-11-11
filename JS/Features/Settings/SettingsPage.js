@@ -39,6 +39,9 @@ import { ScanLogsTrimModel } from '../../Models/ScanLogsTrimModel.js';
 import { ScannerSilenceModel } from '../../Models/ScannerSilenceModel.js';
 import { UsageModel } from '../../Models/UsageModel.js';
 import { fmtUsageBytes, fmtPercent } from '../../Utils/usage.js';
+import {
+  scanGrowthRate, projectFull, runwayLabel, growthSeverity, topRelations, deadShare,
+} from '../../Utils/dbGrowth.js';
 import { OFFLINE_THUMB_TARGET, recompressThumbBase64 } from '../../Utils/image.js';
 import { shrinkSoundFile, SOUND_TARGET, MAX_SOUND_SECONDS } from '../../Utils/audio.js';
 import { openConfirmModal } from '../../Components/ConfirmModal.js';
@@ -1329,11 +1332,28 @@ function paintUsage() {
   // the archival and trim panels below rather than finding out at 100%.
   const tone = pct === null ? '' : pct >= 90 ? 'bad' : pct >= 80 ? 'warn' : '';
 
-  const tables = Array.isArray(dbUsage.tables) ? dbUsage.tables : [];
-  const largest = tables.slice(0, 6);
+  const largest = topRelations(dbUsage.tables, 8);
   // Share of the total, because "12.5 MB" means nothing without knowing the
   // database is 35 MB — the ratio is what tells you where to look.
   const shareOf = (n) => (bytes > 0 ? Math.round((Number(n) / bytes) * 100) : null);
+
+  // THE FIGURE THAT PERCENTAGE CANNOT GIVE. Storage is the one Supabase
+  // quota that does not reset at the billing boundary, so 18% reads the
+  // same whether it took six weeks or six years. On 2026-11-11 it had taken
+  // seven weeks. `growth` is absent on a client talking to a project that
+  // has not applied 20261111160000, and scanGrowthRate returns null for it
+  // — which renders as "not enough history" rather than a wrong number.
+  const rate = scanGrowthRate({
+    bytes: dbUsage.growth?.scan_bytes,
+    rows: dbUsage.growth?.scan_rows,
+    firstAt: dbUsage.growth?.first_scan_at,
+    lastAt: dbUsage.growth?.last_scan_at,
+  });
+  const projection = projectFull({
+    databaseBytes: bytes, limitBytes: limit, bytesPerDay: rate?.bytesPerDay,
+  });
+  const severity = growthSeverity(projection.daysRemaining);
+  const growthTone = severity === 'bad' ? ' bad' : severity === 'warn' ? ' warn' : '';
 
   body.innerHTML = `
     <div class="stat-grid">
@@ -1341,23 +1361,45 @@ function paintUsage() {
         <div class="stat-value">${esc(fmtUsageBytes(bytes))}</div>
         <div class="stat-label">Database size${limit ? ` of ${esc(fmtUsageBytes(limit))}${pct === null ? '' : ` (${pct}%)`}` : ''}</div>
       </div>
+      <div class="stat-card${growthTone}">
+        <div class="stat-value">${rate ? `+${esc(fmtUsageBytes(rate.bytesPerDay))}` : '—'}</div>
+        <div class="stat-label">Per day${rate ? ` · ${esc(Math.round(rate.scansPerDay).toLocaleString())} scans` : ''}</div>
+      </div>
+      <div class="stat-card${growthTone}">
+        <div class="stat-value">${esc(runwayLabel(projection.daysRemaining).replace(/^about /, ''))}</div>
+        <div class="stat-label">${projection.fullOn
+          ? `Full around ${esc(fmtTime(projection.fullOn).split(',')[0])}`
+          : 'Storage does not reset monthly'}</div>
+      </div>
     </div>
+    <p class="emp-meta" style="margin-top:10px;">
+      ${rate
+        ? `Projected from scan volume over ${esc(Math.round(rate.spanDays).toLocaleString())} days
+           at ${esc(fmtUsageBytes(rate.bytesPerScan))} a scan — the dominant term, but not the only one.
+           <code>employees.scan_logs</code> also grows until the 180-day trim starts biting and then
+           levels off, and photo thumbnails are flat, so treat this as a floor rather than a forecast.`
+        : `Not enough scan history to project a rate yet. The panel reports the size it can measure
+           rather than extrapolating from a single reading.`}
+    </p>
     ${largest.length ? `
       <p class="emp-meta" style="margin-top:12px;">
-        Largest tables. The total on its own isn't actionable; this is — a table
-        dominating the database is where archival or trimming would actually pay off.
+        Largest relations, across every schema. <b>Dead</b> is the share of rows that are
+        reclaimable — large and reclaimable are different problems, and only the second one
+        is fixed by vacuuming.
       </p>
       <div class="table-scroll" style="margin-top:6px;">
         <table>
-          <thead><tr><th>Table</th><th>Total</th><th>Of which indexes</th><th class="col-shrink">Share</th></tr></thead>
+          <thead><tr><th>Relation</th><th>Total</th><th>Of which indexes</th><th class="col-shrink">Share</th><th class="col-shrink">Dead</th></tr></thead>
           <tbody>
             ${largest.map((t) => {
-              const share = shareOf(t.total_bytes);
+              const share = shareOf(t.totalBytes);
+              const dead = deadShare(t);
               return `<tr>
-                <td class="mono">${esc(t.name)}</td>
-                <td class="mono">${esc(fmtUsageBytes(Number(t.total_bytes)))}</td>
-                <td class="mono">${esc(fmtUsageBytes(Number(t.index_bytes)))}</td>
+                <td class="mono">${t.schema === 'public' ? '' : `<span class="emp-meta">${esc(t.schema)}.</span>`}${esc(t.name)}</td>
+                <td class="mono">${esc(fmtUsageBytes(t.totalBytes))}</td>
+                <td class="mono">${esc(fmtUsageBytes(t.indexBytes))}</td>
                 <td class="mono col-shrink">${share === null ? '—' : `${share}%`}</td>
+                <td class="mono col-shrink${dead !== null && dead >= 20 ? ' warn-text' : ''}">${dead === null ? '—' : `${dead}%`}</td>
               </tr>`;
             }).join('')}
           </tbody>

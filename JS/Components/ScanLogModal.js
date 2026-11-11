@@ -8,6 +8,7 @@ import { openConfirmModal } from './ConfirmModal.js';
 import { dateRangePickerHTML, mountDateRangePicker } from './DateRangePicker.js';
 import { supabase } from '../Core/supabaseClient.js';
 import { EmployeesModel } from '../Models/EmployeesModel.js';
+import { buildHeatmap, intensity, dayLabel, HEATMAP_DAYS, MIN_DAYS_FOR_MEDIAN } from '../Utils/scanHeatmap.js';
 
 // Local (not UTC) yyyy-mm-dd, so it lines up with what fmtTime() displays
 // and with the value an <input type="date"> gives back.
@@ -22,6 +23,47 @@ const localDateKey = (iso) => new Date(iso).toLocaleDateString('en-CA');
 // (needed for the scanner dropdown and for date filtering), only the
 // painted list is capped.
 const RENDER_CAP = 300;
+
+/**
+ * The thirty-day grid above the filters.
+ *
+ * Reads the array that is already here. The list below shows the most
+ * recent RENDER_CAP entries in reverse order, which answers "what happened
+ * on Tuesday" only by scrolling and counting; the grid answers "is this
+ * person's attendance normal" without reading anything. No request, no
+ * column, no migration — see Utils/scanHeatmap.js.
+ */
+function heatmapHTML(logs) {
+  const { days, summary } = buildHeatmap(logs);
+  const cells = days.map((d) => `<i class="hm-cell hm-${d.state} hm-i${intensity(d.count)}" title="${esc(dayLabel(d, { fmtDate: (k) => k }))}"></i>`).join('');
+
+  // What the colours were judged against, stated rather than implied. With
+  // too little history the outlier test did not run at all, and reporting
+  // "0 unusual" as though it had would be the kind of unearned figure this
+  // project refuses elsewhere (see the health drawer's missing denominator).
+  const basis = summary.basis === 'self'
+    ? `Usual day ${esc(summary.medianIn)} → ${esc(summary.medianOut)}`
+    : `Fewer than ${MIN_DAYS_FOR_MEDIAN} closed days — not enough to judge unusual hours`;
+
+  const flags = [
+    summary.openDays ? `<span class="hm-flag bad-text">${summary.openDays} unclosed</span>` : '',
+    summary.basis === 'self' && summary.oddDays ? `<span class="hm-flag warn-text">${summary.oddDays} unusual</span>` : '',
+  ].filter(Boolean).join('');
+
+  return `
+    <div class="hm-wrap">
+      <div class="hm-head">
+        <span>Last ${HEATMAP_DAYS} days</span>
+        <span class="hm-sub">${summary.daysWithScans} active · ${summary.totalScans} scans</span>
+      </div>
+      <div class="hm-grid">${cells}</div>
+      <div class="hm-foot">
+        <span class="hm-sub">${basis}</span>
+        <span class="hm-flags">${flags}</span>
+      </div>
+    </div>
+  `;
+}
 
 export async function openScanLogModal(employeeId, initialDate = '') {
   const token = startModalOpen();
@@ -143,6 +185,7 @@ export async function openScanLogModal(employeeId, initialDate = '') {
 
     bodyEl.className = '';
     bodyEl.innerHTML = `
+      ${heatmapHTML(logs)}
       <div class="filter-row" id="log-filter-row" style="margin-bottom:10px;">
         ${dateRangePickerHTML('log-range', { from: prevFrom, to: prevTo, emptyLabel: 'All dates' })}
         <select id="log-scanner">

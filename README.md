@@ -672,6 +672,54 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-11 (later still) — a 30-day attendance heatmap, and a database panel that shows a slope**
+
+Two features in one branch. Neither adds a request.
+
+**Scan log → 30-day heatmap.** `openScanLogModal()` already downloads an
+employee's entire `scan_logs` array to list it — some carry 1,000+ entries —
+and then paints at most 300 of them in reverse order. The grid draws the
+same array: thirty cells, colour for the day's state, opacity for how busy
+it was. **Zero new requests, zero new columns, no migration.**
+
+> **"Odd hours" is judged against this employee's own median**, not a
+> clock. `shift_rules` is empty and scanners have no department to key it
+> by even when it is not, so a hardcoded 09:00–17:00 would flag an entire
+> night shift as anomalous. Below five closed days the outlier test does
+> not run at all and the panel says so, rather than reporting "0 unusual"
+> as though it had looked. An unclosed day outranks an unusual one — a
+> missing OUT is a data problem someone must fix; an odd hour is an
+> observation.
+
+**Settings → Usage: the question is when, not how much.** Asked for features
+that reduce database size, I measured first, and the measurement killed most
+of what I had proposed — see the Supabase changelog for the table. **92 MB of
+500, 100 dead tuples on `scan_events`, 95 on `employees`,
+`cron.job_run_details` empty.** There is nothing to reclaim. What there is,
+is seven weeks of slope against a ceiling that never resets.
+
+So the panel now shows bytes per day, the projected date it fills, every
+schema rather than only `public`, and dead rows as their own column. The
+projection is deliberately coarse past a couple of months — the slope comes
+from one table over seven weeks, and "412 days" is a precision the input
+does not carry.
+
+**Tests:** 46 added, suite **617 → 663**. Four guards confirmed to fail when
+reverted: hardcoding office hours instead of the per-employee median,
+restoring the `nspname = 'public'` filter, and removing the nullish guard
+that makes an unknown runway read as unknown instead of "about 1 day left".
+
+> `Number(null) === 0`, and zero is finite. That cost a bug in **three**
+> separate places in this one session — unknown durations sorting as "just
+> arrived", a null `scanned_at` bucketing into 1970, and an unknown runway
+> rendering as a one-day emergency. `Number.isFinite` alone is not a null
+> check.
+
+**The migration is not applied.** The client degrades without it: a missing
+`growth` key renders as "not enough history to project" and a missing
+`schema` falls back to `public`, so the panel keeps working rather than
+breaking.
+
 **2026-11-11 (later) — `Invoke-Sql.ps1`, so a VERIFY block can actually be run**
 
 Every migration in this repo ends in a VERIFY block. Running one meant the

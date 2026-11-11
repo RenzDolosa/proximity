@@ -1341,6 +1341,83 @@ the day each entry was written and not maintained since.** Several of them are
 long applied. Probe before believing one.
 
 ### Change log (most recent first)
+**2026-11-11 (later) — the Usage panel could not see most of the database (`20261111160000_database_usage_growth.sql`, NOT applied)**
+
+Asked to find features that would **reduce** database size, with a 500 MB
+ceiling that does not reset at the billing boundary. Measured first, and the
+measurement said not to build most of what had been proposed:
+
+| relation | total | live | dead |
+|---|---|---|---|
+| database | **92 MB of 500** | | |
+| `public.scan_events` | 49 MB | 171,032 | **100** |
+| `public.employees` | 26 MB | 814 | **95** |
+| `auth.refresh_tokens` | 968 kB | 1,993 | 32 |
+| `cron.job_run_details` | 728 kB | **0** | 0 |
+| `net._http_response` | 96 kB | 8 | 4 |
+
+- **There is nothing to reclaim.** 100 dead tuples against 171,032 and 95
+  against 814 — autovacuum is comfortably ahead. The theory that appending
+  to `employees.scan_logs` on every scan would bloat that table, since
+  Postgres cannot append to a jsonb array in place and must rewrite the
+  whole row, is **wrong in practice**: 95 dead rows.
+- **The two tables everyone expects to find unbounded are not.**
+  `cron.job_run_details` holds **zero** live rows despite
+  `check-scanner-silence` running every 15 minutes, and `net._http_response`
+  holds eight. A purge job for either would have been dead code.
+- **Dropping every never-scanned index in `public` recovers ~1.2 MB**, and
+  two of the three are trigram indexes backing employee search.
+- **`raw_payload` is not the problem either** — 28 MB of table across
+  171,032 rows is 164 bytes a row, most of which is tuple overhead and the
+  fixed columns.
+
+**The panel could not have established any of that.** `20261005120000`
+filters `WHERE n.nspname = 'public'`, so the two relations most likely to
+grow unobserved were invisible to it, and `pg_total_relation_size` folds
+dead tuples into one number so "large" and "reclaimable" were the same
+column. It took a hand-written catalog query to find out.
+
+**So the feature is a slope, not a cleanup.** Storage is the one Supabase
+quota that does not reset monthly, which makes "when does this cross 500 MB"
+the only question worth asking — and 18% reads the same whether it took six
+weeks or six years. It took seven weeks.
+
+- Every schema except `pg_catalog`, `information_schema` and `pg_toast`,
+  with the schema name carried through. `pg_toast` is excluded because
+  `pg_total_relation_size` already folds a table's TOAST into its parent,
+  and listing both would double-count `employees`.
+- **Dead rows reported separately from size.** Rows, not bytes: converting
+  assumes dead tuples are as wide as live ones, which for a table whose rows
+  hold a growing jsonb array is the assumption most likely to be wrong.
+- **`growth`** carries the raw inputs — scan bytes, scan rows, first and
+  last `scanned_at`, across the live table **and** the archive. The
+  arithmetic lives in `Utils/dbGrowth.js` where it is unit-tested. Spanning
+  both tables matters: counting only the live one would make the rate appear
+  to drop the first time archival does something, which on a 180-day horizon
+  is March 2027.
+- **No size-history table.** A trend needs two measurements, so one would
+  show nothing for days — and it would mean adding a table to solve a
+  storage problem. `scan_events` already records when it started and how
+  many rows it holds.
+
+**Cost:** the same single admin-only RPC, read on demand, never on a timer.
+`reltuples` comes from the catalog rather than `count(*)`, and
+`min`/`max(scanned_at)` walk `idx_scan_events_scanned_at` from each end — so
+the panel does not read the 171,032 rows it reports on.
+
+**Signature and return type unchanged**, so this is a true `CREATE OR
+REPLACE` and either side can ship first: an older client reads
+`database_bytes`, `database_limit_bytes`, `tables[]` and `measured_at`, all
+still present and unchanged.
+
+**The one lever nobody has pulled.** `archive_old_scan_events(180)` *moves*
+rows between two tables, so it frees nothing — and at seven weeks of data
+neither it nor `trim_employee_scan_logs(180)` has ever deleted a single row.
+The first time either does anything is around **March 2027**. Bounding
+growth needs a horizon past which archived detail is rolled up and deleted,
+and that is a decision about discarding audit history rather than a
+migration someone should write unprompted.
+
 **2026-11-11 — every scan log export was 1,000 rows (`20261111120000_scan_log_export_row_cap.sql`, NOT applied)**
 
 Reported by users as "the export is missing rows". It was missing almost all

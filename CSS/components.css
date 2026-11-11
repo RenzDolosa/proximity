@@ -552,6 +552,37 @@ tr.row-clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2
 .log-row-who{flex:1;min-width:0;}
 .log-row .feed-time{margin-left:auto;white-space:nowrap;padding-left:12px;}
 
+/* Thirty-day attendance grid at the top of the scan log modal.
+   Built from the array the modal already downloaded — see
+   Utils/scanHeatmap.js. Colours carry the day's state; opacity carries how
+   many scans it held, so the two never compete for the same channel. */
+.hm-wrap{border:1px solid var(--border);border-radius:var(--radius);padding:9px 10px;margin-bottom:10px;background:var(--surface);}
+.hm-head,.hm-foot{display:flex;align-items:baseline;gap:8px;font-size:11.5px;}
+.hm-head{font-weight:600;margin-bottom:7px;}
+.hm-foot{margin-top:7px;}
+.hm-sub{color:var(--text-muted);font-size:11px;margin-left:auto;font-weight:400;}
+.hm-foot .hm-sub{margin-left:0;}
+.hm-flags{margin-left:auto;display:flex;gap:8px;}
+.hm-flag{font-size:10.5px;font-family:var(--mono);}
+/* Shared with the Usage panel's dead-row column. Two call sites wanting
+   "this number is the concerning one" is enough to name it once. */
+.warn-text{color:var(--warn);}
+.bad-text{color:var(--bad);}
+/* A fixed 15 columns, so a row is always half the window and the eye can
+   compare week against week. grid-auto-rows keeps the cells square without
+   aspect-ratio, which Safari 14 does not have. */
+.hm-grid{display:grid;grid-template-columns:repeat(15,1fr);gap:3px;}
+.hm-cell{display:block;width:100%;padding-top:100%;border-radius:2px;background:var(--border-soft);}
+.hm-complete{background:var(--accent);}
+.hm-odd{background:var(--warn);}
+.hm-open{background:var(--bad);}
+/* Intensity only dims a day that HAS a state; hm-i0 is the empty day and
+   must stay at full opacity or it disappears against the surface. */
+.hm-complete.hm-i1,.hm-odd.hm-i1,.hm-open.hm-i1{opacity:.4;}
+.hm-complete.hm-i2,.hm-odd.hm-i2,.hm-open.hm-i2{opacity:.6;}
+.hm-complete.hm-i3,.hm-odd.hm-i3,.hm-open.hm-i3{opacity:.8;}
+@media (max-width:520px){.hm-grid{grid-template-columns:repeat(10,1fr);}}
+
 .search-results{max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);margin-top:6px;}
 .search-result-item{padding:8px 10px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border-soft);display:flex;align-items:center;gap:8px;}
 .search-result-item:last-child{border-bottom:none;}
