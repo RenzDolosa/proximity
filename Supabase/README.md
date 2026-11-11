@@ -1341,6 +1341,44 @@ the day each entry was written and not maintained since.** Several of them are
 long applied. Probe before believing one.
 
 ### Change log (most recent first)
+**2026-11-11 (latest) — the tick carries the unread alert count (`20261111180000_tick_carries_unread_alerts.sql`, NOT applied)**
+
+Two independent timers run on a screen left on the Dashboard:
+
+| | interval | per day |
+|---|---|---|
+| `get_dashboard_tick` | 60 s | 1,440 |
+| `get_unread_alert_count` | 600 s | **144** |
+
+Log Ingestion bills one API-gateway line per request whatever the payload
+weighs, so the second timer costs **144 lines a day per open tab** to deliver
+a single integer — on a screen already talking to the server every minute.
+`20261021090000` merged the pulse and the roster for exactly this reason and
+wrote the rationale down; the badge was missed because it lives in the
+sidebar rather than on the page.
+
+One more key on the same object. Egress is unchanged for practical purposes:
+an integer against a payload that already carries the whole roster delta.
+
+- **`SECURITY INVOKER` unchanged.** `get_unread_alert_count()` does its own
+  gating and returns 0 for anyone below manager, so merging it widens
+  nothing — a caller who could run the tick could already run the count, and
+  gets the same answer either way.
+- **Additive.** Same signature, same return type, one new key. A browser on
+  the previous bundle ignores it; a browser on the new bundle against a
+  project without this migration finds `unread_alerts` undefined and keeps
+  polling. Either side can ship first.
+- **The client suppresses by timestamp, not by route.** `alertsBadge.js`
+  records when it was last handed a count and skips its own poll if that is
+  more recent than its interval. A route check would need editing for a
+  second supplier and would freeze the badge if the Dashboard stopped
+  ticking; a timestamp self-heals within one period, which is also what
+  makes the rollback below need no redeploy.
+
+**Verification is step 2 of the VERIFY block**: the value the tick reports
+must equal `get_unread_alert_count()` called directly, or the badge shows a
+different number depending on which page happens to be open.
+
 **2026-11-11 (later) — the Usage panel could not see most of the database (`20261111160000_database_usage_growth.sql`, NOT applied)**
 
 Asked to find features that would **reduce** database size, with a 500 MB

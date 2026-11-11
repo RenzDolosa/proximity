@@ -24,16 +24,16 @@ import { QueryStatsModel } from '../../Models/QueryStatsModel.js';
 import { describeQuery } from '../../Utils/queryLabel.js';
 import { readSummary, resetMeter } from '../../Core/requestLog.js';
 import { shareOfAllowance } from '../../Utils/requestMeter.js';
-import { isFresh, markFetched, invalidate } from '../../Utils/freshness.js';
+import { isFresh, markFetched, invalidate, PAGE_MAX_AGE_MS } from '../../Utils/freshness.js';
 import { AlertChannelsModel } from '../../Models/AlertChannelsModel.js';
 import { ALERT_KINDS } from '../../Utils/alertKinds.js';
 
-// Matches DIRECTORY_MAX_AGE_MS in DirectoryPage: long enough that flicking
-// between sidebar items costs nothing, short enough that another admin's
-// change shows up without a reload. Every panel here also has its own
-// Refresh button, and those call their loader directly rather than going
-// through openGroup(), so an explicit refresh is never suppressed.
-const SETTINGS_MAX_AGE_MS = 60 * 1000;
+// Was a local `60 * 1000` whose comment said it matched DirectoryPage's own
+// local 60 * 1000 — a comment doing a constant's job. Both now read the
+// shared window. Every panel here also has its own Refresh button, and those
+// call their loader directly rather than going through openGroup(), so an
+// explicit refresh is never suppressed.
+const SETTINGS_MAX_AGE_MS = PAGE_MAX_AGE_MS;
 import { ScanArchiveModel } from '../../Models/ScanArchiveModel.js';
 import { ScanLogsTrimModel } from '../../Models/ScanLogsTrimModel.js';
 import { ScannerSilenceModel } from '../../Models/ScannerSilenceModel.js';

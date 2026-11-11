@@ -10,7 +10,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { isFresh, markFetched, invalidate, invalidateAll } from '../JS/Utils/freshness.js';
 
@@ -32,12 +32,25 @@ test('the per-render Set is gone, replaced by a window that outlives a visit', (
   assert.match(settings, /isFresh\(key, SETTINGS_MAX_AGE_MS\)/);
 });
 
-test('Settings reuses the same staleness window as Employee Manager', () => {
-  const s = settings.match(/SETTINGS_MAX_AGE_MS = ([^;]+);/);
-  const d = directory.match(/DIRECTORY_MAX_AGE_MS = ([^;]+);/);
-  assert.ok(s && d);
-  assert.equal(s[1].trim(), d[1].trim(),
-    '"how stale may a screen be" should have one answer in this app, not one per page');
+// Was: compare SETTINGS_MAX_AGE_MS against DIRECTORY_MAX_AGE_MS and require
+// the two literals to match. That enforced the right rule the weak way --
+// two constants kept equal by a test and a comment. There is now one
+// constant, so the rule is enforced by construction and this asserts the
+// stronger thing: nobody declares a second.
+test('"how stale may a screen be" has exactly one answer in this app', () => {
+  assert.match(settings, /SETTINGS_MAX_AGE_MS = PAGE_MAX_AGE_MS/,
+    'Settings must read the shared window, not restate it');
+  assert.ok(!/DIRECTORY_MAX_AGE_MS\s*=\s*\d/.test(directory),
+    'Employee Manager must not declare its own window either');
+
+  const pages = readdirSync(fileURLToPath(new URL('../JS/Features/', import.meta.url)), { recursive: true })
+    .filter((f) => String(f).endsWith('.js'));
+  for (const rel of pages) {
+    const src = code(readFileSync(fileURLToPath(new URL(`../JS/Features/${rel}`, import.meta.url)), 'utf8'));
+    const own = src.match(/const \w*MAX_AGE_MS\s*=\s*(\d[^;]*);/);
+    assert.equal(own, null,
+      `${rel} declares its own staleness window (${own?.[1]?.trim()}) instead of importing PAGE_MAX_AGE_MS`);
+  }
 });
 
 // `pending` and the toggle listener can both reach the same group inside one

@@ -20,6 +20,7 @@ import { renderPagination } from '../../Components/Pagination.js';
 import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
 import { AttendanceModel } from '../../Models/AttendanceModel.js';
 import { reportError } from '../../Utils/userError.js';
+import { isFresh, markFetched, PAGE_MAX_AGE_MS } from '../../Utils/freshness.js';
 import { openScanLogModal } from '../../Components/ScanLogModal.js';
 import { dateRangePickerHTML, mountDateRangePicker } from '../../Components/DateRangePicker.js';
 import {
@@ -45,6 +46,14 @@ const SEARCH_DEBOUNCE_MS = 350;
 // PostgREST refuses more than 1000 rows per response whatever we ask for, so
 // the export pages at that size rather than pretending one request can do it.
 const EXPORT_PAGE_SIZE = 1000;
+
+// THE WHOLE QUERY IS THE KEY. This page fires two requests a visit (report +
+// summary) and had no freshness gate at all, so the router refetched both on
+// every nav click. Keying on the query rather than invalidating around it
+// means a filter change misses naturally — a different question gets a
+// different timestamp — and paging back to a page already seen inside the
+// window costs nothing.
+const attendanceKey = () => `attendance:${JSON.stringify(currentQuery())}:${page}:${pageSize}`;
 
 let range = defaultRange();
 let userSetRange = false;
@@ -133,6 +142,12 @@ async function load({ force = false } = {}) {
   const problem = validateRange(range.from, range.to);
   if (problem) { showError(problem); return; }
   showError('');
+
+  // Safe to return before the bookkeeping below: the range is part of the
+  // key, so a fresh hit means the range has not moved and `loadedRange` is
+  // already correct. "Run report" and the open-punch modal both force.
+  if (!force && loaded && isFresh(attendanceKey(), PAGE_MAX_AGE_MS)) { paintBody(); return; }
+
   const rangeChanged = loadedRange?.from !== range.from || loadedRange?.to !== range.to;
   if (rangeChanged) departments = [];
   loadedRange = { ...range };
@@ -164,6 +179,9 @@ async function load({ force = false } = {}) {
   if (deptRes && !deptRes.error) {
     departments = (deptRes.data || []).map((r) => r.department).filter(Boolean);
   }
+  // Marked only past the error return above, so a failed report is retried on
+  // the next visit rather than held on screen for the rest of the window.
+  markFetched(attendanceKey());
   loaded = true;
   paintDepartments();
   paintBody();

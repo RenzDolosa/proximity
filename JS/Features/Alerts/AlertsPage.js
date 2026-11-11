@@ -9,6 +9,7 @@ import { isAdminOrManager } from '../../Core/state.js';
 import { AlertsModel } from '../../Models/AlertsModel.js';
 import { severityBadgeClass, alertKindLabel } from '../../Utils/dashboard.js';
 import { refreshAlertsBadge } from '../../Core/alertsBadge.js';
+import { isFresh, markFetched, invalidate, PAGE_MAX_AGE_MS } from '../../Utils/freshness.js';
 
 let showAcked = false;
 let requestSeq = 0;
@@ -16,6 +17,15 @@ let rowsCache = [];  // the last successfully loaded page, so a nav-away/back
                       // re-render can paint instantly instead of flashing
                       // "Loading…" over content that's still perfectly valid
 let loaded = false;  // distinguishes "never fetched" from "fetched, zero rows"
+
+// Keyed on the toggle, because "unread only" and "everything" are different
+// questions. Acknowledging invalidates both, since an ack changes what each
+// one answers.
+const alertsKey = () => `alerts:${showAcked ? 'all' : 'unread'}`;
+function invalidateAlerts() {
+  invalidate('alerts:all');
+  invalidate('alerts:unread');
+}
 
 export async function renderAlerts() {
   const content = $('#content');
@@ -35,7 +45,10 @@ export async function renderAlerts() {
     <div class="table-scroll"><div id="al-body">${loaded ? '' : 'Loading…'}</div></div>
   `;
   $('#al-show-acked').addEventListener('change', (e) => { showAcked = e.target.checked; load(); });
-  $('#al-refresh').addEventListener('click', load);
+  // Explicit Refresh forces. It is the escape hatch that makes caching the
+  // render safe — a manager who thinks the list is behind must never be told
+  // to wait a minute.
+  $('#al-refresh').addEventListener('click', () => load({ force: true }));
   $('#al-ack-all').addEventListener('click', ackAll);
   // Same stale-while-revalidate pattern as Attendance/Dashboard: paint the
   // last loaded page immediately (so re-opening this tab from the sidebar
@@ -64,13 +77,15 @@ function detailText(detail) {
     .join(' · ');
 }
 
-async function load() {
+async function load({ force = false } = {}) {
+  if (!force && loaded && isFresh(alertsKey(), PAGE_MAX_AGE_MS)) { paint(rowsCache); return; }
   const seq = ++requestSeq;
   const { data, error } = await AlertsModel.list({ includeAcknowledged: showAcked });
   if (seq !== requestSeq) return;
   if (error) { showError(error.message); if (!loaded) { const b = $('#al-body'); if (b) b.innerHTML = ''; } return; }
   showError('');
   rowsCache = data || [];
+  markFetched(alertsKey());
   loaded = true;
   paint(rowsCache);
 }
@@ -101,6 +116,7 @@ function paint(rows) {
     b.disabled = true;
     const { error: e } = await AlertsModel.acknowledge(b.dataset.ack);
     if (e) { toast(e.message, 'error'); b.disabled = false; return; }
+    invalidateAlerts();
     load();
   }));
 }
@@ -111,5 +127,6 @@ async function ackAll() {
   const { data, error } = await AlertsModel.acknowledgeAll();
   if (error) { toast(error.message, 'error'); btn.disabled = false; return; }
   toast(`Acknowledged ${data} alert${data === 1 ? '' : 's'}.`);
+  invalidateAlerts();
   load();
 }

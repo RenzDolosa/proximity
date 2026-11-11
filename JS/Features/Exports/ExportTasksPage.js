@@ -25,6 +25,7 @@ import { renderPagination } from '../../Components/Pagination.js';
 import { openExportScanLogsModal } from '../../Components/ExportScanLogsModal.js';
 import { toast } from '../../Utils/toast.js';
 import { reportError } from '../../Utils/userError.js';
+import { isFresh, markFetched, PAGE_MAX_AGE_MS } from '../../Utils/freshness.js';
 
 const MODULE_LABEL = Object.freeze({
   scan_logs: 'Scan logs',
@@ -44,6 +45,11 @@ let total = 0;
 let page = 1;
 let pageSize = EXPORT_TASKS_PAGE_SIZE;
 let loaded = false;
+
+// The page number is IN the key, not invalidated around. Paging to 2 and back
+// to 1 asks a different question of the server each time, so each answer gets
+// its own timestamp and the gate does the right thing with no bookkeeping.
+const exportsKey = () => `exports:${page}:${pageSize}`;
 
 export async function renderExportTasks() {
   const content = $('#content');
@@ -69,9 +75,11 @@ export async function renderExportTasks() {
 
   $('#et-new').addEventListener('click', async () => {
     const { confirmed } = await openExportScanLogsModal();
-    if (confirmed) { page = 1; await load(); }
+    // force: an export just wrote two rows to this very table, so the cached
+    // page is known-stale the instant the modal resolves.
+    if (confirmed) { page = 1; await load({ force: true }); }
   });
-  $('#et-refresh').addEventListener('click', () => load());
+  $('#et-refresh').addEventListener('click', () => load({ force: true }));
 
   // Stale-while-revalidate: paint from cache immediately rather than
   // flashing "Loading…" on a revisit — same pattern as AuditLogPage.js.
@@ -79,7 +87,11 @@ export async function renderExportTasks() {
   await load();
 }
 
-async function load() {
+async function load({ force = false } = {}) {
+  // Refresh is right there in the toolbar, which is what makes a cached
+  // render safe: anyone who suspects the list is behind has a one-click
+  // answer that always goes to the server.
+  if (!force && loaded && isFresh(exportsKey(), PAGE_MAX_AGE_MS)) { paint(); return; }
   const { data, error } = await ExportTasksModel.list({
     limit: pageSize,
     offset: (page - 1) * pageSize,
@@ -95,6 +107,7 @@ async function load() {
   // RPC. Zero rows means zero total — there is no row to read it off, and
   // Number(undefined) would be NaN.
   total = rows.length ? Number(rows[0].total_count) || 0 : 0;
+  markFetched(exportsKey());
   loaded = true;
   paint();
 }
@@ -175,5 +188,7 @@ async function rerun(id) {
   if (!row) return;
   if (!row.is_mine) { toast('You can only re-run your own exports.', 'error'); return; }
   const { confirmed } = await openExportScanLogsModal();
-  if (confirmed) { page = 1; await load(); }
+  // Same reason as the New button: a completed re-run has just written its
+  // own ledger rows, so the cached page is stale by construction.
+  if (confirmed) { page = 1; await load({ force: true }); }
 }

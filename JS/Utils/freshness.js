@@ -17,6 +17,23 @@
 // the pages keep whatever shape they already had.
 const fetchedAt = new Map();
 
+/**
+ * The window every list page uses.
+ *
+ * ONE CONSTANT, because there were already two. DirectoryPage declared
+ * `DIRECTORY_MAX_AGE_MS = 60 * 1000` and SettingsPage then declared
+ * `SETTINGS_MAX_AGE_MS = 60 * 1000` with the comment "Matches
+ * DIRECTORY_MAX_AGE_MS" — which is a comment doing a constant's job, and the
+ * two were one edit away from disagreeing. Seven more pages adopting the
+ * pattern would have been seven more copies.
+ *
+ * 60 seconds is long enough that flicking between sidebar items costs
+ * nothing, and short enough that nobody reasons about staleness: a minute is
+ * below the threshold at which someone notices a list is behind, and every
+ * page keeps an explicit Refresh that forces regardless.
+ */
+export const PAGE_MAX_AGE_MS = 60 * 1000;
+
 export function isFresh(key, maxAgeMs, now = Date.now()) {
   const at = fetchedAt.get(key);
   if (at === undefined) return false;

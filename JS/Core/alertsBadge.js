@@ -32,14 +32,52 @@ const POLL_MS = 600000;
 let timer = null;
 let visibilityHandler = null;
 
+// When something OTHER than this module last supplied a count. The Dashboard
+// tick carries `unread_alerts`, so on a screen left on the Dashboard the
+// number is already arriving every 60 seconds and this module's own poll is
+// pure duplication — 144 requests and 144 log lines a day for an integer
+// that was in the last response.
+//
+// A timestamp rather than a route check, deliberately. Coupling this to
+// `appState.route === 'dashboard'` would mean a second supplier later has to
+// edit this file too, and a Dashboard that stops ticking (an error, a
+// deploy ahead of its migration) would leave the badge frozen with nothing
+// noticing. Asking "has anyone given me a count more recently than my own
+// interval would have?" needs no knowledge of who, and self-heals within one
+// period when the answer becomes no.
+let suppliedAt = 0;
+
+function paintBadge(count) {
+  const el = $('#alerts-badge');
+  if (!el) return;
+  const text = fmtBadgeCount(Number(count));
+  el.textContent = text;
+  el.classList.toggle('hidden', !text);
+}
+
+/**
+ * Paint a count someone else already fetched.
+ *
+ * Costs nothing: the caller had the number in a response it was making
+ * anyway. See DashboardPage's tick handler.
+ */
+export function setAlertsBadgeCount(count) {
+  if (!Number.isFinite(Number(count))) return;
+  suppliedAt = Date.now();
+  paintBadge(count);
+}
+
+/** True when an external supplier has covered this interval already. */
+function recentlySupplied(now = Date.now()) {
+  return suppliedAt > 0 && now - suppliedAt < POLL_MS;
+}
+
 export async function refreshAlertsBadge() {
   const el = $('#alerts-badge');
   if (!el) return;
   const { data, error } = await AlertsModel.unreadCount();
   if (error) return; // a badge that can't refresh just keeps its last value
-  const text = fmtBadgeCount(Number(data));
-  el.textContent = text;
-  el.classList.toggle('hidden', !text);
+  paintBadge(data);
 }
 
 export function startAlertsBadge() {
@@ -53,15 +91,22 @@ export function startAlertsBadge() {
   // up the moment the tab is looked at again, so it's never stale on screen.
   timer = setInterval(() => {
     if (document.hidden) return;
+    if (recentlySupplied()) return;
     refreshAlertsBadge();
   }, POLL_MS);
-  visibilityHandler = () => { if (!document.hidden) refreshAlertsBadge(); };
+  visibilityHandler = () => {
+    if (document.hidden || recentlySupplied()) return;
+    refreshAlertsBadge();
+  };
   document.addEventListener('visibilitychange', visibilityHandler);
 }
 
 export function stopAlertsBadge() {
   clearInterval(timer);
   timer = null;
+  // Cleared on sign-out: the next account's first poll must not be
+  // suppressed by a count that belonged to the previous one.
+  suppliedAt = 0;
   if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
   visibilityHandler = null;
 }
