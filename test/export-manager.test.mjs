@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   EXPORT_PAGE_SIZE, EXPORT_ROW_CEILING, newExportState, appendPage,
-  nextCursor, isFinalPage, exportProgressLabel, hitRowCeiling,
+  nextCursor, isFinalPage, readPage, exportProgressLabel, hitRowCeiling,
 } from '../JS/Utils/exportChunking.js';
 import { canViewExportTasks } from '../JS/Core/accessControl.js';
 
@@ -67,6 +67,116 @@ test('a full page is not assumed to be the last one', () => {
 test('a missing page reads as the end rather than throwing', () => {
   assert.equal(isFinalPage(null, 10), true);
   assert.equal(isFinalPage(undefined, 10), true);
+});
+
+// ---- the 1,000-row cap, and why the page size must come from the server ----
+//
+// Reported 2026-11-11 as "the scan log export is missing rows". Every export
+// held exactly 1,000: PostgREST's db-max-rows truncated each page after the
+// function's own LIMIT, the loop compared 1,000 against the 10,000 it had
+// ASKED for, and `1000 < 10000` read as end-of-data. One page, then stop.
+//
+// isFinalPage() was never wrong. It was fed a number the server had no part
+// in choosing. These tests pin the correction: compare against what the
+// response says, and when the response cannot say, only an empty page ends
+// the walk.
+
+test('a truncated page is no longer mistaken for the last one', () => {
+  // The exact failing case: asked for 10,000, server honoured 1,000.
+  const page = new Array(1000).fill(row('x', 'y'));
+  assert.equal(isFinalPage(page, EXPORT_PAGE_SIZE), true,
+    'this is the assumption that broke — kept here so the fix below is '
+    + 'visibly doing something');
+  assert.equal(readPage({ limit: 1000, rows: page }, EXPORT_PAGE_SIZE).final, false,
+    'against the limit the server reports, a full page is a full page');
+});
+
+test('a short page is still the end when the server sets the size', () => {
+  const page = new Array(999).fill(row('x', 'y'));
+  assert.equal(readPage({ limit: 1000, rows: page }, EXPORT_PAGE_SIZE).final, true);
+});
+
+test('an empty page ends the walk whatever the limit says', () => {
+  assert.equal(readPage({ limit: 10000, rows: [] }, EXPORT_PAGE_SIZE).final, true);
+});
+
+test('the rows come back untouched', () => {
+  const rows = [row('a', '3'), row('b', '2')];
+  assert.deepEqual(readPage({ limit: 10000, rows }, EXPORT_PAGE_SIZE).rows, rows);
+});
+
+// A bare array means the RETURNS TABLE version is still live — the frontend
+// shipped before 20261111120000 was applied. The real cap is unknowable from
+// here, so the only safe stop condition is an empty page. Costs one extra
+// request; cannot truncate.
+test('against the old set-returning RPC, only an empty page stops the walk', () => {
+  assert.equal(readPage(new Array(1000).fill(row('x', 'y')), EXPORT_PAGE_SIZE).final, false);
+  // Even a page far shorter than any plausible cap keeps going, because
+  // "short" and "capped" are indistinguishable without the server's number.
+  assert.equal(readPage([row('a', '1')], EXPORT_PAGE_SIZE).final, false);
+  assert.equal(readPage([], EXPORT_PAGE_SIZE).final, true);
+});
+
+test('a missing or malformed response reads as the end rather than throwing', () => {
+  assert.deepEqual(readPage(null, EXPORT_PAGE_SIZE), { rows: [], final: true });
+  assert.deepEqual(readPage(undefined, EXPORT_PAGE_SIZE), { rows: [], final: true });
+  assert.deepEqual(readPage({ limit: 10000 }, EXPORT_PAGE_SIZE), { rows: [], final: true });
+});
+
+// Number(null) and Number('') are both 0, and 0 is finite. A limit that fell
+// through as 0 would make `rows.length < 0` false for every page — or, with
+// the comparison the other way round, make every page short and stop the
+// export on page one, which is the bug all over again.
+test('a limit of zero or null falls back to what was asked for', () => {
+  const full = new Array(EXPORT_PAGE_SIZE).fill(row('x', 'y'));
+  for (const limit of [0, null, '', undefined, -1, 'lots']) {
+    assert.equal(readPage({ limit, rows: full }, EXPORT_PAGE_SIZE).final, false,
+      `limit ${JSON.stringify(limit)} must not end the walk on a full page`);
+  }
+  assert.equal(readPage({ limit: null, rows: [row('a', '1')] }, EXPORT_PAGE_SIZE).final, true);
+});
+
+// The walk itself, not just the predicate. Four pages of 1,000 against a
+// client that asked for 10,000 — the production shape — must yield 3,500
+// rows, not 1,000.
+test('the export walks every page of a capped server', () => {
+  const all = Array.from({ length: 3500 }, (_, i) => row(`id-${i}`, `t-${i}`));
+  const state = newExportState();
+  let at = 0;
+  for (;;) {
+    const page = all.slice(at, at + 1000);
+    at += page.length;
+    const { rows, final } = readPage({ limit: 1000, rows: page }, EXPORT_PAGE_SIZE);
+    appendPage(state, rows);
+    if (final) break;
+    assert.ok(nextCursor(rows), 'a full page must yield a cursor');
+  }
+  assert.equal(state.rows.length, 3500);
+});
+
+// A source assertion: the pure helpers above can be right while the one place
+// that matters still compares against its own page size.
+test('the export loop uses the server-reported size, not its own', () => {
+  const src = js('Components/ExportScanLogsModal.js');
+  assert.ok(/const \{ rows, final \} = readPage\(/.test(src),
+    'fetchAllScanLogs must take `final` from readPage');
+  assert.ok(!/isFinalPage\(/.test(src),
+    'comparing against EXPORT_PAGE_SIZE in the loop is what capped every '
+    + 'export at 1,000 rows');
+});
+
+// Correct is not the same as cheap. Against the old set-returning RPC, asking
+// for 10,000 means the database computes 9,000 rows a page that PostgREST
+// throws away — ten times the work, with the cursor advancing only by what
+// arrives. The walk is right either way; this keeps it from being wasteful
+// while the migration is outstanding.
+test('the loop stops over-asking once it sees the uncapped shape', () => {
+  const src = js('Components/ExportScanLogsModal.js');
+  assert.ok(/if \(Array\.isArray\(data\)\) limit = POSTGREST_MAX_ROWS;/.test(src),
+    'a bare array means the old RPC is still live and the page size is 1,000 '
+    + 'whatever we ask for');
+  assert.ok(/limit: limit|from, to, cursor, limit,/.test(src),
+    'the adjusted limit must be the one actually sent on the next request');
 });
 
 // ---- the dedupe ----

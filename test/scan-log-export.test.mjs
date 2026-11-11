@@ -201,10 +201,81 @@ test('a client cannot ask for a page big enough to time out', () => {
 
 test('the paged function returns the id its own cursor needs', () => {
   const { body } = latestDefinition('get_scan_events_page');
-  const head = body.slice(0, body.indexOf('LANGUAGE plpgsql'));
-  assert.ok(/RETURNS TABLE\(\s*id uuid/i.test(head),
+  assert.ok(/select\s+c\.id,/i.test(body),
     'without id in the output the client cannot build the next cursor — which '
     + 'is why this is a new function rather than a changed one');
+});
+
+// ---- the 1,000-row cap (20261111120000) ----
+//
+// THE BUG. PostgREST enforces db-max-rows (1000 here, set deliberately) on
+// every response, after the function's own LIMIT and without supabase-js
+// surfacing anything. A set-returning RPC asked for 10,000 therefore handed
+// back 1,000, the client read `1000 < 10000` as "short page = end of data",
+// and five consecutive exports finished after one page. Returning a single
+// jsonb value is what puts the page size back under this function's control:
+// db-max-rows counts ROWS, and one jsonb value is one row.
+
+test('the paged export returns one jsonb value, not a set', () => {
+  const { body } = latestDefinition('get_scan_events_page');
+  const head = body.slice(0, body.indexOf('LANGUAGE plpgsql'));
+  assert.ok(/RETURNS\s+jsonb/i.test(head),
+    'RETURNS TABLE / SETOF puts this back under PostgREST db-max-rows, which '
+    + 'silently truncates every page to 1,000 rows');
+  assert.ok(!/RETURNS\s+TABLE/i.test(head), 'the set-returning shape is the capped one');
+});
+
+// The client must compare a page's length against the size the SERVER used.
+// Comparing against the size it asked for is the exact assumption db-max-rows
+// invalidated.
+test('the page reports the limit it actually applied', () => {
+  const { body } = latestDefinition('get_scan_events_page');
+  assert.ok(/jsonb_build_object\(\s*'limit',\s*v_limit/i.test(body),
+    "the response must carry the server's own page size, not just the rows");
+  assert.ok(/'rows',\s*coalesce\(/i.test(body),
+    'jsonb_agg over zero rows is NULL, not [] — an uncoalesced last page '
+    + 'reaches the client as a malformed response rather than an empty one');
+});
+
+// The cursor is built from the LAST element of the array. An ORDER BY on the
+// outer select orders the single aggregated row, which is a no-op, so the
+// array would come back in join order and the next page would start from an
+// arbitrary row — skipping everything in between, silently.
+test('the aggregate orders inside itself, so the cursor means something', () => {
+  const { body } = latestDefinition('get_scan_events_page');
+  // `[^)]*` is not enough: the aggregate's own argument is `to_jsonb(p)`, so
+  // a negated-paren class stops at the inner close and never reaches the
+  // ORDER BY. The inner call is matched explicitly instead.
+  assert.ok(
+    /jsonb_agg\(\s*to_jsonb\([^)]*\)\s*order by\s*\w+\.scanned_at\s+desc\s*,\s*\w+\.id\s+desc\s*\)/i
+      .test(body),
+    'the ORDER BY must be inside jsonb_agg, not on the select that wraps it');
+});
+
+// A return type cannot change under CREATE OR REPLACE ("cannot change return
+// type of existing function"). Without the DROP the migration fails outright;
+// with a DROP but a changed argument list it would leave a stale overload.
+test('the row-cap migration drops the set-returning version first', () => {
+  const sql = code(read('20261111120000_scan_log_export_row_cap.sql'));
+  const drop = sql.search(/DROP\s+FUNCTION\s+IF\s+EXISTS\s+public\.get_scan_events_page/i);
+  const create = sql.search(/CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.get_scan_events_page/i);
+  assert.ok(drop !== -1, 'a return type change needs an explicit DROP');
+  assert.ok(create > drop, 'the DROP must come first');
+  // Same five arguments, so nothing that resolved to the old function becomes
+  // ambiguous against a leftover overload.
+  const args = (src) => (src.match(/get_scan_events_page\(([^)]*)\)/) || [])[1]
+    ?.replace(/\s+/g, ' ').trim();
+  assert.equal(args(sql), 'timestamptz, timestamptz, timestamptz, uuid, integer');
+});
+
+// The DROP takes the ACL with it, so the grants are not optional boilerplate
+// here the way they are after a true CREATE OR REPLACE.
+test('the grants are restated after the drop', () => {
+  const sql = code(read('20261111120000_scan_log_export_row_cap.sql'));
+  assert.ok(/REVOKE ALL ON FUNCTION public\.get_scan_events_page[^;]*FROM PUBLIC/i.test(sql),
+    'a dropped function loses its ACL and falls back to EXECUTE for PUBLIC');
+  assert.ok(/REVOKE ALL ON FUNCTION public\.get_scan_events_page[^;]*FROM anon/i.test(sql));
+  assert.ok(/GRANT EXECUTE ON FUNCTION public\.get_scan_events_page[^;]*TO authenticated/i.test(sql));
 });
 
 // The two export functions resolve direction the same way, and must not

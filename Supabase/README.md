@@ -1341,6 +1341,74 @@ the day each entry was written and not maintained since.** Several of them are
 long applied. Probe before believing one.
 
 ### Change log (most recent first)
+**2026-11-11 — every scan log export was 1,000 rows (`20261111120000_scan_log_export_row_cap.sql`, NOT applied)**
+
+Reported by users as "the export is missing rows". It was missing almost all
+of them: against the **150,504** rows measured on 2026-11-06, a completed
+"export all" contained **1,000** — about **0.7%** — and said *Finished*.
+
+**The cause is not in the SQL.** PostgREST enforces `db-max-rows` on every
+response, and this project sets it to **1000** deliberately (see the
+`pgrst.db_max_rows` note earlier in this file). It is applied **after** the
+function's own `LIMIT`, and it is silent to the caller — a 206 with a
+`Content-Range` header, which `supabase-js` does not surface. So the paged
+export dead-ended on page one:
+
+1. the client asks `get_scan_events_page` for 10,000 rows
+2. the function computes 10,000
+3. PostgREST returns 1,000
+4. the client reads `1000 < 10000` as "short page = end of data" and stops
+
+The ledger shows it plainly in hindsight: five runs, five different date
+ranges, `row_count` of exactly **1000** every time.
+
+**Why it was missed.** The cap was already known here three times over —
+`Utils/rowCap.js` names it, `20261008160000` was written about it, and the
+Attendance export sets its page size to exactly 1000 with the comment
+*"PostgREST refuses more than 1000 rows per response whatever we ask for"*.
+The scan-log export was written with a page size of 10,000 and a header
+comment claiming pages of 10,000 never approach the statement timeout. Those
+pages never existed. **The 2026-11-06 entry below — "`get_scan_events_page()`
+stops when a page comes back short, so 'all' means all" — was wrong when it
+was written.**
+
+**The fix: return one row instead of many.** `db-max-rows` caps the number of
+**rows** in a response. `RETURNS TABLE`/`SETOF` is a set and gets capped; a
+scalar `jsonb` is one row and cannot be. The page size goes back under the
+function's control — clamped at 25,000, and reviewable in a diff.
+
+- **The response states its own page size:** `{"limit": n, "rows": [...]}`.
+  The client compares against the limit the **server** reports, never the one
+  it asked for. That substitution is the actual bug, and the only durable
+  guard against it is for the number to come from the side that applied it.
+- **Raising `db-max-rows` was the alternative, and was rejected twice over.**
+  It would lift the ceiling on every table, view and RPC in the project to
+  serve one admin-gated export, and it lives only in the dashboard — the
+  class of setting this project already lost seven weeks to ("Allow new users
+  to sign up").
+- **`DROP` then recreate**, because a return type cannot change under `CREATE
+  OR REPLACE`. The argument list is byte-identical, so no stale overload
+  survives and no call site becomes ambiguous. The grants are restated — the
+  `DROP` takes the ACL with it, and the fallback is `EXECUTE` to `PUBLIC` on
+  a `SECURITY DEFINER` function that exports everyone's scan history.
+- **Either order is safe.** `Utils/exportChunking.js` reads both shapes. Given
+  a bare array — the old definition, still live if the frontend ships first —
+  only an *empty* page ends the walk, since the real cap is unknowable from
+  the client. That costs one extra request and cannot truncate.
+
+**Cost.** Egress: unchanged to the byte — the same rows cross the wire, and
+`jsonb_agg` emits the keys PostgREST would have. Log ingestion: **down**. A
+full export is **16 requests** at 10,000 a page, against the 151 it would take
+at 1,000 — and against the 1 it has been taking while returning 0.7% of the
+data.
+
+**Not verified against a database** — no local Postgres here. 14 source and
+unit assertions, and both load-bearing guards were confirmed to fail when the
+fix is reverted: restoring `RETURNS TABLE`, and comparing against
+`EXPORT_PAGE_SIZE` in the export loop. **Step 3 of the VERIFY block in the
+migration is the one that matters** — it asks for a 5,000-row page and
+asserts it gets 5,000, which is exactly what the old definition could not do.
+
 **2026-11-10 — scanner silence hours, alert channels, and the notify-alert push (NOT applied)**
 
 Six migrations, applied in this order:
@@ -1711,6 +1779,11 @@ who ran it.
   `get_scan_events_page()` stops when a page comes back short, so "all" means
   all. At that size the export is **16 requests**, and the 500,000 ceiling
   **reports** rather than truncates.
+  > **Wrong when written — corrected 2026-11-11.** "Stops when a page comes
+  > back short" was the bug, not the fix: PostgREST's `db-max-rows` made
+  > **every** page come back short at 1,000 rows, so the export stopped on
+  > page one and handed over 1,000 of 150,504. It was never 16 requests. See
+  > the 2026-11-11 entry.
 - **Keyset, never `OFFSET`.** An `OFFSET` page re-walks and discards every
   row before it, so page 500 costs 500 times page 1 and the end of a large
   export reaches the same statement timeout from the other direction. The
