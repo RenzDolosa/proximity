@@ -118,12 +118,40 @@ supabase secrets set VIBER_AUTH_TOKEN="<from partners.viber.com>"
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically.
 
 The **same** `NOTIFY_ALERT_SECRET` value goes into Vault so the trigger can
-send it:
+send it.
+
+> `vault.create_secret()` **throws on a duplicate name** rather than
+> updating — `23505 duplicate key value violates unique constraint
+> "secrets_name_idx"`. Worse, with both calls in one batch the failure of the
+> first aborts the second, so a retry leaves you with the URL set and the
+> secret missing. Use the idempotent form:
 
 ```sql
-select vault.create_secret('https://<ref>.supabase.co/functions/v1/notify-alert', 'notify_alert_url');
-select vault.create_secret('<the same long random string>', 'notify_alert_secret');
+do $$
+declare
+  v_url    text := 'https://<ref>.supabase.co/functions/v1/notify-alert';
+  v_secret text := '<the same long random string>';
+  v_id uuid;
+begin
+  select id into v_id from vault.secrets where name = 'notify_alert_url';
+  if v_id is null then perform vault.create_secret(v_url, 'notify_alert_url');
+  else perform vault.update_secret(v_id, v_url); end if;
+
+  select id into v_id from vault.secrets where name = 'notify_alert_secret';
+  if v_id is null then perform vault.create_secret(v_secret, 'notify_alert_secret');
+  else perform vault.update_secret(v_id, v_secret); end if;
+end $$;
 ```
+
+Verify — the URL is safe to print, the secret is not:
+
+```sql
+select name, updated_at from vault.secrets where name like 'notify_alert%';
+select decrypted_secret from vault.decrypted_secrets where name = 'notify_alert_url';
+```
+
+**Do not save that snippet.** The secret sits in the statement text and lands
+in the SQL Editor's history; clear the tab once it has run.
 
 ## Setting up Viber
 

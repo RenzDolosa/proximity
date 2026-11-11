@@ -13,6 +13,12 @@
 --   select vault.create_secret('https://<ref>.supabase.co/functions/v1/notify-alert', 'notify_alert_url');
 --   select vault.create_secret('<a long random string>', 'notify_alert_secret');
 --
+-- Those two statements are NOT re-runnable: create_secret throws 23505 on a
+-- name that already exists, and with both in one batch the first failing
+-- aborts the second -- leaving the URL set and the secret missing, which
+-- presents as the trigger silently doing nothing. The idempotent
+-- create-or-update form is in functions/notify-alert/README.md.
+--
 -- The same random string goes into the function's own secrets as
 -- NOTIFY_ALERT_SECRET (supabase secrets set), and notify-alert refuses any
 -- request whose x-notify-secret header does not match it.
