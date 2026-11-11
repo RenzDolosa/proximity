@@ -19,6 +19,7 @@ import { openScanDetailsModal } from '../../Components/ScanDetailsModal.js';
 import { canDrillDown } from '../../Utils/scanDetails.js';
 import { statusDotHTML, STATUS_DOT_HEADER } from '../../Components/StatusDot.js';
 import { scannerState, SCANNER_STATE_LABEL } from '../../Utils/dashboard.js';
+import { isFresh, markFetched, PAGE_MAX_AGE_MS } from '../../Utils/freshness.js';
 
 const RANGE_OPTIONS = [7, 14, 30, 90];
 
@@ -26,6 +27,11 @@ let selectedDays = 7;
 let stats = null; // { summary, by_scanner, daily } once loaded, else null
 let statsError = null;
 let loaded = false; // distinguishes "never fetched yet" from "fetched, empty window"
+
+// Keyed on the range, so clicking 7d → 30d → 7d within the minute refetches
+// once rather than three times — and so a range never shows another range's
+// numbers. Read-only page: nothing here writes, so nothing invalidates.
+const analyticsKey = () => `analytics:${selectedDays}`;
 
 export async function renderAnalytics() {
   const content = $('#content');
@@ -76,9 +82,18 @@ function onRangeClick(e) {
 }
 
 async function loadStats() {
+  // `stats` already holds this range's numbers and they are under a minute
+  // old, so the paint below is the whole job. The guard needs `stats` as well
+  // as the timestamp: a range whose fetch errored marked nothing, but a
+  // range that returned null data would otherwise paint an empty page from
+  // a fresh key.
+  if (stats && isFresh(analyticsKey(), PAGE_MAX_AGE_MS)) { paintBody(); return; }
   const { data, error } = await ScannerStatsModel.get(selectedDays);
   statsError = error ? error.message : null;
   stats = error ? null : data;
+  // Only a successful fetch is worth remembering. Marking on an error would
+  // hold the failure on screen for a minute with no way to retry but waiting.
+  if (!error) markFetched(analyticsKey());
   loaded = true;
   paintBody();
 }

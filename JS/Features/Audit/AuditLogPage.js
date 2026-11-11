@@ -16,6 +16,13 @@ import { isAdmin } from '../../Core/state.js';
 import { AuditLogModel } from '../../Models/AuditLogModel.js';
 import { renderPagination } from '../../Components/Pagination.js';
 import { truncation } from '../../Utils/rowCap.js';
+import { isFresh, markFetched, PAGE_MAX_AGE_MS } from '../../Utils/freshness.js';
+
+// No invalidate() anywhere in this file, and that is correct rather than an
+// omission: audit_log is append-only and this page cannot write to it. The
+// only way a row appears is an action taken elsewhere, and a minute's delay
+// in seeing it is the same delay the rest of the app accepts.
+const AUDIT_KEY = 'audit';
 
 let rowsCache = [];      // newest AUDIT_PAGE_LIMIT rows, not necessarily all of them
 let totalRows = null;    // true count of audit_log, or null if the count failed
@@ -39,6 +46,10 @@ export async function renderAuditLog() {
   // same pattern as UsersPage.js.
   if (loaded) paintAuditTable();
 
+  // Two requests a visit — the list and the count — on a page whose rows
+  // barely change. Within the window the paint above is the whole render.
+  if (loaded && isFresh(AUDIT_KEY, PAGE_MAX_AGE_MS)) return;
+
   const [listed, counted] = await Promise.all([AuditLogModel.list(), AuditLogModel.count()]);
   const { data, error } = listed;
   const wrap = $('#audit-table-wrap');
@@ -46,6 +57,7 @@ export async function renderAuditLog() {
   rowsCache = data || [];
   // A failed count just means no truncation notice — never a broken page.
   totalRows = counted?.error ? null : Number(counted?.data) || 0;
+  markFetched(AUDIT_KEY);
   loaded = true;
   page = 1;
   paintAuditTable();

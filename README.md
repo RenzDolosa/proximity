@@ -672,6 +672,56 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-11 (latest) — seven pages that refetched on every click, and a badge asking what the Dashboard just answered**
+
+Both halves **subtract** from the bill rather than avoiding an increase.
+
+**The freshness gate reached three pages and stopped.** Dashboard, Employee
+Manager and Settings got one when Settings was measured at 20 of 41 requests
+in a single session. The router calls every page's render function on each
+nav click, so the other seven kept refetching. **Attendance was the worst:**
+`renderAttendance()` ended in a bare `await load()`, and `load()` always
+fired report + summary.
+
+Now all of them read the same `PAGE_MAX_AGE_MS`. Three design points:
+
+- **The key carries the question.** `attendance:{query}:{page}:{size}`,
+  `analytics:{days}`, `exports:{page}:{size}` — so a filter change misses
+  naturally rather than needing an `invalidate()` call someone can forget.
+- **Mutations go through a `reload*()` wrapper.** With a gate in place, a
+  modal callback that re-renders without invalidating repaints the stale
+  cache, and the edit saves but appears not to. Employee Manager already
+  solved this; Users & Roles and Proximity Cards now do too.
+- **Every gated page keeps a Refresh that forces.** A cache with no escape
+  hatch is a bug report waiting to happen.
+
+**And one constant instead of three.** `DIRECTORY_MAX_AGE_MS` was `60 * 1000`;
+`SETTINGS_MAX_AGE_MS` was `60 * 1000` with a comment reading *"Matches
+DIRECTORY_MAX_AGE_MS"* — a comment doing a constant's job, kept honest by a
+test that compared the two literals. Seven more pages would have been seven
+more copies. There is now one, and the test asserts the stronger thing:
+**no page declares its own.**
+
+**The alerts badge was duplicating the Dashboard tick.** Two timers on one
+screen — the tick every 60 s, the badge every 600 s — the second spending
+**144 requests and 144 log lines a day per open tab** on a single integer the
+first had just returned. `20261111180000` adds `unread_alerts` to the tick.
+
+> The suppression is **a timestamp, not a route check.** `alertsBadge.js`
+> records *when* it was last handed a count and skips its own poll if that
+> beats its interval — it never learns who supplied it. Keying off
+> `appState.route === 'dashboard'` would need editing again for a second
+> supplier, and would freeze the badge silently if the Dashboard ever
+> stopped ticking. A timestamp self-heals within one period.
+
+**Tests:** 18 added, suite **663 → 681**. Three guards confirmed to fail when
+reverted: a mutation callback pointed back at the bare render, the gate
+removed from Attendance, and the badge's suppression check deleted.
+
+**The migration is not applied, and either side can ship first.** Same
+signature and return type; a client without it finds `unread_alerts`
+undefined and the badge polls exactly as it does today.
+
 **2026-11-11 (later still) — a 30-day attendance heatmap, and a database panel that shows a slope**
 
 Two features in one branch. Neither adds a request.

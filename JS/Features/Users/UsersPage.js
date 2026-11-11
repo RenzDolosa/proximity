@@ -8,11 +8,22 @@ import { openConfirmModal } from '../../Components/ConfirmModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
 import { statusDotHTML, STATUS_DOT_HEADER, accountState, accountStateLabel } from '../../Components/StatusDot.js';
 import { scopeLabel } from './userOptions.js';
+import { isFresh, markFetched, invalidate, PAGE_MAX_AGE_MS } from '../../Utils/freshness.js';
+
+const USERS_KEY = 'users';
 
 let usersCache = [];
 let page = 1;
 let pageSize = 20;
 let loaded = false; // distinguishes "never fetched yet" from "fetched, zero rows"
+
+// Every mutation path routes through here rather than calling renderUsers()
+// directly. With the freshness gate below, a bare re-render would repaint the
+// stale cache and show the edit as if it had not saved.
+function reloadUsers() {
+  invalidate(USERS_KEY);
+  return renderUsers();
+}
 
 export async function renderUsers() {
   const content = $('#content');
@@ -25,16 +36,23 @@ export async function renderUsers() {
     <div class="table-scroll"><div id="users-table-wrap">${loaded ? '' : 'Loading…'}</div></div>
     <div id="users-pagination"></div>
   `;
-  $('#user-add').addEventListener('click', () => openUserModal(null, renderUsers));
+  $('#user-add').addEventListener('click', () => openUserModal(null, reloadUsers));
 
   // Stale-while-revalidate: paint from cache immediately (no "Loading…"
   // flash) while the fresh fetch runs, if we've already loaded once.
   if (loaded) paintUsersTable();
 
+  // …and within the window, that paint is the whole render. The router calls
+  // this on every nav click, so without the gate a few sidebar taps refetched
+  // the account list each time. Mutations go through reloadUsers(), which
+  // invalidates first, so an edit is never hidden by this.
+  if (loaded && isFresh(USERS_KEY, PAGE_MAX_AGE_MS)) return;
+
   const { data, error } = await ProfilesModel.listUsers();
   const wrap = $('#users-table-wrap');
   if (error) { wrap.innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
   usersCache = data || [];
+  markFetched(USERS_KEY);
   loaded = true;
   page = 1;
   paintUsersTable();
@@ -75,13 +93,13 @@ function paintUsersTable() {
     onChange: (next) => { page = next.page; pageSize = next.pageSize; paintUsersTable(); },
   });
   $$('button[data-edit]', wrap).forEach((b) => b.addEventListener('click', () => {
-    openUserModal(data.find((u) => u.id === b.dataset.edit), renderUsers);
+    openUserModal(data.find((u) => u.id === b.dataset.edit), reloadUsers);
   }));
   // The whole row opens Edit. The action buttons live inside it, so each one
   // has to stop the click reaching the row — otherwise Delete would also open
   // the edit dialog behind the confirmation.
   $$('tr.row-clickable', wrap).forEach((tr) => {
-    const open = () => openUserModal(data.find((u) => u.id === tr.dataset.user), renderUsers);
+    const open = () => openUserModal(data.find((u) => u.id === tr.dataset.user), reloadUsers);
     tr.addEventListener('click', (e) => { if (!e.target.closest('button, a, .copyable')) open(); });
     tr.addEventListener('keydown', (e) => {
       if (e.target !== tr) return;

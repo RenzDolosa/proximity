@@ -18,14 +18,14 @@ import { menuHTML, mountMenu } from '../../Components/Menu.js';
 import { openConfirmModal, openConfirmProgressModal } from '../../Components/ConfirmModal.js';
 import { wireAvatarPreview } from '../../Utils/avatarPreview.js';
 import { buildIdentityIndex, identityKey } from '../../Utils/employeeCode.js';
-import { isFresh, markFetched, invalidate } from '../../Utils/freshness.js';
+import { isFresh, markFetched, invalidate, PAGE_MAX_AGE_MS } from '../../Utils/freshness.js';
 import { scoreDirectory, matchesCheck, SEVERITY_BADGE } from '../../Utils/dataQuality.js';
 
 const DIRECTORY_KEY = 'directory';
-// Long enough that flicking between sidebar items costs nothing, short enough
-// that another admin's edit shows up without a reload. Edits made HERE are not
-// subject to it — they invalidate explicitly.
-const DIRECTORY_MAX_AGE_MS = 60 * 1000;
+// The window itself is PAGE_MAX_AGE_MS, shared with every other list page —
+// this file used to declare its own 60 * 1000 and SettingsPage then declared
+// a second one with a comment saying it matched. Edits made HERE are not
+// subject to it; they invalidate explicitly.
 
 // Every path that changes the roster goes through this rather than
 // renderDirectory() directly, so the freshness window can never swallow a
@@ -194,7 +194,7 @@ export async function renderDirectory() {
   // click. Within the window, the paint above is the whole render. Mutations
   // call reloadDirectory() below, which invalidates first, so an edit is never
   // hidden by this.
-  if (loaded && isFresh(DIRECTORY_KEY, DIRECTORY_MAX_AGE_MS)) {
+  if (loaded && isFresh(DIRECTORY_KEY, PAGE_MAX_AGE_MS)) {
     subscribeToScans();
     return;
   }

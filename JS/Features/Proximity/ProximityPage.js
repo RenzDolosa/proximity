@@ -11,6 +11,17 @@ import { openImportModal } from '../../Components/ImportModal.js';
 import { renderPagination } from '../../Components/Pagination.js';
 import { copyableHTML } from '../../Components/Copyable.js';
 import { openConfirmModal, openConfirmProgressModal } from '../../Components/ConfirmModal.js';
+import { isFresh, markFetched, invalidate, PAGE_MAX_AGE_MS } from '../../Utils/freshness.js';
+
+// Two requests a visit — the card table and the assignment map. Every
+// mutation path routes through reloadProximity() rather than calling
+// renderProximity() directly, or the gate below would repaint the stale
+// cache and the issue/revoke would look like it had not saved.
+const PROXIMITY_KEY = 'proximity';
+function reloadProximity() {
+  invalidate(PROXIMITY_KEY);
+  return renderProximity();
+}
 
 let cardsCache = [];
 let assignedByCard = new Map();
@@ -104,23 +115,28 @@ export async function renderProximity() {
       });
       if (!confirmed) return;
       if (result.error) toast(result.error.message, 'error');
-      else { toast(`Deleted ${result.count} unassigned card${result.count === 1 ? '' : 's'}`); renderProximity(); }
+      else { toast(`Deleted ${result.count} unassigned card${result.count === 1 ? '' : 's'}`); reloadProximity(); }
     });
   }
   if (isAdminOrManager()) {
-    $('#prox-add').addEventListener('click', () => openCardModal(renderProximity));
+    $('#prox-add').addEventListener('click', () => openCardModal(reloadProximity));
     $('#prox-import').addEventListener('click', () => openImportModal({
       title: 'Import proximity cards',
       description: 'One row per card. Cards are issued unassigned — link them to an employee afterward from Employee Manager.',
       columns: [{ key: 'proximity_code', label: 'proximity_code', required: true }],
       sampleRow: { proximity_code: 'PRX-00099' },
       onImport: importCards,
-    }, renderProximity));
+    }, reloadProximity));
   }
 
   // Stale-while-revalidate: paint from cache immediately (no "Loading…"
   // flash) while the fresh fetch runs, if we've already loaded once.
   if (loaded) paintProximityTable();
+
+  // Search, the status filter and the Unassigned toggle all paint locally
+  // from cardsCache, so they never reach here — the only thing this gate
+  // suppresses is the refetch the router triggers on a nav click.
+  if (loaded && isFresh(PROXIMITY_KEY, PAGE_MAX_AGE_MS)) return;
 
   const [{ data, error }, { data: emps }] = await Promise.all([
     ProximityCardsModel.listForTable(),
@@ -129,6 +145,7 @@ export async function renderProximity() {
   if (error) { $('#prox-table-wrap').innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; return; }
   cardsCache = data || [];
   assignedByCard = new Map((emps || []).map((e) => [e.proximity_card_id, e]));
+  markFetched(PROXIMITY_KEY);
   loaded = true;
   page = 1;
   paintProximityTable();

@@ -17,6 +17,7 @@ import { occupancyByScanner, longestOnSite } from '../../Utils/occupancy.js';
 import { DashboardModel } from '../../Models/DashboardModel.js';
 import { openDepartmentRosterModal } from '../../Components/DepartmentRosterModal.js';
 import { saveSnapshot } from '../../Utils/musterCache.js';
+import { setAlertsBadgeCount } from '../../Core/alertsBadge.js';
 
 // 60s, not the original 30s. Log Ingestion bills one API-gateway event per
 // request regardless of payload size, and this timer is the largest single
@@ -168,6 +169,11 @@ async function load({ force = false } = {}) {
     if (seq !== requestSeq) return; // superseded; issue nothing further
     const d = t.data?.roster;
     if (!t.error && d && Array.isArray(d.rows)) {
+      // The tick carries the unread count as of this moment, so the sidebar
+      // badge's own 10-minute poll has nothing left to ask — see
+      // Core/alertsBadge.js. Absent on a project still on the pre-20261111
+      // tick, in which case the badge keeps polling exactly as before.
+      if (t.data?.unread_alerts !== undefined) setAlertsBadgeCount(t.data.unread_alerts);
       finish(seq, null, t.data?.stats, mergeRosterDelta(roster, d), d);
       return;
     }
