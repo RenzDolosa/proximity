@@ -7,12 +7,18 @@ import { $ } from '../Utils/dom.js';
 import { esc } from '../Utils/format.js';
 import { parseCSV, toCSV } from '../Utils/csv.js';
 import { openModal, closeModal, setModalLocked } from './Modal.js';
+import { previewImport, importableCount, previewSamples } from '../Utils/importPreview.js';
 
 /**
- * @param {{ title: string, description?: string, columns: {key:string,label:string,required?:boolean}[], sampleRow?: object, onImport: (records:object[], onProgress:(done:number,total:number)=>void) => Promise<{successCount:number, skippedCount?:number, errors:{line:number,message:string}[]}> }} config
+ * @param {{ title: string, description?: string, columns: {key:string,label:string,required?:boolean}[], sampleRow?: object, onImport: (records:object[], onProgress:(done:number,total:number)=>void) => Promise<{successCount:number, skippedCount?:number, errors:{line:number,message:string}[]}>, preview?: {key: string, existing: Iterable<string>, noun?: string, validate?: (value:string,row:object)=>string|null} }} config
  * @param {() => void} [onDone] - called once the import finishes, so the page can refresh its table.
+ *
+ * `preview` is optional and costs nothing when supplied: the caller passes
+ * the keys it ALREADY holds to draw the table behind this dialog, so what
+ * the import will do is worked out on the client before anything is sent.
+ * Without it the dialog falls back to the row count it always showed.
  */
-export function openImportModal({ title, description, columns, sampleRow, onImport }, onDone) {
+export function openImportModal({ title, description, columns, sampleRow, onImport, preview }, onDone) {
   const required = columns.filter((c) => c.required);
 
   const overlay = openModal(`
@@ -75,10 +81,61 @@ export function openImportModal({ title, description, columns, sampleRow, onImpo
       return;
     }
     parsedRecords = records;
-    previewEl.innerHTML = `<div class="emp-meta">${records.length} row${records.length === 1 ? '' : 's'} ready to import.</div>`;
+
+    if (!preview) {
+      // Unchanged fallback for a caller with nothing to compare against —
+      // Employee Manager has no single key it can check a row against.
+      previewEl.innerHTML = `<div class="emp-meta">${records.length} row${records.length === 1 ? '' : 's'} ready to import.</div>`;
+      runBtn.classList.remove('hidden');
+      runBtn.disabled = false;
+      return;
+    }
+
+    const report = previewImport({
+      records, key: preview.key, existing: preview.existing, validate: preview.validate,
+    });
+    const willCreate = importableCount(report);
+    previewEl.innerHTML = previewHTML(report, preview.noun || 'row');
+    parsedRecords = records;
     runBtn.classList.remove('hidden');
-    runBtn.disabled = false;
+    // Nothing to create is not an error — a file whose rows all exist
+    // already is a perfectly normal re-run — but there is also nothing to
+    // press, and a button that imports zero rows invites a second look at a
+    // preview that already answered the question.
+    runBtn.disabled = willCreate === 0;
+    runBtn.textContent = willCreate === 0
+      ? 'Nothing to import'
+      : `Import ${willCreate.toLocaleString()}`;
   });
+
+  function previewHTML(report, noun) {
+    const samples = previewSamples(report);
+    const line = (label, items, count, tone) => (count
+      ? `<tr>
+           <td>${esc(label)}</td>
+           <td class="mono col-shrink"${tone ? ` style="color:var(--${tone})"` : ''}>${count.toLocaleString()}</td>
+         </tr>
+         ${items.length ? `<tr><td colspan="2" class="emp-meta" style="padding-top:0;">
+            ${items.map((i) => `row ${i.line}${i.value ? ` · <span class="mono">${esc(i.value)}</span>` : ''}${i.reason ? ` — ${esc(i.reason)}` : ''}`).join('<br>')}
+            ${count > items.length ? `<br>…and ${(count - items.length).toLocaleString()} more` : ''}
+          </td></tr>` : ''}`
+      : '');
+
+    return `
+      <div class="table-scroll" style="margin:4px 0 2px;">
+        <table>
+          <tbody>
+            <tr><td>New ${esc(noun)}s</td><td class="mono col-shrink" style="color:var(--good)">+ ${report.fresh.length.toLocaleString()}</td></tr>
+            ${line('Already in the system', samples.alreadyExists, report.alreadyExists.length, 'warn')}
+            ${line('Duplicated inside the file', samples.duplicateInFile, report.duplicateInFile.length, 'bad')}
+            ${line('Cannot be imported', samples.malformed, report.malformed.length, 'bad')}
+          </tbody>
+        </table>
+      </div>
+      <div class="emp-meta" style="margin-bottom:10px;">
+        Checked against the ${[...preview.existing].length.toLocaleString()} already loaded on this page — nothing has been sent yet.
+      </div>`;
+  }
 
   $('#im-run', overlay).addEventListener('click', async () => {
     if (!parsedRecords) return;

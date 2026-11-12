@@ -125,6 +125,15 @@ export async function renderProximity() {
       description: 'One row per card. Cards are issued unassigned — link them to an employee afterward from Employee Manager.',
       columns: [{ key: 'proximity_code', label: 'proximity_code', required: true }],
       sampleRow: { proximity_code: 'PRX-00099' },
+      // COSTS NOTHING: cardsCache is already here, holding every issued card,
+      // because it is what draws the table this button sits on. Passing it in
+      // turns "412 rows ready to import" into what the import will actually
+      // do — which until now only arrived afterwards, as a skipped count.
+      preview: {
+        key: 'proximity_code',
+        noun: 'card',
+        existing: cardsCache.map((c) => c.proximity_code),
+      },
       onImport: importCards,
     }, reloadProximity));
   }

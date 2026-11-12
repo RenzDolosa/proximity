@@ -110,6 +110,59 @@ export function musterTotals(groups) {
   };
 }
 
+/**
+ * Drop ticks for people no longer on the sheet.
+ *
+ * Refresh replaces the snapshot while a headcount is running. Someone who
+ * has since tapped out is off the list, and a tick they still carry would
+ * keep counting toward a site total that no longer includes them — a site
+ * reading "41 of 40 accounted for", or worse, reading complete when it is
+ * not. Ticks for people who ARE still listed survive, because a marshal who
+ * presses Refresh is asking for a newer list, not for their work to be
+ * thrown away.
+ *
+ * @param {Set<string>|Iterable<string>} accounted
+ * @param {Array<{id?: string}>} rows the roster the sheet is about to render
+ * @returns {Set<string>}
+ */
+export function pruneAccounted(accounted, rows) {
+  const live = new Set((Array.isArray(rows) ? rows : []).map((r) => r?.id).filter(Boolean));
+  const kept = new Set();
+  for (const id of accounted || []) if (live.has(id)) kept.add(id);
+  return kept;
+}
+
+/**
+ * An id for someone typed in at the assembly point.
+ *
+ * Prefixed so it can never collide with an employee id, and so anything
+ * reading the roll call can tell the two apart without a second list.
+ * Random rather than derived from the label: two contractors can legitimately
+ * be written down the same way, and the second must not silently tick the
+ * first.
+ */
+export function unlistedId(rand = Math.random) {
+  return `unlisted:${Date.now().toString(36)}-${Math.floor(rand() * 1e6).toString(36)}`;
+}
+
+/**
+ * Add a typed-in person, or return the list unchanged.
+ *
+ * Trimmed, length-capped, and empties rejected — a marshal hitting Enter on
+ * an empty box must not add a blank row to a document someone will later
+ * read as a record of who was outside.
+ */
+export function addUnlisted(entries, label, makeId = unlistedId) {
+  const list = Array.isArray(entries) ? entries : [];
+  const text = String(label ?? '').trim().slice(0, 80);
+  if (!text) return list;
+  return [...list, { id: makeId(), label: text }];
+}
+
+export function removeUnlisted(entries, id) {
+  return (Array.isArray(entries) ? entries : []).filter((e) => e?.id !== id);
+}
+
 // How old a cached roster is allowed to be before the page says so loudly.
 // Not a cutoff — a stale list is far better than none during an evacuation,
 // and the only wrong answer is showing it without saying how old it is.
