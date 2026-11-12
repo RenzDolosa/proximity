@@ -16,7 +16,7 @@ import { esc, fmtTime } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
 import { canViewAttendance, isAdminOrManager } from '../../Core/state.js';
 import { openOpenPunchModal } from '../../Components/OpenPunchModal.js';
-import { renderPagination } from '../../Components/Pagination.js';
+import { renderPagination, readPageSize } from '../../Components/Pagination.js';
 import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
 import { AttendanceModel } from '../../Models/AttendanceModel.js';
 import { reportError } from '../../Utils/userError.js';
@@ -59,7 +59,7 @@ let range = defaultRange();
 let userSetRange = false;
 let filters = { query: '', department: '', status: '' };
 let page = 1;
-let pageSize = 50;
+let pageSize = readPageSize('attendance', 50);
 let pageRows = [];        // just the rows on screen
 let totals = null;        // filtered, uncapped — drives the stat cards and the pager
 let departments = [];
@@ -397,6 +397,7 @@ function paintTable() {
   });
 
   renderPagination($('#att-pagination'), {
+    storeAs: 'attendance',
     total, page, pageSize,
     onChange: (next) => {
       const sizeChanged = next.pageSize !== pageSize;

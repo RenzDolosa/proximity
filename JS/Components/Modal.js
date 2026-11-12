@@ -9,7 +9,7 @@
 // one (via its own button, Escape, or a click on its backdrop) only ever
 // removes that single layer and reveals whatever was beneath it.
 
-/** @type {{ overlay: HTMLElement, cleanup: (() => void) | null, locked: boolean }[]} */
+/** @type {{ overlay: HTMLElement, cleanup: (() => void) | null, locked: boolean, guard: (() => boolean|Promise<boolean>) | null, asking: boolean }[]} */
 const stack = [];
 
 /**
@@ -30,11 +30,32 @@ export function openModal(innerHTML, { maxWidth } = {}) {
 
   // A click that both starts and ends directly on the backdrop (not
   // bubbled up from something inside .modal) closes just this layer.
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) closeModal(overlay);
+  overlay.addEventListener('click', async (e) => {
+    if (e.target !== overlay) return;
+    const entry = stack.find((x) => x.overlay === overlay);
+    if (!entry) { overlay.remove(); return; }
+
+    // LOCKED WAS ONLY EVER HONOURED BY ESCAPE. setModalLocked's own comment
+    // says it suppresses "Escape and backdrop-click", and this handler never
+    // checked it — so a stray click during a running import closed the
+    // dialog while the import carried on in the background, taking its
+    // progress bar with it.
+    if (entry.locked) return;
+
+    if (entry.guard) {
+      // A confirm is already open over this layer. Without this, clicking
+      // the backdrop again while being asked stacks a second identical
+      // question, and answering one leaves the other orphaned.
+      if (entry.asking) return;
+      entry.asking = true;
+      let mayClose = false;
+      try { mayClose = await entry.guard(); } catch { mayClose = false; } finally { entry.asking = false; }
+      if (!mayClose) return;
+    }
+    closeModal(overlay);
   });
 
-  stack.push({ overlay, cleanup: null, locked: false });
+  stack.push({ overlay, cleanup: null, locked: false, guard: null, asking: false });
   return overlay;
 }
 
@@ -63,6 +84,25 @@ document.addEventListener('keydown', (e) => {
 export function setModalLocked(overlay, locked) {
   const entry = stack.find((e) => e.overlay === overlay);
   if (entry) entry.locked = locked;
+}
+
+/**
+ * Ask before a backdrop click throws work away.
+ *
+ * The guard returns true to allow the close, false to keep the dialog open,
+ * and may be async so it can put a question on screen first. Modal.js
+ * deliberately does not know what the question is — importing ConfirmModal
+ * here would make a cycle, since ConfirmModal is built on this file. See
+ * Components/unsavedGuard.js for the one everything uses.
+ *
+ * ESCAPE IS NOT GUARDED, and that is the intended difference. Escape is a
+ * deliberate "get me out of here"; a backdrop click is usually a miss aimed
+ * at a field. Confirming on both would make every dialog feel sticky in
+ * exchange for catching a keystroke nobody presses by accident.
+ */
+export function setCloseGuard(overlay, guard) {
+  const entry = stack.find((e) => e.overlay === overlay);
+  if (entry) entry.guard = typeof guard === 'function' ? guard : null;
 }
 
 // For modals that hold onto a live resource for as long as they're open —

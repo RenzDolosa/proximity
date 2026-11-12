@@ -110,6 +110,114 @@ export function musterTotals(groups) {
   };
 }
 
+/**
+ * Drop ticks for people no longer on the sheet.
+ *
+ * Refresh replaces the snapshot while a headcount is running. Someone who
+ * has since tapped out is off the list, and a tick they still carry would
+ * keep counting toward a site total that no longer includes them — a site
+ * reading "41 of 40 accounted for", or worse, reading complete when it is
+ * not. Ticks for people who ARE still listed survive, because a marshal who
+ * presses Refresh is asking for a newer list, not for their work to be
+ * thrown away.
+ *
+ * @param {Set<string>|Iterable<string>} accounted
+ * @param {Array<{id?: string}>} rows the roster the sheet is about to render
+ * @returns {Set<string>}
+ */
+export function pruneAccounted(accounted, rows) {
+  const live = new Set((Array.isArray(rows) ? rows : []).map((r) => r?.id).filter(Boolean));
+  const kept = new Set();
+  for (const id of accounted || []) if (live.has(id)) kept.add(id);
+  return kept;
+}
+
+/**
+ * An id for someone typed in at the assembly point.
+ *
+ * Prefixed so it can never collide with an employee id, and so anything
+ * reading the roll call can tell the two apart without a second list.
+ * Random rather than derived from the label: two contractors can legitimately
+ * be written down the same way, and the second must not silently tick the
+ * first.
+ */
+export function unlistedId(rand = Math.random) {
+  return `unlisted:${Date.now().toString(36)}-${Math.floor(rand() * 1e6).toString(36)}`;
+}
+
+/**
+ * Add a typed-in person, or return the list unchanged.
+ *
+ * Trimmed, length-capped, and empties rejected — a marshal hitting Enter on
+ * an empty box must not add a blank row to a document someone will later
+ * read as a record of who was outside.
+ */
+export function addUnlisted(entries, label, makeId = unlistedId) {
+  const list = Array.isArray(entries) ? entries : [];
+  const text = String(label ?? '').trim().slice(0, 80);
+  if (!text) return list;
+  return [...list, { id: makeId(), label: text }];
+}
+
+export function removeUnlisted(entries, id) {
+  return (Array.isArray(entries) ? entries : []).filter((e) => e?.id !== id);
+}
+
+/**
+ * The completed headcount, flattened into one sheet.
+ *
+ * WHAT PRINT DOES NOT GIVE YOU. The Print button produces the LIST; this is
+ * the record of who was accounted for, which is the thing filed after a
+ * drill and asked for after a real incident. Nothing is fetched — every
+ * value here is already on screen.
+ *
+ * NOT ACCOUNTED FOR SORTS FIRST, inside each site. A roll call is read to
+ * find who is missing, and burying four names among three hundred ticked
+ * ones is the one layout that defeats the purpose.
+ *
+ * Typed-in people come last, under their own site label, because they were
+ * never part of the snapshot the site totals are measured against.
+ */
+export function rollCallRows(groups, accounted, unlisted = []) {
+  const done = accounted instanceof Set ? accounted : new Set(accounted || []);
+  const rows = [];
+
+  for (const group of Array.isArray(groups) ? groups : []) {
+    for (const dept of group.departments || []) {
+      for (const person of dept.people || []) {
+        rows.push({
+          accounted: done.has(person.id) ? 'yes' : 'NOT ACCOUNTED',
+          full_name: person.full_name || '',
+          employee_code: person.employee_code || '',
+          site: group.site || '',
+          department: dept.department || '',
+          last_in_at: person.last_in_at || '',
+          source: 'on the saved sheet',
+        });
+      }
+    }
+  }
+
+  // Stable within a site: missing first, then by the order the sheet showed.
+  rows.sort((a, b) => (a.site === b.site
+    ? Number(a.accounted === 'yes') - Number(b.accounted === 'yes')
+    : 0));
+
+  for (const entry of Array.isArray(unlisted) ? unlisted : []) {
+    rows.push({
+      accounted: done.has(entry.id) ? 'yes' : 'NOT ACCOUNTED',
+      full_name: entry.label || '',
+      employee_code: '',
+      site: 'Added at the assembly point',
+      department: '',
+      last_in_at: '',
+      source: 'added by marshal',
+    });
+  }
+
+  return rows;
+}
+
 // How old a cached roster is allowed to be before the page says so loudly.
 // Not a cutoff — a stale list is far better than none during an evacuation,
 // and the only wrong answer is showing it without saying how old it is.

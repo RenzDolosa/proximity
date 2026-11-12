@@ -10,15 +10,31 @@
 // to survive.
 import { $, $$ } from '../../Utils/dom.js';
 import { esc, fmtTime } from '../../Utils/format.js';
+import { toast } from '../../Utils/toast.js';
+import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
 import { appState } from '../../Core/state.js';
 import { DashboardModel } from '../../Models/DashboardModel.js';
 import { deriveRoster } from '../../Utils/dashboard.js';
-import { readSnapshot, saveSnapshot } from '../../Utils/musterCache.js';
+import {
+  readSnapshot, saveSnapshot,
+  readAccounted, saveAccounted, clearAccounted,
+  readUnlisted, saveUnlisted, clearUnlisted,
+} from '../../Utils/musterCache.js';
 import {
   groupForMuster, musterTotals, certainty, CERTAINTY, snapshotAge,
+  pruneAccounted, addUnlisted, removeUnlisted, rollCallRows,
 } from '../../Utils/muster.js';
 
-let accounted = new Set();
+// RESTORED FROM THE DEVICE, not started empty. This used to be a bare
+// `new Set()`, so a refresh, a crash or the service worker activating
+// mid-evacuation lost every tick — while assembly mode, persisted three
+// lines below, survived all three. See Utils/musterCache.js for the expiry
+// and pruning rules that keep a stored roll call honest.
+let accounted = readAccounted();
+// People a marshal typed in because they were present and not on the sheet:
+// anyone who tapped in after the snapshot, and anyone who never had a card
+// at all — contractors, visitors, a delivery driver.
+let unlisted = readUnlisted();
 // Site names the reader has folded away. Collapse hides with CSS rather than
 // dropping the rows, so a tick survives a fold and the counts below keep
 // working off a list that is always complete.
@@ -63,6 +79,7 @@ export async function renderMuster() {
                 title="Pure black, larger names, taller rows — for reading outdoors in daylight">Assembly mode</button>
         <button class="ghost" id="mu-expand">Collapse all</button>
         <button class="ghost" id="mu-reset">Reset ticks</button>
+        <button class="ghost" id="mu-export">Export</button>
         <button class="ghost" id="mu-print">Print</button>
         <button class="primary" id="mu-refresh">Refresh</button>
       </div>
@@ -72,8 +89,18 @@ export async function renderMuster() {
   `;
 
   $('#mu-search').addEventListener('input', paint);
-  $('#mu-reset').addEventListener('click', () => { accounted = new Set(); paint(); });
+  // Reset is the one deliberate clear, so it clears everything a headcount
+  // accumulated — ticks AND typed-in people. Leaving the latter behind would
+  // make "Reset ticks" quietly a half-reset.
+  $('#mu-reset').addEventListener('click', () => {
+    accounted = new Set();
+    unlisted = [];
+    clearAccounted();
+    clearUnlisted();
+    paint();
+  });
   $('#mu-print').addEventListener('click', () => window.print());
+  $('#mu-export').addEventListener('click', exportRollCall);
   $('#mu-refresh').addEventListener('click', refresh);
   $('#mu-expand').addEventListener('click', toggleAll);
   // Class toggle only — no repaint. A marshal who hits this mid-headcount
@@ -105,12 +132,79 @@ export async function renderMuster() {
     const cb = e.target.closest('input[data-person]');
     if (!cb) return;
     if (cb.checked) accounted.add(cb.dataset.person); else accounted.delete(cb.dataset.person);
+    // Written on every tick rather than on a timer or on unload: the events
+    // this page exists for are exactly the ones that give no warning before
+    // the tab goes away.
+    saveAccounted(accounted);
     paintCounts();
+  });
+
+  // Adding someone who is present and not on the sheet. Delegated on #mu-body
+  // like the rest, so it survives every repaint.
+  $('#mu-body').addEventListener('click', (e) => {
+    const add = e.target.closest('[data-add-unlisted]');
+    if (add) {
+      unlisted = addUnlisted(unlisted, add.dataset.addUnlisted);
+      const added = unlisted[unlisted.length - 1];
+      // Ticked on arrival: nobody types a name at an assembly point except
+      // to say that person is standing in front of them.
+      if (added) accounted.add(added.id);
+      saveUnlisted(unlisted);
+      saveAccounted(accounted);
+      const search = $('#mu-search');
+      if (search) search.value = '';
+      paint();
+      search?.focus();
+      return;
+    }
+    const drop = e.target.closest('[data-drop-unlisted]');
+    if (!drop) return;
+    const id = drop.dataset.dropUnlisted;
+    unlisted = removeUnlisted(unlisted, id);
+    accounted.delete(id);
+    saveUnlisted(unlisted);
+    saveAccounted(accounted);
+    paint();
   });
 
   if (snap) paint();
   // Opportunistic, never blocking: the list is already on screen by now.
   refresh({ quiet: true });
+}
+
+// The record, as opposed to the list. Built from allGroups — the UNFILTERED
+// grouping — so a search left in the box cannot quietly export a subset and
+// have it read as the whole headcount.
+function exportRollCall() {
+  const rows = rollCallRows(allGroups, accounted, unlisted);
+  if (!rows.length) { toast('Nothing to export yet — no roster on this device.', 'error'); return; }
+  const snap = readSnapshot();
+  // The roster time goes in the FILENAME, not a column: it is one fact about
+  // the whole sheet, and a column repeating it on every row is the kind of
+  // thing that later gets mistaken for a per-person timestamp.
+  const asOf = snap?.savedAt ? new Date(snap.savedAt) : new Date();
+  const stamp = `${asOf.toLocaleDateString('en-CA')}-${String(asOf.getHours()).padStart(2, '0')}${String(asOf.getMinutes()).padStart(2, '0')}`;
+  exportXlsx({
+    filename: `muster-roster-${stamp}-exported-${todayStamp()}.xlsx`,
+    sheetName: 'Roll call',
+    columns: [
+      { key: 'accounted', label: 'Accounted for' },
+      { key: 'full_name', label: 'Name' },
+      // text: true — an employee code can be all digits, and Excel will
+      // happily turn 0004182 into 4182 on the round trip. Same reason
+      // Employee Manager and the card export mark theirs.
+      { key: 'employee_code', label: 'Employee code', text: true },
+      { key: 'site', label: 'Site' },
+      { key: 'department', label: 'Department' },
+      { key: 'last_in_at', label: 'Last IN' },
+      { key: 'source', label: 'Source' },
+    ],
+    rows: rows.map((r) => ({ ...r, last_in_at: r.last_in_at ? fmtTime(r.last_in_at) : '' })),
+  });
+  const missing = rows.filter((r) => r.accounted !== 'yes').length;
+  toast(missing
+    ? `Exported ${rows.length} — ${missing} not accounted for.`
+    : `Exported ${rows.length} — everyone accounted for.`);
 }
 
 function toggleAll() {
@@ -150,6 +244,7 @@ function setStatus(snap, { failed = false } = {}) {
     <span class="${age.stale ? 'badge unassigned_card' : ''}">As of ${esc(age.text)}</span>
     · ${totals.people} to account for across ${totals.sites} site${totals.sites === 1 ? '' : 's'}
     ${totals.unsure ? `· <button type="button" id="mu-unsure" class="badge inactive_card mu-filter${onlyUnsure ? ' is-on' : ''}" aria-pressed="${onlyUnsure}" title="${esc(CERTAINTY.unsure)} — show only these">${totals.unsure} uncertain</button>` : ''}
+    ${unlisted.length ? `· <span class="badge inactive_card">${unlisted.length} added here</span>` : ''}
     ${onlyUnsure ? '· <span class="mu-filter-note">showing only uncertain — click the badge to clear</span>' : ''}
     ${failed ? '· <span class="badge inactive_card">no network — showing the saved list</span>' : ''}
   `;
@@ -168,6 +263,12 @@ function paint() {
   // more complete than it is — the one lie this page must not tell.
   allGroups = groupForMuster(all);
 
+  // Refresh replaces the snapshot mid-headcount. A tick for someone who has
+  // since tapped out would keep counting toward a site total that no longer
+  // includes them — "41 of 40", or a site reading complete when it is not.
+  const pruned = pruneAccounted(accounted, [...all, ...unlisted]);
+  if (pruned.size !== accounted.size) { accounted = pruned; saveAccounted(accounted); }
+
   const q = ($('#mu-search')?.value || '').trim().toLowerCase();
   const rows = all.filter((r) => (!onlyUnsure || certainty(r) === 'unsure'))
     .filter((r) => !q
@@ -176,10 +277,16 @@ function paint() {
       || String(r.department ?? '').toLowerCase().includes(q));
 
   const groups = groupForMuster(rows);
+  // Both halves render whether or not the snapshot has anyone matching: the
+  // add affordance is most needed exactly when the search finds nobody, and
+  // the typed-in panel must not vanish behind a filter that was never about
+  // it.
+  const extras = addRowHTML(q) + unlistedHTML();
+
   if (!groups.length) {
-    body.innerHTML = `<div class="empty-state">${
+    body.innerHTML = extras + `<div class="empty-state">${
       onlyUnsure ? 'No scan is old enough to be uncertain. Click the badge again to show everyone.'
-        : q ? 'Nobody matches that search.'
+        : q ? 'Nobody on the sheet matches that search.'
           : 'Nobody is recorded as being on site.'}</div>`;
     paintExpandLabel();
     return;
@@ -190,9 +297,51 @@ function paint() {
   // A site that filters down to nobody is dropped rather than left as an
   // empty cell, which does shift the others — accepted, because a column of
   // blank panels is worse to read under pressure than a shifted one.
-  body.innerHTML = `<div class="muster-grid">${groups.map(siteHTML).join('')}</div>`;
+  body.innerHTML = extras + `<div class="muster-grid">${groups.map(siteHTML).join('')}</div>`;
   paintCounts();
   paintExpandLabel();
+}
+
+// Offered whenever something is typed, not only when the search comes back
+// empty: a marshal looking at "Maria Santos" on screen may still be standing
+// in front of a different Maria who is not on the sheet at all.
+function addRowHTML(q) {
+  if (!q) return '';
+  return `
+    <button type="button" class="muster-add" data-add-unlisted="${esc(q)}">
+      <span class="badge inactive_card">not listed</span>
+      Add <strong>${esc(q)}</strong> as present
+    </button>`;
+}
+
+// A panel of its own, never folded into a site. Site totals are measured
+// against the snapshot, and quietly adding people to a denominator the
+// snapshot never contained is how "all accounted for" stops meaning
+// anything.
+function unlistedHTML() {
+  if (!unlisted.length) return '';
+  const done = unlisted.filter((e) => accounted.has(e.id)).length;
+  return `
+    <section class="panel muster-site muster-unlisted" style="padding:16px;">
+      <div class="muster-site-head" style="cursor:default;">
+        <span>
+          <h3 style="margin:0 0 2px;">Added at the assembly point</h3>
+          <span class="emp-meta" data-unlisted-count>${done} of ${unlisted.length} accounted for · not on the saved sheet</span>
+        </span>
+      </div>
+      <ul class="muster-list">
+        ${unlisted.map((e) => `
+          <li class="muster-person">
+            <label>
+              <input type="checkbox" data-person="${esc(e.id)}" ${accounted.has(e.id) ? 'checked' : ''} />
+              <span class="muster-name">${esc(e.label)}</span>
+              <span class="badge inactive_card">added</span>
+            </label>
+            <button type="button" class="ghost muster-drop" data-drop-unlisted="${esc(e.id)}"
+                    title="Remove — added by mistake">×</button>
+          </li>`).join('')}
+      </ul>
+    </section>`;
 }
 
 function paintExpandLabel() {
@@ -255,6 +404,15 @@ function personHTML(p) {
 // the old version matched a panel to its site by comparing h3 text, so any
 // change to this heading's markup silently broke every count.
 function paintCounts() {
+  // The typed-in panel keeps its own count current on a tick too — it is
+  // rendered by paint() and would otherwise sit stale until the next full
+  // repaint, which a tick deliberately avoids.
+  const extraEl = $('[data-unlisted-count]');
+  if (extraEl && unlisted.length) {
+    const done = unlisted.filter((e) => accounted.has(e.id)).length;
+    extraEl.textContent = `${done} of ${unlisted.length} accounted for · not on the saved sheet`;
+  }
+
   const bySite = new Map(allGroups.map((g) => [g.site, g]));
   $$('[data-site-count]').forEach((el) => {
     const group = bySite.get(el.dataset.siteCount);

@@ -9,7 +9,7 @@ import { $ } from '../../Utils/dom.js';
 import { esc, fmtTime } from '../../Utils/format.js';
 import { toast } from '../../Utils/toast.js';
 import { appState, isAdminOrManager } from '../../Core/state.js';
-import { renderPagination } from '../../Components/Pagination.js';
+import { renderPagination, readPageSize } from '../../Components/Pagination.js';
 import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
 import { fmtDuration } from '../../Utils/attendance.js';
 import { summarizeRoster, filterRoster, mergeRosterDelta, deriveRoster } from '../../Utils/dashboard.js';
@@ -65,7 +65,7 @@ function isMissingFunctionError(error) {
 }
 let filters = { query: '', department: '', view: 'live' };
 let page = 1;
-let pageSize = 50;
+let pageSize = readPageSize('dashboard', 50);
 let requestSeq = 0;
 let timer = null;
 let visibilityHandler = null;
@@ -415,6 +415,7 @@ function paintTable() {
       </tbody>
     </table>`;
   renderPagination($('#dash-pagination'), {
+    storeAs: 'dashboard',
     total: all.length, page, pageSize,
     onChange: (next) => { page = next.page; pageSize = next.pageSize; paintTable(); },
   });

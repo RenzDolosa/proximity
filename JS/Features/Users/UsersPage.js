@@ -5,7 +5,7 @@ import { isAdmin, appState } from '../../Core/state.js';
 import { ProfilesModel } from '../../Models/ProfilesModel.js';
 import { openUserModal } from '../../Components/UserModal.js';
 import { openConfirmModal } from '../../Components/ConfirmModal.js';
-import { renderPagination } from '../../Components/Pagination.js';
+import { renderPagination, readPageSize } from '../../Components/Pagination.js';
 import { statusDotHTML, STATUS_DOT_HEADER, accountState, accountStateLabel } from '../../Components/StatusDot.js';
 import { scopeLabel } from './userOptions.js';
 import { isFresh, markFetched, invalidate, PAGE_MAX_AGE_MS } from '../../Utils/freshness.js';
@@ -14,7 +14,7 @@ const USERS_KEY = 'users';
 
 let usersCache = [];
 let page = 1;
-let pageSize = 20;
+let pageSize = readPageSize('users', 20);
 let loaded = false; // distinguishes "never fetched yet" from "fetched, zero rows"
 
 // Every mutation path routes through here rather than calling renderUsers()
@@ -89,6 +89,7 @@ function paintUsersTable() {
     </table>
   `;
   renderPagination($('#users-pagination'), {
+    storeAs: 'users',
     total: data.length, page, pageSize,
     onChange: (next) => { page = next.page; pageSize = next.pageSize; paintUsersTable(); },
   });

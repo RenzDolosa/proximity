@@ -672,6 +672,89 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-12 — a roll call that survives a reload, people who aren't on the sheet, and an import that says what it will do**
+
+Three features, no requests, no migration.
+
+**The muster roll call was memory only.** Assembly mode was written to
+`localStorage` on every toggle; `let accounted = new Set()` three lines above
+it was not. A refresh, a crash, or the service worker activating
+mid-evacuation lost **every tick** — on a phone, outdoors, with people
+standing in a car park and no way back but starting again.
+
+Two rules keep a stored roll call from becoming its own lie:
+
+- **It expires after 12 hours.** An evacuation is minutes to hours; a tick
+  still present tomorrow describes a different headcount.
+- **It is pruned to the current sheet.** Refresh replaces the snapshot
+  mid-count, and a tick for someone who has since tapped out would keep
+  counting toward a site total that no longer includes them — a site reading
+  "41 of 40", or reading complete when it is not. Ticks for people still
+  listed survive, because pressing Refresh asks for a newer list, not for
+  your work to be thrown away.
+
+**Nobody could record a person who wasn't on the sheet.** The list is exactly
+the snapshot, so two kinds of people can never appear on it: anyone who
+tapped in after it was taken, and **anyone who never had a card at all** —
+contractors, visitors, a delivery driver. Those are precisely the people a
+marshal needs written down. Typing a name now offers to add them, ticked, in
+their own panel.
+
+> **Their own panel, never folded into a site.** Site totals are measured
+> against the snapshot; quietly adding people to a denominator the snapshot
+> never contained is how "all accounted for" stops meaning anything.
+
+**And the card import now says what it will do before it does it.** The
+preview was the row count — *"412 rows ready to import"* — with conflicts
+arriving afterwards as a skipped count. Proximity Cards already holds every
+issued card to draw the table the Import button sits on, so new / already
+issued / duplicated-in-file / malformed are all answerable on the client. The
+button says `Import 388`, not `Import`.
+
+**Tests:** 32 added, suite **715 → 747**. Four guards confirmed to fail when
+reverted. A fifth passed when it shouldn't have — its slice ran past
+`readAccounted` into `readUnlisted`, which carries the same guard — and is
+now bounded to each function.
+
+**Three more in the same branch.**
+
+**The headcount leaves a record.** Print gives the *list*; Export gives who
+was accounted for, built from the **unfiltered** grouping so a search left in
+the box cannot quietly export a subset and have it read as the whole roster.
+Not-accounted sorts first inside each site — a roll call is read to find who
+is missing, and burying four names among three hundred ticked ones defeats
+the point. Typed-in people come last under their own label.
+
+**A stray backdrop click no longer discards an edit.** `openModal()` closed
+on any click landing on the backdrop with no dirty check anywhere in the app.
+The four form dialogs now ask first.
+
+> **Escape stays instant, deliberately.** Escape is "get me out of here"; a
+> backdrop click is usually a miss aimed at a field. Confirming on both
+> would make every dialog sticky to catch a keystroke nobody presses by
+> accident.
+>
+> The comparison is **per key against an empty baseline**, not one
+> serialized string. RemarksModal paints its textarea in after the modal
+> opens, and a whole-string match called that a change — so closing a
+> dialog you had only *looked* at asked whether you wanted to discard your
+> work. A control that did not exist at snapshot time is measured against
+> `''`: still empty is clean, typed into is dirty.
+
+**A bug found while reading it:** `setModalLocked`'s own comment says it
+suppresses "Escape and backdrop-click", and the backdrop handler never
+checked it. A stray click during a running import closed the dialog while
+the import carried on, taking its progress bar with it. Fixed alongside.
+
+**The page size finally sticks**, per table — 100 rows is right for scanning
+a week of attendance and wrong for the audit log. A stored value is validated
+against `PAGE_SIZES` rather than merely parsed, so a stale key cannot leave
+the select showing nothing.
+
+**Tests:** 28 more, suite **747 → 775**. Four further guards confirmed to
+fail when reverted, including the per-key comparison and the unfiltered
+export.
+
 **2026-11-11 (last) — click a heatmap day, and tap a badge to find its owner**
 
 Two features, no new requests and no migration.

@@ -1,13 +1,14 @@
 import { $ } from '../Utils/dom.js';
 import { toast } from '../Utils/toast.js';
 import { openModal, closeModal, showModalError } from './Modal.js';
+import { guardUnsaved } from './unsavedGuard.js';
 import { appState } from '../Core/state.js';
 import { ProximityCardsModel } from '../Models/ProximityCardsModel.js';
 
 export function openCardModal(onSaved) {
   const overlay = openModal(`
     <h3>Issue proximity card</h3>
-    <p class="sub" style="margin:-4px 0 16px;">Cards can be issued as unassigned inventory — link one to an employee later from Employee Manager.</p>
+    <p class="sub" style="margin:-4px 0 16px;">Cards can be issued as unassigned inventory â€” link one to an employee later from Employee Manager.</p>
     <div class="field"><label>Proximity code</label><input id="c-code" class="mono" placeholder="e.g. PRX-00021" /></div>
     <div class="auth-error hidden" id="c-error"></div>
     <div class="actions">
@@ -15,6 +16,8 @@ export function openCardModal(onSaved) {
       <button class="primary" id="c-save">Issue card</button>
     </div>
   `);
+  // One stray click on the backdrop used to discard this silently.
+  guardUnsaved(overlay, { noun: 'card details' });
 
   $('#c-cancel', overlay).addEventListener('click', () => closeModal(overlay));
   $('#c-save', overlay).addEventListener('click', async () => {

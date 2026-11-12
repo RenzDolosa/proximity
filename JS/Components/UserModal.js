@@ -2,6 +2,7 @@ import { $ } from '../Utils/dom.js';
 import { esc } from '../Utils/format.js';
 import { toast } from '../Utils/toast.js';
 import { openModal, closeModal, showModalError } from './Modal.js';
+import { guardUnsaved } from './unsavedGuard.js';
 import { ProfilesModel } from '../Models/ProfilesModel.js';
 import { scopeOptions, roleOptions } from '../Features/Users/userOptions.js';
 
@@ -40,6 +41,8 @@ export function openUserModal(user, onSaved) {
       <button class="primary" id="u-save">${isEdit ? 'Save changes' : 'Create account'}</button>
     </div>
   `);
+  // One stray click on the backdrop used to discard this silently.
+  guardUnsaved(overlay, { noun: 'account details' });
 
   // Resetting a password is something you decide while already looking at the
   // account, so it belongs here as well as in the row. Closes this modal
@@ -70,7 +73,7 @@ export function openUserModal(user, onSaved) {
     }
 
     // admin-users is a single request/response with no byte-level
-    // progress to report (unlike the photo upload's XHR-based bar) — an
+    // progress to report (unlike the photo upload's XHR-based bar) â€” an
     // indeterminate bar is what tells the user "this is in flight" for
     // that shape of request, same as a scan sound upload's progress bar.
     progressEl.classList.remove('hidden');

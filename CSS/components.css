@@ -795,6 +795,30 @@ tr.row-clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2
 .muster-in{margin-left:auto;white-space:nowrap;}
 .muster-done{color:var(--good);}
 
+/* Adding someone who is present and not on the saved sheet. Full width and
+   above the grid, because the moment it is needed is the moment the search
+   has just come back empty and the reader is already looking here. */
+.muster-add{
+  display:flex;align-items:center;gap:10px;width:100%;
+  padding:11px 14px;margin-bottom:12px;min-height:44px;
+  border:1px dashed var(--warn);border-radius:var(--radius);
+  background:var(--warn-dim);color:var(--text);
+  font-family:var(--sans);font-size:13px;text-align:left;cursor:pointer;
+}
+.muster-add:hover{border-style:solid;}
+/* Its own panel, never folded into a site: site totals are measured against
+   the snapshot, and adding people to a denominator the snapshot never had is
+   how "all accounted for" stops meaning anything. */
+.muster-unlisted{border-color:var(--warn);margin-bottom:12px;}
+.muster-unlisted .muster-site-head{margin-bottom:8px;}
+.muster-person{display:flex;align-items:center;}
+.muster-person label{flex:1;min-width:0;}
+.muster-drop{
+  flex:0 0 auto;padding:2px 9px;margin-left:6px;
+  color:var(--text-faint);font-size:15px;line-height:1.2;
+}
+.muster-drop:hover{color:var(--bad);}
+
 /* Command palette (Ctrl/Cmd+K). Sits above the drawer (z-index 40) and the
    phone tab bar (35), since it covers the whole app while open. */
 .cmdk-overlay{
