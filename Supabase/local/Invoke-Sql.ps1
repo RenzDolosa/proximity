@@ -138,9 +138,23 @@ $lines = @($raw | ForEach-Object { [string]$_ })
 
 # `\timing on` prints "Time: 12.345 ms" after every statement, including the
 # two setup ones. Folded into the footer rather than left in the body.
+#
+# NOT ANCHORED AT THE END, and that is the whole point. Past one second psql
+# appends a human-readable form:
+#
+#   Time: 12.345 ms
+#   Time: 1392.202 ms (00:01.392)
+#
+# The original pattern ended in `ms\s*$`, so it matched the first and not the
+# second -- which meant the ONLY timings it ever captured were the fast ones.
+# A query that ran for 1.4 seconds had its timing stripped from the body AND
+# dropped from the footer, reported as "n/a", and never compared against the
+# 200 ms threshold. The one case the warning exists for was the one case it
+# could not see. Caught on 2026-11-12 by a verification query that took
+# 1,392 ms and claimed to have no timing at all.
 $timings = @()
 $body = foreach ($line in $lines) {
-  if ($line -match '^\s*Time:\s*([\d.]+)\s*ms\s*$') { $timings += [double]$Matches[1] } else { $line }
+  if ($line -match '^\s*Time:\s*([\d.]+)\s*ms') { $timings += [double]$Matches[1] } else { $line }
 }
 
 $text = ($body | Out-String).TrimEnd()

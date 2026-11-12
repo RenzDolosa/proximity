@@ -145,6 +145,43 @@ test('the cost of a query is reported, not assumed', () => {
     'a large result set must warn, since that is the only way this costs money');
 });
 
+// THE BUG THIS PINS, found 2026-11-12. Past one second psql appends a
+// human-readable form to its timing line:
+//
+//   Time: 12.345 ms
+//   Time: 1392.202 ms (00:01.392)
+//
+// The original pattern ended in `ms\s*$`, so it matched the first and not
+// the second — the only timings it ever captured were the FAST ones. A
+// query that ran 1,392 ms had its timing stripped from the body, dropped
+// from the footer as "n/a", and never compared against the 200 ms
+// threshold. The one case the warning exists for was the one it could not
+// see.
+//
+// The pattern is lifted out of the script and run here, so this exercises
+// the real thing rather than asserting on its source. .NET and JS agree on
+// every construct in it.
+test('a timing over one second is still captured', () => {
+  const pattern = (QUERY.match(/\$line -match '([^']+)'\) \{ \$timings/) || [])[1];
+  assert.ok(pattern, 'could not find the timing pattern in Invoke-Sql.ps1');
+  const re = new RegExp(pattern);
+
+  assert.equal('Time: 12.345 ms'.match(re)?.[1], '12.345', 'the sub-second form');
+  assert.equal('Time: 1392.202 ms (00:01.392)'.match(re)?.[1], '1392.202',
+    'the form psql uses past one second — this is the one that regressed');
+  assert.equal('Time: 60000.000 ms (01:00.000)'.match(re)?.[1], '60000.000');
+
+  // Still a timing line and nothing else: a result row that happens to
+  // mention a duration must stay in the body.
+  assert.equal(re.test(' some_column | Time to live'), false);
+});
+
+// A captured timing is only useful if it reaches the threshold check.
+test('the slowest timing is what gets compared against 200 ms', () => {
+  assert.match(QUERY, /Measure-Object -Maximum/);
+  assert.match(QUERY, /\$slowest -gt 200/);
+});
+
 // THE CROSS-FILE GUARD. 20261017090000 raised log_min_duration_statement to
 // 1000 ms on anon, authenticated and service_role — the roles live traffic
 // runs as. It deliberately did NOT touch postgres, which is the role psql
