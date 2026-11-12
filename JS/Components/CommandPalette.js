@@ -139,16 +139,47 @@ async function choose(index) {
   }
 }
 
-export function initCommandPalette() {
-  // A badge reader is a keyboard wedge, so a card tapped on the desk reader
+// NOT INSTALLED ON THE KIOSK, and the listener is removed rather than gated.
+//
+// This used to be a single init() at startup, on the reasoning that the
+// palette reads the rail buttons to decide what it can offer and there are
+// none on the standalone scanner — so it was inert there. The card-tap
+// listener broke that: on a kiosk the reader is the PRIMARY input, so every
+// badge scan opened the palette over the scan result (reported 2026-11-12,
+// with "0005267898 — nothing matches" covering the person's photo).
+//
+// `acceptsCardTap()` was supposed to prevent exactly this by refusing while
+// an input has focus, and it did not, because doScan() DISABLES #ss-code for
+// a second after each scan to stop a second read piling onto the first —
+// and a disabled input is not document.activeElement. Focus falls back to
+// <body>, which reads as "nothing is being typed into".
+//
+// A gate that subtle is the wrong mechanism for a screen the palette has no
+// business being on at all. Screens.js already starts and stops the alerts
+// badge per screen; the palette now follows the same rule, and a listener
+// that was never installed cannot be wrong about focus.
+let keyHandler = null;
+let tap = emptyTapState();
+
+export function stopCommandPalette() {
+  if (keyHandler) document.removeEventListener('keydown', keyHandler);
+  keyHandler = null;
+  tap = emptyTapState();
+  closePalette();
+}
+
+export function startCommandPalette() {
+  // Idempotent: showShell() runs again on a re-auth, and two handlers would
+  // double every keystroke into the tap state.
+  stopCommandPalette();
+
+  // A badge reader is a keyboard wedge, so a card tapped on a desk reader
   // arrives here as a burst of keystrokes ending in Enter. Catching it opens
   // the palette on that code, and the ranking in paletteSearch.js already
   // treats `active_proximity_code` as an exact match — so "whose card is
   // this?" is answered from the rows in memory, with no request and nothing
   // typed. See Utils/cardTap.js for how a reader is told from a person.
-  let tap = emptyTapState();
-
-  document.addEventListener('keydown', (e) => {
+  keyHandler = (e) => {
     if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
       e.preventDefault();
       if (overlay) closePalette(); else openPalette();
@@ -178,5 +209,6 @@ export function initCommandPalette() {
     // intercepted on the strength of a guess about where the burst is going.
     e.preventDefault();
     openPalette(code.trim());
-  });
+  };
+  document.addEventListener('keydown', keyHandler);
 }

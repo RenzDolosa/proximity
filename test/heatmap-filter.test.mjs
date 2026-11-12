@@ -101,7 +101,7 @@ test('a card tap never competes with something being typed', () => {
 // moment a guard above was wrong. Only the terminating Enter of a COMPLETE
 // read is consumed.
 test('nothing is intercepted until a whole read is in hand', () => {
-  const init = palette.slice(palette.indexOf('export function initCommandPalette'));
+  const init = palette.slice(palette.indexOf('export function startCommandPalette'));
   const guard = init.indexOf('if (!code || !isCardRead(code)) return;');
   const prevent = init.indexOf('e.preventDefault();', guard);
   assert.ok(guard !== -1 && prevent !== -1 && guard < prevent,
@@ -121,8 +121,64 @@ test('the search already knows how to match a card code', () => {
 // Focus moves constantly; latching it when the listener is installed would
 // read the state from page load rather than from the keystroke.
 test('focus is re-read on every key, not captured once', () => {
-  const init = palette.slice(palette.indexOf('export function initCommandPalette'));
-  const listener = init.slice(init.indexOf("addEventListener('keydown'"));
-  assert.match(listener, /acceptsCardTap\(document\.activeElement/,
+  const init = palette.slice(palette.indexOf('export function startCommandPalette'));
+  assert.match(init, /acceptsCardTap\(document\.activeElement/,
     'reading activeElement inside the handler is what makes the guard current');
+});
+
+// ---- the palette must not listen on the kiosk (reported 2026-11-12) ----
+//
+// It was installed once at startup for the whole app, on the reasoning that
+// it reads the rail buttons to decide what it can offer and there are none
+// on the kiosk — so it was inert there. The card-tap listener made that
+// false: a kiosk's reader is the PRIMARY input, so every badge scan opened
+// the palette over the scan result.
+//
+// acceptsCardTap() was supposed to prevent exactly this by refusing while an
+// input has focus, and did not: doScan() DISABLES #ss-code for a second
+// after each scan, and a disabled input is not document.activeElement —
+// focus falls back to <body>, which reads as "nothing is being typed into".
+
+const screens = code(read('Core/screens.js'));
+const scanner = code(read('Features/Scanner/StandaloneScanner.js'));
+const main = code(read('main.js'));
+
+test('the palette is started per screen, not once at startup', () => {
+  assert.ok(!/initCommandPalette/.test(main),
+    'a single startup install is what put the palette on the kiosk');
+  assert.match(palette, /export function startCommandPalette/);
+  assert.match(palette, /export function stopCommandPalette/);
+});
+
+test('only the shell starts it; auth and the kiosk stop it', () => {
+  const shell = screens.slice(screens.indexOf('export function showShell'));
+  assert.match(shell, /startCommandPalette\(\)/, 'the shell is the only screen it belongs on');
+
+  const auth = screens.slice(screens.indexOf('export function showAuth'), screens.indexOf('function paintNavGroups'));
+  assert.match(auth, /stopCommandPalette\(\)/);
+
+  const show = scanner.slice(scanner.indexOf('export function showStandaloneScanner'));
+  assert.match(show, /stopCommandPalette\(\)/,
+    'a card tap on the kiosk must reach the scan box and nothing else');
+});
+
+// REMOVED, not gated. A listener that was never installed cannot be wrong
+// about focus — which is the mistake that produced this bug.
+test('stopping actually removes the listener', () => {
+  const stop = palette.slice(palette.indexOf('export function stopCommandPalette'),
+    palette.indexOf('export function startCommandPalette'));
+  assert.match(stop, /document\.removeEventListener\('keydown', keyHandler\)/);
+  assert.match(stop, /keyHandler = null/);
+  assert.match(stop, /tap = emptyTapState\(\)/, 'a half-read must not survive a screen change');
+  assert.match(stop, /closePalette\(\)/, 'an open palette must not outlive the screen it opened on');
+});
+
+// showShell() runs again on a re-auth, and two handlers would double every
+// keystroke into the tap state — which would break the cadence test.
+test('starting twice does not install two listeners', () => {
+  const start = palette.slice(palette.indexOf('export function startCommandPalette'));
+  const stopAt = start.indexOf('stopCommandPalette();');
+  const addAt = start.indexOf("document.addEventListener('keydown', keyHandler)");
+  assert.ok(stopAt !== -1 && addAt !== -1 && stopAt < addAt,
+    'start must remove any existing handler before adding one');
 });

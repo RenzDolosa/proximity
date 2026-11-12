@@ -8,15 +8,16 @@ import { initAppUpdates } from './Utils/appUpdate.js';
 import { initNavDrawer } from './Core/navDrawer.js';
 import { initHintDropdownWatch } from './Components/Hint.js';
 import { initCopyWatch } from './Components/Copyable.js';
-import { initCommandPalette } from './Components/CommandPalette.js';
 
 initAuthScreen();
 initRouter();
-// Ctrl/Cmd+K. Registered once at the document, like the other delegated
-// watchers below. It reads the rail buttons to decide what it may offer, so
-// it is inert until the shell exists and harmless on the auth screen and in
-// the standalone scanner, where there are none.
-initCommandPalette();
+// The command palette is NOT started here any more. It used to be, on the
+// reasoning that it reads the rail buttons to decide what it may offer and
+// so was inert on the auth screen and the kiosk. Adding the card-tap
+// listener made that false: on a kiosk the badge reader is the primary
+// input, and every scan opened the palette over the scan result
+// (2026-11-12). It is started and stopped per screen now, beside the alerts
+// badge, in Core/screens.js.
 initNavDrawer();
 // Delegated from the document, so modals rebuilt from innerHTML need no
 // re-wiring. See Components/Hint.js.
