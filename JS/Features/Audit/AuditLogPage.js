@@ -14,7 +14,7 @@ import { $ } from '../../Utils/dom.js';
 import { esc, fmtTime } from '../../Utils/format.js';
 import { isAdmin } from '../../Core/state.js';
 import { AuditLogModel } from '../../Models/AuditLogModel.js';
-import { renderPagination } from '../../Components/Pagination.js';
+import { renderPagination, readPageSize } from '../../Components/Pagination.js';
 import { truncation } from '../../Utils/rowCap.js';
 import { isFresh, markFetched, PAGE_MAX_AGE_MS } from '../../Utils/freshness.js';
 
@@ -27,7 +27,7 @@ const AUDIT_KEY = 'audit';
 let rowsCache = [];      // newest AUDIT_PAGE_LIMIT rows, not necessarily all of them
 let totalRows = null;    // true count of audit_log, or null if the count failed
 let page = 1;
-let pageSize = 50;
+let pageSize = readPageSize('audit', 50);
 let loaded = false; // distinguishes "never fetched yet" from "fetched, zero rows"
 
 export async function renderAuditLog() {
@@ -90,6 +90,7 @@ function paintAuditTable() {
     </table>
   `;
   renderPagination($('#audit-pagination'), {
+    storeAs: 'audit',
     total: data.length, page, pageSize,
     onChange: (next) => { page = next.page; pageSize = next.pageSize; paintAuditTable(); },
   });

@@ -12,7 +12,7 @@ import { openScanLogModal } from '../../Components/ScanLogModal.js';
 import { openRemarksModal } from '../../Components/RemarksModal.js';
 import { openImportModal } from '../../Components/ImportModal.js';
 import { openExportScanLogsModal } from '../../Components/ExportScanLogsModal.js';
-import { renderPagination } from '../../Components/Pagination.js';
+import { renderPagination, readPageSize } from '../../Components/Pagination.js';
 import { copyableHTML } from '../../Components/Copyable.js';
 import { menuHTML, mountMenu } from '../../Components/Menu.js';
 import { openConfirmModal, openConfirmProgressModal } from '../../Components/ConfirmModal.js';
@@ -36,7 +36,7 @@ export function reloadDirectory() {
 }
 
 let page = 1;
-let pageSize = 50;
+let pageSize = readPageSize('directory', 50);
 let loaded = false; // distinguishes "never fetched yet" from "fetched, zero rows"
 let scanChannel = null; // created once, kept alive for the rest of the session — see below
 let unresolvedOnly = false; // toolbar toggle — resets to off each fresh page load, same as `page`
@@ -354,6 +354,7 @@ function paintDirectoryTable(filter) {
     </table>
   `;
   renderPagination($('#dir-pagination'), {
+    storeAs: 'directory',
     total: allRows.length, page, pageSize,
     onChange: (next) => { page = next.page; pageSize = next.pageSize; paintDirectoryTable(filter); },
   });

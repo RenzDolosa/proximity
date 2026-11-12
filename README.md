@@ -716,6 +716,45 @@ reverted. A fifth passed when it shouldn't have — its slice ran past
 `readAccounted` into `readUnlisted`, which carries the same guard — and is
 now bounded to each function.
 
+**Three more in the same branch.**
+
+**The headcount leaves a record.** Print gives the *list*; Export gives who
+was accounted for, built from the **unfiltered** grouping so a search left in
+the box cannot quietly export a subset and have it read as the whole roster.
+Not-accounted sorts first inside each site — a roll call is read to find who
+is missing, and burying four names among three hundred ticked ones defeats
+the point. Typed-in people come last under their own label.
+
+**A stray backdrop click no longer discards an edit.** `openModal()` closed
+on any click landing on the backdrop with no dirty check anywhere in the app.
+The four form dialogs now ask first.
+
+> **Escape stays instant, deliberately.** Escape is "get me out of here"; a
+> backdrop click is usually a miss aimed at a field. Confirming on both
+> would make every dialog sticky to catch a keystroke nobody presses by
+> accident.
+>
+> The comparison is **per key against an empty baseline**, not one
+> serialized string. RemarksModal paints its textarea in after the modal
+> opens, and a whole-string match called that a change — so closing a
+> dialog you had only *looked* at asked whether you wanted to discard your
+> work. A control that did not exist at snapshot time is measured against
+> `''`: still empty is clean, typed into is dirty.
+
+**A bug found while reading it:** `setModalLocked`'s own comment says it
+suppresses "Escape and backdrop-click", and the backdrop handler never
+checked it. A stray click during a running import closed the dialog while
+the import carried on, taking its progress bar with it. Fixed alongside.
+
+**The page size finally sticks**, per table — 100 rows is right for scanning
+a week of attendance and wrong for the audit log. A stored value is validated
+against `PAGE_SIZES` rather than merely parsed, so a stale key cannot leave
+the select showing nothing.
+
+**Tests:** 28 more, suite **747 → 775**. Four further guards confirmed to
+fail when reverted, including the per-key comparison and the unfiltered
+export.
+
 **2026-11-11 (last) — click a heatmap day, and tap a badge to find its owner**
 
 Two features, no new requests and no migration.

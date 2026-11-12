@@ -8,7 +8,7 @@ import { EmployeesModel } from '../../Models/EmployeesModel.js';
 import { openCardModal } from '../../Components/ProximityCardModal.js';
 import { openRevokeCardModal } from '../../Components/RevokeCardModal.js';
 import { openImportModal } from '../../Components/ImportModal.js';
-import { renderPagination } from '../../Components/Pagination.js';
+import { renderPagination, readPageSize } from '../../Components/Pagination.js';
 import { copyableHTML } from '../../Components/Copyable.js';
 import { openConfirmModal, openConfirmProgressModal } from '../../Components/ConfirmModal.js';
 import { isFresh, markFetched, invalidate, PAGE_MAX_AGE_MS } from '../../Utils/freshness.js';
@@ -26,7 +26,7 @@ function reloadProximity() {
 let cardsCache = [];
 let assignedByCard = new Map();
 let page = 1;
-let pageSize = 50;
+let pageSize = readPageSize('proximity', 50);
 let loaded = false; // distinguishes "never fetched yet" from "fetched, zero rows"
 let unassignedOnly = false; // toolbar toggle — resets each fresh page load, same as `page`
 let visibleRows = []; // current search/status-filtered set (pre-pagination) — kept in sync by paintProximityTable(), read by the Export button
@@ -208,6 +208,7 @@ function paintProximityTable() {
     </table>
   `;
   renderPagination($('#prox-pagination'), {
+    storeAs: 'proximity',
     total: allRows.length, page, pageSize,
     onChange: (next) => { page = next.page; pageSize = next.pageSize; paintProximityTable(); },
   });

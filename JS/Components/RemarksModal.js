@@ -1,13 +1,14 @@
-// Remarks/notes log for an employee — same append-only jsonb pattern as
+// Remarks/notes log for an employee â€” same append-only jsonb pattern as
 // scan_logs, but written to by the admin/manager instead of the scanner
 // RPC. Appends go through EmployeesModel.addRemark() (add_employee_remark
 // RPC) so concurrent adds don't clobber each other; resolving a remark
 // goes through resolveRemark() (resolve_employee_remark RPC) for the same
 // reason. An unresolved remark also surfaces on the Scanner's result card
-// (see ScanResultCard.js) — resolving it here is what clears that flag.
+// (see ScanResultCard.js) â€” resolving it here is what clears that flag.
 import { $, $$ } from '../Utils/dom.js';
 import { esc, fmtTime } from '../Utils/format.js';
 import { openModal, closeModal, startModalOpen, isStaleModalOpen } from './Modal.js';
+import { guardUnsaved } from './unsavedGuard.js';
 import { toast } from '../Utils/toast.js';
 import { EmployeesModel } from '../Models/EmployeesModel.js';
 
@@ -15,11 +16,13 @@ export async function openRemarksModal(employeeId) {
   const token = startModalOpen();
   const overlay = openModal(`
     <h3 id="remarks-title">Remarks</h3>
-    <div id="remarks-body" class="empty-state">Loading…</div>
+    <div id="remarks-body" class="empty-state">Loadingâ€¦</div>
     <div class="actions">
       <button class="ghost" id="remarks-close">Close</button>
     </div>
   `, { maxWidth: '520px' });
+  // One stray click on the backdrop used to discard this silently.
+  guardUnsaved(overlay, { noun: 'remark text' });
 
   $('#remarks-close', overlay).addEventListener('click', () => closeModal(overlay));
 
@@ -28,12 +31,12 @@ export async function openRemarksModal(employeeId) {
     if (isStaleModalOpen(token)) return; // superseded by a newer click before this resolved
     const bodyEl = $('#remarks-body', overlay);
     if (error) { bodyEl.textContent = error.message; return; }
-    $('#remarks-title', overlay).textContent = `Remarks — ${emp.full_name}`;
+    $('#remarks-title', overlay).textContent = `Remarks â€” ${emp.full_name}`;
     const remarks = (emp.remarks_log || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     bodyEl.className = '';
     bodyEl.innerHTML = `
       <div class="field" style="display:flex;gap:8px;align-items:flex-start;margin-bottom:14px;">
-        <textarea id="remark-input" rows="2" placeholder="Add a remark…" style="flex:1;resize:vertical;"></textarea>
+        <textarea id="remark-input" rows="2" placeholder="Add a remarkâ€¦" style="flex:1;resize:vertical;"></textarea>
         <button class="primary" id="remark-add" style="flex-shrink:0;">Add</button>
       </div>
       <div id="remarks-list" style="max-height:300px;overflow-y:auto;">
@@ -43,7 +46,7 @@ export async function openRemarksModal(employeeId) {
               <div>${esc(r.remark)}</div>
               <div class="emp-meta mono">
                 ${esc(r.created_by || 'Unknown')}
-                ${r.resolved ? `<span class="badge active" style="margin-left:6px;">Resolved${r.resolved_by ? ' · ' + esc(r.resolved_by) : ''}</span>` : `<span class="badge suspended" style="margin-left:6px;">Unresolved</span>`}
+                ${r.resolved ? `<span class="badge active" style="margin-left:6px;">Resolved${r.resolved_by ? ' Â· ' + esc(r.resolved_by) : ''}</span>` : `<span class="badge suspended" style="margin-left:6px;">Unresolved</span>`}
               </div>
             </div>
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">

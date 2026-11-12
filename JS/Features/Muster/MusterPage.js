@@ -10,6 +10,8 @@
 // to survive.
 import { $, $$ } from '../../Utils/dom.js';
 import { esc, fmtTime } from '../../Utils/format.js';
+import { toast } from '../../Utils/toast.js';
+import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
 import { appState } from '../../Core/state.js';
 import { DashboardModel } from '../../Models/DashboardModel.js';
 import { deriveRoster } from '../../Utils/dashboard.js';
@@ -20,7 +22,7 @@ import {
 } from '../../Utils/musterCache.js';
 import {
   groupForMuster, musterTotals, certainty, CERTAINTY, snapshotAge,
-  pruneAccounted, addUnlisted, removeUnlisted,
+  pruneAccounted, addUnlisted, removeUnlisted, rollCallRows,
 } from '../../Utils/muster.js';
 
 // RESTORED FROM THE DEVICE, not started empty. This used to be a bare
@@ -77,6 +79,7 @@ export async function renderMuster() {
                 title="Pure black, larger names, taller rows — for reading outdoors in daylight">Assembly mode</button>
         <button class="ghost" id="mu-expand">Collapse all</button>
         <button class="ghost" id="mu-reset">Reset ticks</button>
+        <button class="ghost" id="mu-export">Export</button>
         <button class="ghost" id="mu-print">Print</button>
         <button class="primary" id="mu-refresh">Refresh</button>
       </div>
@@ -97,6 +100,7 @@ export async function renderMuster() {
     paint();
   });
   $('#mu-print').addEventListener('click', () => window.print());
+  $('#mu-export').addEventListener('click', exportRollCall);
   $('#mu-refresh').addEventListener('click', refresh);
   $('#mu-expand').addEventListener('click', toggleAll);
   // Class toggle only — no repaint. A marshal who hits this mid-headcount
@@ -166,6 +170,41 @@ export async function renderMuster() {
   if (snap) paint();
   // Opportunistic, never blocking: the list is already on screen by now.
   refresh({ quiet: true });
+}
+
+// The record, as opposed to the list. Built from allGroups — the UNFILTERED
+// grouping — so a search left in the box cannot quietly export a subset and
+// have it read as the whole headcount.
+function exportRollCall() {
+  const rows = rollCallRows(allGroups, accounted, unlisted);
+  if (!rows.length) { toast('Nothing to export yet — no roster on this device.', 'error'); return; }
+  const snap = readSnapshot();
+  // The roster time goes in the FILENAME, not a column: it is one fact about
+  // the whole sheet, and a column repeating it on every row is the kind of
+  // thing that later gets mistaken for a per-person timestamp.
+  const asOf = snap?.savedAt ? new Date(snap.savedAt) : new Date();
+  const stamp = `${asOf.toLocaleDateString('en-CA')}-${String(asOf.getHours()).padStart(2, '0')}${String(asOf.getMinutes()).padStart(2, '0')}`;
+  exportXlsx({
+    filename: `muster-roster-${stamp}-exported-${todayStamp()}.xlsx`,
+    sheetName: 'Roll call',
+    columns: [
+      { key: 'accounted', label: 'Accounted for' },
+      { key: 'full_name', label: 'Name' },
+      // text: true — an employee code can be all digits, and Excel will
+      // happily turn 0004182 into 4182 on the round trip. Same reason
+      // Employee Manager and the card export mark theirs.
+      { key: 'employee_code', label: 'Employee code', text: true },
+      { key: 'site', label: 'Site' },
+      { key: 'department', label: 'Department' },
+      { key: 'last_in_at', label: 'Last IN' },
+      { key: 'source', label: 'Source' },
+    ],
+    rows: rows.map((r) => ({ ...r, last_in_at: r.last_in_at ? fmtTime(r.last_in_at) : '' })),
+  });
+  const missing = rows.filter((r) => r.accounted !== 'yes').length;
+  toast(missing
+    ? `Exported ${rows.length} — ${missing} not accounted for.`
+    : `Exported ${rows.length} — everyone accounted for.`);
 }
 
 function toggleAll() {

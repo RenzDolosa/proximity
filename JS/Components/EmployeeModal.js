@@ -2,6 +2,7 @@ import { $, $$ } from '../Utils/dom.js';
 import { esc, initials } from '../Utils/format.js';
 import { toast } from '../Utils/toast.js';
 import { openModal, closeModal, showModalError, startModalOpen, isStaleModalOpen } from './Modal.js';
+import { guardUnsaved } from './unsavedGuard.js';
 import { appState } from '../Core/state.js';
 import { EmployeesModel } from '../Models/EmployeesModel.js';
 import { ProximityCardsModel } from '../Models/ProximityCardsModel.js';
@@ -10,13 +11,13 @@ import { EMPLOYEE_STATUS_HINT, employeeStatusOptionsHTML } from '../Utils/employ
 import { withHint } from './Hint.js';
 import { currentCodeHolder, currentNameHolder } from '../Utils/employeeCode.js';
 
-// Opens instantly — the two network calls this needs (unassigned cards +
+// Opens instantly â€” the two network calls this needs (unassigned cards +
 // who's linked to what) load in the background *after* the modal is
 // already on screen, instead of blocking openModal() itself. It used to
 // await both before rendering anything, so clicking Edit did nothing
 // visible for a beat and then the whole modal popped in at once. The
 // employee's own current code (`emp.active_proximity_code`) is already in
-// memory from the table row, so that part never needed the fetch at all —
+// memory from the table row, so that part never needed the fetch at all â€”
 // only the "pick a different existing card" search list does.
 export async function openEmployeeModal(emp, onSaved) {
   const isEdit = !!emp;
@@ -55,7 +56,7 @@ export async function openEmployeeModal(emp, onSaved) {
       ${withHint(`<select id="f-status">${employeeStatusOptionsHTML(emp?.status)}</select>`, EMPLOYEE_STATUS_HINT)}
     </div>
     <div class="field">
-      <label>Proximity code <span style="color:red;">*</span> <span style="color:var(--text-faint)">(required — every employee needs one)</span></label>
+      <label>Proximity code <span style="color:red;">*</span> <span style="color:var(--text-faint)">(required â€” every employee needs one)</span></label>
       <select id="f-card-mode">
         <option value="existing">${isEdit ? 'Assign a different card' : 'Assign an existing unassigned card'}</option>
         <option value="new">Issue a brand-new proximity code</option>
@@ -63,7 +64,7 @@ export async function openEmployeeModal(emp, onSaved) {
     </div>
     <div class="field" id="f-card-existing-wrap">
       ${isEdit && emp?.active_proximity_code ? `<div class="emp-meta" style="margin-bottom:6px;">Currently assigned: <span class="mono">${esc(emp.active_proximity_code)}</span></div>` : ''}
-      <input id="f-card-search" class="mono" placeholder="Loading proximity cards…" autocomplete="off" autofocus disabled />
+      <input id="f-card-search" class="mono" placeholder="Loading proximity cardsâ€¦" autocomplete="off" autofocus disabled />
       <div id="f-card-results" class="search-results hidden"></div>
     </div>
     <div class="field hidden" id="f-card-new-wrap">
@@ -75,6 +76,8 @@ export async function openEmployeeModal(emp, onSaved) {
       <button class="primary" id="f-save">${isEdit ? 'Save changes' : 'Add employee'}</button>
     </div>
   `);
+  // One stray click on the backdrop used to discard this silently.
+  guardUnsaved(overlay, { noun: 'employee details' });
 
   $('#f-cancel', overlay).addEventListener('click', () => closeModal(overlay));
   $('#f-card-mode', overlay).addEventListener('change', (e) => {
@@ -86,7 +89,7 @@ export async function openEmployeeModal(emp, onSaved) {
   // The actual Drive upload is deferred until Save (below), so picking a
   // photo and then cancelling the modal never uploads anything.
   let pendingPhotoBlob = null; // converted .webp Blob awaiting upload, or null
-  let pendingThumbBlob = null; // smaller .webp Blob for the offline Scanner's photo_thumb_b64 — see Utils/image.js's fileToOfflineThumbWebp()
+  let pendingThumbBlob = null; // smaller .webp Blob for the offline Scanner's photo_thumb_b64 â€” see Utils/image.js's fileToOfflineThumbWebp()
   let photoRemoved = false; // true if the existing photo should be cleared on save
   let thumbMissing = false; // set on save when neither thumbnail path produced one
   const photoAvatar = $('#f-photo-avatar', overlay);
@@ -102,11 +105,11 @@ export async function openEmployeeModal(emp, onSaved) {
   $('#f-photo-file', overlay).addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    photoStatus.textContent = 'Converting to .webp…';
+    photoStatus.textContent = 'Converting to .webpâ€¦';
     try {
       const { blob, previewUrl } = await fileToWebp(file);
       pendingPhotoBlob = blob;
-      // Never blocks the photo the admin just approved in the preview — the Edge
+      // Never blocks the photo the admin just approved in the preview â€” the Edge
       // Function has its own server-side fallback. But the failure is reported
       // rather than swallowed: when BOTH paths miss, the employee shows as
       // initials on every kiosk while looking perfectly fine here, and that gap
@@ -122,8 +125,8 @@ export async function openEmployeeModal(emp, onSaved) {
       setAvatarPreview(previewUrl);
       photoRemoveBtn.style.display = '';
       photoStatus.textContent = thumbFailed
-        ? `Ready — ${Math.round(blob.size / 1024)} KB .webp. Couldn't build the Scanner thumbnail from this file (iPhone HEIC photos aren't readable by the browser) — the server will try instead. A JPEG or PNG is more reliable.`
-        : `Ready — ${Math.round(blob.size / 1024)} KB .webp, uploads on Save.`;
+        ? `Ready â€” ${Math.round(blob.size / 1024)} KB .webp. Couldn't build the Scanner thumbnail from this file (iPhone HEIC photos aren't readable by the browser) â€” the server will try instead. A JPEG or PNG is more reliable.`
+        : `Ready â€” ${Math.round(blob.size / 1024)} KB .webp, uploads on Save.`;
     } catch (err) {
       photoStatus.textContent = err.message;
       e.target.value = '';
@@ -148,7 +151,7 @@ export async function openEmployeeModal(emp, onSaved) {
     const resultsEl = $('#f-card-results', overlay);
     const matches = availableCards.filter((c) => !f || c.proximity_code.toLowerCase().includes(f));
     if (!matches.length) {
-      resultsEl.innerHTML = `<div class="search-empty">No unassigned cards match — issue a new one instead.</div>`;
+      resultsEl.innerHTML = `<div class="search-empty">No unassigned cards match â€” issue a new one instead.</div>`;
       return;
     }
     resultsEl.innerHTML = matches.map((c) => `
@@ -162,7 +165,7 @@ export async function openEmployeeModal(emp, onSaved) {
       paintCardResults($('#f-card-search', overlay).value);
     }));
   }
-  // Results only show while the search field is actually focused — it
+  // Results only show while the search field is actually focused â€” it
   // used to render open by default, listing every unassigned card even
   // before you'd interacted with it. The timeout on blur (rather than
   // hiding immediately) gives a click on a result item time to register;
@@ -176,7 +179,7 @@ export async function openEmployeeModal(emp, onSaved) {
   $('#f-card-search', overlay).addEventListener('input', (e) => paintCardResults(e.target.value));
 
   // unassigned, active cards + (when editing) the employee's own current
-  // card — loads in the background, the form above is already usable
+  // card â€” loads in the background, the form above is already usable
   // (including "issue a brand-new code" mode, which doesn't need this at
   // all) while it does.
   (async () => {
@@ -190,7 +193,7 @@ export async function openEmployeeModal(emp, onSaved) {
 
     const searchInput = $('#f-card-search', overlay);
     searchInput.disabled = false;
-    searchInput.placeholder = 'Search proximity codes…';
+    searchInput.placeholder = 'Search proximity codesâ€¦';
     // Only auto-switch to "issue new" if the person hasn't already touched
     // the mode selector while this was loading.
     if (!availableCards.length && $('#f-card-mode', overlay).value === 'existing') {
@@ -216,7 +219,7 @@ export async function openEmployeeModal(emp, onSaved) {
       showModalError(overlay, errSel, 'Full name and employee code are required.');
       return;
     }
-    // Both checks ignore resigned employees and the record being edited — see
+    // Both checks ignore resigned employees and the record being edited â€” see
     // Utils/employeeCode.js. The code check mirrors
     // employees_employee_code_current_key so a collision reads as an
     // explanation rather than a raw constraint-violation message.
@@ -244,10 +247,10 @@ export async function openEmployeeModal(emp, onSaved) {
       progressWrap.classList.remove('hidden');
       progressFill.classList.remove('indeterminate');
       progressFill.style.width = '0%';
-      photoStatus.textContent = 'Uploading photo… 0%';
+      photoStatus.textContent = 'Uploading photoâ€¦ 0%';
 
       const base64 = await blobToBase64(pendingPhotoBlob);
-      // thumbBase64 null is fine — uploadPhoto/the Edge Function falls
+      // thumbBase64 null is fine â€” uploadPhoto/the Edge Function falls
       // back to its own (lower-res, non-webp-guaranteed) server-side
       // Drive thumbnail fetch when the client didn't supply one, same as
       // every upload before fileToOfflineThumbWebp() existed.
@@ -262,14 +265,14 @@ export async function openEmployeeModal(emp, onSaved) {
         onProgress: (pct) => {
           if (pct >= 100) {
             // Bytes are fully sent, but the function is still round-tripping
-            // to Google Drive server-side — an indeterminate shimmer reads
+            // to Google Drive server-side â€” an indeterminate shimmer reads
             // as "still working" instead of a bar frozen at 100% with
             // nothing happening.
             progressFill.classList.add('indeterminate');
-            photoStatus.textContent = 'Finishing upload…';
+            photoStatus.textContent = 'Finishing uploadâ€¦';
           } else {
             progressFill.style.width = `${pct}%`;
-            photoStatus.textContent = `Uploading photo… ${pct}%`;
+            photoStatus.textContent = `Uploading photoâ€¦ ${pct}%`;
           }
         },
       });
@@ -285,11 +288,11 @@ export async function openEmployeeModal(emp, onSaved) {
       photoStatus.textContent = 'Upload complete.';
       payload.photo_url = uploaded.url;
       payload.photo_file_id = uploaded.file_id;
-      // A null thumb_b64 is expected, not a failure — both the client-side
+      // A null thumb_b64 is expected, not a failure â€” both the client-side
       // conversion and the server's Drive fetch are best-effort. But it has a
       // real consequence worth saying out loud: this employee will show as
-      // initials on every kiosk while looking correct here. Settings → Offline
-      // scanner thumbnails → Repair missing fixes it once Drive catches up.
+      // initials on every kiosk while looking correct here. Settings â†’ Offline
+      // scanner thumbnails â†’ Repair missing fixes it once Drive catches up.
       payload.photo_thumb_b64 = uploaded.thumb_b64 ?? null;
       thumbMissing = !uploaded.thumb_b64;
     } else if (photoRemoved) {
@@ -329,7 +332,7 @@ export async function openEmployeeModal(emp, onSaved) {
     // while looking correct in the directory. Say so now rather than leaving it
     // to be noticed at a door.
     if (thumbMissing) {
-      toast('Photo saved, but no Scanner thumbnail could be made — this employee will show as initials on kiosks. Settings → Offline scanner thumbnails → Repair missing can retry it.', 'error');
+      toast('Photo saved, but no Scanner thumbnail could be made â€” this employee will show as initials on kiosks. Settings â†’ Offline scanner thumbnails â†’ Repair missing can retry it.', 'error');
     }
     onSaved?.();
   });
