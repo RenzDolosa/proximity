@@ -819,6 +819,18 @@ tr.row-clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2
 }
 .muster-drop:hover{color:var(--bad);}
 
+/* Label/value rows — Settings' "About this install". Deliberately not a
+   <table>: three rows of two cells is a list, and a table here would inherit
+   the grid styling meant for data someone sorts and pages through. */
+.kv-rows{display:flex;flex-direction:column;gap:2px;margin-top:10px;}
+.kv-row{
+  display:flex;align-items:baseline;gap:12px;
+  padding:5px 0;border-bottom:1px solid var(--border-soft);
+  font-size:12.5px;color:var(--text-muted);
+}
+.kv-row:last-child{border-bottom:none;}
+.kv-row > span:last-child{margin-left:auto;color:var(--text);}
+
 /* Command palette (Ctrl/Cmd+K). Sits above the drawer (z-index 40) and the
    phone tab bar (35), since it covers the whole app while open. */
 .cmdk-overlay{

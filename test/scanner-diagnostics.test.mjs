@@ -234,6 +234,10 @@ test('a healthy kiosk reports good across the board', () => {
     cacheRows: 727, cacheSyncedAt: '2026-11-06T00:00:00Z', cacheAgeMs: 2 * 3600 * 1000,
     photosCached: 727, audioUnlocked: true, soundsLoaded: true,
     scannerId: 'Krus4K',
+    // Added with the App version row. A kiosk that cannot say which build it
+    // is running is not fully healthy, so a complete state has to include it
+    // — the same reason scannerId is here.
+    buildLabel: '4f96538', updatePending: false,
   });
   assert.equal(overallHealth(rows), HEALTH.GOOD);
 });
@@ -354,10 +358,34 @@ test('an unchecked site is not reported as unset', () => {
 
 test('missing input degrades to unknown rather than throwing', () => {
   const rows = healthRows();
-  assert.equal(rows.length, 6);
+  assert.equal(rows.length, 7); // 6 until the App version row was added
   assert.ok(rows.every((r) => r.label && r.value));
-  assert.equal(healthRows({}).length, 6);
+  assert.equal(healthRows({}).length, 7);
   assert.equal(overallHealth(null), HEALTH.UNKNOWN);
+});
+
+// A held update is not a fault — the kiosk is working, it is just behind —
+// but it is the one state where the drawer should say something an operator
+// can act on, and the handle's dot should stop reading as all-clear.
+test('a held update warns rather than passing silently', () => {
+  const healthy = {
+    online: true, queued: 0, cacheRows: 10, cacheSyncedAt: 'x', cacheAgeMs: 0,
+    photosCached: 10, audioUnlocked: true, soundsLoaded: true, scannerId: 'K1',
+    buildLabel: '4f96538',
+  };
+  assert.equal(overallHealth(healthRows({ ...healthy, updatePending: false })), HEALTH.GOOD);
+  assert.equal(overallHealth(healthRows({ ...healthy, updatePending: true })), HEALTH.WARN);
+
+  const row = healthRows({ ...healthy, updatePending: true }).find((r) => r.key === 'build');
+  assert.equal(row.value, 'update waiting');
+});
+
+// A build it cannot name is reported as unknown, not invented and not
+// silently good — the same rule the scanner-identity row follows.
+test('an unnamed build reads as unknown', () => {
+  const row = healthRows({}).find((r) => r.key === 'build');
+  assert.equal(row.value, 'unknown');
+  assert.equal(row.state, HEALTH.UNKNOWN);
 });
 
 test('cache age reads in the largest sensible unit', () => {

@@ -25,6 +25,12 @@ import { describeQuery } from '../../Utils/queryLabel.js';
 import { readSummary, resetMeter } from '../../Core/requestLog.js';
 import { shareOfAllowance } from '../../Utils/requestMeter.js';
 import { isFresh, markFetched, invalidate, PAGE_MAX_AGE_MS } from '../../Utils/freshness.js';
+import { shortBuild, isDevBuild } from '../../Core/buildInfo.js';
+import { updatePending, applyUpdateNow } from '../../Utils/appUpdate.js';
+
+// When this tab booted. Module scope, so it is the tab's own load time and
+// not the moment Settings was opened.
+const TAB_LOADED_AT = Date.now();
 import { AlertChannelsModel } from '../../Models/AlertChannelsModel.js';
 import { ALERT_KINDS } from '../../Utils/alertKinds.js';
 
@@ -453,6 +459,29 @@ export async function renderSettings() {
       )}
       <div id="travel-body">${travelRules ? '' : 'Loading…'}</div>
     </div>`,
+
+    // WHAT THIS ANSWERS. Nothing in the app said which build it was running,
+    // so "did that fix reach the kiosk by the loading bay?" was answered by
+    // walking over and guessing — a question that came up for real on
+    // 2026-11-12. Open to everyone who can see Settings, because the person
+    // who needs it is as often an operator as an admin.
+    //
+    // Costs nothing: BUILD is a constant stamped into the bundle at deploy
+    // time, and the worker's version comes back over postMessage inside the
+    // browser. No request, no log line.
+    about: `
+    <div class="panel" style="padding:20px;">
+      <h3 style="margin:0 0 4px;">About this install</h3>
+      ${panelNote(
+        'Which build this browser is running, and whether an update is waiting.',
+        `<p>The build is the commit it was deployed from — paste it into
+         GitHub to see exactly what is live here.</p>
+         <p>A tab keeps the code it loaded with until it reloads, so a tab
+         left open can be behind the deployed version. It reloads itself once
+         nothing is in flight.</p>`,
+      )}
+      <div id="about-body"></div>
+    </div>`,
   };
 
   // Grouped by what you came to Settings to do. "Your account" is open by
@@ -460,7 +489,7 @@ export async function renderSettings() {
   // which is what makes the lazy loading below possible.
   const groups = [
     { id: 'account', label: 'Your account', hint: 'How this browser looks, and your own sign-in', open: true,
-      html: panels.appearance + panels.password },
+      html: panels.appearance + panels.password + panels.about },
     { id: 'scanning', label: 'Scanning & kiosks', hint: 'The scanners themselves, and what they play and show',
       html: panels.scanners + panels.sounds + panels.thumbs + panels.silence + panels.notifications + panels.travel },
     // Its own group rather than a fourth panel under Scanning: a shift start
@@ -605,6 +634,9 @@ export async function renderSettings() {
     // handle the not-yet-loaded case themselves.
     paintSiteRules();
     paintShiftRules();
+    // Reads constants and a postMessage, never a fetch — so it belongs on the
+    // render path rather than behind a loader.
+    paintAbout();
     // Same reason as the two above: the freshness window means this panel's
     // loader does not run on every visit, so the render path has to paint it
     // from state or it sits on "Loading…" until the window expires.
@@ -1508,6 +1540,66 @@ function paintSilenceStatus() {
 }
 
 // ---- shift times (punctuality) ----
+
+// The worker's own version, asked over postMessage. Cached for the session:
+// it cannot change without the worker activating, and an activation reloads
+// the page anyway.
+let workerBuild = null;
+
+function askWorkerBuild() {
+  const sw = navigator.serviceWorker;
+  if (!sw?.controller || workerBuild !== null) return;
+  const onMessage = (event) => {
+    if (event.data?.type !== 'sw-version') return;
+    workerBuild = String(event.data.version || '');
+    sw.removeEventListener('message', onMessage);
+    paintAbout();
+  };
+  sw.addEventListener('message', onMessage);
+  sw.controller.postMessage({ type: 'which-version' });
+}
+
+function paintAbout() {
+  const body = $('#about-body');
+  if (!body) return;
+  askWorkerBuild();
+
+  const tabBuild = shortBuild();
+  const worker = workerBuild ? shortBuild(workerBuild) : null;
+  const pending = updatePending();
+  // A difference between the two is the honest signal, and it is more
+  // reliable than waiting for the activation message: the tab holds whatever
+  // it booted with, the worker is what is live now.
+  const behind = Boolean(worker && worker !== tabBuild);
+
+  const status = pending || behind
+    ? '<span class="badge unassigned_card">update waiting</span>'
+    : (isDevBuild() ? '<span class="badge role-viewer">dev build</span>'
+      : '<span class="badge matched">up to date</span>');
+
+  body.innerHTML = `
+    <div class="kv-rows">
+      <div class="kv-row"><span>Build</span><span class="mono">${esc(tabBuild)}</span></div>
+      <div class="kv-row"><span>Service worker</span><span class="mono">${esc(worker || 'not registered')}</span></div>
+      <div class="kv-row"><span>Tab loaded</span><span class="mono">${esc(fmtTime(new Date(TAB_LOADED_AT).toISOString()))}</span></div>
+    </div>
+    <p class="emp-meta" style="margin:10px 0 0;display:flex;align-items:center;gap:8px;">
+      ${status}
+      ${pending || behind
+        ? '<button class="ghost" id="about-apply" style="padding:4px 10px;">Reload now</button>'
+        : ''}
+    </p>`;
+
+  const apply = $('#about-apply');
+  if (apply) {
+    apply.addEventListener('click', () => {
+      // Routed through the gate, which refuses while a dialog is open — the
+      // same rule the automatic reload follows. A button that ignored it
+      // could discard an edit, which is the opposite of helpful.
+      if (!applyUpdateNow()) toast('Close any open dialog first, then try again.');
+    });
+  }
+}
 
 async function loadShiftRules() {
   const { data, error } = await ShiftRulesModel.list();

@@ -34,14 +34,26 @@
 // Utils/format.js) is unrelated to PHOTO_CACHE's removal; DEFAULT_AVATAR_URL
 // below is precached independently of it.
 
-// Bump VERSION on every deploy that changes app code. It renames APP_CACHE
-// (so `activate` prunes the previous one) and is broadcast to open tabs, which
-// reload themselves when idle — see JS/Utils/appUpdate.js for why a kiosk tab
-// left open for three weeks became the single largest egress source.
+// STAMPED AT DEPLOY TIME — do not hand-edit, and do not "fix" it back to a
+// hardcoded string. The Cloudflare workflow rewrites this one line to the
+// commit SHA before publishing, and rewrites JS/Core/buildInfo.js's BUILD to
+// the same value in the same step.
 //
-// Forgetting to bump it is survivable: appUpdate.js also reloads on tab age
-// alone, precisely so freshness never depends on remembering this line.
-const VERSION = 'v2';
+// WHY IT HAD TO STOP BEING A HAND-BUMPED CONSTANT. A Service Worker is only
+// reinstalled when its own FILE BYTES change. This line last moved in
+// 8d9e02f; 79 commits touched JS/CSS afterwards without it. So across two
+// months of deploys the browser saw no new worker, `activate` never ran, and
+// the `app-updated` message below was never posted to a single tab.
+//
+// appUpdate.js's header says there are "two triggers, because they fail in
+// different ways" — a new worker activating, and plain tab age. Only the
+// second has ever fired, which is why a kiosk could serve up to twelve hours
+// of stale code after a deploy, and why the 2026-11-12 kiosk fix had to ship
+// with "reload the tab" as the instruction.
+//
+// Forgetting is no longer possible, which is the point: the stamp is part of
+// the deploy, not part of remembering.
+const VERSION = 'dev';
 const APP_CACHE = `proximity-app-${VERSION}`;
 // Deliberately unversioned: the sounds are the largest thing cached here and
 // change only when an admin replaces one, so a code deploy should not evict
@@ -100,6 +112,17 @@ self.addEventListener('activate', (event) => {
     const windows = await self.clients.matchAll({ type: 'window' });
     for (const client of windows) client.postMessage({ type: 'app-updated', version: VERSION });
   })());
+});
+
+// "Which build is actually controlling this page?" — asked by the About
+// block in Settings and the kiosk's health drawer. A postMessage round trip
+// inside the browser: no network, no request, no log line. Answering is
+// worth it because the page's own BUILD comes from the JS it booted with,
+// and the worker's VERSION is what is live — a difference between them is
+// precisely the "you are running stale code" case.
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== 'which-version') return;
+  event.source?.postMessage({ type: 'sw-version', version: VERSION });
 });
 
 function isSoundRequest(url) {

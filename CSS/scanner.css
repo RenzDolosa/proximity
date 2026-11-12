@@ -355,6 +355,19 @@ span.ss-health-dot.ss-health-unknown{background:var(--text-faint);}
 }
 .ss-health-row > span:last-child{text-align:right;}
 
+/* The one actionable thing in the drawer, so it gets a button rather than
+   another label/value row. Only rendered when an update is actually held. */
+.ss-health-apply{
+  display:flex;align-items:center;gap:10px;
+  margin-top:8px;padding:9px 10px;
+  border-radius:var(--radius);background:var(--accent-dim);
+}
+.ss-health-apply-title{font-size:12.5px;font-weight:600;color:var(--text);}
+.ss-health-apply .emp-meta{font-size:11px;}
+/* 44px minimum: this is tapped on a kiosk screen, often by someone wearing
+   gloves — the same floor the muster rows and the scan box use. */
+.ss-health-apply button{flex:0 0 auto;margin-left:auto;min-height:36px;padding:7px 12px;}
+
 @media (max-width: 640px){
   /* A phone has no hover, so this only ever opens by tap — and anchoring it
      to the button does not fit. Measured at 375px: the wrapper's right edge
