@@ -672,6 +672,57 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-12 (later) — deploys have not been reaching kiosks for two months**
+
+Not a feature. A correctness fix to the deploy pipeline, silently broken
+since September.
+
+**A Service Worker is reinstalled only when its own file bytes change.**
+`sw.js` carried a hand-bumped `const VERSION = 'v2'` whose last change was
+**8d9e02f** — and **79 commits** have touched `JS/` or `CSS/` since 1 October
+without it moving. So across two months of deploys the browser never saw a
+new worker, `activate` never ran, and the `app-updated` message was never
+posted to a single tab.
+
+`appUpdate.js`'s own header says there are *"two triggers, because they fail
+in different ways"* — a new worker activating, and plain tab age. **Only the
+second has ever fired.** Twelve hours of stale code after every deploy, which
+is why shipping the kiosk fix the day before came with "reload the tab" as
+the instruction.
+
+- **The version is stamped at deploy time**, in `JS/Core/buildInfo.js` and
+  `sw.js`, both from `GITHUB_SHA` in one step so they cannot disagree. The
+  step `grep`s afterwards and **fails the deploy** if either substitution
+  silently matched nothing — a no-op there would restore exactly this bug and
+  look identical from the outside.
+- **The kiosk says when an update is held.** `createUpdateGate` already
+  tracked `pending` and already waited for the scanner to be idle; nothing
+  read the bit. There is now a Health row and an Apply-now button, still
+  routed through the gate so pressing it mid-scan reschedules rather than
+  reloading over the top.
+- **Settings → About says which build is running**, comparing the tab's own
+  `BUILD` against the live worker's version over `postMessage`. That
+  difference is a better signal than the activation message, because it does
+  not depend on having been listening at the right moment.
+
+**Costs nothing.** A constant in the bundle, and a postMessage inside the
+browser. No request, no log line, no egress.
+
+**Tests:** 16 added, suite **713 → 729**. Two guards confirmed to fail when
+reverted: removing the stamp verification from the workflow, and making
+Apply-now call `reload()` directly instead of going through the gate.
+
+> **A test of mine was wrong again, the same way.** The check that Apply-now
+> does not reload directly sliced from `applyUpdateNow` to the end of the
+> file and ran into `initAppUpdates`, which legitimately holds
+> `reload = () => window.location.reload()`. Bounded to the function now —
+> the identical mistake the `readAccounted` guard made yesterday.
+
+**Verified by simulation, not by deploying.** The substitution was run
+locally against both files: both rewrite, both still parse, and
+`shortBuild()` returns `4f96538`. The real `sed` runs on `ubuntu-latest`, so
+the first deploy after merge is the one that proves it.
+
 **2026-11-12 — a roll call that survives a reload, people who aren't on the sheet, and an import that says what it will do**
 
 Three features, no requests, no migration.

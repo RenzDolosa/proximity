@@ -29,7 +29,8 @@ export function healthRows(state = {}) {
     online, lastRequestFailed, queued,
     cacheRows, cacheSyncedAt, cacheAgeMs,
     photosCached, audioUnlocked, soundsLoaded,
-    scannerId, site, nowMs = Date.now(),
+    scannerId, site, buildLabel, updatePending = false,
+    nowMs = Date.now(),
   } = state;
 
   const rows = [];
@@ -114,6 +115,21 @@ export function healthRows(state = {}) {
     state: soundsLoaded === false
       ? HEALTH.UNKNOWN
       : (audioUnlocked ? HEALTH.GOOD : HEALTH.WARN),
+  });
+
+  // A HELD UPDATE IS WORTH SAYING OUT LOUD. createUpdateGate() already waits
+  // for the kiosk to be idle before reloading, and already tracks that it is
+  // waiting — nothing read the bit. An operator standing at a kiosk that has
+  // been running yesterday's code has no way to know, and no way to let the
+  // update through between taps.
+  //
+  // Not BAD: the kiosk is working, it is just behind. WARN is the same
+  // weight as a stale cache, which is the same kind of problem.
+  rows.push({
+    key: 'build',
+    label: 'App version',
+    value: updatePending ? 'update waiting' : (buildLabel || 'unknown'),
+    state: updatePending ? HEALTH.WARN : (buildLabel ? HEALTH.GOOD : HEALTH.UNKNOWN),
   });
 
   // `site` has THREE meaningful values and the row says a different thing for

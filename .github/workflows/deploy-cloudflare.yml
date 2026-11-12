@@ -16,6 +16,40 @@ jobs:
         with:
           node-version: '20'
       - run: npm install
+
+      # THE STEP THAT MAKES DEPLOYS REACH KIOSKS.
+      #
+      # A Service Worker is reinstalled only when its own FILE BYTES change.
+      # sw.js carried a hand-bumped `const VERSION = 'v2'` that last moved in
+      # 8d9e02f, with 79 commits touching JS/CSS afterwards — so for two
+      # months the browser saw no new worker, `activate` never ran, and the
+      # `app-updated` message never reached a tab. Tab age (12 hours) was the
+      # only update path left, which is why shipping a kiosk fix came with
+      # "reload the tab" as the instruction.
+      #
+      # Stamping the SHA makes sw.js differ on every deploy that changes
+      # anything, so the browser installs it and the signal fires.
+      #
+      # BOTH FILES, ONE VALUE. buildInfo.js is what the UI displays and sw.js
+      # is what controls the page; stamping them separately would let them
+      # disagree, and "which build is this?" would have two answers.
+      #
+      # sed with a `|` delimiter: a SHA cannot contain one, and `/` would
+      # need escaping. `-i` without a backup suffix is GNU sed, which is what
+      # ubuntu-latest has.
+      - name: Stamp the build
+        run: |
+          set -e
+          BUILD="${GITHUB_SHA}"
+          sed -i "s|^const VERSION = 'dev';|const VERSION = '${BUILD}';|" sw.js
+          sed -i "s|^export const BUILD = 'dev';|export const BUILD = '${BUILD}';|" JS/Core/buildInfo.js
+          # Fail loudly rather than deploying an unstamped build: a silent
+          # no-op here would restore exactly the bug this step exists for,
+          # and it would look identical from the outside.
+          grep -q "^const VERSION = '${BUILD}';" sw.js
+          grep -q "^export const BUILD = '${BUILD}';" JS/Core/buildInfo.js
+          echo "stamped ${BUILD}"
+
       - run: npm run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

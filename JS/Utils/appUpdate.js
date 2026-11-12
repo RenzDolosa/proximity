@@ -87,6 +87,28 @@ export function createUpdateGate({ reload, isBusy: busy, schedule, retryMs = BUS
   };
 }
 
+// The gate from the one real initAppUpdates() call, so anything that wants
+// to SHOW the pending state can read it without threading the object through
+// half the app. initAppUpdates already returned the gate; nothing held it.
+let liveGate = null;
+
+/** Is a reload waiting for this page to go idle? */
+export function updatePending() {
+  return Boolean(liveGate?.pending);
+}
+
+/**
+ * Let a held update through now.
+ *
+ * Still routed via the gate rather than calling reload() directly: the
+ * whole point of the gate is that a scan in flight or an open dialog is a
+ * bad moment, and a button that ignored that would be a worse version of
+ * the thing it is trying to improve. Returns whether it actually reloaded.
+ */
+export function applyUpdateNow() {
+  return Boolean(liveGate?.attempt());
+}
+
 export function initAppUpdates({
   loadedAt = Date.now(),
   now = Date.now,
@@ -109,5 +131,6 @@ export function initAppUpdates({
     if (isTabStale(loadedAt, now(), maxAgeMs)) gate.request();
   }, STALE_CHECK_MS);
 
+  liveGate = gate;
   return gate;
 }

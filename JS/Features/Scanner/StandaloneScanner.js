@@ -11,7 +11,9 @@ import { loadScanSounds, playScanSound, scanSoundsLoaded, initAudioUnlock, audio
 import { healthRows, overallHealth } from '../../Utils/scannerHealth.js';
 import { OfflineScanModel, STALE_AFTER_MS } from '../../Models/OfflineScanModel.js';
 import { readRejection } from '../../Core/offlineScanning.js';
-import { registerBusyCheck } from '../../Utils/appUpdate.js';
+import { registerBusyCheck, updatePending, applyUpdateNow } from '../../Utils/appUpdate.js';
+import { shortBuild } from '../../Core/buildInfo.js';
+import { toast } from '../../Utils/toast.js';
 import { wireAvatarPreview } from '../../Utils/avatarPreview.js';
 import { openModal, closeModal, onModalClose } from '../../Components/Modal.js';
 import { connectionState, CONNECTION_LABEL, CONNECTION_BADGE } from '../../Utils/connectionState.js';
@@ -699,6 +701,8 @@ function paintHealth(meta, pending) {
     audioUnlocked: audioIsUnlocked(),
     soundsLoaded: scanSoundsLoaded(),
     scannerId: currentOperatorName,
+    buildLabel: shortBuild(),
+    updatePending: updatePending(),
     // Deliberately omitted: see healthRows(). Looking the site up is a
     // request, and this drawer costs none.
   });
@@ -711,7 +715,27 @@ function paintHealth(meta, pending) {
       <div class="ss-health-row">
         <span>${esc(r.label)}</span>
         <span class="mono ss-health-${r.state}">${esc(r.value)}</span>
-      </div>`).join('');
+      </div>`).join('')
+      // Offered only when there is something to apply. The gate still
+      // decides: pressing this during a scan reschedules rather than
+      // reloading over the top of it, which is the behaviour the automatic
+      // path already has and the whole reason it waits.
+      + (updatePending() ? `
+        <div class="ss-health-apply">
+          <div>
+            <div class="ss-health-apply-title">New version ready</div>
+            <div class="emp-meta">Applies by itself once no scan is in flight.</div>
+          </div>
+          <button class="primary" id="ss-apply-update">Apply now</button>
+        </div>` : '');
+    const applyBtn = $('#ss-apply-update');
+    if (applyBtn) {
+      applyBtn.addEventListener('click', () => {
+        // False means the gate judged this a bad moment and has scheduled a
+        // retry. Say so rather than leaving a button that looks ignored.
+        if (!applyUpdateNow()) toast('Finishing a scan first — the update will apply in a moment.');
+      });
+    }
   }
 }
 
