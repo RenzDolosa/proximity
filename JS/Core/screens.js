@@ -5,6 +5,7 @@ import { $, $$ } from '../Utils/dom.js';
 import { appState, isAdmin, canViewEmployeeManager, canViewScanner, canViewSettings, canViewAttendance, canViewDashboard, canViewAlerts, canViewExportTasks } from './state.js';
 import { render } from './router.js';
 import { startAlertsBadge, stopAlertsBadge } from './alertsBadge.js';
+import { startCommandPalette, stopCommandPalette } from '../Components/CommandPalette.js';
 import { hiddenGroupIds, bottomNavRoutes, BOTTOM_NAV_LABEL } from './navGroups.js';
 
 export function showAuth() {
@@ -12,6 +13,7 @@ export function showAuth() {
   $('#shell').classList.add('hidden');
   $('#standalone-scanner').classList.add('hidden');
   stopAlertsBadge();
+  stopCommandPalette();
   // Signing out (or landing here with no session at all) previously left
   // whatever shell route hash was last in the URL untouched — e.g.
   // signing out from #users left the address bar reading .../#users while
@@ -104,6 +106,10 @@ export function showShell() {
   if (appState.route === 'audit' && !isAdmin()) appState.route = canViewEmployeeManager() ? 'directory' : (canViewScanner() ? 'scanner' : (canViewSettings() ? 'settings' : 'users'));
   render();
   startAlertsBadge();
+  // The shell is the only screen the palette belongs on. On the kiosk a card
+  // tap must reach the scan box and nothing else; on the auth screen there is
+  // nothing to search.
+  startCommandPalette();
 }
 
 // showStandaloneScanner is wired up in Features/Scanner/StandaloneScanner.js

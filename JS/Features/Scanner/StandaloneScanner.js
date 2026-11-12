@@ -15,6 +15,7 @@ import { registerBusyCheck } from '../../Utils/appUpdate.js';
 import { wireAvatarPreview } from '../../Utils/avatarPreview.js';
 import { openModal, closeModal, onModalClose } from '../../Components/Modal.js';
 import { connectionState, CONNECTION_LABEL, CONNECTION_BADGE } from '../../Utils/connectionState.js';
+import { stopCommandPalette } from '../../Components/CommandPalette.js';
 
 // Whether the LAST attempt to reach the server actually failed. navigator
 // .onLine cannot tell us this, and it is the difference between "this device
@@ -227,6 +228,12 @@ function startFocusWatchdog(input) {
 export function showStandaloneScanner() {
   $('#auth-screen').classList.add('hidden');
   $('#shell').classList.add('hidden');
+  // THE PALETTE MUST NOT BE LISTENING HERE. Reported 2026-11-12: every badge
+  // scan opened the command palette over the scan result, because its
+  // card-tap listener was installed once at startup for the whole app and a
+  // kiosk's reader is the primary input, not an occasional one. Removed
+  // rather than gated — see the note above startCommandPalette().
+  stopCommandPalette();
   const wrap = $('#standalone-scanner');
   wrap.classList.remove('hidden');
   if (!canViewScanner()) {

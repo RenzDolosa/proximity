@@ -715,6 +715,23 @@ reverted, including the two most likely to break silently: a click listener
 bound to a node that gets rebuilt on repaint, and `preventDefault` moved
 ahead of the completeness check.
 
+> **Fixed in the same branch after a report from the kiosk (2026-11-12).**
+> Every badge scan opened the palette over the scan result. The palette was
+> installed once at startup for the whole app, on the reasoning that it reads
+> the rail buttons to decide what it can offer and there are none on the
+> kiosk — true until the card-tap listener made the reader its input too.
+>
+> `acceptsCardTap()` should have refused while an input had focus and did
+> not: **`doScan()` disables `#ss-code`** for a second after each scan so a
+> second read cannot pile onto the first, and **a disabled input is not
+> `document.activeElement`** — focus falls back to `<body>`, which reads as
+> "nothing is being typed into".
+>
+> The palette is now started and stopped **per screen**, beside the alerts
+> badge in `screens.js`. The listener is **removed rather than gated**: one
+> that was never installed cannot be wrong about focus, which is exactly the
+> mistake that caused this. Suite **709 → 713**.
+
 **2026-11-11 (latest) — seven pages that refetched on every click, and a badge asking what the Dashboard just answered**
 
 Both halves **subtract** from the bill rather than avoiding an increase.
