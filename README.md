@@ -683,6 +683,53 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-13 (later) — the stamp changed the bytes; nobody was looking at them**
+
+`20261112`'s deploy stamp made `sw.js`'s bytes change on every deploy, which
+was the first half. The second half only became visible once the first was
+fixed: after #80 deployed, a kiosk sat with **both** About rows reading
+`5da157e` while the origin had been serving `492bca4` for hours. Fetching
+`/sw.js` and `/JS/Core/buildInfo.js` from the live site showed both correctly
+stamped, so the whole gap was client-side — and it was two defects stacked.
+
+**Nobody ever asked.** The browser checks for a new Service Worker script on
+**navigation** to an in-scope page. `main.js` calls `register('/sw.js')`
+exactly once, at boot, and a kiosk is a single page opened once and left
+running for weeks — it never navigates again. The bytes changed and no one
+looked.
+
+- `initAppUpdates()` now calls `registration.update()` at boot, every 30
+  minutes, and on reconnect and refocus, floored at one ask per five minutes
+  across all three sources.
+- **This costs nothing on Supabase.** It is a conditional GET for one ~8 kB
+  file against the CDN, answered `304` when nothing changed. No Supabase
+  request, so no egress and no log ingestion there.
+- **Asking is deliberately not gated on `isBusy()`.** `update()` only asks
+  whether a new worker exists; if one does, activation posts `app-updated`
+  and the *reload* goes through the gate like every other trigger. Gating the
+  question would have rebuilt the same bug one layer up.
+
+**A backlog counted as busy.** `kioskIsBusy()` read `pendingScanCount > 0` —
+and `pendingScanCount` is the offline **queue depth**, not a scan in flight.
+So a single unsynced scan made the kiosk permanently busy: the update gate
+rescheduled every 60 seconds and never fired, and the 12-hour tab-age
+trigger, built specifically to catch a stale kiosk, could never reload
+anything. The failure selected for the worst case — a kiosk that cannot sync
+is both the most likely to hold a backlog and the most in need of new code.
+
+- `scanInFlight` is the real predicate and already existed; it is what
+  `paintFocusState()` uses to tell a deliberate input disable from lost focus.
+- Reloading with entries queued was already safe: the queue lives in
+  IndexedDB and outlives the tab, `initOfflineSupport()` flushes on mount,
+  and a replay interrupted mid-flight cannot double-record because every
+  entry carries a `request_id` that `prior_scan_for_request()` resolves to
+  the original answer (`20261106170000`).
+- The queue-depth mirror is removed rather than left assigned, so the same
+  mistake cannot be made back.
+
+Egress impact: **none**. Log ingestion: **none** — nothing here adds a
+Supabase request.
+
 **2026-11-13 — a kiosk that promised a sync it could not make, and a picker offering alerts that cannot fire**
 
 Three things that had one trait in common: each one looked, from the
