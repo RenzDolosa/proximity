@@ -36,6 +36,8 @@ export function healthRows(state = {}) {
     photosCached, audioUnlocked, soundsLoaded,
     scannerId, site, buildLabel, updatePending = false,
     syncBlocked = null, droppedScans = 0,
+    // undefined = nobody checked, null = checking, boolean = the answer.
+    offlineShell,
     nowMs = Date.now(),
   } = state;
 
@@ -160,6 +162,32 @@ export function healthRows(state = {}) {
     value: updatePending ? 'update waiting' : (buildLabel || 'unknown'),
     state: updatePending ? HEALTH.WARN : (buildLabel ? HEALTH.GOOD : HEALTH.UNKNOWN),
   });
+
+  // A SEPARATE ROW, because it is a different fault from being behind.
+  //
+  // This row did not exist, and its absence was the serious half of the
+  // 2026-11-13 About-panel bug. Everything else in this drawer assumes the
+  // Service Worker is serving the app shell when the network drops — that is
+  // the entire premise of offline scanning. A page the worker is not
+  // controlling has no cached shell at all, so it does not degrade to
+  // offline mode, it fails to load. Nothing said so, and the App version row
+  // above happily read GOOD throughout.
+  //
+  // `offlineShell` is tri-state on purpose: undefined means nobody checked,
+  // which must not render as either working or broken.
+  if (offlineShell !== undefined) {
+    rows.push({
+      key: 'shell',
+      label: 'Offline support',
+      value: offlineShell === null ? 'checking…' : (offlineShell ? 'on' : 'off'),
+      state: offlineShell === null
+        ? HEALTH.UNKNOWN
+        : (offlineShell ? HEALTH.GOOD : HEALTH.BAD),
+      detail: offlineShell === false
+        ? 'this tab is not using the service worker — it will not load without a network'
+        : null,
+    });
+  }
 
   // `site` has THREE meaningful values and the row says a different thing for
   // each: a string is the configured site, null means genuinely not set, and
