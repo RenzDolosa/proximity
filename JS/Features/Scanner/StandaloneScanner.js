@@ -55,16 +55,32 @@ let focusWatchdogTimer = null;
 // auto-submit without an IndexedDB read per keystroke. Refreshed alongside the
 // cache itself; an empty array simply means the check fails open.
 let cachedLookupRows = [];
-// Last known offline-queue depth, kept in sync by renderOfflineStatus() so
-// kioskIsBusy() can stay synchronous.
-let pendingScanCount = 0;
 
 // A kiosk must never be reloaded mid-read. The reader types a whole badge in
 // ~100ms, so a non-empty input is an in-progress scan, not idle UI.
+//
+// A QUEUED BACKLOG IS NOT BUSY, and treating it as such is what kept a kiosk
+// on two-month-old code. This used to read `pendingScanCount > 0`, where
+// pendingScanCount is the offline QUEUE DEPTH — not a scan in flight. So one
+// unsynced scan made kioskIsBusy() true forever, the update gate rescheduled
+// every 60 seconds and never fired, and the 12-hour tab-age trigger — the one
+// specifically built to catch a stale kiosk — could never reload anything.
+// The worst case is the one that matters: a kiosk that cannot sync is both
+// the most likely to have a backlog and the most in need of new code.
+//
+// Reloading with entries queued is safe, and was already safe before this:
+// the queue lives in IndexedDB and outlives the tab, initOfflineSupport()
+// flushes on mount, and a replay interrupted mid-flight cannot double-record
+// because every entry carries a request_id that prior_scan_for_request()
+// resolves to the original answer (20261106170000).
+//
+// scanInFlight is the real predicate, and already existed — it is what
+// paintFocusState() uses to tell a deliberate input disable apart from lost
+// focus.
 function kioskIsBusy() {
   const input = document.querySelector('#ss-code');
   if (!input) return false;
-  return input.disabled || input.value.length > 0 || pendingScanCount > 0
+  return input.disabled || input.value.length > 0 || scanInFlight
     || Boolean(document.querySelector('.overlay'));
 }
 
@@ -576,7 +592,6 @@ async function renderOfflineStatus() {
   // scan, and on every connectivity change — so looksLikeCardCode() stays
   // current without a single extra IndexedDB read.
   cachedLookupRows = meta.rows || [];
-  pendingScanCount = pending;
   const stale = meta.ageMs > STALE_AFTER_MS;
 
   if (headerEl) {
