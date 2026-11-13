@@ -378,7 +378,18 @@ JS/
                                    cache — added 2026-09-19, see change log) —
                                    the only thing backing OfflineScanModel.js;
                                    no external idb library, to keep this repo
-                                   dependency-free
+                                   dependency-free. The scan queue is bounded
+                                   (QUEUE_MAX, oldest dropped and counted) and
+                                   warns from QUEUE_WARN_AT — see 2026-11-13
+    syncBackoff.js                 why the offline queue stopped and how often
+                                   to ask again. classifyFlushError() turns a
+                                   PostgREST error into something an operator
+                                   can act on; createFlushGate() paces the
+                                   automatic retry so a kiosk that cannot sync
+                                   stops sending 180 failing requests an hour.
+                                   Pure and clock-injected, like appUpdate.js's
+                                   gate — the kiosk wiring is the only part
+                                   that touches the DOM
     xlsxExport.js                  exportXlsx({filename, sheetName, columns,
                                    rows}) — added 2026-09-19, built on the
                                    vendored SheetJS mini build (window.XLSX,
@@ -671,6 +682,78 @@ GitHub connector) and re-verify against `Supabase:list_tables` /
 file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
+
+**2026-11-13 — a kiosk that promised a sync it could not make, and a picker offering alerts that cannot fire**
+
+Three things that had one trait in common: each one looked, from the
+outside, exactly like everything working. No error, no red, nothing to
+notice.
+
+**The kiosk said "will sync automatically" whether or not it would.**
+`flushQueuedScans()` stops every worker on the first failure — correct,
+since a failure usually means auth or connectivity rather than one bad row
+— but it then discarded the error, so `flushQueue()` could only ever return
+`{ synced, remaining }`. `StandaloneScanner` rendered the reassuring
+sentence unconditionally. An expired session, a revoked grant and a kiosk
+waiting for Wi-Fi all produced the same line, and only the last one
+deserved it. The count sat there not falling with a promise underneath it.
+
+- `flushQueuedScans()` now also returns `error`, keeping the **first** one
+  rather than the last — workers run concurrently, so a later error is
+  whatever happened to land afterwards.
+- `Utils/syncBackoff.js` (new) classifies it into something an operator can
+  act on and names the action, not the code: *this kiosk needs to sign in
+  again* rather than `PGRST301`.
+- **It also cost requests, which is the part that shows on a bill.**
+  `initOfflineSupport()` retries every 20 seconds and returned early only
+  when the queue was **empty**, so a queue blocked by something a retry
+  cannot fix sent **180 failing requests an hour**, each an API-gateway log
+  event, for as long as it stayed blocked. The ladder — 20s, 40s, 80s, up to
+  ten minutes — takes that to **6/hour** at the ceiling.
+- **The retry stays automatic.** A kiosk is operated with a card reader and
+  no mouse, and the health-drawer bug (hover opens it, because a click
+  steals focus from the reader input) is the standing reminder of what
+  pointer affordances cost here. No Retry button was added. A reconnect, a
+  tab becoming visible, or any successful online scan clears the ladder, so
+  the ordinary case still recovers on the next 20-second tick.
+- One failure does not change the wording. A single dropped request on a
+  flaky link resolves itself, and crying wolf at a kiosk is how operators
+  learn to ignore the line.
+
+**Settings → Notifications offered three alert kinds that do not exist.**
+`unassigned_card` and `inactive_card` are `scan_events.result` values, not
+alert kinds; `impossible_travel` was removed by `20261008140000`, after
+which the only occurrence left in the repository was the picker entry
+itself. A channel routed to any of them saves cleanly, renders as
+configured, and delivers nothing — indistinguishable from a quiet site.
+Meanwhile **five kinds that do fire could not be routed at all**, including
+`card_shared_between_sites`, the only `critical` one, which is the signal
+that one badge is being used at two gates.
+
+- `ALERT_KINDS` now lists what `raise_alert()` actually produces, criticals
+  first. `UNLISTED_ALERT_KINDS` holds the deliberate omissions, so "we chose
+  to leave this out" is distinguishable from "someone forgot".
+- A stored dead kind announces itself rather than being echoed back: the
+  Notifications table used to render `impossible_travel` bare, which reads
+  as a working rule with an odd name.
+- `test/alert-kinds.test.mjs` reads the kinds back out of
+  `Supabase/migrations/` and fails the build on drift, the same guard
+  `scan-sounds.test.mjs` applies to the six sound filenames. Comments are
+  stripped first — `20261008140000`'s header discusses the alerts it is
+  *removing*, and a raw search finds them there.
+
+**The offline queue had no ceiling.** `idbEnqueue` was a bare
+`store.add(entry)`. The honest proportion: an entry is four short strings,
+so ten thousand of them is ~1.2 MB against a photo cache measured in tens of
+megabytes — the queue is not what gets a kiosk evicted. The real gap was
+that **nothing reported its depth**, so "this kiosk has 900 unsent scans"
+was invisible until someone opened the drawer. The cap is a backstop; the
+warning at 500 is the feature. At the ceiling the oldest go first and are
+counted, because the alternative is refusing the person standing at the door
+now, and the oldest entries are days old and reconstructable.
+
+Egress impact: **none** for all three. Log ingestion: **lower** — the
+backoff is strictly fewer requests, and nothing here adds one.
 
 **2026-11-12 (later) — deploys have not been reaching kiosks for two months**
 
