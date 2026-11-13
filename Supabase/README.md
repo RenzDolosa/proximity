@@ -723,6 +723,26 @@ an admin swaps it out.
   employee history, and (same best-effort pattern as
   `get_scan_archive_status()`) the trim job's most recent
   `cron.job_run_details` run.
+- **`check_open_punches(p_hours integer default 12, floor 4)`** — added
+  2026-11-13 (`20261113120000_open_punch_alerts.sql`). Raises an
+  `open_punch` alert for every **active** employee whose most recent
+  `scan_logs` entry is an `in` older than `p_hours`. Reads the **last array
+  element** (`scan_logs -> -1`), not a `jsonb_array_elements` unnest —
+  `trg_append_scan_log()` re-sorts and re-derives direction on every append
+  (20261024090000), so the final element is authoritative, and hourly that
+  distinction is the entire cost. Deduped on
+  `open-punch:<employee_id>:<local date>` with a 1440-minute window, so one
+  stuck punch produces one alert rather than one per run. Same two-caller
+  permission split as the functions below (`auth.uid()` null → pg_cron,
+  proceed; set → must be admin); `EXECUTE` revoked from `PUBLIC`/`anon`,
+  granted to `authenticated`. Scheduled hourly at `:20` by pg_cron
+  (`check-open-punches`), unscheduled first so re-applying cannot leave two.
+  **Why it exists:** `get_open_punch_closures()` is a queue someone has to
+  remember to open, and 382 of 3,345 employee-days in one week carried
+  `open_punch` when measured on 2026-11-03. Missing one is not one bad row —
+  direction is parity over the whole history, so a missing OUT puts every
+  later scan out of phase and `get_attendance_report()`'s `dir = 'in'`
+  filter then drops those days from the report entirely.
 - **`check_scanner_silence(p_silence_minutes integer default 60)`** —
   implemented 2026-10-02
   (`Supabase/migrations/20261002000000_scanner_silence_alerts.sql`;
