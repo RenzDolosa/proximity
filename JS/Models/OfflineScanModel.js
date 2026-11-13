@@ -28,6 +28,12 @@ import { attachCachedPhoto, classifyCachedScan, flushQueuedScans, isDuplicateSca
 // something higher-stakes than an attendance/activity log.
 export const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
+// Queue entries this tab has had to drop to stay under idb.js's QUEUE_MAX.
+// Session-scoped on purpose: a reload means a human was here, and carrying a
+// stale "scans were lost" banner past that point would be alarming without
+// being actionable.
+let droppedScans = 0;
+
 // Set once if get_scanner_offline_cache_delta() isn't on the project yet, so
 // a kiosk running a client that's ahead of the database doesn't pay a failed
 // round trip before every fallback refresh. See refreshCache() below.
@@ -264,11 +270,22 @@ export const OfflineScanModel = {
   },
 
   async enqueue(proximity_code, scanner_id, request_id, scanned_at) {
-    return idbEnqueue({ proximity_code, scanner_id, request_id, scanned_at });
+    const result = await idbEnqueue({ proximity_code, scanner_id, request_id, scanned_at });
+    // Accumulated for the session rather than read back from storage, because
+    // the whole point is that these rows are gone — there is nothing left to
+    // count. Surfaced in the health drawer so a kiosk that has started losing
+    // the tail of its backlog says so instead of just showing a flat 10,000.
+    droppedScans += result?.dropped || 0;
+    return result;
   },
 
   async queueCount() {
     return idbCountQueue().catch(() => 0);
+  },
+
+  /** Entries this tab has dropped to stay under QUEUE_MAX. Zero, normally. */
+  droppedScanCount() {
+    return droppedScans;
   },
 
   // Replays per employee in chronological order, with different employees

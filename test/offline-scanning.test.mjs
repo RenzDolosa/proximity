@@ -210,7 +210,7 @@ test('queue replay preserves chronological order per card while allowing other c
   });
   assert.equal(sent.indexOf('a-1') < sent.indexOf('a-2'), true);
   assert.deepEqual(removed.sort(), ['a-1', 'a-2', 'b-2']);
-  assert.deepEqual(result, { synced: 3, remaining: 0 });
+  assert.deepEqual(result, { synced: 3, remaining: 0, error: null });
 });
 
 test('queue replay stops after an RPC failure and keeps unsynced entries', async () => {
@@ -225,7 +225,12 @@ test('queue replay stops after an RPC failure and keeps unsynced entries', async
     remove: async (id) => { removed.push(id); },
   });
   assert.deepEqual(removed, ['a-1']);
-  assert.deepEqual(result, { synced: 1, remaining: 1 });
+  assert.equal(result.synced, 1);
+  assert.equal(result.remaining, 1);
+  // The reason now comes back with the counts. Without it the caller cannot
+  // tell "waiting for Wi-Fi" from "this kiosk's session expired", and the
+  // kiosk promised an automatic sync in both cases.
+  assert.equal(result.error?.message, 'offline');
 });
 
 test('queue replay treats only this request id unique violation as an already-synced scan', async () => {
@@ -247,7 +252,7 @@ test('queue replay treats only this request id unique violation as an already-sy
     remove: async (id) => { removed.push(id); },
   });
   assert.deepEqual(removed, [1]);
-  assert.deepEqual(result, { synced: 1, remaining: 0 });
+  assert.deepEqual(result, { synced: 1, remaining: 0, error: null });
 });
 
 // scan_proximity_code_compact(p_include_photo => false) omits the thumbnail;

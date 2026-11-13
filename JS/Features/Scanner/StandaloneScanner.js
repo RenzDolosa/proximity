@@ -18,6 +18,13 @@ import { wireAvatarPreview } from '../../Utils/avatarPreview.js';
 import { openModal, closeModal, onModalClose } from '../../Components/Modal.js';
 import { connectionState, CONNECTION_LABEL, CONNECTION_BADGE } from '../../Utils/connectionState.js';
 import { stopCommandPalette } from '../../Components/CommandPalette.js';
+import { createFlushGate, syncStatusText } from '../../Utils/syncBackoff.js';
+
+// Paces the automatic queue flush so a kiosk that cannot sync stops asking
+// every 20 seconds, and remembers why it stopped so the line under Recent
+// Activity can say. Module-level, like the queue itself: one kiosk, one tab,
+// one ladder. See Utils/syncBackoff.js for why the retry stays automatic.
+const flushGate = createFlushGate();
 
 // Whether the LAST attempt to reach the server actually failed. navigator
 // .onLine cannot tell us this, and it is the difference between "this device
@@ -464,6 +471,12 @@ function renderStandaloneScanner() {
       await OfflineScanModel.enqueue(proximity_code, operatorName, requestId, scannedAt).catch(() => {});
       renderOfflineStatus();
     }
+    // A scan that reached the server is the strongest possible evidence that
+    // the queue's backoff is out of date — same credentials, same endpoint,
+    // and it just worked. Clear the ladder so the backlog drains on the next
+    // tick instead of waiting out a delay earned under conditions that have
+    // since changed.
+    if (!offlineHandled && !error) flushGate.reset();
     // Online results arrive without photo_thumb_b64 (see ScanEventsModel.scan());
     // put the locally cached thumbnail back before anything renders. Offline
     // results already got theirs from getCacheMeta()'s merge.
@@ -586,13 +599,21 @@ async function renderOfflineStatus() {
   }
 
   if (syncEl) {
-    if (pending > 0) {
-      syncEl.innerHTML = navigator.onLine
-        ? `<span class="emp-meta">Syncing ${pending} offline scan${pending === 1 ? '' : 's'}…</span>`
-        : `<span class="emp-meta">${pending} scan${pending === 1 ? '' : 's'} queued — will sync automatically</span>`;
-    } else {
-      syncEl.innerHTML = '';
-    }
+    // "will sync automatically" is now a claim this makes only when it is
+    // true. A blocked queue names the cause and when it will try again,
+    // which an operator can check by standing there — the old sentence was
+    // unfalsifiable, and said the same thing to a kiosk whose session had
+    // expired as to one waiting for Wi-Fi.
+    const gate = flushGate.state();
+    const text = syncStatusText({
+      pending,
+      online: navigator.onLine,
+      blocked: gate.blocked,
+      secondsToRetry: gate.secondsToRetry,
+    });
+    syncEl.innerHTML = text
+      ? `<span class="emp-meta"${gate.blocked ? ' style="color:var(--bad)"' : ''}>${esc(text)}</span>`
+      : '';
   }
 
   // Free ride, like cachedLookupRows above: this function already has the
@@ -703,6 +724,10 @@ function paintHealth(meta, pending) {
     scannerId: currentOperatorName,
     buildLabel: shortBuild(),
     updatePending: updatePending(),
+    // Both already in memory: the gate is a module-level object and the drop
+    // counter is a running total on the model. No read of any kind.
+    syncBlocked: flushGate.state().blocked,
+    droppedScans: OfflineScanModel.droppedScanCount(),
     // Deliberately omitted: see healthRows(). Looking the site up is a
     // request, and this drawer costs none.
   });
@@ -715,7 +740,8 @@ function paintHealth(meta, pending) {
       <div class="ss-health-row">
         <span>${esc(r.label)}</span>
         <span class="mono ss-health-${r.state}">${esc(r.value)}</span>
-      </div>`).join('')
+      </div>${r.detail ? `
+      <div class="ss-health-detail ss-health-${r.state}">${esc(r.detail)}</div>` : ''}`).join('')
       // Offered only when there is something to apply. The gate still
       // decides: pressing this during a scan reschedules rather than
       // reloading over the top of it, which is the behaviour the automatic
@@ -815,13 +841,23 @@ function initOfflineSupport(operatorName) {
     if (!navigator.onLine) return;
     const pendingBefore = await OfflineScanModel.queueCount();
     if (pendingBefore === 0) return;
+    // The backoff check comes BEFORE any request. A queue blocked by
+    // something a retry cannot fix used to send 180 failing requests an hour
+    // against this 20-second interval, each one an API-gateway log event;
+    // skipping the tick costs one local IndexedDB count and nothing else.
+    if (!flushGate.allow()) { renderOfflineStatus(); return; }
     const syncEl = $('#ss-sync-status');
-    const { synced } = await OfflineScanModel.flushQueue((done, total) => {
+    const { synced, error } = await OfflineScanModel.flushQueue((done, total) => {
       // Synchronous text update from numbers flushQueue already holds. A full
       // renderOfflineStatus() here would stack two IndexedDB reads onto every
       // synced scan, and only this line needs per-item updates.
       if (syncEl) syncEl.innerHTML = `<span class="emp-meta">Syncing ${done}/${total} offline scan${total === 1 ? '' : 's'}…</span>`;
-    }).catch(() => ({ synced: 0 }));
+    }).catch((err) => ({ synced: 0, error: err }));
+    // Progress is progress: a flush that synced nine of ten and then hit a
+    // bad row should not be treated as a kiosk that cannot reach the server.
+    // Only a run that moved nothing AND reported a reason counts as a strike.
+    if (error && synced === 0) flushGate.recordFailure(error);
+    else flushGate.recordSuccess();
     // The feed only shows scan_events rows, so newly written ones need an
     // explicit reload or they never appear until the next scan.
     if (synced > 0) loadScanFeed('ss-feed', 10, operatorName);
@@ -834,12 +870,22 @@ function initOfflineSupport(operatorName) {
     await refreshPhotosIfOnline();
   };
 
-  window.addEventListener('online', flushAndRefresh);
+  // A reconnect, or a tab coming back to the foreground, is new information:
+  // whatever the backoff had concluded was about the old conditions. Clearing
+  // the ladder means the ordinary case — the Wi-Fi came back — is still
+  // handled on the next 20-second tick rather than ten minutes later, without
+  // anyone touching the kiosk.
+  const flushNowAndRefresh = async () => {
+    flushGate.reset();
+    await flushAndRefresh();
+  };
+
+  window.addEventListener('online', flushNowAndRefresh);
   window.addEventListener('offline', renderOfflineStatus);
   // Alongside 'online', not instead of it: a tab backgrounded while offline and
   // foregrounded after reconnecting is where 'online' is most often missed.
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') flushAndRefresh();
+    if (document.visibilityState === 'visible') flushNowAndRefresh();
   });
 
   // Paint the cached state first (no network wait), then try a real refresh.

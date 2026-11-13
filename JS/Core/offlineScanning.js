@@ -212,30 +212,44 @@ export function isDuplicateScanRequestError(error) {
 // Replays each card's scans in order while allowing unrelated cards to make
 // bounded progress concurrently. `send` returns an error-like value on
 // failure; entries after the first failure are deliberately retained.
+//
+// Returns `error` as well as the counts: the caller cannot tell a kiosk
+// waiting for Wi-Fi apart from one whose session expired without it, and
+// those two want opposite things — keep retrying every 20 seconds, versus
+// stop hammering and say so. Before this it was discarded here, which is why
+// the kiosk promised an automatic sync it had no grounds to promise. See
+// Utils/syncBackoff.js.
+//
+// The FIRST error is kept, not the last. Workers run concurrently, so a
+// later one is whatever happened to land afterwards — often a second symptom
+// of the same cause, and sometimes just an abort.
 export async function flushQueuedScans({ entries, send, remove, onProgress, concurrency = 6 }) {
   const total = entries.length;
-  if (!total) return { synced: 0, remaining: 0 };
+  if (!total) return { synced: 0, remaining: 0, error: null };
 
   const groups = groupQueuedScans(entries);
   let synced = 0;
   let stopped = false;
   let nextGroup = 0;
+  let stopError = null;
+
+  const stop = (error) => {
+    if (!stopError) stopError = error || new Error('Offline sync stopped for an unreported reason');
+    stopped = true;
+    return false;
+  };
 
   const syncEntry = async (entry) => {
     if (stopped) return false;
     try {
       const error = await send(entry);
-      if (error) {
-        stopped = true;
-        return false;
-      }
+      if (error) return stop(error);
       await remove(entry.id);
       synced += 1;
       onProgress?.(synced, total);
       return true;
-    } catch {
-      stopped = true;
-      return false;
+    } catch (err) {
+      return stop(err);
     }
   };
 
@@ -249,5 +263,5 @@ export async function flushQueuedScans({ entries, send, remove, onProgress, conc
   };
 
   await Promise.all(Array.from({ length: Math.min(concurrency, groups.length) }, worker));
-  return { synced, remaining: total - synced };
+  return { synced, remaining: total - synced, error: stopError };
 }
