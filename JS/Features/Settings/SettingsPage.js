@@ -32,7 +32,7 @@ import { updatePending, applyUpdateNow } from '../../Utils/appUpdate.js';
 // not the moment Settings was opened.
 const TAB_LOADED_AT = Date.now();
 import { AlertChannelsModel } from '../../Models/AlertChannelsModel.js';
-import { ALERT_KINDS } from '../../Utils/alertKinds.js';
+import { ALERT_KINDS, alertKindLabel, isDeadAlertKind } from '../../Utils/alertKinds.js';
 
 // Was a local `60 * 1000` whose comment said it matched DirectoryPage's own
 // local 60 * 1000 — a comment doing a constant's job. Both now read the
@@ -1095,7 +1095,10 @@ function paintAlertChannels() {
   }
   if (!alertChannels) { body.innerHTML = 'Loading…'; return; }
 
-  const kindLabel = (k) => ALERT_KINDS.find((x) => x.value === (k || ''))?.label || k;
+  // Not `?.label || k`: echoing an unrecognised kind back renders a rule that
+  // can never fire as though it were simply one with an unfamiliar name. See
+  // Utils/alertKinds.js for the three that used to be offered here.
+  const kindLabel = alertKindLabel;
   body.innerHTML = `
     ${alertChannels.length ? `
       <table>
@@ -1107,7 +1110,9 @@ function paintAlertChannels() {
                 <span class="badge role-viewer">${esc(c.channel)}</span>
                 ${copyableMasked(c.target)}
               </td>
-              <td>${esc(kindLabel(c.kind))}</td>
+              <td>${isDeadAlertKind(c.kind)
+                ? `<span style="color:var(--bad)">⚠ ${esc(kindLabel(c.kind))}</span>`
+                : esc(kindLabel(c.kind))}</td>
               <td class="col-shrink">
                 <input type="checkbox" data-ac-toggle="${esc(c.id)}" ${c.enabled ? 'checked' : ''}
                        ${alertChannelSaving ? 'disabled' : ''} aria-label="Enabled" />

@@ -355,6 +355,13 @@ span.ss-health-dot.ss-health-unknown{background:var(--text-faint);}
 }
 .ss-health-row > span:last-child{text-align:right;}
 
+/* A row's reason, under its value rather than crammed into it. Only the
+   queue row uses this today — "14 · not syncing" needs to be followed by
+   WHY, and that does not fit in a right-aligned value column.
+   Colour comes from the row's own state class, so a kiosk merely behind
+   reads as a warning and one that has stopped syncing reads as a fault. */
+.ss-health-detail{padding:0 0 4px;font-size:12px;line-height:1.4;}
+
 /* The one actionable thing in the drawer, so it gets a button rather than
    another label/value row. Only rendered when an update is actually held. */
 .ss-health-apply{

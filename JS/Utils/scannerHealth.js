@@ -17,6 +17,11 @@ export const HEALTH = Object.freeze({ GOOD: 'good', WARN: 'warn', BAD: 'bad', UN
 // testable in Node; the test asserts they agree.
 export const CACHE_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
+// Matches QUEUE_WARN_AT in Utils/idb.js, duplicated for the same reason as
+// the constant above — importing idb.js here would drag IndexedDB into a
+// module that has to run under Node. The test asserts the two agree.
+export const QUEUE_WARN_AT = 500;
+
 /**
  * Rows for the drawer, in the order they matter at 3am.
  *
@@ -30,6 +35,7 @@ export function healthRows(state = {}) {
     cacheRows, cacheSyncedAt, cacheAgeMs,
     photosCached, audioUnlocked, soundsLoaded,
     scannerId, site, buildLabel, updatePending = false,
+    syncBlocked = null, droppedScans = 0,
     nowMs = Date.now(),
   } = state;
 
@@ -47,13 +53,36 @@ export function healthRows(state = {}) {
   });
 
   const n = Number(queued);
+  // Typed, not coerced: Number(null) is 0 and 0 is finite, so a nullish count
+  // would read as "nothing has been dropped" — the one claim this row must
+  // never make without grounds.
+  const dropped = typeof droppedScans === 'number' && Number.isFinite(droppedScans)
+    ? Math.max(0, droppedScans) : 0;
+  const queueParts = [Number.isFinite(n) ? n.toLocaleString() : 'unknown'];
+  if (syncBlocked) queueParts.push('not syncing');
+  if (dropped > 0) queueParts.push(`${dropped.toLocaleString()} dropped`);
   rows.push({
     key: 'queue',
     label: 'Queued scans',
-    value: Number.isFinite(n) ? String(n) : 'unknown',
+    value: queueParts.join(' · '),
     // A queue is not a fault — it is the offline design working. It only
-    // matters if it is not draining, which the connection row above says.
-    state: !Number.isFinite(n) ? HEALTH.UNKNOWN : (n === 0 ? HEALTH.GOOD : HEALTH.WARN),
+    // matters if it is not draining, and until this branch existed the only
+    // hint of that was the connection row above, which is silent when the
+    // network is fine and the SERVER is the one refusing.
+    //
+    // Dropped entries are BAD without qualification: scans that existed and
+    // no longer do. Everything else here describes a kiosk that is behind;
+    // this one describes a kiosk that has lost something.
+    state: dropped > 0 || syncBlocked
+      ? HEALTH.BAD
+      : (!Number.isFinite(n)
+        ? HEALTH.UNKNOWN
+        : (n === 0 ? HEALTH.GOOD : HEALTH.WARN)),
+    // Surfaced separately so the drawer can show the reason under the count
+    // rather than truncating it into the value column.
+    detail: syncBlocked || (n >= QUEUE_WARN_AT
+      ? 'this kiosk has not reached the server in a long time'
+      : null),
   });
 
   const rowCount = Number(cacheRows);
