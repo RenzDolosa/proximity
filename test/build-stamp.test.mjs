@@ -114,11 +114,19 @@ test('a refused apply says why rather than doing nothing visible', () => {
 // The tab holds whatever it booted with; the worker is what is live. A
 // difference between them is the signal, and it does not depend on having
 // caught the activation message.
+//
+// The comparison moved into Utils/workerState.js on 2026-11-13 — it had to
+// be shared with the kiosk drawer, and the inline version silently rendered
+// "up to date" whenever the worker was unknown. This test follows it there
+// rather than being deleted: the round trip it guards is unchanged.
 test('Settings compares the tab build against the live worker', () => {
-  assert.match(settings, /const behind = Boolean\(worker && worker !== tabBuild\)/);
+  assert.match(settings, /describeWorker\(\{/);
+  assert.match(settings, /workerBuild: workerBuild \? shortBuild\(workerBuild\) : null/);
   assert.match(settings, /postMessage\(\{ type: 'which-version' \}\)/);
   assert.match(sw, /event\.data\?\.type !== 'which-version'/);
   assert.match(sw, /type: 'sw-version', version: VERSION/);
+  const state = readFileSync(fileURLToPath(new URL('../JS/Utils/workerState.js', import.meta.url)), 'utf8');
+  assert.match(state, /const behind = Boolean\(tabBuild && workerBuild !== tabBuild\)/);
 });
 
 // Asking the worker is a postMessage inside the browser. If this ever

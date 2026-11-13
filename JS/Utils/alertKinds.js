@@ -40,6 +40,7 @@ export const ALERT_KINDS = Object.freeze([
   { value: 'truncated_card_read', label: 'Truncated card read' },
   { value: 'inactive_employee_scan', label: 'Inactive employee scanned' },
   { value: 'after_hours_scan', label: 'After-hours scan' },
+  { value: 'open_punch', label: 'Scanned in, never out' },
 ]);
 
 // Kinds that raise_alert() can emit but that deliberately do not belong in

@@ -33,6 +33,7 @@ import { updatePending, applyUpdateNow } from '../../Utils/appUpdate.js';
 const TAB_LOADED_AT = Date.now();
 import { AlertChannelsModel } from '../../Models/AlertChannelsModel.js';
 import { ALERT_KINDS, alertKindLabel, isDeadAlertKind } from '../../Utils/alertKinds.js';
+import { WORKER, describeWorker, probeWorkerState } from '../../Utils/workerState.js';
 
 // Was a local `60 * 1000` whose comment said it matched DirectoryPage's own
 // local 60 * 1000 — a comment doing a constant's job. Both now read the
@@ -1546,23 +1547,56 @@ function paintSilenceStatus() {
 
 // ---- shift times (punctuality) ----
 
-// The worker's own version, asked over postMessage. Cached for the session:
-// it cannot change without the worker activating, and an activation reloads
-// the page anyway.
+// What the worker is doing for this page, and its own version once it has
+// answered. Both start unknown, and "unknown" must never render as a green
+// badge — see Utils/workerState.js for the panel that did exactly that.
+let workerPhase = WORKER.UNKNOWN;
 let workerBuild = null;
+let workerAskedAt = 0;
 
-function askWorkerBuild() {
+// The reply is a postMessage with no delivery guarantee, so the ask needs a
+// deadline. Without one, a worker that never answers leaves the panel on
+// "asking…" forever, which is at least honest but not useful.
+const WORKER_REPLY_TIMEOUT_MS = 3000;
+
+async function askWorkerBuild() {
+  // Re-probed rather than cached for the session. The old version cached on
+  // first answer AND returned early whenever workerBuild was set, so a
+  // worker activating while Settings was open left the panel showing the
+  // superseded build with no way to correct itself.
+  const phase = await probeWorkerState();
+  const changed = phase !== workerPhase;
+  workerPhase = phase;
+  if (phase !== WORKER.ASKING) {
+    workerBuild = null;
+    if (changed) paintAbout();
+    return;
+  }
+  if (workerBuild && !changed) return;
+  if (Date.now() - workerAskedAt < WORKER_REPLY_TIMEOUT_MS) return;
+  workerAskedAt = Date.now();
+
   const sw = navigator.serviceWorker;
-  if (!sw?.controller || workerBuild !== null) return;
   const onMessage = (event) => {
     if (event.data?.type !== 'sw-version') return;
     workerBuild = String(event.data.version || '');
+    workerPhase = WORKER.READY;
     sw.removeEventListener('message', onMessage);
     paintAbout();
   };
   sw.addEventListener('message', onMessage);
-  sw.controller.postMessage({ type: 'which-version' });
+  sw.controller?.postMessage({ type: 'which-version' });
+  if (changed) paintAbout();
 }
+
+// A new worker taking over is the one event that invalidates everything
+// above. Registered once, at module scope, because paintAbout() can run many
+// times and stacking listeners would repaint once per visit to Settings.
+navigator.serviceWorker?.addEventListener?.('controllerchange', () => {
+  workerBuild = null;
+  workerAskedAt = 0;
+  paintAbout();
+});
 
 function paintAbout() {
   const body = $('#about-body');
@@ -1570,27 +1604,31 @@ function paintAbout() {
   askWorkerBuild();
 
   const tabBuild = shortBuild();
-  const worker = workerBuild ? shortBuild(workerBuild) : null;
-  const pending = updatePending();
-  // A difference between the two is the honest signal, and it is more
-  // reliable than waiting for the activation message: the tab holds whatever
-  // it booted with, the worker is what is live now.
-  const behind = Boolean(worker && worker !== tabBuild);
-
-  const status = pending || behind
-    ? '<span class="badge unassigned_card">update waiting</span>'
-    : (isDevBuild() ? '<span class="badge role-viewer">dev build</span>'
-      : '<span class="badge matched">up to date</span>');
+  // One decision, shared with the kiosk drawer. "up to date" is reachable
+  // from exactly one state: controlling, answered, and matching.
+  const w = describeWorker({
+    state: workerPhase,
+    workerBuild: workerBuild ? shortBuild(workerBuild) : null,
+    tabBuild,
+    pending: updatePending(),
+    isDev: isDevBuild(),
+  });
+  const offerReload = w.badge === 'update waiting';
+  const BADGE_CLASS = {
+    good: 'matched', warn: 'unassigned_card', bad: 'inactive_card', unknown: 'role-viewer',
+  };
 
   body.innerHTML = `
     <div class="kv-rows">
       <div class="kv-row"><span>Build</span><span class="mono">${esc(tabBuild)}</span></div>
-      <div class="kv-row"><span>Service worker</span><span class="mono">${esc(worker || 'not registered')}</span></div>
+      <div class="kv-row"><span>Service worker</span><span class="mono">${esc(w.value)}</span></div>
+      <div class="kv-row"><span>Offline support</span><span class="mono">${w.offline ? 'on' : 'off'}</span></div>
       <div class="kv-row"><span>Tab loaded</span><span class="mono">${esc(fmtTime(new Date(TAB_LOADED_AT).toISOString()))}</span></div>
     </div>
+    ${w.detail ? `<p class="emp-meta" style="margin:8px 0 0;">${esc(w.detail)}</p>` : ''}
     <p class="emp-meta" style="margin:10px 0 0;display:flex;align-items:center;gap:8px;">
-      ${status}
-      ${pending || behind
+      <span class="badge ${BADGE_CLASS[w.tone]}">${esc(w.badge)}</span>
+      ${offerReload
         ? '<button class="ghost" id="about-apply" style="padding:4px 10px;">Reload now</button>'
         : ''}
     </p>`;

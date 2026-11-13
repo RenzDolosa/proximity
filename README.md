@@ -381,6 +381,17 @@ JS/
                                    dependency-free. The scan queue is bounded
                                    (QUEUE_MAX, oldest dropped and counted) and
                                    warns from QUEUE_WARN_AT — see 2026-11-13
+    workerState.js                 what the Service Worker is doing for this
+                                   page. describeWorker() is the single
+                                   decision behind the About panel's badge
+                                   and the kiosk's Offline support row —
+                                   "up to date" is reachable from exactly one
+                                   state, which is the bug it was extracted
+                                   to fix. probeWorkerState() distinguishes
+                                   no registration from a registration that
+                                   is not controlling this page (what a
+                                   force-reload leaves behind). Reads browser
+                                   state only; no request
     syncBackoff.js                 why the offline queue stopped and how often
                                    to ask again. classifyFlushError() turns a
                                    PostgREST error into something an operator
@@ -683,6 +694,72 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-13 (last) — "not registered" next to "up to date", and nobody told about a punch that never closed**
+
+**The About panel rendered two statements that cannot both be true.** Seen
+immediately after the `57476db` deploy:
+
+```
+Service worker   not registered
+[ up to date ]
+```
+
+It came from `const behind = Boolean(worker && worker !== tabBuild)`. A null
+worker makes `behind` false, so the badge fell through to the reassuring
+branch — a confident claim made in exactly the state where the panel knows
+nothing. The same shape as `Number(null) === 0`: absence treated as a pass,
+and the fourth time that pattern has caused a bug here.
+
+**And "not registered" was the wrong words anyway.** It was printed whenever
+`navigator.serviceWorker.controller` was null, which covers three different
+situations:
+
+- there really is no registration;
+- there is one but it is not controlling *this page* — the documented result
+  of a **force-reload**, which is what had just been done;
+- it is controlling and has not answered the `postMessage` yet.
+
+`Utils/workerState.js` (new) holds one decision shared by the About panel
+and the kiosk drawer, and `probeWorkerState()` uses `getRegistration()` to
+tell the three apart. It reads browser state, so it costs no request. A test
+enumerates the whole state space and asserts that **exactly one** combination
+can produce "up to date".
+
+Two other faults in the same function: `askWorkerBuild()` returned early
+whenever `workerBuild` was already set, so a worker activating while Settings
+was open left the panel showing the superseded build forever; and the
+`postMessage` had no deadline, so an unanswered ask waited indefinitely. Now
+`controllerchange` invalidates the cached answer and the ask times out.
+
+**The serious half is the kiosk, not the panel.** An uncontrolled page has no
+cached app shell, so it does not degrade to offline scanning when the network
+drops — it fails to load. The drawer's `App version` row read `GOOD`
+throughout. There is now a separate **Offline support** row, `BAD` when the
+worker is not controlling, tri-state so "not yet probed" renders as
+`checking…` rather than as either answer.
+
+**Open punches now raise an alert**
+(`20261113120000_open_punch_alerts.sql`). `get_open_punch_closures()` has
+been a queue someone had to remember to open; 382 of 3,345 employee-days in
+one week carried `open_punch` when measured, and nothing announced any of
+them. The cost of missing one is not one bad row: direction is parity over
+the whole history, so a missing OUT puts every later scan out of phase, and
+`get_attendance_report()` filters on `dir = 'in'` — so the day is dropped
+from the report entirely rather than under-counted. One missed tap-out can
+hide every subsequent day for that person.
+
+- `check_open_punches(p_hours default 12, floor 4)` reads the **last element**
+  of each `scan_logs` array rather than unnesting the whole history the way
+  the review queue does — hourly, that distinction is the whole cost.
+- Deduped on `open-punch:<employee>:<date>` with a 1440-minute window, so one
+  stuck punch is one alert, not one per run.
+- Scheduled hourly at `:20` via pg_cron, unscheduled first so re-applying
+  cannot leave two jobs. Server-side: no PostgREST request, no gateway log
+  line, no egress.
+- `open_punch` added to `ALERT_KINDS`, which the drift test then requires.
+
+Egress impact: **none** for all three. Log ingestion: **none**.
+
 **2026-11-13 (later) — the stamp changed the bytes; nobody was looking at them**
 
 `20261112`'s deploy stamp made `sw.js`'s bytes change on every deploy, which
@@ -704,6 +781,10 @@ looked.
 - **This costs nothing on Supabase.** It is a conditional GET for one ~8 kB
   file against the CDN, answered `304` when nothing changed. No Supabase
   request, so no egress and no log ingestion there.
+- **Recover a stuck tab with a plain reload, not Ctrl+Shift+R.** A
+  force-reload bypasses the Service Worker by design, leaving the page
+  uncontrolled — which is how the About panel came to read `not registered`
+  on a kiosk whose registration was perfectly healthy. See 2026-11-13 (last).
 - **Asking is deliberately not gated on `isBusy()`.** `update()` only asks
   whether a new worker exists; if one does, activation posts `app-updated`
   and the *reload* goes through the gate like every other trigger. Gating the

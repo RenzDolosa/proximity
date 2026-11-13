@@ -19,6 +19,19 @@ import { openModal, closeModal, onModalClose } from '../../Components/Modal.js';
 import { connectionState, CONNECTION_LABEL, CONNECTION_BADGE } from '../../Utils/connectionState.js';
 import { stopCommandPalette } from '../../Components/CommandPalette.js';
 import { createFlushGate, syncStatusText } from '../../Utils/syncBackoff.js';
+import { WORKER, probeWorkerState } from '../../Utils/workerState.js';
+
+// Whether the Service Worker is actually controlling this tab, i.e. whether
+// offline scanning has a cached app shell to fall back on at all. null until
+// the first probe resolves, so the drawer can say "checking…" rather than
+// guessing "on" — a kiosk told its offline support works when it does not is
+// worse off than one told nothing. Local browser state; no request.
+let offlineShellReady = null;
+
+async function refreshOfflineShellState() {
+  const phase = await probeWorkerState().catch(() => WORKER.NONE);
+  offlineShellReady = phase === WORKER.ASKING || phase === WORKER.READY;
+}
 
 // Paces the automatic queue flush so a kiosk that cannot sync stops asking
 // every 20 seconds, and remembers why it stopped so the line under Recent
@@ -743,6 +756,10 @@ function paintHealth(meta, pending) {
     // counter is a running total on the model. No read of any kind.
     syncBlocked: flushGate.state().blocked,
     droppedScans: OfflineScanModel.droppedScanCount(),
+    // Probed once per drawer paint and held in a module variable, so this
+    // read is synchronous and costs nothing. null until the first probe
+    // resolves — which the row renders as "checking…", never as "on".
+    offlineShell: offlineShellReady,
     // Deliberately omitted: see healthRows(). Looking the site up is a
     // request, and this drawer costs none.
   });
@@ -794,6 +811,12 @@ function initOfflineSupport(operatorName) {
   if (offlineSupportInited) { renderOfflineStatus(); return flushIfPendingShared; }
   offlineSupportInited = true;
   registerBusyCheck(kioskIsBusy);
+  // Once at mount, then again whenever a new worker takes over — those are
+  // the only two moments the answer can change for a given tab.
+  refreshOfflineShellState().then(renderOfflineStatus);
+  navigator.serviceWorker?.addEventListener?.('controllerchange', () => {
+    refreshOfflineShellState().then(renderOfflineStatus);
+  });
   // Load the local thumbnails into memory now so the first scan's result card
   // and the feed don't wait on an IndexedDB read (see OfflineScanModel.getPhotoCache()).
   OfflineScanModel.getPhotoCache().catch(() => {});
