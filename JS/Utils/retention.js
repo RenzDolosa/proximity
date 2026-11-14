@@ -53,11 +53,28 @@ export function isValidRetentionDays(days) {
  */
 export const ARCHIVE_CHOICES = Object.freeze([
   { value: 0, label: 'Never — keep everything live' },
+  { value: 30, label: '30 days' },
+  { value: 60, label: '60 days' },
   { value: 90, label: '90 days' },
   { value: 180, label: '180 days' },
   { value: 365, label: '1 year' },
   { value: 730, label: '2 years' },
 ]);
+
+// The archive horizon's own floor, which is LOWER than the trim's 90.
+// They differ because the two jobs are limited by different things: the
+// trim's floor protects get_attendance_report()'s 31-day ranges from the
+// job deleting the month being reported on, while this one only had to stay
+// above Scanner Analytics' 90-day window — and since 20261114090000 taught
+// get_scanner_scan_details() to read the archive, that constraint is gone.
+export const ARCHIVE_MIN_DAYS = 30;
+
+/** Valid archive horizons. Separate from isValidRetentionDays: lower floor. */
+export function isValidArchiveDays(days) {
+  if (typeof days !== 'number' || !Number.isFinite(days)) return false;
+  if (!Number.isInteger(days)) return false;
+  return days === 0 || (days >= ARCHIVE_MIN_DAYS && days <= RETENTION_MAX_DAYS);
+}
 
 /**
  * What the archive horizon costs, said in terms of what the operator loses

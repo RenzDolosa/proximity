@@ -24,7 +24,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
-  ARCHIVE_CHOICES, archiveSummary, isValidRetentionDays,
+  ARCHIVE_CHOICES, ARCHIVE_MIN_DAYS, archiveSummary, isValidArchiveDays, isValidRetentionDays,
 } from '../JS/Utils/retention.js';
 
 const dir = fileURLToPath(new URL('../Supabase/migrations/', import.meta.url));
@@ -82,7 +82,10 @@ test('an absent effective date means "already in force", not "waiting"', () => {
 
 // ---- the floor, and what it protects ----
 
-test('below 90 is refused, because analytics reads the live table only', () => {
+// Superseded by 20261114090000, which taught the drilldown to read the
+// archive and then lowered this floor to 30. Kept as the record of what the
+// floor was protecting, since that is why it could not simply be lowered.
+test('the original floor was 90, set against the analytics window', () => {
   assert.match(setter, /raise exception 'archive horizon must be 0 \(never archive\) or between 90 and 3650 days'/);
   assert.match(sql, /CHECK \(scan_events_days = 0 OR \(scan_events_days >= 90 AND scan_events_days <= 3650\)\)/);
 });
@@ -185,11 +188,81 @@ test('an unknown archive setting says so rather than guessing', () => {
 
 test('every offered archive choice is one the server accepts', () => {
   for (const c of ARCHIVE_CHOICES) {
-    assert.ok(isValidRetentionDays(c.value), `the picker offers ${c.value}, which would be refused`);
+    assert.ok(isValidArchiveDays(c.value), `the picker offers ${c.value}, which would be refused`);
   }
   assert.equal(ARCHIVE_CHOICES[0].value, 0);
   assert.match(ARCHIVE_CHOICES[0].label, /Never/,
     '0 means never archive here, not "off" — the live table still keeps everything');
+});
+
+// ---- the floor came down, and only after it was made safe ----
+
+const lower = strip(read('20261114090000_archive_horizon_down_to_30.sql'));
+
+test('the archive floor is 30 and the trim floor is still 90', () => {
+  assert.match(lower, /CHECK \(scan_events_days = 0 OR \(scan_events_days >= 30 AND scan_events_days <= 3650\)\)/);
+  assert.match(lower, /raise exception 'archive horizon must be 0 \(never archive\) or between 30 and 3650 days'/);
+  assert.ok(!/scan_logs_days = 0 OR \(scan_logs_days >= 30/.test(lower),
+    'the trim DELETES and get_attendance_report asks for 31-day ranges — its floor must stay 90');
+});
+
+test('the client floors agree with the server, and differ from each other', () => {
+  assert.equal(ARCHIVE_MIN_DAYS, 30);
+  assert.equal(isValidArchiveDays(30), true);
+  assert.equal(isValidArchiveDays(29), false);
+  assert.equal(isValidArchiveDays(0), true);
+  // The trim's validator must NOT have moved with it.
+  assert.equal(isValidRetentionDays(30), false,
+    'a 30-day trim horizon would race the attendance report it is deleting under');
+});
+
+test('a nullish archive horizon is not mistaken for "never"', () => {
+  for (const bad of [null, undefined, NaN, '30', 30.5]) {
+    assert.equal(isValidArchiveDays(bad), false, `${String(bad)} should not validate`);
+  }
+});
+
+// THE REASON THE FLOOR COULD NOT SIMPLY BE LOWERED. Scanner Analytics reads
+// the live table, and its drilldown window is 90 days. At a 30-day horizon,
+// days 31-90 would have been silently empty.
+test('the drilldown now reads the archive, so its window survives a short horizon', () => {
+  const details = lower.slice(lower.indexOf('CREATE OR REPLACE FUNCTION public.get_scanner_scan_details'));
+  assert.match(details, /union all/i);
+  assert.match(details, /from public\.scan_events_archive sa/);
+  assert.match(details, /least\(coalesce\(p_days, 7\), 90\)/, 'the 90-day window itself is unchanged');
+});
+
+// Inside either branch it would report that branch's size, and pagination
+// would be wrong by exactly the number of archived rows.
+test('the total is counted over the combined set, not one branch', () => {
+  const details = lower.slice(lower.indexOf('CREATE OR REPLACE FUNCTION public.get_scanner_scan_details'));
+  // Bounded to the CTE body. Slicing at `from rows_in_window r` does not
+  // work: a SELECT's column list precedes its FROM, so count(*) over ()
+  // always lands in the first half however correct the query is.
+  const cteStart = details.indexOf('with rows_in_window as (');
+  const cteEnd = details.indexOf('select r.id', cteStart);
+  assert.ok(cteStart !== -1 && cteEnd > cteStart, 'could not isolate the CTE');
+  assert.ok(!/count\(\*\) over \(\)/.test(details.slice(cteStart, cteEnd)),
+    'inside the union it would report one branch, and pagination would be short by the archived rows');
+  assert.match(details.slice(cteEnd), /count\(\*\) over \(\)/);
+});
+
+test('the job itself floors at 30, not only the constraint', () => {
+  const job = lower.slice(lower.indexOf('CREATE OR REPLACE FUNCTION public.archive_old_scan_events'));
+  assert.match(job, /v_days := greatest\(30, coalesce\(v_set_days, 180\)\)/,
+    'a row written before this migration must not push the cutoff nearer than the drilldown reaches');
+});
+
+// The half that could not be done here. If this function ever gains a
+// migration, this test should be replaced by one asserting it unions too.
+test('the unfixed half is named, with the command to capture it', () => {
+  const rawLower = read('20261114090000_archive_horizon_down_to_30.sql');
+  assert.match(rawLower, /get_scanner_performance_stats/);
+  assert.match(rawLower, /pg_get_functiondef/,
+    'the migration must say how to obtain what it could not read');
+  const drift = readFileSync(fileURLToPath(new URL('../test/schema-drift.test.mjs', import.meta.url)), 'utf8');
+  assert.match(drift, /'get_scanner_performance_stats'/,
+    'still live-only; when that changes, give it the same union');
 });
 
 // ---- the panel ----
