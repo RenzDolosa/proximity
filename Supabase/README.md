@@ -723,6 +723,24 @@ an admin swaps it out.
   employee history, and (same best-effort pattern as
   `get_scan_archive_status()`) the trim job's most recent
   `cron.job_run_details` run.
+- **`try_timestamptz(p_text text)`** — added 2026-11-13
+  (`20261113140000_retention_deletes_only_provably_old.sql`). Parses a
+  `timestamptz`, returning NULL instead of raising on malformed input.
+  `STRICT`, so a NULL argument short-circuits. Exists so one unparseable
+  `scan_logs` entry can neither abort a retention run nor be silently
+  deleted by a predicate that evaluates to NULL.
+- **`preview_scan_logs_trim(p_older_than_days integer default 180, floor 90)`**
+  — added 2026-11-13. What the next `trim_employee_scan_logs()` run would
+  remove, without removing it: `cutoff`, `horizon_days`, `oldest_entry_at`,
+  `would_remove_entries`, `would_affect_employees`, `newest_removed_at` and
+  `undated_entries`. Admin only. **Deliberately separate from
+  `get_scan_logs_trim_status()`**, which `20261107130000` rewrote to read the
+  `scan_logs_count` counter rather than de-TOAST `scan_logs` (1852 ms over
+  814 employees); a preview must unnest, so it belongs behind an explicit
+  press, never on a timer. Same cheap-status / expensive-pass split as
+  `get_offline_thumb_stats()` and `get_thumbs_to_recompress()`.
+  `undated_entries` counts entries the trim now **keeps** — a data-quality
+  finding, not a retention outcome.
 - **`check_open_punches(p_hours integer default 12, floor 4)`** — added
   2026-11-13 (`20261113120000_open_punch_alerts.sql`). Raises an
   `open_punch` alert for every **active** employee whose most recent

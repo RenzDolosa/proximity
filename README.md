@@ -694,6 +694,65 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-13 (latest) — retention now deletes only what it can prove is old**
+
+Asked to confirm that neither retention job can touch data inside the
+180-day window. For `archive_old_scan_events()` the answer is yes,
+unconditionally: `scan_events.scanned_at` is `timestamptz NOT NULL DEFAULT
+now()` and the predicate is `WHERE scanned_at < v_cutoff`. For
+`trim_employee_scan_logs()` it was yes for every well-formed entry and **no**
+for two cases, both silent.
+
+The keep-predicate was `(elem->>'scanned_at')::timestamptz >= v_cutoff`, and
+the result was written back over the employee's array. That is a whitelist of
+what to **keep**, which is not the same rule as a blacklist of what to
+**delete** — and the difference is every entry the predicate cannot evaluate:
+
+- **A missing `scanned_at` deleted the entry at any age.** `elem->>'…'`
+  returns NULL, the cast returns NULL, `NULL >= v_cutoff` is NULL, which is
+  not TRUE — so the entry fell out of the aggregate and was gone. An entry
+  written a minute earlier would have been destroyed.
+- **A malformed `scanned_at` aborted the whole run.** The cast raises, the
+  transaction rolls back, and nobody sees it: the panel's `last_run` reads
+  `cron.job_run_details`, which holds zero live rows.
+
+Neither had fired. `trg_append_scan_log()` always writes `scanned_at`, and
+the job has never deleted anything because the oldest data is about seven
+weeks old. That is the reason to fix it now rather than later — the first
+real run processes 180 days in one unattended pass, which is exactly when an
+entry written by an older trigger or a backfill would turn up.
+
+- `try_timestamptz(text)` (new) returns NULL instead of raising. `STRICT`, so
+  a NULL argument short-circuits without entering the body.
+- The rule is now `coalesce(try_timestamptz(…) >= v_cutoff, true)` — **remove
+  only when datable AND older**; anything undatable is kept and counted.
+- The rewritten array is aggregated `order by ord` with `with ordinality`.
+  `get_attendance_report()` reads it with ordinality and derives direction
+  from `lead()` over that order, so a reshuffled array would mislabel IN/OUT
+  until the next append re-sorted it.
+- The 90-day floor on both jobs is retained and now pinned by a test: no
+  argument from either caller can bring the cutoff inside three months.
+
+**`preview_scan_logs_trim(p_older_than_days)`** (new) reports
+`would_remove_entries`, `would_affect_employees`, `undated_entries` and
+`newest_removed_at` without removing anything — the guarantee as data rather
+than as a reading of the SQL.
+
+**It is deliberately a separate function, and a test caught the first
+draft that was not.** That draft folded the counts into
+`get_scan_logs_trim_status()`, which `20261107130000` had rewritten to read
+the `scan_logs_count` counter rather than de-TOAST the array — three
+`jsonb_array_length` calls over 814 employees measured **1852 ms**. A preview
+has to unnest, so it has to be its own call, on a press. Same split as
+Settings → Employee photos: `get_offline_thumb_stats()` answers cheaply,
+`get_thumbs_to_recompress()` does the expensive pass.
+
+Wiring it into the panel is the next piece of work; today it is reachable
+from the migration's VERIFY block through `Invoke-Sql.ps1`.
+
+Egress impact: **none**. Log ingestion: **none** — the preview is one request
+on an explicit press, and nothing polls it.
+
 **2026-11-13 (last) — "not registered" next to "up to date", and nobody told about a punch that never closed**
 
 **The About panel rendered two statements that cannot both be true.** Seen
