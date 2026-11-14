@@ -723,6 +723,23 @@ an admin swaps it out.
   employee history, and (same best-effort pattern as
   `get_scan_archive_status()`) the trim job's most recent
   `cron.job_run_details` run.
+- **`get_retention_settings()` / `set_retention_days(p_days integer)`** —
+  added 2026-11-13 (`20261113160000_configurable_retention_with_grace.sql`).
+  The scan-history horizon, admin only. `0` is **off and the default**;
+  otherwise 90–3650, with anything else **refused rather than floored**.
+  `set_retention_days()` writes `effective_from = (local date) + 1` from the
+  **server's** clock — the grace period is not a parameter, because a caller
+  able to choose the date could choose today. Every change resets it, in
+  both directions. The getter returns `active_now` and `days_until_active`
+  so a panel can tell *off*, *set but waiting*, and *running* apart. Writes
+  a `retention_changed` audit event. Table `retention_settings` is
+  single-row (`id boolean PRIMARY KEY CHECK (id)`), RLS on with no policies.
+  Client: `Models/RetentionModel.js`, wording in `Utils/retention.js`.
+  **`trim_employee_scan_logs()` now reads this** and does nothing while it is
+  0 or before `effective_from`; `p_older_than_days` became an override that
+  can only widen what is kept (`greatest(setting, argument)`), and the cron
+  schedule passes no argument at all. `archive_old_scan_events()` is
+  deliberately unaffected — it moves rows rather than deleting them.
 - **`try_timestamptz(p_text text)`** — added 2026-11-13
   (`20261113140000_retention_deletes_only_provably_old.sql`). Parses a
   `timestamptz`, returning NULL instead of raising on malformed input.
