@@ -52,7 +52,9 @@ export function isValidRetentionDays(days) {
  * is 0: one relocates, the other destroys.
  */
 export const ARCHIVE_CHOICES = Object.freeze([
-  { value: 0, label: 'Never — keep everything live' },
+  // Worded to match RETENTION_CHOICES' first entry. Both panels now start
+  // off and wait to be chosen, so the two "off" options should read alike.
+  { value: 0, label: 'Off — keep everything live' },
   { value: 30, label: '30 days' },
   { value: 60, label: '60 days' },
   { value: 90, label: '90 days' },
@@ -87,7 +89,7 @@ export function isValidArchiveDays(days) {
 export function archiveSummary(s) {
   const days = Number(s?.scan_events_days);
   if (!s || !Number.isFinite(days)) return 'Archive setting unknown.';
-  if (days === 0) return 'Never archiving — the live table keeps every scan, and will keep growing.';
+  if (days === 0) return 'Off — the live table keeps every scan, and will keep growing.';
   const base = `Analytics and the Dashboard can look back ${days} days. Older scans move to the archive and stay in exports.`;
   if (s.archive_active_now) return base;
   const when = s.archive_effective_from ? ` on ${s.archive_effective_from}` : '';

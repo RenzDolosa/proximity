@@ -24,7 +24,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
-  ARCHIVE_CHOICES, ARCHIVE_MIN_DAYS, archiveSummary, isValidArchiveDays, isValidRetentionDays,
+  ARCHIVE_CHOICES, ARCHIVE_MIN_DAYS, RETENTION_CHOICES,
+  archiveSummary, isValidArchiveDays, isValidRetentionDays,
 } from '../JS/Utils/retention.js';
 
 const dir = fileURLToPath(new URL('../Supabase/migrations/', import.meta.url));
@@ -50,9 +51,12 @@ test('the archive horizon is its own column, with its own effective date', () =>
   assert.match(sql, /ADD COLUMN IF NOT EXISTS scan_events_effective_from date/);
 });
 
-// The asymmetry is the point: one job destroys and starts off, the other
-// relocates and keeps running.
-test('archiving defaults to 180 while trimming defaults to 0', () => {
+// SUPERSEDED by 20261114120000, which made both sides default to 0. Kept as
+// the record of what shipped first: archiving defaulted to 180 on the
+// reasoning that relocating is free, which was true and still the wrong
+// call — two adjacent panels following different rules teaches the rule
+// learned from one and assumed for the other.
+test('archiving originally defaulted to 180, before the rules were unified', () => {
   assert.match(sql, /scan_events_days integer NOT NULL DEFAULT 180/);
   const retention = strip(read('20261113160000_configurable_retention_with_grace.sql'));
   assert.match(retention, /scan_logs_days integer NOT NULL DEFAULT 0/);
@@ -71,13 +75,59 @@ test('a change waits for the next local day, exactly as the trim does', () => {
   assert.match(archive, /\(now\(\) at time zone coalesce\(v_tz, 'Asia\/Manila'\)\)::date < v_from/);
 });
 
-// A NULL effective date means the stored 180 has been running all along,
-// which must not be mistaken for a change that has not landed yet — that
-// would switch archiving off for everyone on upgrade.
-test('an absent effective date means "already in force", not "waiting"', () => {
+// SUPERSEDED by 20261114120000. When archiving shipped already-on at 180, a
+// NULL effective date had to mean "in force" or applying the migration would
+// have switched it off for everyone. Once both sides default to 0 that case
+// cannot arise, and the trim's stricter rule applies to both.
+test('archiving originally treated an absent date as "already in force"', () => {
   assert.match(archive, /if v_from is not null\s*\n\s*and \(now\(\)/,
-    'the wait must be conditional on a date actually being set');
+    'the wait was conditional on a date actually being set');
   assert.match(sql, /'archive_active_now', r\.scan_events_days > 0\s*\n\s*and \(r\.scan_events_effective_from is null/);
+});
+
+// ---- and then the two were made the same ----
+
+const unified = strip(read('20261114120000_archive_matches_trim_semantics.sql'));
+const unifiedArchive = unified.slice(
+  unified.indexOf('CREATE OR REPLACE FUNCTION public.archive_old_scan_events'),
+  unified.indexOf('$function$;', unified.indexOf('CREATE OR REPLACE FUNCTION public.archive_old_scan_events')),
+);
+
+test('both horizons now default to 0', () => {
+  assert.match(unified, /ALTER COLUMN scan_events_days SET DEFAULT 0/);
+  // A default alone would have changed nothing: this table holds exactly one
+  // row by construction, and that row already existed with 180 in it.
+  assert.match(unified, /SET scan_events_days = 0,\s*\n\s*scan_events_effective_from = NULL/);
+});
+
+test('the archive guard is now the trim guard, character for character', () => {
+  const trimSrc = strip(read('20261113160000_configurable_retention_with_grace.sql'));
+  const shape = /if v_from is null\s*\n?\s*or \(now\(\) at time zone coalesce\(v_tz, 'Asia\/Manila'\)\)::date < v_from then/;
+  assert.match(unifiedArchive, shape, 'null must now mean "do nothing", as it does for the trim');
+  assert.match(trimSrc, shape);
+  assert.ok(!/if v_from is not null/.test(unifiedArchive),
+    'the fail-open form is gone');
+});
+
+test('an absent row means off on both sides, not 180', () => {
+  assert.match(unifiedArchive, /if coalesce\(v_set_days, 0\) = 0 then/);
+  assert.ok(!/coalesce\(v_set_days, 180\)/.test(unifiedArchive));
+});
+
+// The readout and the job have to agree about whether something is running.
+// The old expression reported active while the job refused, which is the
+// specific disagreement this project keeps finding and removing.
+test('archive_active_now now requires a date, exactly as active_now does', () => {
+  assert.match(unified, /'archive_active_now', r\.scan_events_days > 0\s*\n\s*and r\.scan_events_effective_from is not null\s*\n\s*and v_today >= r\.scan_events_effective_from/);
+  assert.match(unified, /'active_now', r\.scan_logs_days > 0\s*\n\s*and r\.effective_from is not null\s*\n\s*and v_today >= r\.effective_from/);
+});
+
+// The two things that stay different, both deliberate and both asked for.
+test('the floors still differ, and the wording still tells the truth', () => {
+  assert.equal(ARCHIVE_MIN_DAYS, 30);
+  assert.equal(isValidRetentionDays(30), false);
+  const off = archiveSummary({ scan_events_days: 0 });
+  assert.ok(!/delete/i.test(off), 'archiving never deletes, however the rules are aligned');
 });
 
 // ---- the floor, and what it protects ----
@@ -191,8 +241,12 @@ test('every offered archive choice is one the server accepts', () => {
     assert.ok(isValidArchiveDays(c.value), `the picker offers ${c.value}, which would be refused`);
   }
   assert.equal(ARCHIVE_CHOICES[0].value, 0);
-  assert.match(ARCHIVE_CHOICES[0].label, /Never/,
-    '0 means never archive here, not "off" — the live table still keeps everything');
+  // Was asserted the other way round, when archiving deliberately read
+  // "Never" to distinguish it from the trim's "Off". 20261114120000 made the
+  // two sides follow one rule, so the two labels should read alike too.
+  assert.match(ARCHIVE_CHOICES[0].label, /^Off —/,
+    'both panels now start off and wait to be chosen');
+  assert.match(RETENTION_CHOICES[0].label, /^Off —/);
 });
 
 // ---- the floor came down, and only after it was made safe ----
