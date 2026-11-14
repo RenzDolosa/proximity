@@ -694,6 +694,51 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-14 (later) — the archive floor drops to 30 days, after making 30 safe**
+
+Asked to reduce archival to 30. The floor of 90 turned out to be
+load-bearing rather than cautious, so it could not simply be lowered.
+
+**Scanner Analytics reads the live table only**, and
+`get_scanner_scan_details()` clamps its window to 1–90 days. Archiving at 30
+would have left **days 31–90 of that drilldown silently empty** — no error,
+no message, just fewer rows than exist. That is the exact class of failure
+this project has spent a week removing.
+
+So the function learned to read the archive, the way the export already
+does: `scan_events UNION ALL scan_events_archive`, with `count(*) over ()`
+deliberately **outside** the union — inside either branch it would report
+that branch's size and pagination would be short by exactly the archived
+rows. The window itself is unchanged at 90 days. After this the archive
+horizon stops limiting what anyone can *see* and becomes only what it should
+always have been: how many rows sit in the hot table.
+
+- Archive floor: **30**. Choices now start at 30 days.
+- **The trim floor stays 90.** That job DELETES, and
+  `get_attendance_report()` asks for ranges up to 31 days — a 30-day trim
+  horizon would mean a one-month report racing the job removing the month it
+  is reporting on. `isValidArchiveDays()` is a separate validator from
+  `isValidRetentionDays()` for this reason, and a test asserts they disagree
+  about 30.
+- `archive_old_scan_events()` now floors at 30 itself, not only via the
+  table `CHECK`, so a row written before this migration cannot push the
+  cutoff nearer than the drilldown reaches back.
+
+**⚠ One half of this could not be done from the repository.**
+`get_scanner_performance_stats()` — the counts across the top of Scanner
+Analytics — has **no migration anywhere**. It is live-only, created through
+the dashboard SQL editor, and listed in `KNOWN_MISSING_FUNCTIONS` in
+`test/schema-drift.test.mjs`. Its body cannot be read here, so it cannot be
+rewritten here, and it still reads the live table only.
+
+**Until it is captured, a horizon below 90 means the drilldown list is
+complete and the summary counts above it are not.** The migration carries
+the `pg_get_functiondef` query to dump it; once it has a migration, it needs
+the same union. This is the live-only-objects problem blocking real work for
+the first time, rather than being a theoretical risk.
+
+Egress impact: **none**. Log ingestion: **none**.
+
 **2026-11-14 — the archive horizon becomes a setting too, and stays a separate one**
 
 Asked to give Scan data archival the same treatment as Scan log trimming,
