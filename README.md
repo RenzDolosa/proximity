@@ -694,6 +694,44 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-14 (last) — the archive horizon follows the trim's rules exactly**
+
+Asked twice to make Scan data archival behave like Scan log trimming, and
+twice it shipped differently on my own judgement: a default of **180** rather
+than 0, and a guard treating "no effective date" as *carry on* rather than
+*do nothing*. The reasoning was that archiving relocates rather than
+destroys, so leaving it on is free.
+
+That reasoning is not wrong, and it is not the point. **Two adjacent panels
+that look identical and follow different rules is a worse property than
+either rule on its own**, because the rule a person learns from one is the
+rule they will assume for the other.
+
+| | before | now |
+|---|---|---|
+| default | `180` | `0`, like the trim |
+| no effective date | run anyway | do nothing, like the trim |
+| `archive_active_now` | true with a null date | requires a date, like `active_now` |
+| "off" label | *Never — keep everything live* | *Off — keep everything live* |
+
+- The **existing row is reset to 0**, not just the column default. This table
+  holds exactly one row by construction, so a default alone would have
+  changed nothing at all.
+- `archive_active_now` previously reported *running* while the job refused to
+  run — the readout and the job disagreeing is the specific fault this
+  project keeps finding and removing.
+- **Effect today: none observable.** `scan_events_days` was 180 against an
+  oldest live row of ~48 days, so the job has never moved anything. It now
+  reads 0 and waits to be chosen, exactly as the trim did when it shipped.
+
+**Two things stay different, both deliberate and both asked for.** The
+**floor** is 30 for archiving and 90 for trimming — `get_attendance_report()`
+reads 31-day ranges out of `scan_logs`, so a 30-day trim would race the job
+deleting the month it is reporting on, while archiving has no such caller
+since the Analytics drilldown learned to read the archive. And the
+**wording**: `archiveSummary()` still never says "deleted", because archiving
+does not delete. That is accuracy, not a divergent rule.
+
 **2026-11-14 (later) — the archive floor drops to 30 days, after making 30 safe**
 
 Asked to reduce archival to 30. The floor of 90 turned out to be
