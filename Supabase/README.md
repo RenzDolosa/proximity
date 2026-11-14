@@ -723,6 +723,22 @@ an admin swaps it out.
   employee history, and (same best-effort pattern as
   `get_scan_archive_status()`) the trim job's most recent
   `cron.job_run_details` run.
+- **`set_archive_days(p_days integer)` / `preview_scan_events_archive(p_older_than_days)`**
+  — added 2026-11-14 (`20261113180000_configurable_archive_horizon.sql`).
+  The **second** horizon, deliberately not the same one:
+  `retention_settings.scan_events_days` (default **180**, 0 = never archive,
+  otherwise 90–3650) governs `archive_old_scan_events()`. Same grace
+  mechanism as the trim — a change takes effect the next local day — and the
+  same override rule, `greatest(setting, argument)`, so the cron schedule
+  now passes no argument. `scan_events_effective_from` NULL means "already
+  in force", not "waiting"; reading it the other way would switch archiving
+  off on upgrade. **Floor of 90 because `get_scanner_performance_stats()`
+  and `get_scanner_scan_details()` cap at 90 days and read the live table
+  only** — the horizon is exactly the reach of Scanner Analytics, while
+  exports are unaffected because `get_scan_events_page()` unions both
+  tables. The preview is one indexed `COUNT`, unlike the trim's, which must
+  unnest. Client: `Models/RetentionModel.js`, wording in
+  `Utils/retention.js` (`archiveSummary()` never says "deleted").
 - **`get_retention_settings()` / `set_retention_days(p_days integer)`** —
   added 2026-11-13 (`20261113160000_configurable_retention_with_grace.sql`).
   The scan-history horizon, admin only. `0` is **off and the default**;
