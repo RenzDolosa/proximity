@@ -47,22 +47,41 @@
 -- count(*) over () stays OUTSIDE the union, computed over the combined set —
 -- putting it inside either branch would report that branch's size and the
 -- pagination total would be wrong by exactly the number of archived rows.
+-- SIGNATURE AND RETURN TYPE COPIED VERBATIM FROM 20260928080000, not
+-- reconstructed from the SELECT list. The first attempt at this migration
+-- guessed them and failed on apply with "cannot change return type of
+-- existing function": the real OUT columns are `scan_id` and
+-- `employee_name`, not `id` and `full_name`, and the real parameter order is
+-- (p_days, p_filter, p_scanner_id, p_limit). Nothing was committed, but a
+-- guess that happens to keep the same (integer, text, text, integer)
+-- signature is the dangerous version of this mistake — it would have
+-- swapped what the two text arguments mean for any positional caller.
+--
+-- #variable_conflict use_column is carried over too: several OUT parameters
+-- (scanned_at, scanner_id, result) share names with columns in the query.
 CREATE OR REPLACE FUNCTION public.get_scanner_scan_details(
   p_days integer DEFAULT 7,
-  p_scanner_id text DEFAULT NULL::text,
-  p_filter text DEFAULT 'all'::text,
+  p_filter text DEFAULT 'all',
+  p_scanner_id text DEFAULT NULL,
   p_limit integer DEFAULT 500
 )
-RETURNS TABLE(
-  id uuid, scanned_at timestamptz, full_name text, employee_code text,
-  department text, proximity_code text, scanner_id text, result text,
-  captured_offline boolean, total_count bigint
-)
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path TO 'public'
+ RETURNS TABLE(
+   scan_id uuid,
+   scanned_at timestamp with time zone,
+   employee_name text,
+   employee_code text,
+   department text,
+   proximity_code text,
+   scanner_id text,
+   result text,
+   captured_offline boolean,
+   total_count bigint
+ )
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
+#variable_conflict use_column
 declare
   v_since timestamptz := now() - (greatest(1, least(coalesce(p_days, 7), 90)) || ' days')::interval;
   v_limit integer := greatest(1, least(coalesce(p_limit, 500), 1000));

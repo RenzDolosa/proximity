@@ -225,6 +225,34 @@ test('a nullish archive horizon is not mistaken for "never"', () => {
 // THE REASON THE FLOOR COULD NOT SIMPLY BE LOWERED. Scanner Analytics reads
 // the live table, and its drilldown window is 90 days. At a 30-day horizon,
 // days 31-90 would have been silently empty.
+// THE MISTAKE THIS PINS. The first attempt reconstructed the signature from
+// the SELECT list and failed on apply: "cannot change return type of
+// existing function". The real OUT columns are scan_id and employee_name,
+// and the real parameter order is (p_days, p_filter, p_scanner_id, p_limit).
+// The signature stayed (integer, text, text, integer) either way, which is
+// what makes the guess dangerous rather than merely wrong.
+test('the drilldown keeps the exact signature it already had', () => {
+  const original = strip(read('20260928080000_scanner_analytics_drilldown.sql'));
+  const sigOf = (src) => {
+    const from = src.indexOf('CREATE OR REPLACE FUNCTION public.get_scanner_scan_details');
+    const to = src.indexOf('LANGUAGE plpgsql', from);
+    return src.slice(from, to).replace(/\s+/g, ' ').trim();
+  };
+  assert.equal(sigOf(lower), sigOf(original),
+    'parameters and OUT columns must match the live function character for character, '
+    + 'or CREATE OR REPLACE refuses and the migration cannot apply');
+});
+
+test('the body still maps onto those OUT columns in order', () => {
+  const details = lower.slice(lower.indexOf('CREATE OR REPLACE FUNCTION public.get_scanner_scan_details'));
+  assert.match(details, /#variable_conflict use_column/,
+    'scanned_at, scanner_id and result are all both OUT parameters and column names');
+  const outer = details.slice(details.indexOf('select r.id'));
+  const cols = outer.slice(0, outer.indexOf('from rows_in_window'));
+  assert.match(cols, /r\.id,\s*\n\s*r\.scanned_at,\s*\n\s*e\.full_name/,
+    'scan_id, scanned_at, employee_name — positional, so the order is the contract');
+});
+
 test('the drilldown now reads the archive, so its window survives a short horizon', () => {
   const details = lower.slice(lower.indexOf('CREATE OR REPLACE FUNCTION public.get_scanner_scan_details'));
   assert.match(details, /union all/i);
