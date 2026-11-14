@@ -404,7 +404,10 @@ export async function renderSettings() {
         <button type="button" class="ghost" id="sa-run" ${archiveRunning ? 'disabled' : ''}>${archiveRunning ? 'Running…' : 'Run archival now'}</button>
       </div>
       ${panelNote(
-        'A nightly job moves scans older than 180 days out of the live history, so the Scanner, Dashboard and Analytics stay fast as records build up.',
+        // Was hardcoded to "older than 180 days" and stayed that way whatever
+        // the picker said. A description contradicting the control beside it
+        // is worse than no description.
+        'A nightly job moves older scans out of the live history, so the Scanner, Dashboard and Analytics stay fast as records build up. The horizon is set below.',
         `<p><strong>Nothing is deleted</strong> — "Export all scan logs" still
          reaches archived scans for an older date range.</p>
          <p>180 days is well past every report's own limit (Attendance 31 days,
@@ -421,7 +424,7 @@ export async function renderSettings() {
         <button type="button" class="ghost" id="st-run" ${trimRunning ? 'disabled' : ''}>${trimRunning ? 'Running…' : 'Run trim now'}</button>
       </div>
       ${panelNote(
-        "A nightly job trims each employee's personal scan history to the last 180 days.",
+        "A nightly job trims each employee's personal scan history. The horizon is set below.",
         `<p>That history is the record behind the Scan log dialog, Attendance
          and the on-site roster. <strong>Nothing is lost</strong>: every scan
          still appears in "Export all scan logs".</p>
@@ -1529,8 +1532,11 @@ function paintArchiveStatus() {
   // bounds is how far back Scanner Analytics and the Dashboard can see.
   const ar = retentionSettings;
   const aDays = Number(ar?.scan_events_days);
+  // Identical to the trim panel's badge, including the colour. It read
+  // `never` in red while the trim read `off` in grey, which made the same
+  // state look like two different states on two adjacent panels.
   const aBadge = !ar ? ''
-    : aDays === 0 ? '<span class="badge inactive_card">never</span>'
+    : aDays === 0 ? '<span class="badge role-viewer">off</span>'
       : (ar.archive_active_now ? '<span class="badge matched">active</span>'
         : '<span class="badge unassigned_card">starts tomorrow</span>');
   body.innerHTML = `
@@ -1539,7 +1545,7 @@ function paintArchiveStatus() {
         <label class="emp-meta" style="display:flex;align-items:center;gap:6px;">
           Keep scans in the live table for
           <select id="sa-archive" style="min-width:190px;">
-            ${ARCHIVE_CHOICES.map((c) => `<option value="${c.value}"${c.value === aDays ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}
+            ${ARCHIVE_CHOICES.map((c) => `<option value="${c.value}"${c.value === aDays ? ' selected' : ''}${c.disabled ? ' disabled' : ''}>${esc(c.label)}</option>`).join('')}
           </select>
         </label>
         ${aBadge}
@@ -1645,7 +1651,7 @@ function paintTrimStatus() {
         <label class="emp-meta" style="display:flex;align-items:center;gap:6px;">
           Keep scan history for
           <select id="st-retention" style="min-width:170px;">
-            ${RETENTION_CHOICES.map((c) => `<option value="${c.value}"${c.value === days ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}
+            ${RETENTION_CHOICES.map((c) => `<option value="${c.value}"${c.value === days ? ' selected' : ''}${c.disabled ? ' disabled' : ''}>${esc(c.label)}</option>`).join('')}
           </select>
         </label>
         ${retentionBadge}

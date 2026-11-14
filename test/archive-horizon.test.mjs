@@ -238,8 +238,20 @@ test('an unknown archive setting says so rather than guessing', () => {
 
 test('every offered archive choice is one the server accepts', () => {
   for (const c of ARCHIVE_CHOICES) {
+    if (c.disabled) continue;
     assert.ok(isValidArchiveDays(c.value), `the picker offers ${c.value}, which would be refused`);
   }
+  // The two dropdowns must hold the same rows in the same order — that was
+  // the reported inconsistency. Only which rows are selectable differs.
+  assert.deepEqual(
+    ARCHIVE_CHOICES.map((c) => c.value),
+    RETENTION_CHOICES.map((c) => c.value),
+    'both panels offer the same horizons; the floors decide what is selectable',
+  );
+  assert.equal(ARCHIVE_CHOICES.find((c) => c.value === 30)?.disabled, false,
+    '30 is selectable for archiving');
+  assert.equal(RETENTION_CHOICES.find((c) => c.value === 30)?.disabled, true,
+    'and not for trimming, with the reason on the row');
   assert.equal(ARCHIVE_CHOICES[0].value, 0);
   // Was asserted the other way round, when archiving deliberately read
   // "Never" to distinguish it from the trim's "Off". 20261114120000 made the
@@ -363,4 +375,40 @@ test('the archive panel loads the setting and keeps its preview separate', () =>
 test('a failed read explains itself in the archive panel too', () => {
   const page = readFileSync(fileURLToPath(new URL('../JS/Features/Settings/SettingsPage.js', import.meta.url)), 'utf8');
   assert.match(page, /Archive horizon control unavailable/);
+});
+
+// ---- the three reported inconsistencies ----
+
+const page = () => readFileSync(fileURLToPath(new URL('../JS/Features/Settings/SettingsPage.js', import.meta.url)), 'utf8');
+
+// Reported: the archive badge read `never` in red while the trim read `off`
+// in grey, for the same state on two adjacent panels.
+test('the off badge is identical on both panels', () => {
+  const src = page();
+  // [\w-]+ not \w+: the class is `role-viewer`, and the hyphen silently made
+  // this match nothing at all rather than fail loudly.
+  const badges = [...src.matchAll(/=== 0 \? '<span class="badge ([\w-]+)">(\w+)<\/span>'/g)]
+    .map((m) => `${m[1]}:${m[2]}`);
+  assert.equal(badges.length, 2, 'expected one off-badge per panel');
+  assert.equal(badges[0], badges[1], `the two off badges differ: ${badges.join(' vs ')}`);
+});
+
+// Reported: both descriptions said "180 days" whatever the picker showed.
+test('neither description hardcodes a horizon', () => {
+  const src = page();
+  // To end of line, not to the next quote: one note is in double quotes and
+  // contains "employee's", so a quote-terminated match stopped mid-sentence
+  // and then failed on text it had truncated itself.
+  const notes = [...src.matchAll(/A nightly job[^\n]*/g)].map((m) => m[0]);
+  assert.ok(notes.length >= 2, 'expected both panel notes');
+  for (const n of notes) {
+    assert.ok(!/\d+\s*days/.test(n), `a panel note still states a fixed horizon: ${n}`);
+    assert.match(n, /set below/, 'it should point at the control instead');
+  }
+});
+
+test('the disabled attribute actually reaches both dropdowns', () => {
+  const src = page();
+  const withDisabled = [...src.matchAll(/c\.disabled \? ' disabled' : ''/g)];
+  assert.equal(withDisabled.length, 2, 'both pickers must render the disabled rows as disabled');
 });
