@@ -210,6 +210,27 @@ test('the panel loads the setting with the counts, but never the preview', () =>
     'the preview unnests every scan_logs array — it must not run on panel open');
 });
 
+// The first version of this panel rendered the picker as `settings ? … : ''`,
+// so a failed read — exactly what happens before the migration is applied —
+// removed the control with no explanation. An admin cannot tell a setting
+// that silently does not exist from one that was never built.
+test('a failed retention read explains itself instead of hiding the control', () => {
+  const page = readFileSync(fileURLToPath(new URL('../JS/Features/Settings/SettingsPage.js', import.meta.url)), 'utf8');
+  assert.match(page, /retentionError/, 'the failure has to be kept, not just the success');
+  // Bounded to the retention block. An unbounded lazy match runs on into the
+  // trimPreview ternary below it, which legitimately ends in `: ''` — the
+  // same mistake the readAccounted and applyUpdateNow guards made earlier.
+  const from = page.indexOf('${r ? `');
+  const to = page.indexOf('${trimPreview ?', from);
+  assert.ok(from !== -1 && to > from, 'could not isolate the retention block');
+  // The positive assertion is the whole test: this sentence lives only in
+  // the false branch, so if that branch ever goes back to '' it disappears
+  // and this fails. A separate "no empty branch" regex was tried first and
+  // kept matching the trimPreview ternary underneath.
+  assert.match(page.slice(from, to), /Retention control unavailable/,
+    'the false branch must say why, not render nothing');
+});
+
 test('a changed setting discards a preview computed against the old one', () => {
   const page = readFileSync(fileURLToPath(new URL('../JS/Features/Settings/SettingsPage.js', import.meta.url)), 'utf8');
   const from = page.indexOf('async function saveRetention');

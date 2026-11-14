@@ -111,9 +111,16 @@ let trimStatusError = null;
 let trimStatusLoaded = false;
 let trimRunning = false;
 // The retention horizon and whether it has taken effect yet. Loaded
-// alongside the counts above, which are both cheap; null when that read
-// failed, which hides the control rather than blanking the panel.
+// alongside the counts above, which are both cheap.
 let retentionSettings = null;
+// Why the control is not there, when it is not there. The first version of
+// this panel rendered the picker as `settings ? … : ''`, so a failed read —
+// which is exactly what happens before the migration is applied — removed
+// the whole control with no explanation. An admin looking for a setting
+// that silently does not exist cannot tell that from one that was never
+// built, which is the same class of bug as the About panel claiming "up to
+// date" while admitting it knew nothing.
+let retentionError = null;
 // Result of the explicit "what would be removed?" press. Cleared whenever
 // the setting changes, because an answer computed against the old horizon
 // would be worse than no answer.
@@ -1504,8 +1511,11 @@ async function loadTrimStatus() {
   ]);
   trimStatusError = error ? reportError(error, 'settings.trim', "Couldn't load trim status.") : null;
   trimStatus = error ? null : data;
-  // A failed retention read must not blank the whole panel: the counts above
-  // are still true and still worth showing.
+  // A failed retention read must not blank the whole panel — the counts
+  // above are still true — but it must not vanish silently either.
+  retentionError = retention.error
+    ? reportError(retention.error, 'settings.retention', "Couldn't load the retention setting.")
+    : null;
   retentionSettings = retention.error ? null : retention.data;
   trimPreview = null;
   trimStatusLoaded = true;
@@ -1564,7 +1574,11 @@ function paintTrimStatus() {
         <button class="ghost" id="st-preview">What would be removed?</button>
       </div>
       <p class="emp-meta" style="margin:0 0 12px;">${esc(retentionSummary(r))}</p>
-    ` : ''}
+    ` : `
+      <p class="emp-meta" style="margin:0 0 12px;color:var(--bad)">
+        ⚠ Retention control unavailable — ${esc(retentionError || 'the setting could not be read.')}
+        ${retentionError ? ' Until it loads, the scheduled trim is following whatever is already stored.' : ''}
+      </p>`}
     ${trimPreview ? `
       <p class="emp-meta" style="margin:0 0 12px;">
         ${trimPreview.retention_off
