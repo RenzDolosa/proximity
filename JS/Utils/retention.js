@@ -45,6 +45,38 @@ export function isValidRetentionDays(days) {
   return days === RETENTION_OFF || (days >= RETENTION_MIN_DAYS && days <= RETENTION_MAX_DAYS);
 }
 
+/**
+ * The archive horizon's own choices. 0 is allowed and means "never archive",
+ * which is a PERFORMANCE choice rather than a safety one — the live table
+ * then grows without bound. That is why its default is 180 while trimming's
+ * is 0: one relocates, the other destroys.
+ */
+export const ARCHIVE_CHOICES = Object.freeze([
+  { value: 0, label: 'Never — keep everything live' },
+  { value: 90, label: '90 days' },
+  { value: 180, label: '180 days' },
+  { value: 365, label: '1 year' },
+  { value: 730, label: '2 years' },
+]);
+
+/**
+ * What the archive horizon costs, said in terms of what the operator loses
+ * sight of rather than what the database does.
+ *
+ * Deliberately worded away from retentionSummary(): archiving moves rows and
+ * exports still read them, so "deleted" would be wrong and alarming. What it
+ * really bounds is how far back Scanner Analytics and the Dashboard can see.
+ */
+export function archiveSummary(s) {
+  const days = Number(s?.scan_events_days);
+  if (!s || !Number.isFinite(days)) return 'Archive setting unknown.';
+  if (days === 0) return 'Never archiving — the live table keeps every scan, and will keep growing.';
+  const base = `Analytics and the Dashboard can look back ${days} days. Older scans move to the archive and stay in exports.`;
+  if (s.archive_active_now) return base;
+  const when = s.archive_effective_from ? ` on ${s.archive_effective_from}` : '';
+  return `${base} New setting takes effect${when}.`;
+}
+
 /** What to tell an admin about the current setting, in one sentence. */
 export function retentionSummary(s) {
   const days = Number(s?.scan_logs_days);
