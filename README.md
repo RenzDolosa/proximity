@@ -694,6 +694,119 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-13 (last) — retention is a setting, off by default, and never acts on the day it is changed**
+
+Asked for: *"Default is 0, user set to 90 Days, the data older than 90 Days
+will be deleted the next day, not on the day it was set."* Two guarantees in
+one sentence, and the second is the one with teeth.
+
+**⚠ This changes current behaviour.** The cron schedule passed a hardcoded
+`180` and would have begun deleting around March 2027. It now passes nothing
+and reads `retention_settings`, which starts at **0 — off**. After this
+migration nothing is ever deleted until an admin chooses a horizon. That is
+the direction asked for and the safe one, but it is not a no-op.
+
+- **`retention_settings`** (new) is single-row by construction: a boolean
+  primary key with `CHECK (id)` can hold exactly one row, so "there is one
+  setting" is enforced by the key rather than by every caller remembering to
+  filter. RLS on with no policies; reads and writes go through the two
+  admin-gated functions.
+- **`set_retention_days(p_days)`** computes `effective_from` **server-side**
+  as *(local date) + 1*. That is the grace period, and it is deliberately
+  not a parameter: a caller that could choose the date could choose today,
+  which is the thing being prevented.
+- **Every change resets the clock**, including raising the horizon. 180 → 90
+  obviously needs it; 90 → 180 does not, but a rule with an exception is one
+  somebody has to remember, and waiting a day to delete *less* costs nothing.
+- **0, or 90–3650.** Values below the floor are **refused, not silently
+  raised** — 30 is a specific intention and quietly storing 90 would be a
+  worse answer than an error. The floor is in the table's `CHECK` as well as
+  in the setter.
+- **`p_older_than_days` became an override that can only keep MORE**:
+  `greatest(setting, argument)`. An admin running the job by hand cannot
+  reach further back than the configured horizon, so the setting is a floor
+  on what survives rather than a suggestion.
+- The schedule had to stop passing `180`. With the override rule above, a
+  stored horizon of 90 and a hardcoded 180 would have meant the 90 was never
+  honoured.
+
+**`archive_old_scan_events()` is deliberately NOT gated behind this.** It
+*moves* rows to `scan_events_archive` — it deletes nothing, loses nothing,
+and `get_all_scan_events()` reads both tables. Putting it behind a retention
+switch would let an operator turn off the only thing keeping the live table
+small, in exchange for no safety at all.
+
+Settings → Scan log trimming gains a horizon picker, a badge distinguishing
+**off** / **starts tomorrow** / **active**, and a *"What would be removed?"*
+button. The three states are worded differently on purpose: a panel reading
+"90 days" in all three would be lying in two of them, and the middle state is
+the entire point of the grace period. The preview is behind a press, never on
+panel open — it unnests every `scan_logs` array, and the status counts beside
+it deliberately read the `scan_logs_count` counter instead.
+
+Egress impact: **none** — one read when the panel opens, one write on save,
+one preview per press. Log ingestion: **none**; the job itself reads the
+setting inside pg_cron.
+
+**2026-11-13 (latest) — retention now deletes only what it can prove is old**
+
+Asked to confirm that neither retention job can touch data inside the
+180-day window. For `archive_old_scan_events()` the answer is yes,
+unconditionally: `scan_events.scanned_at` is `timestamptz NOT NULL DEFAULT
+now()` and the predicate is `WHERE scanned_at < v_cutoff`. For
+`trim_employee_scan_logs()` it was yes for every well-formed entry and **no**
+for two cases, both silent.
+
+The keep-predicate was `(elem->>'scanned_at')::timestamptz >= v_cutoff`, and
+the result was written back over the employee's array. That is a whitelist of
+what to **keep**, which is not the same rule as a blacklist of what to
+**delete** — and the difference is every entry the predicate cannot evaluate:
+
+- **A missing `scanned_at` deleted the entry at any age.** `elem->>'…'`
+  returns NULL, the cast returns NULL, `NULL >= v_cutoff` is NULL, which is
+  not TRUE — so the entry fell out of the aggregate and was gone. An entry
+  written a minute earlier would have been destroyed.
+- **A malformed `scanned_at` aborted the whole run.** The cast raises, the
+  transaction rolls back, and nobody sees it: the panel's `last_run` reads
+  `cron.job_run_details`, which holds zero live rows.
+
+Neither had fired. `trg_append_scan_log()` always writes `scanned_at`, and
+the job has never deleted anything because the oldest data is about seven
+weeks old. That is the reason to fix it now rather than later — the first
+real run processes 180 days in one unattended pass, which is exactly when an
+entry written by an older trigger or a backfill would turn up.
+
+- `try_timestamptz(text)` (new) returns NULL instead of raising. `STRICT`, so
+  a NULL argument short-circuits without entering the body.
+- The rule is now `coalesce(try_timestamptz(…) >= v_cutoff, true)` — **remove
+  only when datable AND older**; anything undatable is kept and counted.
+- The rewritten array is aggregated `order by ord` with `with ordinality`.
+  `get_attendance_report()` reads it with ordinality and derives direction
+  from `lead()` over that order, so a reshuffled array would mislabel IN/OUT
+  until the next append re-sorted it.
+- The 90-day floor on both jobs is retained and now pinned by a test: no
+  argument from either caller can bring the cutoff inside three months.
+
+**`preview_scan_logs_trim(p_older_than_days)`** (new) reports
+`would_remove_entries`, `would_affect_employees`, `undated_entries` and
+`newest_removed_at` without removing anything — the guarantee as data rather
+than as a reading of the SQL.
+
+**It is deliberately a separate function, and a test caught the first
+draft that was not.** That draft folded the counts into
+`get_scan_logs_trim_status()`, which `20261107130000` had rewritten to read
+the `scan_logs_count` counter rather than de-TOAST the array — three
+`jsonb_array_length` calls over 814 employees measured **1852 ms**. A preview
+has to unnest, so it has to be its own call, on a press. Same split as
+Settings → Employee photos: `get_offline_thumb_stats()` answers cheaply,
+`get_thumbs_to_recompress()` does the expensive pass.
+
+Wiring it into the panel is the next piece of work; today it is reachable
+from the migration's VERIFY block through `Invoke-Sql.ps1`.
+
+Egress impact: **none**. Log ingestion: **none** — the preview is one request
+on an explicit press, and nothing polls it.
+
 **2026-11-13 (last) — "not registered" next to "up to date", and nobody told about a punch that never closed**
 
 **The About panel rendered two statements that cannot both be true.** Seen
