@@ -43,6 +43,8 @@ import { WORKER, describeWorker, probeWorkerState } from '../../Utils/workerStat
 const SETTINGS_MAX_AGE_MS = PAGE_MAX_AGE_MS;
 import { ScanArchiveModel } from '../../Models/ScanArchiveModel.js';
 import { ScanLogsTrimModel } from '../../Models/ScanLogsTrimModel.js';
+import { RetentionModel } from '../../Models/RetentionModel.js';
+import { RETENTION_CHOICES, retentionSummary } from '../../Utils/retention.js';
 import { ScannerSilenceModel } from '../../Models/ScannerSilenceModel.js';
 import { UsageModel } from '../../Models/UsageModel.js';
 import { fmtUsageBytes, fmtPercent } from '../../Utils/usage.js';
@@ -108,6 +110,14 @@ let trimStatus = null; // { total_entries, employees_with_entries, max_entries_f
 let trimStatusError = null;
 let trimStatusLoaded = false;
 let trimRunning = false;
+// The retention horizon and whether it has taken effect yet. Loaded
+// alongside the counts above, which are both cheap; null when that read
+// failed, which hides the control rather than blanking the panel.
+let retentionSettings = null;
+// Result of the explicit "what would be removed?" press. Cleared whenever
+// the setting changes, because an answer computed against the old horizon
+// would be worse than no answer.
+let trimPreview = null;
 
 // Settings → Notifications. Admin-only, and the table behind it is revoked
 // from both client roles (20261110091000) — these go through RPCs.
@@ -1485,10 +1495,43 @@ function paintArchiveStatus() {
 }
 
 async function loadTrimStatus() {
-  const { data, error } = await ScanLogsTrimModel.status();
+  // Two requests, both cheap: the counter-based status, and the retention
+  // setting itself. Deliberately NOT the preview — that one unnests every
+  // scan_logs array and belongs behind its own press.
+  const [{ data, error }, retention] = await Promise.all([
+    ScanLogsTrimModel.status(),
+    RetentionModel.get(),
+  ]);
   trimStatusError = error ? reportError(error, 'settings.trim', "Couldn't load trim status.") : null;
   trimStatus = error ? null : data;
+  // A failed retention read must not blank the whole panel: the counts above
+  // are still true and still worth showing.
+  retentionSettings = retention.error ? null : retention.data;
+  trimPreview = null;
   trimStatusLoaded = true;
+  paintTrimStatus();
+}
+
+async function saveRetention(days) {
+  const sel = $('#st-retention');
+  if (sel) sel.disabled = true;
+  const { data, error } = await RetentionModel.set(days);
+  if (sel) sel.disabled = false;
+  if (error) { toast(reportError(error, 'settings'), 'error'); return; }
+  retentionSettings = data;
+  trimPreview = null;
+  // The whole point of the setting, said out loud at the moment it changes.
+  toast(retentionSummary(data));
+  paintTrimStatus();
+}
+
+async function loadTrimPreview() {
+  const btn = $('#st-preview');
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+  const { data, error } = await RetentionModel.preview();
+  if (btn) { btn.disabled = false; btn.textContent = 'What would be removed?'; }
+  if (error) { toast(reportError(error, 'settings'), 'error'); return; }
+  trimPreview = data;
   paintTrimStatus();
 }
 
@@ -1499,7 +1542,40 @@ function paintTrimStatus() {
   if (!trimStatus) { body.innerHTML = 'Loading…'; return; }
   const s = trimStatus;
   const lastRun = s.last_run;
+  const r = retentionSettings;
+  const days = Number(r?.scan_logs_days);
+  // Three states, three colours. A horizon that is set but not yet active
+  // must not look the same as one that is running, or the grace period is
+  // invisible exactly when it matters.
+  const retentionBadge = !r ? ''
+    : days === 0 ? '<span class="badge role-viewer">off</span>'
+      : (r.active_now ? '<span class="badge matched">active</span>'
+        : '<span class="badge unassigned_card">starts tomorrow</span>');
   body.innerHTML = `
+    ${r ? `
+      <div class="filter-row" style="margin-bottom:12px;align-items:center;">
+        <label class="emp-meta" style="display:flex;align-items:center;gap:6px;">
+          Keep scan history for
+          <select id="st-retention" style="min-width:170px;">
+            ${RETENTION_CHOICES.map((c) => `<option value="${c.value}"${c.value === days ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}
+          </select>
+        </label>
+        ${retentionBadge}
+        <button class="ghost" id="st-preview">What would be removed?</button>
+      </div>
+      <p class="emp-meta" style="margin:0 0 12px;">${esc(retentionSummary(r))}</p>
+    ` : ''}
+    ${trimPreview ? `
+      <p class="emp-meta" style="margin:0 0 12px;">
+        ${trimPreview.retention_off
+          ? 'Retention is off, so nothing is scheduled for removal.'
+          : `Next run would remove <strong>${Number(trimPreview.would_remove_entries || 0).toLocaleString()}</strong> entr${Number(trimPreview.would_remove_entries) === 1 ? 'y' : 'ies'}
+             across ${Number(trimPreview.would_affect_employees || 0).toLocaleString()} employee${Number(trimPreview.would_affect_employees) === 1 ? '' : 's'}.
+             ${Number(trimPreview.undated_entries) > 0
+               ? `<span style="color:var(--warn)">${Number(trimPreview.undated_entries).toLocaleString()} entries have no usable date and are kept.</span>`
+               : ''}`}
+      </p>
+    ` : ''}
     <div class="stat-grid">
       <div class="stat-card accent"><div class="stat-value">${s.total_entries.toLocaleString()}</div><div class="stat-label">Entries, all employees</div></div>
       <div class="stat-card"><div class="stat-value">${s.employees_with_entries.toLocaleString()}</div><div class="stat-label">Employees with history</div></div>
@@ -1512,6 +1588,14 @@ function paintTrimStatus() {
       </p>
     ` : `<p class="emp-meta" style="margin-top:10px;">The scheduled job hasn't run yet since this status was last checked (it runs once daily at 03:10 UTC).</p>`}
   `;
+
+  // Wired after innerHTML, not delegated: this panel is repainted from
+  // several places and a delegated listener would have to be removed in all
+  // of them. Re-querying is cheaper than getting that wrong.
+  const sel = $('#st-retention');
+  if (sel) sel.addEventListener('change', (e) => saveRetention(Number(e.target.value)));
+  const prev = $('#st-preview');
+  if (prev) prev.addEventListener('click', loadTrimPreview);
 }
 
 async function loadSilenceStatus() {
