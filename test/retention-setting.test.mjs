@@ -190,11 +190,22 @@ test('the client refuses the same values the server does', () => {
   assert.equal(isValidRetentionDays(90.5), false);
 });
 
-test('every offered choice is one the server will accept', () => {
+// Both panels now show the SAME horizons so they cannot look like different
+// features. A row under a job's floor is listed but disabled and carries the
+// reason — hiding it made the lists differ silently, offering it live would
+// hand back an error.
+test('every selectable choice is one the server will accept, and the rest say why', () => {
   for (const c of RETENTION_CHOICES) {
-    assert.ok(isValidRetentionDays(c.value), `the picker offers ${c.value}, which would be refused`);
+    if (c.disabled) {
+      assert.equal(isValidRetentionDays(c.value), false,
+        `${c.value} is disabled but the server would have accepted it`);
+      assert.match(c.label, /too short for Attendance/);
+    } else {
+      assert.ok(isValidRetentionDays(c.value), `the picker offers ${c.value}, which would be refused`);
+    }
   }
   assert.equal(RETENTION_CHOICES[0].value, 0, 'off leads the list, because it is the default');
+  assert.ok(RETENTION_CHOICES.some((c) => c.disabled), 'the floor should be visible, not implied');
 });
 
 // ---- the panel ----

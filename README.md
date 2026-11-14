@@ -694,6 +694,140 @@ file can drift from the live state between sessions.*
 
 ### Change log (most recent first)
 
+**2026-11-14 (last) — the archive horizon follows the trim's rules exactly**
+
+Asked twice to make Scan data archival behave like Scan log trimming, and
+twice it shipped differently on my own judgement: a default of **180** rather
+than 0, and a guard treating "no effective date" as *carry on* rather than
+*do nothing*. The reasoning was that archiving relocates rather than
+destroys, so leaving it on is free.
+
+That reasoning is not wrong, and it is not the point. **Two adjacent panels
+that look identical and follow different rules is a worse property than
+either rule on its own**, because the rule a person learns from one is the
+rule they will assume for the other.
+
+| | before | now |
+|---|---|---|
+| default | `180` | `0`, like the trim |
+| no effective date | run anyway | do nothing, like the trim |
+| `archive_active_now` | true with a null date | requires a date, like `active_now` |
+| "off" label | *Never — keep everything live* | *Off — keep everything live* |
+
+- The **existing row is reset to 0**, not just the column default. This table
+  holds exactly one row by construction, so a default alone would have
+  changed nothing at all.
+- `archive_active_now` previously reported *running* while the job refused to
+  run — the readout and the job disagreeing is the specific fault this
+  project keeps finding and removing.
+- **Effect today: none observable.** `scan_events_days` was 180 against an
+  oldest live row of ~48 days, so the job has never moved anything. It now
+  reads 0 and waits to be chosen, exactly as the trim did when it shipped.
+
+**Two things stay different, both deliberate and both asked for.** The
+**floor** is 30 for archiving and 90 for trimming — `get_attendance_report()`
+reads 31-day ranges out of `scan_logs`, so a 30-day trim would race the job
+deleting the month it is reporting on, while archiving has no such caller
+since the Analytics drilldown learned to read the archive. And the
+**wording**: `archiveSummary()` still never says "deleted", because archiving
+does not delete. That is accuracy, not a divergent rule.
+
+**2026-11-14 (later) — the archive floor drops to 30 days, after making 30 safe**
+
+Asked to reduce archival to 30. The floor of 90 turned out to be
+load-bearing rather than cautious, so it could not simply be lowered.
+
+**Scanner Analytics reads the live table only**, and
+`get_scanner_scan_details()` clamps its window to 1–90 days. Archiving at 30
+would have left **days 31–90 of that drilldown silently empty** — no error,
+no message, just fewer rows than exist. That is the exact class of failure
+this project has spent a week removing.
+
+So the function learned to read the archive, the way the export already
+does: `scan_events UNION ALL scan_events_archive`, with `count(*) over ()`
+deliberately **outside** the union — inside either branch it would report
+that branch's size and pagination would be short by exactly the archived
+rows. The window itself is unchanged at 90 days. After this the archive
+horizon stops limiting what anyone can *see* and becomes only what it should
+always have been: how many rows sit in the hot table.
+
+- Archive floor: **30**. Choices now start at 30 days.
+- **The trim floor stays 90.** That job DELETES, and
+  `get_attendance_report()` asks for ranges up to 31 days — a 30-day trim
+  horizon would mean a one-month report racing the job removing the month it
+  is reporting on. `isValidArchiveDays()` is a separate validator from
+  `isValidRetentionDays()` for this reason, and a test asserts they disagree
+  about 30.
+- `archive_old_scan_events()` now floors at 30 itself, not only via the
+  table `CHECK`, so a row written before this migration cannot push the
+  cutoff nearer than the drilldown reaches back.
+
+**⚠ One half of this could not be done from the repository.**
+`get_scanner_performance_stats()` — the counts across the top of Scanner
+Analytics — has **no migration anywhere**. It is live-only, created through
+the dashboard SQL editor, and listed in `KNOWN_MISSING_FUNCTIONS` in
+`test/schema-drift.test.mjs`. Its body cannot be read here, so it cannot be
+rewritten here, and it still reads the live table only.
+
+**Until it is captured, a horizon below 90 means the drilldown list is
+complete and the summary counts above it are not.** The migration carries
+the `pg_get_functiondef` query to dump it; once it has a migration, it needs
+the same union. This is the live-only-objects problem blocking real work for
+the first time, rather than being a theoretical risk.
+
+Egress impact: **none**. Log ingestion: **none**.
+
+**2026-11-14 — the archive horizon becomes a setting too, and stays a separate one**
+
+Asked to give Scan data archival the same treatment as Scan log trimming,
+or to combine them. Both halves were worth doing, but **not as one number.**
+
+"Keep scan history for N days" sounds like one idea and is two, because the
+jobs remove different things from different places:
+
+| | `archive_old_scan_events()` | `trim_employee_scan_logs()` |
+|---|---|---|
+| acts on | `scan_events` | `employees.scan_logs` |
+| action | **moves** to `scan_events_archive` | **deletes** |
+| exports | unaffected — `get_scan_events_page()` unions both | unaffected |
+| what the horizon really bounds | how far back **Scanner Analytics and the Dashboard** can see | how far back **Attendance** can report |
+| default | **180** | **0, off** |
+
+The second row of that table is why they cannot share a number: choosing a
+faster live table would otherwise silently truncate payroll history to the
+same figure. And it is why the defaults differ — trimming starts off because
+it destroys; archiving keeps its existing 180 because it does not, and
+switching it off would let the live table grow until the Dashboard slowed.
+
+**The archive floor of 90 is not arbitrary.** `get_scanner_performance_stats()`
+and `get_scanner_scan_details()` both cap at 90 days and read the live table
+only — `20260930000000` records that `get_all_scan_events()` was "the one
+place that needs to read `scan_events_archive` too". So the horizon is
+exactly the reach of Analytics, and a shorter one would empty its far end
+with nothing on screen to say why.
+
+- `set_archive_days()` uses the **same grace mechanism** as the trim: a
+  change takes effect the next local day. The reason is weaker — archiving
+  loses nothing — but choosing 90 when you meant 900 moves a hundred
+  thousand rows out of every analytics view, and a day to notice costs
+  nothing. One mechanism to learn, with the *wording* carrying the
+  difference between reversible and not.
+- `scan_events_effective_from` is **NULL when nothing is pending**, and the
+  job treats that as "already in force". Reading NULL as "waiting" would
+  have switched archiving off for everyone on upgrade.
+- `preview_scan_events_archive()` is cheap where the trim's preview is not:
+  one indexed `COUNT` over `idx_scan_events_scanned_at`, rather than
+  unnesting every jsonb array.
+- Both schedules now pass **no argument**. With the override rule
+  (`greatest(setting, argument)`, which can only keep more), a hardcoded 180
+  against a stored 90 would have meant the 90 was never honoured.
+
+The two panels keep their own controls and their own wording. A test asserts
+the archive sentence **never says "deleted"** and names what is actually
+lost instead, because that distinction only reaches a user in that one line.
+
+Egress impact: **none**. Log ingestion: **none**.
+
 **2026-11-13 (last) — retention is a setting, off by default, and never acts on the day it is changed**
 
 Asked for: *"Default is 0, user set to 90 Days, the data older than 90 Days

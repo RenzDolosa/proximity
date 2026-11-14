@@ -44,7 +44,9 @@ const SETTINGS_MAX_AGE_MS = PAGE_MAX_AGE_MS;
 import { ScanArchiveModel } from '../../Models/ScanArchiveModel.js';
 import { ScanLogsTrimModel } from '../../Models/ScanLogsTrimModel.js';
 import { RetentionModel } from '../../Models/RetentionModel.js';
-import { RETENTION_CHOICES, retentionSummary } from '../../Utils/retention.js';
+import {
+  RETENTION_CHOICES, retentionSummary, ARCHIVE_CHOICES, archiveSummary,
+} from '../../Utils/retention.js';
 import { ScannerSilenceModel } from '../../Models/ScannerSilenceModel.js';
 import { UsageModel } from '../../Models/UsageModel.js';
 import { fmtUsageBytes, fmtPercent } from '../../Utils/usage.js';
@@ -125,6 +127,11 @@ let retentionError = null;
 // the setting changes, because an answer computed against the old horizon
 // would be worse than no answer.
 let trimPreview = null;
+// The archive panel's equivalent. Separate variable, not a shared one: the
+// two previews answer different questions (rows that would MOVE versus
+// entries that would be DELETED) and showing one under the other's heading
+// would be the exact confusion these two panels already invite.
+let archivePreview = null;
 
 // Settings → Notifications. Admin-only, and the table behind it is revoked
 // from both client roles (20261110091000) — these go through RPCs.
@@ -397,7 +404,10 @@ export async function renderSettings() {
         <button type="button" class="ghost" id="sa-run" ${archiveRunning ? 'disabled' : ''}>${archiveRunning ? 'Running…' : 'Run archival now'}</button>
       </div>
       ${panelNote(
-        'A nightly job moves scans older than 180 days out of the live history, so the Scanner, Dashboard and Analytics stay fast as records build up.',
+        // Was hardcoded to "older than 180 days" and stayed that way whatever
+        // the picker said. A description contradicting the control beside it
+        // is worse than no description.
+        'A nightly job moves older scans out of the live history, so the Scanner, Dashboard and Analytics stay fast as records build up. The horizon is set below.',
         `<p><strong>Nothing is deleted</strong> — "Export all scan logs" still
          reaches archived scans for an older date range.</p>
          <p>180 days is well past every report's own limit (Attendance 31 days,
@@ -414,7 +424,7 @@ export async function renderSettings() {
         <button type="button" class="ghost" id="st-run" ${trimRunning ? 'disabled' : ''}>${trimRunning ? 'Running…' : 'Run trim now'}</button>
       </div>
       ${panelNote(
-        "A nightly job trims each employee's personal scan history to the last 180 days.",
+        "A nightly job trims each employee's personal scan history. The horizon is set below.",
         `<p>That history is the record behind the Scan log dialog, Attendance
          and the on-site roster. <strong>Nothing is lost</strong>: every scan
          still appears in "Export all scan logs".</p>
@@ -1469,10 +1479,43 @@ function paintUsage() {
 
 
 async function loadArchiveStatus() {
-  const { data, error } = await ScanArchiveModel.status();
+  // Both horizons come from one row, so whichever panel loads first fetches
+  // it and the other reuses it. Refetched here rather than shared through a
+  // flag because this panel can be opened without the trim panel ever being.
+  const [{ data, error }, retention] = await Promise.all([
+    ScanArchiveModel.status(),
+    RetentionModel.get(),
+  ]);
   archiveStatusError = error ? reportError(error, 'settings.archive', "Couldn't load archive status.") : null;
   archiveStatus = error ? null : data;
+  retentionError = retention.error
+    ? reportError(retention.error, 'settings.retention', "Couldn't load the retention setting.")
+    : null;
+  retentionSettings = retention.error ? null : retention.data;
+  archivePreview = null;
   archiveStatusLoaded = true;
+  paintArchiveStatus();
+}
+
+async function saveArchiveDays(days) {
+  const sel = $('#sa-archive');
+  if (sel) sel.disabled = true;
+  const { data, error } = await RetentionModel.setArchiveDays(days);
+  if (sel) sel.disabled = false;
+  if (error) { toast(reportError(error, 'settings'), 'error'); return; }
+  retentionSettings = data;
+  archivePreview = null;
+  toast(archiveSummary(data));
+  paintArchiveStatus();
+}
+
+async function loadArchivePreview() {
+  const btn = $('#sa-preview');
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+  const { data, error } = await RetentionModel.previewArchive();
+  if (btn) { btn.disabled = false; btn.textContent = 'What would move?'; }
+  if (error) { toast(reportError(error, 'settings'), 'error'); return; }
+  archivePreview = data;
   paintArchiveStatus();
 }
 
@@ -1483,7 +1526,43 @@ function paintArchiveStatus() {
   if (!archiveStatus) { body.innerHTML = 'Loading…'; return; }
   const s = archiveStatus;
   const lastRun = s.last_run;
+  // Same control as the trim panel below, same grace mechanism, deliberately
+  // different wording. Archiving moves rows and exports still read them, so
+  // "deleted" would be both wrong and alarming — what this number really
+  // bounds is how far back Scanner Analytics and the Dashboard can see.
+  const ar = retentionSettings;
+  const aDays = Number(ar?.scan_events_days);
+  // Identical to the trim panel's badge, including the colour. It read
+  // `never` in red while the trim read `off` in grey, which made the same
+  // state look like two different states on two adjacent panels.
+  const aBadge = !ar ? ''
+    : aDays === 0 ? '<span class="badge role-viewer">off</span>'
+      : (ar.archive_active_now ? '<span class="badge matched">active</span>'
+        : '<span class="badge unassigned_card">starts tomorrow</span>');
   body.innerHTML = `
+    ${ar ? `
+      <div class="filter-row" style="margin-bottom:12px;align-items:center;">
+        <label class="emp-meta" style="display:flex;align-items:center;gap:6px;">
+          Keep scans in the live table for
+          <select id="sa-archive" style="min-width:190px;">
+            ${ARCHIVE_CHOICES.map((c) => `<option value="${c.value}"${c.value === aDays ? ' selected' : ''}${c.disabled ? ' disabled' : ''}>${esc(c.label)}</option>`).join('')}
+          </select>
+        </label>
+        ${aBadge}
+        <button class="ghost" id="sa-preview">What would move?</button>
+      </div>
+      <p class="emp-meta" style="margin:0 0 12px;">${esc(archiveSummary(ar))}</p>
+    ` : `
+      <p class="emp-meta" style="margin:0 0 12px;color:var(--bad)">
+        ⚠ Archive horizon control unavailable — ${esc(retentionError || 'the setting could not be read.')}
+      </p>`}
+    ${archivePreview ? `
+      <p class="emp-meta" style="margin:0 0 12px;">
+        ${archivePreview.archiving_off
+          ? 'Archiving is off — nothing will move, and the live table keeps growing.'
+          : `Next run would move <strong>${Number(archivePreview.would_move_rows || 0).toLocaleString()}</strong> row${Number(archivePreview.would_move_rows) === 1 ? '' : 's'} out of the live table. Exports still include them.`}
+      </p>
+    ` : ''}
     <div class="stat-grid">
       <div class="stat-card accent"><div class="stat-value">${s.live_count.toLocaleString()}</div><div class="stat-label">Live scan_events</div></div>
       <div class="stat-card"><div class="stat-value">${s.archive_count.toLocaleString()}</div><div class="stat-label">Archived</div></div>
@@ -1499,6 +1578,11 @@ function paintArchiveStatus() {
       </p>
     ` : `<p class="emp-meta" style="margin-top:4px;">The scheduled job hasn't run yet since this status was last checked (it runs once daily at 03:00 UTC).</p>`}
   `;
+
+  const aSel = $('#sa-archive');
+  if (aSel) aSel.addEventListener('change', (e) => saveArchiveDays(Number(e.target.value)));
+  const aPrev = $('#sa-preview');
+  if (aPrev) aPrev.addEventListener('click', loadArchivePreview);
 }
 
 async function loadTrimStatus() {
@@ -1567,7 +1651,7 @@ function paintTrimStatus() {
         <label class="emp-meta" style="display:flex;align-items:center;gap:6px;">
           Keep scan history for
           <select id="st-retention" style="min-width:170px;">
-            ${RETENTION_CHOICES.map((c) => `<option value="${c.value}"${c.value === days ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}
+            ${RETENTION_CHOICES.map((c) => `<option value="${c.value}"${c.value === days ? ' selected' : ''}${c.disabled ? ' disabled' : ''}>${esc(c.label)}</option>`).join('')}
           </select>
         </label>
         ${retentionBadge}

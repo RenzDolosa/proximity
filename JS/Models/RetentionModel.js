@@ -27,6 +27,21 @@ export const RetentionModel = {
     return supabase.rpc('set_retention_days', { p_days: days });
   },
 
+  // The archive horizon. A separate setting, not a second opinion on the
+  // same one: this bounds how far back Scanner Analytics can see, while the
+  // one above bounds how far back Attendance can report. Folding them into
+  // a single number would mean choosing a faster live table silently
+  // truncated payroll history.
+  async setArchiveDays(days) {
+    return supabase.rpc('set_archive_days', { p_days: days });
+  },
+
+  // Cheap, unlike preview() above: one indexed COUNT rather than an unnest
+  // of every scan_logs array. Still behind a press.
+  async previewArchive(olderThanDays = null) {
+    return supabase.rpc('preview_scan_events_archive', { p_older_than_days: olderThanDays });
+  },
+
   // Expensive by nature — it unnests every scan_logs array to date the
   // entries inside. Deliberately separate from the trim status panel, which
   // reads a counter column instead (see 20261107130000: de-TOASTing those
