@@ -10,6 +10,8 @@ import { AlertsModel } from '../../Models/AlertsModel.js';
 import { severityBadgeClass, alertKindLabel } from '../../Utils/dashboard.js';
 import { refreshAlertsBadge } from '../../Core/alertsBadge.js';
 import { isFresh, markFetched, invalidate, PAGE_MAX_AGE_MS } from '../../Utils/freshness.js';
+import { exportXlsx, todayStamp } from '../../Utils/xlsxExport.js';
+import { ALERT_EXPORT_COLUMNS, alertExportRows, alertExportFilename } from '../../Utils/alertExport.js';
 
 let showAcked = false;
 let requestSeq = 0;
@@ -38,6 +40,7 @@ export async function renderAlerts() {
           <input type="checkbox" id="al-show-acked" ${showAcked ? 'checked' : ''} /> Show acknowledged
         </label>
         <button class="ghost" id="al-refresh">Refresh</button>
+        <button class="ghost" id="al-export" disabled>Export</button>
         <button class="primary" id="al-ack-all" disabled>Acknowledge all</button>
       </div>
     </div>
@@ -49,6 +52,7 @@ export async function renderAlerts() {
   // render safe — a manager who thinks the list is behind must never be told
   // to wait a minute.
   $('#al-refresh').addEventListener('click', () => load({ force: true }));
+  $('#al-export').addEventListener('click', exportLoaded);
   $('#al-ack-all').addEventListener('click', ackAll);
   // Same stale-while-revalidate pattern as Attendance/Dashboard: paint the
   // last loaded page immediately (so re-opening this tab from the sidebar
@@ -95,6 +99,10 @@ function paint(rows) {
   if (!body) return;
   const unread = rows.filter((a) => !a.acknowledged_at).length;
   $('#al-ack-all').disabled = unread === 0;
+  // Enabled off the same array the export reads, so the button can never
+  // offer a download of nothing.
+  const exportBtn = $('#al-export');
+  if (exportBtn) exportBtn.disabled = rows.length === 0;
   refreshAlertsBadge();
 
   if (!rows.length) { body.innerHTML = `<div class="empty-state">${showAcked ? 'No alerts.' : 'No unread alerts. 🎉'}</div>`; return; }
@@ -119,6 +127,26 @@ function paint(rows) {
     invalidateAlerts();
     load();
   }));
+}
+
+// Exports the rows already on screen. No request, no bytes, no log line —
+// rowsCache is what paint() just rendered.
+//
+// It therefore exports at most one page of get_alerts(), which is 100 rows.
+// The count goes in the filename AND in the toast, because a download
+// holding 100 of 422 alerts without saying so is the kind of quiet wrongness
+// that is worse than no export at all. "Show acknowledged" widens what is
+// loaded, so it widens this too.
+function exportLoaded() {
+  if (!rowsCache.length) { toast('Nothing to export.'); return; }
+  const rows = alertExportRows(rowsCache, { fmt: fmtTime, kindLabel: alertKindLabel });
+  exportXlsx({
+    filename: alertExportFilename(rows.length, { showAcked, stamp: todayStamp() }),
+    sheetName: 'Alerts',
+    columns: ALERT_EXPORT_COLUMNS,
+    rows,
+  });
+  toast(`Exported ${rows.length} alert${rows.length === 1 ? '' : 's'} — the ones loaded on this page.`);
 }
 
 async function ackAll() {

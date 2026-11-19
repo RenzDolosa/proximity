@@ -50,7 +50,24 @@ export function exportXlsx({ filename, sheetName = 'Sheet1', columns, rows }) {
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  XLSX.writeFile(wb, filename); // triggers the browser's own download — no manual Blob/anchor plumbing needed
+  // triggers the browser's own download — no manual Blob/anchor plumbing needed
+  XLSX.writeFile(wb, withExtension(filename));
+}
+
+// XLSX.writeFile() picks the output FORMAT from the filename's extension, so
+// a caller that forgets one gets a file written as xlsx bytes with nothing to
+// open it by — Windows shows it as type "File". Every caller passed ".xlsx"
+// by hand until the Alerts export did not, which is a convention held by
+// nine separate string literals and therefore not a convention at all.
+//
+// Only an ABSENT extension is filled in. A caller asking for ".csv" means it,
+// and SheetJS honours that — overwriting it here would quietly hand back a
+// different format than the one requested.
+export function withExtension(filename, fallback = '.xlsx') {
+  const name = String(filename ?? '').trim();
+  if (!name) return `export${fallback}`;
+  const base = name.slice(name.lastIndexOf('/') + 1);
+  return /\.[a-z0-9]{2,5}$/i.test(base) ? name : `${name}${fallback}`;
 }
 
 // yyyy-mm-dd, local time — used to timestamp every export filename
