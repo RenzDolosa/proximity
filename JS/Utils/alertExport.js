@@ -103,5 +103,10 @@ export function alertExportRows(alerts, { fmt = (v) => str(v), kindLabel = (k) =
 export function alertExportFilename(count, { showAcked = false, stamp = '' } = {}) {
   const n = typeof count === 'number' && Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0;
   const scope = showAcked ? 'all' : 'unread';
-  return `alerts-${scope}-${n}${stamp ? `-${stamp}` : ''}`;
+  // The extension is part of the filename, not something exportXlsx adds:
+  // it passes this straight to XLSX.writeFile(), which picks the output
+  // FORMAT from the extension. The first version of this omitted it and
+  // produced a file Windows showed as type "File" — written as xlsx bytes,
+  // but with nothing to open it by.
+  return `alerts-${scope}-${n}${stamp ? `-${stamp}` : ''}.xlsx`;
 }

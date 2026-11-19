@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import {
   ALERT_EXPORT_COLUMNS, alertExportRows, alertExportFilename, detailRest,
 } from '../JS/Utils/alertExport.js';
+import { withExtension } from '../JS/Utils/xlsxExport.js';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
 const page = read('../JS/Features/Alerts/AlertsPage.js');
@@ -129,9 +130,46 @@ test('a nested object in detail is still legible in one cell', () => {
 
 test('the row count and scope are in the filename', () => {
   assert.equal(alertExportFilename(100, { showAcked: false, stamp: '2026-11-19' }),
-    'alerts-unread-100-2026-11-19');
+    'alerts-unread-100-2026-11-19.xlsx');
   assert.equal(alertExportFilename(42, { showAcked: true, stamp: '2026-11-19' }),
-    'alerts-all-42-2026-11-19');
+    'alerts-all-42-2026-11-19.xlsx');
+});
+
+// Shipped without one. XLSX.writeFile() picks the output FORMAT from the
+// extension, so the download arrived as xlsx bytes that Windows listed as
+// type "File" with nothing to open it by.
+test('the filename carries an extension in every branch', () => {
+  for (const args of [[100, {}], [0, { showAcked: true }], [null, { stamp: '2026-11-19' }], [7, { stamp: '' }]]) {
+    assert.match(alertExportFilename(...args), /\.xlsx$/, `no extension for ${JSON.stringify(args)}`);
+  }
+});
+
+test('every export in the app names a real file type', () => {
+  const sources = [
+    '../JS/Features/Directory/DirectoryPage.js',
+    '../JS/Features/Dashboard/DashboardPage.js',
+    '../JS/Features/Attendance/AttendancePage.js',
+    '../JS/Features/Proximity/ProximityPage.js',
+    '../JS/Features/Muster/MusterPage.js',
+    '../JS/Features/Scanner/TestScanPage.js',
+    '../JS/Components/DepartmentRosterModal.js',
+    '../JS/Components/ScanDetailsModal.js',
+    '../JS/Components/ScanLogModal.js',
+  ];
+  // Per line, not `filename: \`([^\`]*)\``: several of these nest a template
+  // literal inside the filename (ScanDetailsModal interpolates a scannerId
+  // with its own backticks), so a backtick-terminated match stops partway
+  // through and then fails on text it truncated itself. Third time that
+  // shape of regex has bitten in this repo.
+  let checked = 0;
+  for (const p of sources) {
+    for (const line of read(p).split('\n')) {
+      if (!/^\s*filename:/.test(line)) continue;
+      checked += 1;
+      assert.match(line, /\.(xlsx|csv)`/, `${p} builds a filename with no extension: ${line.trim()}`);
+    }
+  }
+  assert.ok(checked >= sources.length, `expected one filename per source, found ${checked}`);
 });
 
 // Number(null) is 0 and 0 is finite — but here 0 is also a meaningful count,
@@ -140,6 +178,42 @@ test('a nonsense count becomes 0, never NaN or undefined in a filename', () => {
   for (const bad of [null, undefined, NaN, '100', -5]) {
     assert.match(alertExportFilename(bad), /^alerts-unread-0/, `count ${String(bad)} leaked into the name`);
   }
+});
+
+// ---- the backstop ----
+//
+// Nine callers appended ".xlsx" by hand and the tenth did not, which is a
+// convention held by nine string literals and therefore not a convention.
+// exportXlsx() now fills in an absent extension itself.
+
+test('a missing extension is filled in before the file is written', () => {
+  assert.equal(withExtension('alerts-unread-100'), 'alerts-unread-100.xlsx');
+  assert.equal(withExtension('alerts-unread-100.xlsx'), 'alerts-unread-100.xlsx');
+});
+
+// A caller asking for .csv means it, and SheetJS honours that. Overwriting
+// would hand back a different format than the one requested.
+test('an extension the caller chose is left alone', () => {
+  assert.equal(withExtension('rows.csv'), 'rows.csv');
+  assert.equal(withExtension('rows.txt'), 'rows.txt');
+});
+
+// A date in the name is not an extension. `alerts-2026-11-19` must not be
+// read as having one, or the fix misses exactly the case it was built for.
+test('a dotted date or a long suffix is not mistaken for an extension', () => {
+  assert.equal(withExtension('alerts-2026-11-19'), 'alerts-2026-11-19.xlsx');
+  assert.equal(withExtension('report.something-long'), 'report.something-long.xlsx');
+});
+
+test('nullish and empty names still produce a usable file', () => {
+  for (const bad of [null, undefined, '', '   ']) {
+    assert.equal(withExtension(bad), 'export.xlsx');
+  }
+});
+
+test('exportXlsx routes the filename through the guard', () => {
+  const src = read('../JS/Utils/xlsxExport.js');
+  assert.match(src, /XLSX\.writeFile\(wb, withExtension\(filename\)\)/);
 });
 
 // ---- the wiring ----
